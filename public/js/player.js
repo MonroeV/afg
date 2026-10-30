@@ -1,9 +1,10 @@
-// First-person movement and collision against the block grid.
+// First-person movement and collision.
+// Collision works with boxes, so thin doors and car roofs feel solid in the right places.
 import * as THREE from 'three';
-import { BLOCKS, SPAWN } from './shared/blocks.js';
+import { BLOCKS, SPAWN, blockId } from './shared/blocks.js';
 
 const HALF_WIDTH = 0.3;
-const HEIGHT = 1.8;
+export const HEIGHT = 1.8;
 export const EYE_HEIGHT = 1.62;
 
 const WALK_SPEED = 6;
@@ -12,6 +13,7 @@ const FLY_SPEED = 14;
 const GRAVITY = 28;
 const JUMP_SPEED = 9;
 const BOUNCE_SPEED = 19;
+const AXES = { x: 0, y: 1, z: 2 };
 
 export class Player {
   constructor(world) {
@@ -24,6 +26,7 @@ export class Player {
     this.flying = false;
     this.sprinting = false;
     this.moving = false;
+    this.extraBoxes = () => []; // other solid things, like cars
   }
 
   respawn() {
@@ -68,49 +71,53 @@ export class Player {
     }
 
     this.unstick();
-
-    // Move in small steps so fast movement can't tunnel through blocks.
-    const dist = this.vel.length() * dt;
-    const steps = Math.max(1, Math.ceil(dist / 0.35));
     const wasOnGround = this.onGround;
     this.onGround = false;
-    for (let i = 0; i < steps; i++) {
-      this.moveAxis('x', (this.vel.x * dt) / steps);
-      this.moveAxis('z', (this.vel.z * dt) / steps);
-      this.moveAxis('y', (this.vel.y * dt) / steps);
-    }
+    this.moveAxis('x', this.vel.x * dt);
+    this.moveAxis('z', this.vel.z * dt);
+    this.moveAxis('y', this.vel.y * dt);
     if (this.onGround && this.flying && !wasOnGround) this.flying = false;
   }
 
-  // Cells that the player's box would overlap at the current position.
-  collides() {
-    const minX = Math.floor(this.pos.x - HALF_WIDTH), maxX = Math.floor(this.pos.x + HALF_WIDTH - 1e-6);
-    const minY = Math.floor(this.pos.y), maxY = Math.floor(this.pos.y + HEIGHT - 1e-6);
-    const minZ = Math.floor(this.pos.z - HALF_WIDTH), maxZ = Math.floor(this.pos.z + HALF_WIDTH - 1e-6);
-    for (let x = minX; x <= maxX; x++)
-      for (let y = minY; y <= maxY; y++)
-        for (let z = minZ; z <= maxZ; z++)
-          if (this.world.isSolid(x, y, z)) return true;
-    return false;
+  box() {
+    const p = this.pos;
+    return [p.x - HALF_WIDTH, p.y, p.z - HALF_WIDTH, p.x + HALF_WIDTH, p.y + HEIGHT, p.z + HALF_WIDTH];
   }
 
+  // All solid boxes that could touch the region [min, max].
+  boxesNear(r) {
+    const out = [];
+    for (let x = Math.floor(r[0]); x <= Math.floor(r[3]); x++)
+      for (let y = Math.floor(r[1]); y <= Math.floor(r[4]); y++)
+        for (let z = Math.floor(r[2]); z <= Math.floor(r[5]); z++) this.world.cellBoxes(x, y, z, out);
+    for (const b of this.extraBoxes()) {
+      if (b[0] < r[3] && b[3] > r[0] && b[1] < r[4] && b[4] > r[1] && b[2] < r[5] && b[5] > r[2]) out.push(b);
+    }
+    return out;
+  }
+
+  // Moves along one axis as far as possible without entering anything solid.
   moveAxis(axis, d) {
     if (d === 0) return;
-    this.pos[axis] += d;
-    if (!this.collides()) return;
-
-    // Back off to the edge of the block we ran into.
-    const before = this.pos[axis] - d;
-    if (axis === 'y') {
-      this.pos.y = d < 0 ? Math.floor(this.pos.y) + 1 : Math.floor(this.pos.y + HEIGHT) - HEIGHT - 1e-4;
-    } else if (d > 0) {
-      this.pos[axis] = Math.floor(this.pos[axis] + HALF_WIDTH) - HALF_WIDTH - 1e-4;
-    } else {
-      this.pos[axis] = Math.floor(this.pos[axis] - HALF_WIDTH) + 1 + HALF_WIDTH + 1e-4;
+    const a = AXES[axis];
+    const p = this.box();
+    const region = p.slice();
+    if (d > 0) region[a + 3] += d;
+    else region[a] += d;
+    const o1 = (a + 1) % 3, o2 = (a + 2) % 3;
+    let allowed = d;
+    for (const b of this.boxesNear(region)) {
+      // Only boxes that overlap us on the other two axes can block this move.
+      if (b[o1] >= p[o1 + 3] - 1e-7 || b[o1 + 3] <= p[o1] + 1e-7) continue;
+      if (b[o2] >= p[o2 + 3] - 1e-7 || b[o2 + 3] <= p[o2] + 1e-7) continue;
+      if (d > 0 && b[a] >= p[a + 3] - 1e-4) allowed = Math.min(allowed, b[a] - p[a + 3]);
+      else if (d < 0 && b[a + 3] <= p[a] + 1e-4) allowed = Math.max(allowed, b[a + 3] - p[a]);
     }
-    if (this.collides()) this.pos[axis] = before; // couldn't resolve cleanly, just undo
-    this.vel[axis] = 0;
-    if (axis === 'y' && d < 0) this.landed();
+    this.pos[axis] += allowed;
+    if (allowed !== d) {
+      this.vel[axis] = 0;
+      if (axis === 'y' && d < 0) this.landed();
+    }
   }
 
   landed() {
@@ -118,10 +125,10 @@ export class Player {
     // Bounce pads launch you upward.
     const x0 = Math.floor(this.pos.x - HALF_WIDTH), x1 = Math.floor(this.pos.x + HALF_WIDTH);
     const z0 = Math.floor(this.pos.z - HALF_WIDTH), z1 = Math.floor(this.pos.z + HALF_WIDTH);
-    const y = Math.floor(this.pos.y) - 1;
+    const y = Math.floor(this.pos.y - 0.01);
     for (let x = x0; x <= x1; x++)
       for (let z = z0; z <= z1; z++)
-        if (BLOCKS[this.world.get(x, y, z)]?.bounce) {
+        if (BLOCKS[blockId(this.world.get(x, y, z))]?.bounce) {
           this.vel.y = BOUNCE_SPEED;
           this.onGround = false;
           this.bounced = true;
@@ -129,10 +136,16 @@ export class Player {
         }
   }
 
-  // If a block appears inside us (e.g. someone built on top of us), pop up.
+  overlapsSomething() {
+    const p = this.box();
+    return this.boxesNear(p).some(b =>
+      b[0] < p[3] - 1e-4 && b[3] > p[0] + 1e-4 && b[1] < p[4] - 1e-4 && b[4] > p[1] + 1e-4 && b[2] < p[5] - 1e-4 && b[5] > p[2] + 1e-4);
+  }
+
+  // If something appears inside us (e.g. someone built on top of us), pop up.
   unstick() {
     let tries = 0;
-    while (this.collides() && tries++ < 64) this.pos.y = Math.floor(this.pos.y) + 1;
+    while (this.overlapsSomething() && tries++ < 64) this.pos.y = Math.floor(this.pos.y) + 1;
   }
 
   // Would a block at (x,y,z) overlap the player?

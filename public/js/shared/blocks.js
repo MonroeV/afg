@@ -1,5 +1,11 @@
 // Block definitions shared by the server and the browser.
 // IDs are saved in the world file, so never reorder or reuse them.
+//
+// A stored block value is `id + meta * 256`. Most blocks have meta 0; doors use
+// the meta bits to remember which way they face and whether they are open.
+//
+// shape: 'cube' (default), 'door' (two blocks tall, opens), 'flat' (a thin floor
+// layer you can walk over, like roads) or 'plant' (crossed sprites, no collision).
 
 export const BLOCKS = {
   1: { name: 'Grass', tex: { top: 'grass_top', side: 'grass_side', bottom: 'dirt' } },
@@ -19,17 +25,85 @@ export const BLOCKS = {
   15: { name: 'Blue Paint', tex: 'paint_blue' },
   16: { name: 'Yellow Paint', tex: 'paint_yellow' },
   17: { name: 'Black Paint', tex: 'paint_black' },
-  18: { name: 'Lamp', tex: 'lamp', emissive: true },
+  18: { name: 'Lamp', tex: 'lamp', emissive: true, light: true },
   19: { name: 'Bounce Pad', tex: 'bounce', bounce: true },
   20: { name: 'Floor Tiles', tex: 'tiles', glossy: true },
+  21: { name: 'Door', shape: 'door', tex: { bottom: 'door_bottom', top: 'door_top', edge: 'planks' } },
+  22: { name: 'Road', shape: 'flat', tex: 'asphalt' },
+  23: { name: 'Road Line', shape: 'flat', tex: 'road_line' },
+  24: { name: 'Sidewalk', shape: 'flat', tex: 'sidewalk' },
+  25: { name: 'Wood Floor', shape: 'flat', tex: 'planks' },
+  26: { name: 'Roof Tiles', tex: 'roof' },
+  27: { name: 'Flowers', shape: 'plant', tex: 'flowers' },
+  28: { name: 'Rainbow', tex: 'rainbow', glossy: true },
+  29: { name: 'Pink Paint', tex: 'paint_pink' },
+  30: { name: 'Mint Paint', tex: 'paint_mint' },
+  31: { name: 'Sky Paint', tex: 'paint_sky' },
+  32: { name: 'Orange Paint', tex: 'paint_orange' },
+  33: { name: 'Purple Paint', tex: 'paint_purple' },
+  34: { name: 'Green Paint', tex: 'paint_green' },
+  35: { name: 'Red Carpet', shape: 'flat', tex: 'paint_red' },
+  36: { name: 'Water', shape: 'flat', tex: 'water', glossy: true },
 };
 
 export const BLOCK_IDS = Object.keys(BLOCKS).map(Number);
 
-// Playable area (block coordinates, inclusive).
-export const WORLD = { min: -64, max: 63, maxY: 63 };
+export const blockId = v => v & 255;
+export const blockMeta = v => v >> 8;
+export const makeBlock = (id, meta = 0) => id | (meta << 8);
+export const shapeOf = v => BLOCKS[v & 255]?.shape || 'cube';
 
-export const SPAWN = { x: 0.5, y: 1, z: 6.5 };
+// Solid blocks stop players and cars. Roads, carpets and flowers don't.
+export const isSolidBlock = v => {
+  const shape = shapeOf(v);
+  return v !== 0 && shape !== 'flat' && shape !== 'plant';
+};
+export const isReplaceable = v => {
+  const shape = shapeOf(v);
+  return shape === 'flat' || shape === 'plant';
+};
+
+export function isValidBlock(v) {
+  if (!Number.isInteger(v) || v < 0) return false;
+  if (v === 0) return true;
+  const def = BLOCKS[v & 255];
+  if (!def) return false;
+  return def.shape === 'door' ? v >> 8 < 16 : v >> 8 === 0;
+}
+
+// ---------- Doors ----------
+// meta bits: 0-1 facing (quarter turns), 2 open, 3 top half.
+export const DOOR_OPEN = 4;
+export const DOOR_TOP = 8;
+export const toggleDoorValue = v => v ^ (DOOR_OPEN << 8);
+export const doorFacingFromYaw = yaw => ((Math.round(yaw / (Math.PI / 2)) % 4) + 4) % 4;
+
+// The door panel as a box inside its cell, relative to the cell's corner.
+export function doorBox(meta) {
+  const open = meta & DOOR_OPEN;
+  // Panel in local space, centred on the cell (x/z from -0.5 to 0.5).
+  const [x0, z0, x1, z1] = open ? [-0.5, -0.5, -0.32, 0.5] : [-0.5, -0.09, 0.5, 0.09];
+  const a = (meta & 3) * Math.PI / 2;
+  const c = Math.round(Math.cos(a)), s = Math.round(Math.sin(a));
+  const xs = [], zs = [];
+  for (const [x, z] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]]) {
+    xs.push(x * c + z * s);
+    zs.push(-x * s + z * c);
+  }
+  return [Math.min(...xs) + 0.5, 0, Math.min(...zs) + 0.5, Math.max(...xs) + 0.5, 1, Math.max(...zs) + 0.5];
+}
+
+// ---------- World ----------
+
+// Playable area (block coordinates, inclusive).
+export const WORLD = { min: -128, max: 127, maxY: 63 };
+
+export const SPAWN = { x: 0.5, y: 0, z: 5.5 };
+
+// One full day + night, in seconds.
+export const DAY_LENGTH = 600;
+
+export const CAR_KINDS = ['car', 'police', 'monster'];
 
 export const blockKey = (x, y, z) => `${x},${y},${z}`;
 

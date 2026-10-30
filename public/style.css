@@ -267,3 +267,133 @@ button:disabled { opacity: 0.6; cursor: wait; }
   .controls { grid-template-columns: 1fr; }
   h1 { font-size: 40px; }
 }
+
+/* ---------- Extra buttons ---------- */
+
+button.secondary {
+  background: #3a4a6b;
+  box-shadow: 0 5px 0 #222c40;
+  color: #fff;
+  font-size: 16px;
+}
+
+/* ---------- Character editor ---------- */
+
+.panel.editor {
+  display: flex;
+  gap: 20px;
+  width: min(980px, 100%);
+  height: min(640px, 100%);
+  text-align: left;
+}
+.editor-preview {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 38%;
+  text-align: center;
+}
+#preview {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border-radius: 12px;
+  background: radial-gradient(circle at 50% 40%, #4b6a9b, #1b2335);
+  cursor: grab;
+  touch-action: none;
+}
+.editor-preview .hint { margin: 6px 0 0; }
+.editor-options { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.editor-options h2 { margin-bottom: 10px; }
+#editor-body { flex: 1; overflow-y: auto; padding-right: 4px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.tab {
+  width: auto;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #2b3240;
+  box-shadow: none;
+  color: var(--text);
+  font-size: 14px;
+  letter-spacing: 0;
+}
+.tab.active { background: var(--accent); color: #231700; }
+.tab:active { transform: none; box-shadow: none; }
+.option-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+.option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 10px 4px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.option .emoji { font-size: 26px; line-height: 1; }
+.option.selected { border-color: var(--accent); background: rgba(255, 179, 33, 0.15); }
+.option:active { transform: scale(0.96); box-shadow: none; }
+.color-row { margin-top: 16px; }
+.color-title { margin-bottom: 6px; font-weight: 700; color: var(--muted); }
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.swatch {
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  box-shadow: none;
+}
+.swatch.selected { border-color: #fff; transform: scale(1.15); }
+.swatch:active { transform: scale(0.9); box-shadow: none; }
+
+@media (max-width: 760px) {
+  .panel.editor { flex-direction: column; height: 100%; }
+  .editor-preview { flex: 0 0 220px; }
+}
+
+/* ---------- Inventory sections ---------- */
+
+.inv-section { grid-column: 1 / -1; margin: 8px 0 0; text-align: left; color: var(--muted); font-weight: 800; }
+
+/* ---------- Driving and targets ---------- */
+
+#target-hint {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 22px);
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  font-size: 14px;
+  font-weight: 700;
+  text-shadow: 0 1px 2px #000;
+  white-space: nowrap;
+}
+#target-hint:empty { display: none; }
+
+#car-help {
+  position: absolute;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.5);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+#clock { font-size: 15px; }

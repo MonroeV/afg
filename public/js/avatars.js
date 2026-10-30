@@ -1,6 +1,7 @@
-// Other players: a blocky robot builder with a floating name tag.
+// Other players: a customizable character with a floating name tag.
 import * as THREE from 'three';
-import { EYE_HEIGHT } from './player.js';
+import { buildCharacter, animateCharacter } from './character.js';
+import { SEAT_SCALE } from './cars.js';
 
 function nameTag(name, color) {
   const canvas = document.createElement('canvas');
@@ -8,17 +9,17 @@ function nameTag(name, color) {
   canvas.height = 64;
   const ctx = canvas.getContext('2d');
   ctx.font = 'bold 30px system-ui, sans-serif';
-  const w = Math.min(248, ctx.measureText(name).width + 28);
+  const w = Math.min(248, ctx.measureText(name).width + 34);
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.beginPath();
   ctx.roundRect((256 - w) / 2, 10, w, 44, 12);
   ctx.fill();
   ctx.fillStyle = color;
-  ctx.fillRect((256 - w) / 2 + 10, 28, 8, 8);
+  ctx.fillRect((256 - w) / 2 + 10, 27, 10, 10);
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(name, 128 + 6, 33, 220);
+  ctx.fillText(name, 128 + 7, 33, 220);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
@@ -27,49 +28,44 @@ function nameTag(name, color) {
   return sprite;
 }
 
-function box(w, h, d, mat, x, y, z) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-  m.position.set(x, y, z);
-  m.castShadow = true;
-  return m;
-}
-
-class Avatar {
-  constructor(scene, info) {
+// A character in the world that can walk, dance, wave and sit in cars.
+export class Avatar {
+  constructor(scene, info, { tag = true } = {}) {
     this.scene = scene;
+    this.id = info.id;
     this.name = info.name;
-    this.color = info.color;
-    const body = new THREE.MeshStandardMaterial({ color: info.color, roughness: 0.5, metalness: 0.2 });
-    const dark = new THREE.MeshStandardMaterial({ color: 0x2a2d33, roughness: 0.6, metalness: 0.3 });
-    const visor = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1, metalness: 0.6, emissive: 0x2288ff, emissiveIntensity: 0.6 });
-
-    this.group = new THREE.Group();
-    this.legL = box(0.24, 0.75, 0.26, dark, 0, -0.375, 0);
-    this.legR = this.legL.clone();
-    this.legPivotL = new THREE.Group(); this.legPivotL.position.set(-0.14, 0.75, 0); this.legPivotL.add(this.legL);
-    this.legPivotR = new THREE.Group(); this.legPivotR.position.set(0.14, 0.75, 0); this.legPivotR.add(this.legR);
-    const torso = box(0.56, 0.7, 0.32, body, 0, 1.1, 0);
-    this.armL = box(0.18, 0.65, 0.2, body, 0, -0.3, 0);
-    this.armR = this.armL.clone();
-    this.armPivotL = new THREE.Group(); this.armPivotL.position.set(-0.38, 1.4, 0); this.armPivotL.add(this.armL);
-    this.armPivotR = new THREE.Group(); this.armPivotR.position.set(0.38, 1.4, 0); this.armPivotR.add(this.armR);
-    this.head = new THREE.Group();
-    this.head.position.y = EYE_HEIGHT - 0.05;
-    this.head.add(box(0.48, 0.42, 0.44, body, 0, 0.05, 0));
-    this.head.add(box(0.4, 0.14, 0.05, visor, 0, 0.08, -0.22));
-    this.group.add(this.legPivotL, this.legPivotR, torso, this.armPivotL, this.armPivotR, this.head);
-
-    this.tag = nameTag(info.name, info.color);
-    this.tag.position.y = 2.2;
-    this.group.add(this.tag);
-
+    this.root = new THREE.Group();
     this.pos = new THREE.Vector3().fromArray(info.pos || [0, 0, 0]);
     this.target = this.pos.clone();
     this.yaw = this.targetYaw = info.rot?.[0] || 0;
     this.pitch = this.targetPitch = info.rot?.[1] || 0;
     this.walk = 0;
-    this.group.position.copy(this.pos);
-    scene.add(this.group);
+    this.speed = 0;
+    this.dance = 0;
+    this.wave = 0;
+    this.swing = 1;
+    this.seat = null; // { position, yaw } while sitting in a car
+    if (tag) {
+      this.tag = nameTag(info.name, info.look?.shirtColor || '#fff');
+      this.tag.position.y = 2.35;
+      this.root.add(this.tag);
+    }
+    this.setLook(info.look);
+    this.root.position.copy(this.pos);
+    scene.add(this.root);
+  }
+
+  get color() {
+    return this.character.look.shirtColor;
+  }
+
+  setLook(look) {
+    if (this.character) {
+      this.root.remove(this.character.group);
+      this.character.dispose();
+    }
+    this.character = buildCharacter(look);
+    this.root.add(this.character.group);
   }
 
   setState(x, y, z, yaw, pitch) {
@@ -78,34 +74,50 @@ class Avatar {
     this.targetPitch = pitch;
   }
 
-  update(dt) {
+  emote(kind) {
+    if (kind === 'dance') this.dance = 4;
+    if (kind === 'wave') this.wave = 2;
+  }
+
+  update(dt, time) {
     const k = 1 - Math.exp(-12 * dt);
     const before = this.pos.clone();
-    this.pos.lerp(this.target, k);
-    let dy = this.targetYaw - this.yaw;
-    dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-    this.yaw += dy * k;
+    if (this.seat) {
+      this.pos.copy(this.seat.position);
+      this.yaw = this.seat.yaw;
+    } else if (this.snap) {
+      // Our own body follows the camera exactly.
+      this.pos.copy(this.target);
+      this.yaw = this.targetYaw;
+    } else {
+      this.pos.lerp(this.target, k);
+      let dy = this.targetYaw - this.yaw;
+      dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      this.yaw += dy * k;
+    }
     this.pitch += (this.targetPitch - this.pitch) * k;
 
-    const speed = Math.hypot(this.pos.x - before.x, this.pos.z - before.z) / Math.max(dt, 1e-4);
-    this.walk += dt * Math.min(speed, 10) * 1.6;
-    const swing = Math.sin(this.walk) * Math.min(speed / 6, 1) * 0.8;
-    this.legPivotL.rotation.x = swing;
-    this.legPivotR.rotation.x = -swing;
-    this.armPivotL.rotation.x = -swing;
-    this.armPivotR.rotation.x = swing;
+    const moved = Math.hypot(this.pos.x - before.x, this.pos.z - before.z) / Math.max(dt, 1e-4);
+    this.speed += (Math.min(moved / 6, 1) - this.speed) * Math.min(1, dt * 10);
+    this.walk += dt * Math.min(moved, 10) * 1.6;
+    this.dance = Math.max(0, this.dance - dt);
+    this.wave = Math.max(0, this.wave - dt);
+    if (this.speed > 0.3 && !this.seat) this.dance = 0;
 
-    this.group.position.copy(this.pos);
-    this.group.rotation.y = this.yaw;
-    this.head.rotation.x = this.pitch;
+    this.root.position.copy(this.pos);
+    this.root.rotation.y = this.yaw;
+    this.root.scale.setScalar(this.seat ? SEAT_SCALE : 1);
+    animateCharacter(this.character, {
+      walk: this.walk, speed: this.seat ? 0 : this.speed, pitch: this.pitch, time,
+      dance: this.dance, wave: this.wave, swing: this.swing, sitting: !!this.seat,
+      flying: this.flying,
+    });
   }
 
   dispose() {
-    this.scene.remove(this.group);
-    this.group.traverse(o => {
-      o.geometry?.dispose();
-      if (o.material?.map) o.material.map.dispose();
-    });
+    this.scene.remove(this.root);
+    this.character.dispose();
+    this.tag?.material.map.dispose();
   }
 }
 
@@ -135,7 +147,7 @@ export class Avatars {
     }
   }
 
-  update(dt) {
-    for (const a of this.list.values()) a.update(dt);
+  update(dt, time) {
+    for (const a of this.list.values()) a.update(dt, time);
   }
 }

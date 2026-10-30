@@ -19,9 +19,11 @@
 
   <div id="hud" class="hidden">
     <div id="crosshair"></div>
+    <div id="target-hint"></div>
     <div id="info"></div>
     <div id="players"></div>
     <div id="item-name"></div>
+    <div id="car-help" class="hidden"></div>
     <div id="hotbar"></div>
     <div id="chat">
       <div id="chat-log"></div>
@@ -33,39 +35,28 @@
   <div id="menu" class="screen">
     <div class="panel">
       <h1>BUILD<span>ZONE</span></h1>
-      <p class="tagline">Build anything, together.</p>
+      <p class="tagline">Build, drive and explore — together!</p>
       <div id="loading">
         <div class="bar"><div id="loading-fill"></div></div>
-        <p>Generating textures…</p>
+        <p>Building the world…</p>
       </div>
       <form id="join-form" class="hidden">
         <label>Name <input id="name" maxlength="16" placeholder="Builder" autocomplete="off"></label>
-        <label class="color">Color <input id="color" type="color" value="#3fa7ff"></label>
+        <button type="button" id="customize" class="secondary">🎨 CUSTOMIZE MY CHARACTER</button>
         <button type="submit" id="play">PLAY</button>
         <p id="status"></p>
       </form>
-      <div class="controls">
-        <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</div>
-        <div><kbd>Mouse</kbd> Look</div>
-        <div><kbd>Space</kbd> Jump</div>
-        <div><kbd>Click</kbd> Use item</div>
-        <div><kbd>Right click</kbd> Break block</div>
-        <div><kbd>Middle click</kbd> Copy block</div>
-        <div><kbd>1</kbd>–<kbd>9</kbd> / <kbd>Wheel</kbd> Pick item</div>
-        <div><kbd>E</kbd> All blocks</div>
-        <div><kbd>Shift</kbd> Sprint</div>
-        <div><kbd>F</kbd> Fly (<kbd>Space</kbd>/<kbd>C</kbd> up/down)</div>
-        <div><kbd>T</kbd> / <kbd>Enter</kbd> Chat</div>
-        <div><kbd>R</kbd> Back to spawn</div>
-      </div>
+      <div class="controls" id="menu-controls"></div>
     </div>
   </div>
 
   <div id="pause" class="screen hidden">
-    <div class="panel">
+    <div class="panel wide">
       <h2>Paused</h2>
       <button id="resume">RESUME</button>
+      <button id="pause-customize" class="secondary">🎨 CUSTOMIZE MY CHARACTER</button>
       <label class="slider">Mouse sensitivity <input id="sensitivity" type="range" min="0.2" max="3" step="0.05" value="1"></label>
+      <label class="slider">Sound volume <input id="volume" type="range" min="0" max="1" step="0.05" value="0.4"></label>
       <label>Graphics
         <select id="quality">
           <option value="high">High</option>
@@ -73,16 +64,32 @@
           <option value="low">Low (faster)</option>
         </select>
       </label>
-      <p class="hint">Press <kbd>E</kbd> in game to choose blocks.</p>
+      <div class="controls" id="pause-controls"></div>
     </div>
   </div>
 
   <div id="inventory" class="screen hidden">
     <div class="panel wide">
-      <h2>Blocks</h2>
+      <h2>Items</h2>
       <p class="hint">Click an item to put it in your selected hotbar slot.</p>
       <div id="inventory-grid"></div>
       <button id="inventory-done">DONE</button>
+    </div>
+  </div>
+
+  <div id="editor" class="screen hidden">
+    <div class="panel editor">
+      <div class="editor-preview">
+        <canvas id="preview"></canvas>
+        <p class="hint">Drag to spin</p>
+        <button id="randomize" class="secondary">🎲 SURPRISE ME!</button>
+      </div>
+      <div class="editor-options">
+        <h2>My Character</h2>
+        <div id="editor-tabs" class="tabs"></div>
+        <div id="editor-body"></div>
+        <button id="editor-done">DONE</button>
+      </div>
     </div>
   </div>
 

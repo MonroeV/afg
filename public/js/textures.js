@@ -274,6 +274,105 @@ function tiles(u, v) {
   return { c, h: grout ? 0 : 0.7 };
 }
 
+
+function doorPanel(u, v, top) {
+  // Vertical boards with a frame; the top half has a 4-pane window (transparent).
+  const frame = Math.min(u, 1 - u) < 0.1 || (top ? v < 0.08 : v > 0.92);
+  const boards = Math.floor(u * 5);
+  const grain = fbm(u, v, 2, 4, 150 + boards, 10);
+  let c = mixc([0.50, 0.32, 0.18], [0.62, 0.42, 0.25], grain);
+  if (Math.abs((u * 5) % 1 - 0.5) > 0.46) c = shade(c, 0.6);
+  if (frame) c = shade(mixc([0.45, 0.28, 0.15], [0.55, 0.36, 0.2], grain), 0.85);
+  if (top && !frame) {
+    const inWin = u > 0.18 && u < 0.82 && v > 0.15 && v < 0.75;
+    const bar = Math.abs(u - 0.5) < 0.03 || Math.abs(v - 0.45) < 0.03;
+    if (inWin && !bar) return { c: [0.7, 0.85, 0.95], h: 0.2, a: 0 };
+  }
+  // Raised panels on the bottom half, and a gold handle.
+  if (!top && !frame) {
+    const inPanel = (v > 0.12 && v < 0.45 || v > 0.55 && v < 0.88) && u > 0.2 && u < 0.8;
+    if (inPanel) c = shade(c, 1.08);
+    if (Math.hypot(u - 0.8, v - 0.12) < 0.05) return { c: [0.95, 0.78, 0.25], h: 1 };
+  }
+  return { c, h: frame ? 0.8 : 0.5 + grain * 0.2 };
+}
+
+function asphalt(u, v) {
+  const n = fbm(u, v, 8, 5, 160);
+  const grit = hash(Math.floor(u * SIZE), Math.floor(v * SIZE), 161);
+  let c = mixc([0.16, 0.16, 0.17], [0.26, 0.26, 0.27], n);
+  if (grit > 0.93) c = shade(c, 1.5);
+  return { c, h: n * 0.5 + grit * 0.3 };
+}
+
+function roadLine(u, v) {
+  const a = asphalt(u, v);
+  if (Math.abs(u - 0.5) < 0.09) {
+    const wear = fbm(u, v, 16, 3, 162);
+    if (wear > 0.3) return { c: mixc([0.95, 0.78, 0.15], [1, 0.85, 0.3], wear), h: 0.6 };
+  }
+  return a;
+}
+
+function sidewalk(u, v) {
+  const n = fbm(u, v, 8, 5, 170);
+  const slab = Math.min((u * 2) % 1, (v * 2) % 1, 1 - (u * 2) % 1, 1 - (v * 2) % 1) < 0.025;
+  let c = mixc([0.62, 0.61, 0.58], [0.74, 0.73, 0.70], n);
+  if (slab) c = shade(c, 0.6);
+  return { c, h: slab ? 0 : 0.5 + n * 0.2 };
+}
+
+function roofTiles(u, v) {
+  const rows = 6;
+  const row = Math.floor(v * rows);
+  const fy = v * rows - row;
+  const off = row % 2 ? 0.5 : 0;
+  const cu = (u * 4 + off) % 1;
+  const id = hash(Math.floor(u * 4 + off), row, 180);
+  const curve = Math.sin(cu * Math.PI);
+  const n = fbm(u, v, 12, 3, 181);
+  let c = mixc([0.62, 0.22, 0.14], [0.78, 0.34, 0.2], id * 0.6 + n * 0.4);
+  c = shade(c, 0.7 + fy * 0.3 + curve * 0.15);
+  if (cu < 0.04 || cu > 0.96) c = shade(c, 0.5);
+  return { c, h: fy * 0.6 + curve * 0.4 };
+}
+
+function flowers(u, v) {
+  // Stems and leaves with colourful round blossoms; everything else is see-through.
+  const stems = [0.2, 0.42, 0.63, 0.82];
+  const colors = [[0.95, 0.2, 0.25], [1, 0.85, 0.2], [0.95, 0.45, 0.8], [0.6, 0.4, 1]];
+  for (let i = 0; i < stems.length; i++) {
+    const top = 0.25 + hash(i, 0, 190) * 0.25;
+    const sx = stems[i] + Math.sin(v * 6 + i) * 0.02;
+    const d = Math.hypot(u - sx, (v - top) * 1.1);
+    if (d < 0.085) {
+      const center = d < 0.03;
+      return { c: center ? [1, 0.9, 0.3] : colors[i], h: 1 - d * 6 };
+    }
+    if (Math.abs(u - sx) < 0.018 && v > top) return { c: [0.2, 0.5, 0.15], h: 0.5 };
+    const leafY = top + 0.35;
+    if (Math.hypot((u - sx - 0.05) * 1.5, v - leafY) < 0.04) return { c: [0.25, 0.6, 0.2], h: 0.5 };
+  }
+  return { c: [0.2, 0.5, 0.15], h: 0, a: 0 };
+}
+
+function rainbow(u, v) {
+  const bands = [[0.9, 0.2, 0.2], [1, 0.55, 0.15], [1, 0.88, 0.2], [0.3, 0.8, 0.3], [0.2, 0.55, 0.95], [0.55, 0.3, 0.85]];
+  const b = Math.floor(v * 6);
+  const n = fbm(u, v, 8, 3, 200);
+  const edge = (v * 6) % 1;
+  let c = shade(bands[b], 0.9 + n * 0.15);
+  if (edge < 0.06) c = shade(c, 0.8);
+  return { c, h: 0.5 + (edge < 0.06 ? -0.3 : 0) };
+}
+
+function water(u, v) {
+  const n = fbm(u, v, 4, 5, 210);
+  const ripple = Math.sin((u * 3 + v * 2 + n * 3) * Math.PI * 2) * 0.5 + 0.5;
+  const c = mixc([0.10, 0.35, 0.60], [0.25, 0.60, 0.85], n * 0.6 + ripple * 0.4);
+  return { c, h: ripple * 0.5 + n * 0.5 };
+}
+
 const GENERATORS = {
   grass_top: grassTop,
   grass_side: grassSide,
@@ -297,11 +396,27 @@ const GENERATORS = {
   lamp,
   bounce,
   tiles,
+  door_bottom: (u, v) => doorPanel(u, v, false),
+  door_top: (u, v) => doorPanel(u, v, true),
+  asphalt,
+  road_line: roadLine,
+  sidewalk,
+  roof: roofTiles,
+  flowers,
+  rainbow,
+  water,
+  paint_pink: concrete([0.95, 0.62, 0.72], 0.1),
+  paint_mint: concrete([0.55, 0.88, 0.72], 0.1),
+  paint_sky: concrete([0.55, 0.78, 0.95], 0.1),
+  paint_orange: concrete([0.95, 0.5, 0.15], 0.1),
+  paint_purple: concrete([0.5, 0.28, 0.75], 0.1),
+  paint_green: concrete([0.25, 0.62, 0.25], 0.1),
 };
 
 const NORMAL_STRENGTH = {
   grass_top: 2, dirt: 3, stone: 3, cobble: 5, brick: 4, planks: 3, log_side: 4, log_top: 2,
   sand: 2, metal: 4, tiles: 3, lamp: 2, bounce: 2, leaves: 2,
+  door_bottom: 3, door_top: 3, asphalt: 2, sidewalk: 3, roof: 4, rainbow: 2, water: 1,
 };
 
 // ---------- Building THREE textures ----------

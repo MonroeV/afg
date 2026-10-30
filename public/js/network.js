@@ -1,17 +1,28 @@
-// Talks to the server over a WebSocket.
+// Talks to the game room: over a WebSocket when there's a server,
+// or to a copy of the room running right here in the browser for offline play.
+import { GameRoom } from './shared/game.js';
+
+const OFFLINE_SAVE = 'buildzone-offline-world';
+
 export class Network {
   constructor() {
     this.ws = null;
+    this.local = null;
     this.handlers = {};
-    this.online = false;
+    this.online = false; // true when connected to a real server
+    this.connected = false;
   }
 
   on(type, fn) {
     this.handlers[type] = fn;
   }
 
+  dispatch(msg) {
+    this.handlers[msg.t]?.(msg);
+  }
+
   // Resolves with the server's welcome message, or rejects if there is no server.
-  connect(name, color, timeoutMs = 4000) {
+  connect(name, look, timeoutMs = 4000) {
     return new Promise((resolve, reject) => {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       let ws;
@@ -22,20 +33,21 @@ export class Network {
         return;
       }
       this.ws = ws;
+      let welcomed = false;
       const timer = setTimeout(() => {
         ws.close();
         reject(new Error('timeout'));
       }, timeoutMs);
 
-      ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name, color }));
+      ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name, look }));
       ws.onerror = () => {
         clearTimeout(timer);
         reject(new Error('connection failed'));
       };
       ws.onclose = () => {
         clearTimeout(timer);
-        if (this.online) {
-          this.online = false;
+        if (welcomed && this.ws === ws) {
+          this.online = this.connected = false;
           this.handlers.disconnect?.();
         }
       };
@@ -48,19 +60,58 @@ export class Network {
         }
         if (msg.t === 'welcome') {
           clearTimeout(timer);
-          this.online = true;
+          welcomed = true;
+          this.online = this.connected = true;
           resolve(msg);
         } else if (msg.t === 'full') {
           clearTimeout(timer);
           reject(new Error('server full'));
         } else {
-          this.handlers[msg.t]?.(msg);
+          this.dispatch(msg);
         }
       };
     });
   }
 
+  // Single player: run the game room in the browser and save the world in local storage.
+  connectOffline(name, look) {
+    this.ws = null;
+    return new Promise(resolve => {
+      let saveTimer = null;
+      const room = new GameRoom({
+        onDirty: () => {
+          saveTimer ??= setTimeout(() => {
+            saveTimer = null;
+            try {
+              localStorage.setItem(OFFLINE_SAVE, JSON.stringify(room.serialize()));
+            } catch { /* storage full or unavailable */ }
+          }, 3000);
+        },
+      });
+      let saved = null;
+      try {
+        saved = JSON.parse(localStorage.getItem(OFFLINE_SAVE));
+      } catch { /* no saved world */ }
+      if (!room.load(saved)) room.generate();
+
+      const client = room.connect(msg => {
+        // Deliver asynchronously, like a real network would.
+        queueMicrotask(() => (msg.t === 'welcome' ? resolve(msg) : this.dispatch(msg)));
+      });
+      this.local = { room, client };
+      this.connected = true;
+      let last = performance.now();
+      setInterval(() => {
+        const now = performance.now();
+        room.tick((now - last) / 1000);
+        last = now;
+      }, 1000 / 30);
+      room.handle(client, { t: 'join', name, look });
+    });
+  }
+
   send(msg) {
-    if (this.online && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
+    if (this.local) this.local.room.handle(this.local.client, JSON.parse(JSON.stringify(msg)));
+    else if (this.online && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
   }
 }
