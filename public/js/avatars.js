@@ -1,6 +1,6 @@
 // Other players: a customizable character with a floating name tag.
 import * as THREE from 'three';
-import { buildCharacter, animateCharacter } from './character.js';
+import { buildCharacter, animateCharacter, buildPet, animatePet } from './character.js';
 import { SEAT_SCALE } from './cars.js';
 
 function nameTag(name, color) {
@@ -66,6 +66,62 @@ export class Avatar {
     }
     this.character = buildCharacter(look);
     this.root.add(this.character.group);
+    // The pet lives in the world (not attached to us) so it can follow along behind.
+    const { pet, petColor } = this.character.look;
+    if (this.pet && (this.pet.kind !== pet || this.petColor !== petColor)) {
+      this.scene.remove(this.pet.group);
+      this.pet.dispose();
+      this.pet = null;
+    }
+    if (!this.pet && pet !== 'none') {
+      this.pet = buildPet(pet, petColor);
+      this.petColor = petColor;
+      this.pet.pos = this.pos.clone();
+      this.pet.yaw = this.yaw;
+      this.scene.add(this.pet.group);
+    }
+  }
+
+  setName(name) {
+    if (!this.tag || name === this.name) return;
+    this.name = name;
+    this.root.remove(this.tag);
+    this.tag.material.map.dispose();
+    this.tag = nameTag(name, this.character.look.shirtColor);
+    this.tag.position.y = 2.35;
+    this.root.add(this.tag);
+  }
+
+  updatePet(dt, time) {
+    const pet = this.pet;
+    if (!pet) return;
+    pet.group.visible = !this.seat;
+    if (this.seat) {
+      pet.pos.copy(this.pos);
+      return;
+    }
+    // Trot to a spot just behind and beside the owner.
+    const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
+    const target = new THREE.Vector3(this.pos.x + cos * 0.9 + sin * 0.7, this.pos.y, this.pos.z - sin * 0.9 + cos * 0.7);
+    const toTarget = target.clone().sub(pet.pos);
+    const dist = Math.hypot(toTarget.x, toTarget.z);
+    if (dist > 14) pet.pos.copy(target);
+    let moving = 0;
+    if (dist > 0.35) {
+      const step = Math.min(dist, Math.max(3, dist * 2.5) * dt);
+      pet.pos.x += (toTarget.x / dist) * step;
+      pet.pos.z += (toTarget.z / dist) * step;
+      moving = Math.min(1, dist);
+      pet.yaw = Math.atan2(-toTarget.x, -toTarget.z);
+    } else {
+      let dy = this.yaw - pet.yaw;
+      dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+      pet.yaw += dy * Math.min(1, dt * 3);
+    }
+    pet.pos.y += (this.pos.y - pet.pos.y) * Math.min(1, dt * 8);
+    pet.group.position.copy(pet.pos);
+    pet.group.rotation.y = pet.yaw;
+    animatePet(pet, moving, time);
   }
 
   setState(x, y, z, yaw, pitch) {
@@ -112,11 +168,16 @@ export class Avatar {
       dance: this.dance, wave: this.wave, swing: this.swing, sitting: !!this.seat,
       flying: this.flying,
     });
+    this.updatePet(dt, time);
   }
 
   dispose() {
     this.scene.remove(this.root);
     this.character.dispose();
+    if (this.pet) {
+      this.scene.remove(this.pet.group);
+      this.pet.dispose();
+    }
     this.tag?.material.map.dispose();
   }
 }

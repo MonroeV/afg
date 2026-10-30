@@ -7,6 +7,9 @@ customize your character, drive cars, build anything and play with friends.
   with houses you can walk into, shops, parks, playgrounds, a beach and street lamps
 - **Make your own character**: 10 faces, 8 hairstyles, 9 hats, 7 shirts, 4 kinds of pants,
   capes, wings and backpacks, and a color for every piece
+- **Pets** that follow you everywhere: a puppy, kitten, bunny, piglet or baby dragon
+- **Character Gallery**: save your character (with your name) so anyone can pick it later.
+  It holds 25 characters in a 5×5 grid; when it's full you choose one to replace, or replace the oldest
 - **Day and night**: the sun sets, the stars and moon come out and the street lamps light up
 - **Cars**: drive regular cars, a police car with a siren, or a monster truck that can climb blocks
 - **Doors** that open and close, **fireworks**, **dancing** and **waving**
@@ -68,11 +71,23 @@ The game is a normal Node.js web app, so any host that runs Node works
 
 Note: on free hosting the `data/` folder may be wiped on restart, which resets the world.
 
-## The world file
+## Saved files
 
-The server saves the world in `data/world.json`. To start over with a fresh town,
-stop the server, delete that file and start it again. Worlds from older versions of the
-game are kept as `data/world-old-*.json` and a new town is built automatically.
+The server keeps everything in the `data/` folder:
+
+- `data/world.json` is the world. To start over with a fresh town, stop the server, delete
+  that file and start it again. Worlds from older versions of the game are kept as
+  `data/world-old-*.json` and a new town is built automatically.
+- `data/characters.json` is the Character Gallery. Delete it to empty the gallery.
+
+## The Character Gallery
+
+Open it from the main menu or the pause menu. Click a character to play as them: you get their
+name and look. To save your own, type a name and press **Save my character**. Saving again
+with the same name updates that character, so it works like a simple account. When all 25 spots
+are taken, the game asks you to click one to replace, or to replace the oldest one.
+
+In single player (no server) the gallery is kept in your browser instead.
 
 ## How the code is organized
 
@@ -89,6 +104,7 @@ public/
     player.js          Walking, jumping, flying, collisions
     character.js       Builds a character from face/hair/hat/clothes choices
     editor.js          The "customize my character" screen
+    gallery.js         The Character Gallery screen and its little portraits
     avatars.js         Other players' characters and name tags
     cars.js            Car models and driving physics
     daynight.js        Sky, sun, moon, stars and night lighting
@@ -98,13 +114,13 @@ public/
     shared/            Code used by both the server and the browser
       blocks.js        The list of blocks
       avatar.js        Character options
+      characters.js    The saved character list (25 spots)
       game.js          The game rules: blocks, players, cars, the clock
       worldgen.js      Builds the towns
 ```
 
 ### Ideas for what to add next
 
-- Pets that follow you around
 - Signs you can write on
 - A race track with a timer, or hide and seek
 - Boats and water you can swim in

@@ -565,3 +565,137 @@ export function animateCharacter(ch, s) {
     ch.wings[1].rotation.y = 0.5 + flap;
   }
 }
+
+// ---------- Pets ----------
+
+function petFace(kind, color) {
+  return canvas(32, 32, (ctx, w, h) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, w, h);
+    const px = (x, y, c, pw = 1, ph = 1) => {
+      ctx.fillStyle = c;
+      ctx.fillRect(x * 4, y * 4, pw * 4, ph * 4);
+    };
+    if (kind === 'dragon') {
+      px(1, 2, '#fff59d', 2, 2); px(5, 2, '#fff59d', 2, 2);
+      px(2, 2, '#111', 1, 2); px(5, 2, '#111', 1, 2);
+      px(2, 6, '#3a0d0d'); px(5, 6, '#3a0d0d');
+      return;
+    }
+    px(1, 2, '#111', 2, 2); px(5, 2, '#111', 2, 2);
+    px(1, 2, '#fff'); px(5, 2, '#fff');
+    px(3, 4, kind === 'pig' ? '#e57373' : kind === 'bunny' || kind === 'cat' ? '#ff8fab' : '#222', 2, 1);
+    px(3, 6, '#5d2a2a', 2, 1);
+    px(0, 5, 'rgba(255,120,150,0.5)'); px(7, 5, 'rgba(255,120,150,0.5)');
+  });
+}
+
+// A small blocky pet. Its front faces -z, like the characters.
+export function buildPet(kind, color) {
+  const group = new THREE.Group();
+  const body = new THREE.Group(); // bobs up and down while hopping
+  group.add(body);
+  const m = material(color);
+  const dark = material(shadeHex(color, 0.7));
+  const light = material(shadeHex(color, 1.25));
+  const pet = { group, body, kind, legs: [], wings: [] };
+
+  const sizes = {
+    dog: { w: 0.3, h: 0.26, d: 0.5, head: 0.3, leg: 0.2 },
+    cat: { w: 0.24, h: 0.22, d: 0.44, head: 0.26, leg: 0.18 },
+    bunny: { w: 0.28, h: 0.26, d: 0.34, head: 0.26, leg: 0.1 },
+    pig: { w: 0.36, h: 0.3, d: 0.5, head: 0.3, leg: 0.14 },
+    dragon: { w: 0.3, h: 0.28, d: 0.5, head: 0.3, leg: 0.16 },
+  }[kind];
+  const by = sizes.leg + sizes.h / 2;
+  body.add(box(sizes.w, sizes.h, sizes.d, m, 0, by, 0));
+
+  // Head with a face on the front.
+  const faceMat = material(petFace(kind, color));
+  const head = new THREE.Group();
+  head.position.set(0, by + sizes.h * 0.45, -sizes.d / 2 - sizes.head * 0.3);
+  head.add(box(sizes.head, sizes.head, sizes.head, [m, m, m, m, m, faceMat]));
+  body.add(head);
+  pet.head = head;
+
+  for (const x of [-1, 1])
+    for (const z of [-1, 1]) {
+      const pivot = new THREE.Group();
+      pivot.position.set(x * (sizes.w / 2 - 0.05), sizes.leg, z * (sizes.d / 2 - 0.07));
+      pivot.add(box(0.08, sizes.leg, 0.08, dark, 0, -sizes.leg / 2, 0));
+      body.add(pivot);
+      pet.legs.push(pivot);
+    }
+
+  const tail = new THREE.Group();
+  tail.position.set(0, by + sizes.h * 0.2, sizes.d / 2);
+  body.add(tail);
+  pet.tail = tail;
+  const hs = sizes.head / 2;
+  switch (kind) {
+    case 'dog':
+      tail.add(box(0.06, 0.06, 0.24, m, 0, 0.06, 0.1)).rotation.x = 0.6;
+      for (const x of [-1, 1]) head.add(box(0.07, 0.16, 0.12, dark, x * (hs + 0.03), 0.02, 0));
+      head.add(box(0.14, 0.1, 0.1, light, 0, -0.07, -hs - 0.04));
+      break;
+    case 'cat':
+      tail.add(box(0.05, 0.3, 0.05, m, 0, 0.15, 0.02));
+      for (const x of [-1, 1]) {
+        const ear = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.11, 4), m);
+        ear.position.set(x * 0.08, hs + 0.04, 0);
+        ear.rotation.y = Math.PI / 4;
+        head.add(ear);
+      }
+      break;
+    case 'bunny':
+      tail.add(new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), material('#ffffff')));
+      for (const x of [-1, 1]) head.add(box(0.06, 0.26, 0.04, m, x * 0.07, hs + 0.12, 0.02));
+      break;
+    case 'pig':
+      head.add(box(0.14, 0.1, 0.06, material(shadeHex(color, 0.85)), 0, -0.04, -hs - 0.03));
+      tail.add(box(0.04, 0.04, 0.1, m, 0, 0.04, 0.04)).rotation.x = -0.8;
+      for (const x of [-1, 1]) head.add(box(0.07, 0.06, 0.04, dark, x * 0.09, hs + 0.02, 0));
+      break;
+    case 'dragon': {
+      tail.add(box(0.1, 0.08, 0.34, m, 0, 0, 0.16));
+      for (let i = 0; i < 3; i++) body.add(box(0.05, 0.08, 0.06, material('#ffd84a'), 0, by + sizes.h / 2 + 0.04, -0.12 + i * 0.12));
+      for (const x of [-1, 1]) {
+        const horn = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.12, 6), material('#fff3c4'));
+        horn.position.set(x * 0.08, hs + 0.05, 0.03);
+        head.add(horn);
+        const pivot = new THREE.Group();
+        pivot.position.set(x * sizes.w / 2, by + sizes.h / 2, 0);
+        const wing = box(0.36, 0.03, 0.26, material(shadeHex(color, 1.3), { side: THREE.DoubleSide }), x * 0.18, 0, 0);
+        pivot.add(wing);
+        body.add(pivot);
+        pet.wings.push(pivot);
+      }
+      break;
+    }
+  }
+  group.traverse(o => o.isMesh && (o.castShadow = true));
+  pet.dispose = () => group.traverse(o => {
+    if (!o.isMesh) return;
+    o.geometry.dispose();
+    for (const mat of [].concat(o.material)) {
+      mat.map?.dispose();
+      mat.dispose();
+    }
+  });
+  return pet;
+}
+
+// moving: 0..1, time in seconds
+export function animatePet(pet, moving, time) {
+  const hop = pet.kind === 'bunny' ? 14 : 12;
+  const swing = Math.sin(time * hop) * 0.7 * moving;
+  pet.legs.forEach((l, i) => (l.rotation.x = i % 3 === 0 ? swing : -swing));
+  pet.body.position.y = pet.kind === 'bunny' ? Math.abs(Math.sin(time * 7)) * 0.18 * moving : Math.abs(Math.sin(time * hop)) * 0.03 * moving;
+  pet.tail.rotation.y = Math.sin(time * (pet.kind === 'dog' ? 14 : 3)) * (pet.kind === 'dog' ? 0.6 : 0.3);
+  pet.head.rotation.x = Math.sin(time * 2) * 0.08;
+  if (pet.kind === 'dragon') {
+    // Dragons fly beside you.
+    pet.body.position.y = 0.9 + Math.sin(time * 3) * 0.12;
+    pet.wings.forEach((w, i) => (w.rotation.z = (i ? -1 : 1) * Math.sin(time * 10) * 0.6));
+  }
+}

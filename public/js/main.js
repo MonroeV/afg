@@ -11,6 +11,7 @@ import { Avatar, Avatars } from './avatars.js';
 import { Cars, CAR_SPECS, SEAT_SCALE } from './cars.js';
 import { DayNight } from './daynight.js';
 import { Editor } from './editor.js';
+import { CharacterClient, Gallery } from './gallery.js';
 import { Hud, renderControls } from './hud.js';
 import { HAMMER, FIREWORKS, ALL_ITEMS, DEFAULT_HOTBAR, isCarItem, makeIcon, ViewModel } from './items.js';
 import { Particles, Fireworks, Sounds } from './effects.js';
@@ -92,7 +93,7 @@ sounds.volume = settings.volume;
 
 // ---------- Game state ----------
 
-let world, player, materials, textures, icons, hud, cars, myBody, editor;
+let world, player, materials, textures, icons, hud, cars, myBody, editor, gallery;
 const net = new Network();
 const avatars = new Avatars(scene);
 let myId = null;
@@ -167,6 +168,7 @@ async function load() {
 
   hud = new Hud({ icons, settings, sounds, onChange: item => view.setItem(item) });
   editor = new Editor();
+  gallery = new Gallery(new CharacterClient(), sounds);
   myBody = new Avatar(scene, { id: 0, name: '', look: settings.look }, { tag: false });
   myBody.snap = true;
   myBody.root.visible = false;
@@ -232,7 +234,11 @@ net.on('states', ({ list, cars: carStates }) => {
 net.on('join', info => avatars.add(info));
 net.on('leave', ({ id }) => avatars.remove(id));
 net.on('chat', msg => hud.addChat(msg));
-net.on('look', ({ id, look }) => avatars.list.get(id)?.setLook(look));
+net.on('look', ({ id, look, name }) => {
+  const a = avatars.list.get(id);
+  a?.setLook(look);
+  if (name) a?.setName(name);
+});
 net.on('emote', ({ id, kind }) => avatars.list.get(id)?.emote(kind));
 net.on('fx', ({ x, y, z, color, seed }) => {
   fireworks.launch(x, y, z, color, seed);
@@ -276,6 +282,7 @@ function loudness(x, y, z, range) {
 let locked = false;
 let inventoryOpen = false;
 let editorOpen = false;
+let galleryOpen = false;
 
 function lock() {
   const req = canvas.requestPointerLock?.();
@@ -283,7 +290,7 @@ function lock() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -299,7 +306,7 @@ document.addEventListener('pointerlockchange', () => {
 document.addEventListener('pointerlockerror', updateOverlays);
 
 $('resume').addEventListener('click', lock);
-canvas.addEventListener('click', () => inGame && !locked && !inventoryOpen && !editorOpen && lock());
+canvas.addEventListener('click', () => inGame && !locked && !inventoryOpen && !editorOpen && !galleryOpen && lock());
 $('sensitivity').addEventListener('input', e => {
   settings.sensitivity = Number(e.target.value);
   saveSettings();
@@ -328,6 +335,35 @@ async function customize() {
 }
 $('customize').addEventListener('click', customize);
 $('pause-customize').addEventListener('click', customize);
+
+// Becomes a character: a new name and look (from the gallery).
+function setIdentity(name, look) {
+  settings.name = name;
+  settings.look = sanitizeLook(look);
+  $('name').value = name;
+  saveSettings();
+  myBody.setLook(settings.look);
+  if (inGame) net.send({ t: 'look', look: settings.look, name });
+}
+
+async function openGallery() {
+  galleryOpen = true;
+  updateOverlays();
+  const name = inGame ? settings.name : $('name').value.trim() || settings.name || 'Builder';
+  const picked = await gallery.show({
+    name,
+    look: settings.look,
+    onSaved: savedName => setIdentity(savedName, settings.look),
+  });
+  galleryOpen = false;
+  if (picked) {
+    setIdentity(picked.name, picked.look);
+    if (inGame) hud.addChat({ system: true, text: `You are now playing as ${picked.name}!` });
+  }
+  updateOverlays();
+}
+$('gallery-open').addEventListener('click', openGallery);
+$('pause-gallery').addEventListener('click', openGallery);
 
 function toggleInventory(open) {
   inventoryOpen = open;
@@ -366,7 +402,7 @@ const mouse = new Set();
 let useCooldown = 0;
 
 window.addEventListener('keydown', e => {
-  if (!inGame || hud.chatOpen || editorOpen) return;
+  if (!inGame || hud.chatOpen || editorOpen || galleryOpen) return;
   if (e.code === 'KeyE') {
     if (myCar) leaveCar(true);
     else if (target?.car && locked) requestEnter(target.car);

@@ -7,9 +7,10 @@ export const LOOK_OPTIONS = {
   shirt: ['tshirt', 'striped', 'hoodie', 'jacket', 'tank', 'jersey', 'dress'],
   pants: ['jeans', 'shorts', 'skirt', 'sweatpants'],
   extra: ['none', 'backpack', 'cape', 'wings'],
+  pet: ['none', 'dog', 'cat', 'bunny', 'pig', 'dragon'],
 };
 
-export const LOOK_COLORS = ['skin', 'eyes', 'hairColor', 'hatColor', 'shirtColor', 'shirtColor2', 'pantsColor', 'shoesColor', 'extraColor'];
+export const LOOK_COLORS = ['skin', 'eyes', 'hairColor', 'hatColor', 'shirtColor', 'shirtColor2', 'pantsColor', 'shoesColor', 'extraColor', 'petColor'];
 
 export const OPTION_LABELS = {
   smile: 'Smile', grin: 'Big Grin', cool: 'Sunglasses', wink: 'Wink', surprised: 'Surprised',
@@ -22,6 +23,7 @@ export const OPTION_LABELS = {
   jersey: 'Sports Jersey', dress: 'Dress',
   jeans: 'Jeans', shorts: 'Shorts', skirt: 'Skirt', sweatpants: 'Sweatpants',
   backpack: 'Backpack', cape: 'Super Cape', wings: 'Wings',
+  dog: 'Puppy', cat: 'Kitten', bunny: 'Bunny', pig: 'Piglet', dragon: 'Baby Dragon',
 };
 
 export const SKIN_TONES = ['#ffe0c4', '#f5c9a0', '#e8b088', '#d39a6a', '#b07548', '#8d5a34', '#6b4226', '#4a2c18', '#7fd17a', '#8fb8ff'];
@@ -35,12 +37,18 @@ export const PALETTE = [
 export const HAIR_COLORS = ['#1b1209', '#3b2314', '#6b3e1f', '#a0632b', '#d9a441', '#f3d98b', '#c23b22', '#e8e8e8', '#ff5fa2', '#4fc3f7', '#7c4dff', '#66bb6a'];
 
 export const DEFAULT_LOOK = {
-  face: 'smile', hair: 'short', hat: 'none', shirt: 'tshirt', pants: 'jeans', extra: 'none',
+  face: 'smile', hair: 'short', hat: 'none', shirt: 'tshirt', pants: 'jeans', extra: 'none', pet: 'none',
   skin: '#f5c9a0', eyes: '#3b2314', hairColor: '#3b2314', hatColor: '#e53935',
   shirtColor: '#1e88e5', shirtColor2: '#ffffff', pantsColor: '#3949ab', shoesColor: '#ffffff', extraColor: '#e53935',
+  petColor: '#d7a86e',
 };
 
 const isColor = c => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
+
+// Player names: letters, numbers, spaces, dashes and dots, up to 16 characters.
+export const cleanName = s => String(s ?? '').replace(/[^\w \-.]/g, '').trim().slice(0, 16) || 'Builder';
+
+export const PET_COLORS = ['#d7a86e', '#8d5a34', '#f5f5f5', '#424242', '#ff9a3c', '#f8bbd0', '#9e9e9e', '#7cb342', '#8e24aa', '#26c6da'];
 
 // Makes sure a look sent by a player only contains known options and real colors.
 export function sanitizeLook(look) {
@@ -64,6 +72,7 @@ export function randomLook(rand = Math.random) {
     shirt: pick(LOOK_OPTIONS.shirt),
     pants: pick(LOOK_OPTIONS.pants),
     extra: rand() < 0.5 ? 'none' : pick(LOOK_OPTIONS.extra),
+    pet: rand() < 0.3 ? 'none' : pick(LOOK_OPTIONS.pet.slice(1)),
     skin: pick(SKIN_TONES.slice(0, 8)),
     eyes: pick(['#3b2314', '#1e88e5', '#2e7d32', '#111111', '#8e24aa']),
     hairColor: pick(HAIR_COLORS),
@@ -73,5 +82,6 @@ export function randomLook(rand = Math.random) {
     pantsColor: pick(PALETTE),
     shoesColor: pick(PALETTE),
     extraColor: pick(PALETTE),
+    petColor: pick(PET_COLORS),
   };
 }

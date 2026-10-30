@@ -1,7 +1,7 @@
 // The "Customize your character" screen with a spinning 3D preview.
 import * as THREE from 'three';
-import { LOOK_OPTIONS, OPTION_LABELS, SKIN_TONES, PALETTE, HAIR_COLORS, sanitizeLook, randomLook } from './shared/avatar.js';
-import { buildCharacter, animateCharacter } from './character.js';
+import { LOOK_OPTIONS, OPTION_LABELS, SKIN_TONES, PALETTE, HAIR_COLORS, PET_COLORS, sanitizeLook, randomLook } from './shared/avatar.js';
+import { buildCharacter, animateCharacter, buildPet, animatePet } from './character.js';
 
 const EMOJI = {
   smile: '😊', grin: '😁', cool: '😎', wink: '😉', surprised: '😮', silly: '😜', sleepy: '😴', cat: '🐱', robot: '🤖', starry: '🤩',
@@ -10,6 +10,7 @@ const EMOJI = {
   tshirt: '👕', striped: '🦓', hoodie: '🧥', jacket: '🥼', tank: '🎽', jersey: '🏀', dress: '👗',
   jeans: '👖', shorts: '🩳', skirt: '💃', sweatpants: '🏃',
   backpack: '🎒', cape: '🦸', wings: '🧚',
+  dog: '🐶', bunny: '🐰', pig: '🐷', dragon: '🐲',
 };
 
 const TABS = [
@@ -19,6 +20,7 @@ const TABS = [
   { name: 'Shirt', icon: '👕', option: 'shirt', colors: [['shirtColor', 'Shirt color', PALETTE], ['shirtColor2', 'Second color', PALETTE]] },
   { name: 'Pants', icon: '👖', option: 'pants', colors: [['pantsColor', 'Pants color', PALETTE], ['shoesColor', 'Shoes', PALETTE]] },
   { name: 'Extras', icon: '🎒', option: 'extra', colors: [['extraColor', 'Extra color', PALETTE]] },
+  { name: 'Pet', icon: '🐶', option: 'pet', colors: [['petColor', 'Pet color', PET_COLORS]] },
 ];
 
 export class Editor {
@@ -117,6 +119,17 @@ export class Editor {
     }
     this.character = buildCharacter(this.look);
     this.holder.add(this.character.group);
+    if (this.pet) {
+      this.holder.remove(this.pet.group);
+      this.pet.dispose();
+      this.pet = null;
+    }
+    if (this.look.pet !== 'none') {
+      this.pet = buildPet(this.look.pet, this.look.petColor);
+      this.pet.group.position.set(0.75, 0, 0.35);
+      this.pet.group.rotation.y = -0.6;
+      this.holder.add(this.pet.group);
+    }
     this.renderOptions();
     this.onChange?.(this.look);
   }
@@ -133,6 +146,7 @@ export class Editor {
     this.dance = Math.max(0, (this.dance || 0) - dt);
     this.holder.rotation.y = this.spin;
     animateCharacter(this.character, { time, dance: this.dance, walk: 0, speed: 0, pitch: Math.sin(time) * 0.1 });
+    if (this.pet) animatePet(this.pet, this.dance > 0 ? 1 : 0, time);
     this.renderer.render(this.scene, this.camera);
   }
 

@@ -43,6 +43,7 @@
       <form id="join-form" class="hidden">
         <label>Name <input id="name" maxlength="16" placeholder="Builder" autocomplete="off"></label>
         <button type="button" id="customize" class="secondary">🎨 CUSTOMIZE MY CHARACTER</button>
+        <button type="button" id="gallery-open" class="secondary">👥 CHARACTER GALLERY</button>
         <button type="submit" id="play">PLAY</button>
         <p id="status"></p>
       </form>
@@ -55,6 +56,7 @@
       <h2>Paused</h2>
       <button id="resume">RESUME</button>
       <button id="pause-customize" class="secondary">🎨 CUSTOMIZE MY CHARACTER</button>
+      <button id="pause-gallery" class="secondary">👥 CHARACTER GALLERY</button>
       <label class="slider">Mouse sensitivity <input id="sensitivity" type="range" min="0.2" max="3" step="0.05" value="1"></label>
       <label class="slider">Sound volume <input id="volume" type="range" min="0" max="1" step="0.05" value="0.4"></label>
       <label>Graphics
@@ -90,6 +92,27 @@
         <div id="editor-body"></div>
         <button id="editor-done">DONE</button>
       </div>
+    </div>
+  </div>
+
+  <div id="gallery" class="screen hidden">
+    <div class="panel gallery">
+      <h2>👥 Character Gallery</h2>
+      <p class="hint">Click a character to play as them, or save yours so everyone can pick it. Up to 25 characters!</p>
+      <div class="gallery-save">
+        <input id="gallery-name" maxlength="16" placeholder="Your name" autocomplete="off">
+        <button id="gallery-save" type="button">💾 SAVE MY CHARACTER</button>
+      </div>
+      <div id="gallery-full" class="hidden">
+        <p>The gallery is full! Click a character to replace it with yours, or:</p>
+        <div class="row">
+          <button id="gallery-oldest" type="button">REPLACE THE OLDEST</button>
+          <button id="gallery-cancel" type="button" class="secondary">CANCEL</button>
+        </div>
+      </div>
+      <p id="gallery-status"></p>
+      <div id="gallery-grid"></div>
+      <button id="gallery-close" type="button" class="secondary">CLOSE</button>
     </div>
   </div>
 

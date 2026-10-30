@@ -397,3 +397,67 @@ button.secondary {
   white-space: nowrap;
 }
 #clock { font-size: 15px; }
+
+/* ---------- Character gallery ---------- */
+
+.panel.gallery { width: min(760px, 100%); }
+.gallery-save { display: flex; gap: 10px; align-items: center; }
+.gallery-save input { flex: 1; }
+.gallery-save button { width: auto; margin: 0; padding: 12px 16px; font-size: 15px; }
+#gallery-status { min-height: 1.2em; margin: 10px 0 0; color: #ffd77a; font-weight: 700; }
+#gallery-full {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(229, 57, 53, 0.2);
+  border: 2px solid rgba(229, 57, 53, 0.6);
+}
+#gallery-full p { margin: 0 0 8px; font-weight: 700; }
+#gallery-full .row { display: flex; gap: 10px; }
+#gallery-full .row button { margin: 0; padding: 10px; font-size: 15px; }
+#gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+.char-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0;
+  padding: 6px 4px 8px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+  color: var(--text);
+  font-size: 13px;
+  letter-spacing: 0;
+  min-height: 130px;
+}
+.char-card img:not([src]) { visibility: hidden; }
+.char-card img { width: 100%; max-width: 110px; aspect-ratio: 1; border-radius: 8px; background: radial-gradient(circle at 50% 40%, #4b6a9b, #1b2335); }
+.char-card:hover { border-color: var(--accent); background: rgba(255, 179, 33, 0.12); }
+.char-card:active { transform: scale(0.97); box-shadow: none; }
+.char-card.mine { border-color: #7dff8a; }
+.char-card.empty { justify-content: center; border: 2px dashed rgba(255, 255, 255, 0.15); background: none; color: var(--muted); cursor: default; }
+.char-name { margin-top: 4px; font-weight: 800; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.char-when { color: var(--muted); font-size: 11px; font-weight: 600; }
+.char-card .badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #e53935;
+  font-size: 11px;
+  font-weight: 800;
+}
+#gallery-grid.replacing .char-card:not(.empty):hover { border-color: #e53935; background: rgba(229, 57, 53, 0.18); }
+@media (max-width: 640px) {
+  .char-card { min-height: 90px; font-size: 11px; }
+  .char-name { font-size: 11px; }
+  .char-when { display: none; }
+}

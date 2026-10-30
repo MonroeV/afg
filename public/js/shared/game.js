@@ -2,7 +2,7 @@
 // The Node server runs one of these for everybody. When there is no server,
 // the browser runs its own copy so single player works exactly the same way.
 import { blockKey, inBounds, isValidBlock, DAY_LENGTH, CAR_KINDS, WORLD } from './blocks.js';
-import { sanitizeLook } from './avatar.js';
+import { sanitizeLook, cleanName } from './avatar.js';
 import { generateWorld } from './worldgen.js';
 
 export const SAVE_VERSION = 2;
@@ -13,7 +13,6 @@ const CAR_COLORS = ['#e53935', '#1e88e5', '#fdd835', '#43a047', '#ff7043', '#8e2
 
 const num = v => (Number.isFinite(v) ? v : 0);
 const clampWorld = v => Math.max(WORLD.min, Math.min(WORLD.max + 1, num(v)));
-const cleanName = s => String(s ?? '').replace(/[^\w \-.]/g, '').trim().slice(0, 16) || 'Builder';
 
 export class GameRoom {
   constructor({ maxPlayers = 32, onDirty = () => {}, log = () => {} } = {}) {
@@ -183,10 +182,14 @@ export class GameRoom {
       this.broadcast({ t: 'chat', name: client.name, color: client.look.shirtColor, text });
     },
 
+    // A new look, and optionally a new name (when someone picks a saved character).
     look(client, msg) {
       if (!this.allow(client, 'look', 1, 5)) return;
       client.look = sanitizeLook(msg.look);
-      this.broadcast({ t: 'look', id: client.id, look: client.look }, client);
+      const oldName = client.name;
+      if (msg.name !== undefined) client.name = cleanName(msg.name);
+      this.broadcast({ t: 'look', id: client.id, look: client.look, name: client.name }, client);
+      if (client.name !== oldName) this.broadcast({ t: 'chat', system: true, text: `${oldName} is now ${client.name}` });
     },
 
     emote(client, msg) {
