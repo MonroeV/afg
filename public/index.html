@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BuildZone</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/build/three.module.js",
+        "three/addons/": "./vendor/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="crosshair"></div>
+    <div id="info"></div>
+    <div id="players"></div>
+    <div id="item-name"></div>
+    <div id="hotbar"></div>
+    <div id="chat">
+      <div id="chat-log"></div>
+      <input id="chat-input" maxlength="160" autocomplete="off" placeholder="Say something… (Enter to send, Esc to cancel)">
+    </div>
+    <div id="banner" class="hidden"></div>
+  </div>
+
+  <div id="menu" class="screen">
+    <div class="panel">
+      <h1>BUILD<span>ZONE</span></h1>
+      <p class="tagline">Build anything, together.</p>
+      <div id="loading">
+        <div class="bar"><div id="loading-fill"></div></div>
+        <p>Generating textures…</p>
+      </div>
+      <form id="join-form" class="hidden">
+        <label>Name <input id="name" maxlength="16" placeholder="Builder" autocomplete="off"></label>
+        <label class="color">Color <input id="color" type="color" value="#3fa7ff"></label>
+        <button type="submit" id="play">PLAY</button>
+        <p id="status"></p>
+      </form>
+      <div class="controls">
+        <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move</div>
+        <div><kbd>Mouse</kbd> Look</div>
+        <div><kbd>Space</kbd> Jump</div>
+        <div><kbd>Click</kbd> Use item</div>
+        <div><kbd>Right click</kbd> Break block</div>
+        <div><kbd>Middle click</kbd> Copy block</div>
+        <div><kbd>1</kbd>–<kbd>9</kbd> / <kbd>Wheel</kbd> Pick item</div>
+        <div><kbd>E</kbd> All blocks</div>
+        <div><kbd>Shift</kbd> Sprint</div>
+        <div><kbd>F</kbd> Fly (<kbd>Space</kbd>/<kbd>C</kbd> up/down)</div>
+        <div><kbd>T</kbd> / <kbd>Enter</kbd> Chat</div>
+        <div><kbd>R</kbd> Back to spawn</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="pause" class="screen hidden">
+    <div class="panel">
+      <h2>Paused</h2>
+      <button id="resume">RESUME</button>
+      <label class="slider">Mouse sensitivity <input id="sensitivity" type="range" min="0.2" max="3" step="0.05" value="1"></label>
+      <label>Graphics
+        <select id="quality">
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low (faster)</option>
+        </select>
+      </label>
+      <p class="hint">Press <kbd>E</kbd> in game to choose blocks.</p>
+    </div>
+  </div>
+
+  <div id="inventory" class="screen hidden">
+    <div class="panel wide">
+      <h2>Blocks</h2>
+      <p class="hint">Click an item to put it in your selected hotbar slot.</p>
+      <div id="inventory-grid"></div>
+      <button id="inventory-done">DONE</button>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
