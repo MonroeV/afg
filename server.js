@@ -8,7 +8,7 @@ import { BLOCKS, blockKey, inBounds } from './public/js/shared/blocks.js';
 import { generateWorld } from './public/js/shared/worldgen.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = Number(process.env.PORT) || 5010;
 const DATA_DIR = path.join(ROOT, 'data');
 const WORLD_FILE = path.join(DATA_DIR, 'world.json');
 const MAX_PLAYERS = 32;

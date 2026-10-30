@@ -40,9 +40,9 @@ blocks from your hotbar and build things together with friends.
    npm start
    ```
 
-3. Open <http://localhost:3000> in your browser.
+3. Open <http://localhost:5010> in your browser.
 
-To play with someone else on the same Wi-Fi, they can open `http://YOUR-COMPUTER-IP:3000`.
+To play with someone else on the same Wi-Fi, they can open `http://YOUR-COMPUTER-IP:5010`.
 
 ## Putting it online so friends can join
 
