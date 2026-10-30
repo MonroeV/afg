@@ -1,14 +1,15 @@
 // The on-screen parts of the game: hotbar, item menu, chat and info panels.
-import { ALL_ITEMS, HAMMER, FIREWORKS, isCarItem, itemName } from './items.js';
+import { ALL_ITEMS, TOOLS, itemName } from './items.js';
 import { BLOCKS } from './shared/blocks.js';
+import { RECIPES } from './structures.js';
 
 const $ = id => document.getElementById(id);
 
 export const CONTROLS = [
   ['W A S D', 'Move'], ['Mouse', 'Look'], ['Space', 'Jump'], ['Click', 'Use item'],
-  ['Right click', 'Break'], ['Middle click', 'Copy block'], ['1–9 / Wheel', 'Pick item'],
-  ['E', 'Items / get in car'], ['Shift', 'Sprint'], ['F', 'Fly (Space/C)'], ['V', 'Camera view'],
-  ['G', 'Dance!'], ['B', 'Wave'], ['T / Enter', 'Chat'], ['R', 'Back to town'],
+  ['Right click', 'Interact (doors, cars, pets, beds)'], ['Hammer', '3 hits to break'], ['Middle click', 'Copy block'],
+  ['1–9 / Wheel', 'Pick item'], ['E', 'Items & Build Book'], ['Shift', 'Sprint'], ['F', 'Fly (Space/C)'],
+  ['V', 'Camera view'], ['G', 'Dance!'], ['B', 'Wave'], ['T / Enter', 'Chat'], ['R', 'Back to your bed / town'],
 ];
 
 export function renderControls(el) {
@@ -82,7 +83,7 @@ export class Hud {
     const grid = $('inventory-grid');
     grid.textContent = '';
     const sections = [
-      ['🧰 Tools & Toys', i => i === HAMMER || i === FIREWORKS || isCarItem(i)],
+      ['🧰 Tools & Toys', i => TOOLS.includes(i)],
       ['🧱 Building Blocks', i => typeof i === 'number' && !BLOCKS[i].shape],
       ['🏡 Town Stuff', i => typeof i === 'number' && !!BLOCKS[i].shape],
     ];
@@ -103,6 +104,43 @@ export class Hud {
         });
         grid.append(el);
       }
+    }
+    this.buildBook(grid);
+  }
+
+  // The Build Book: special things you can make out of blocks.
+  buildBook(grid) {
+    const h = document.createElement('div');
+    h.className = 'inv-section';
+    h.textContent = '📖 Build Book: arrange blocks like this to make something special';
+    grid.append(h);
+    const book = document.createElement('div');
+    book.className = 'book';
+    grid.append(book);
+    for (const r of RECIPES) {
+      const card = document.createElement('div');
+      card.className = 'recipe';
+      const pic = document.createElement('div');
+      pic.className = 'recipe-pic';
+      const rows = r.side || r.grid;
+      pic.style.gridTemplateColumns = `repeat(${rows[0].length}, 26px)`;
+      for (const row of rows)
+        for (const id of row) {
+          const cell = document.createElement('div');
+          if (id) cell.append(this.iconCanvas(id));
+          pic.append(cell);
+        }
+      const text = document.createElement('div');
+      const title = document.createElement('b');
+      title.textContent = `${r.icon} ${r.name}`;
+      const how = document.createElement('div');
+      how.textContent = r.how + (r.side ? ' (side view)' : ' (seen from above)');
+      const use = document.createElement('div');
+      use.className = 'recipe-use';
+      use.textContent = r.use;
+      text.append(title, how, use);
+      card.append(pic, text);
+      book.append(card);
     }
   }
 
@@ -147,9 +185,25 @@ export class Hud {
     const el = $('car-help');
     el.classList.toggle('hidden', !kind);
     if (!kind) return;
-    el.innerHTML = '<kbd>W</kbd><kbd>S</kbd> Drive <kbd>A</kbd><kbd>D</kbd> Steer <kbd>Space</kbd> Brake ' +
-      '<kbd>Shift</kbd> Boost <kbd>H</kbd> Horn ' + (kind === 'police' ? '<kbd>G</kbd> Siren ' : '') +
-      '<kbd>V</kbd> Camera <kbd>E</kbd> Get out';
+    el.innerHTML = kind === 'heli'
+      ? '<kbd>Space</kbd> Up <kbd>Shift</kbd> Down <kbd>W</kbd><kbd>S</kbd> Tilt <kbd>A</kbd><kbd>D</kbd> Turn <kbd>V</kbd> Camera <kbd>E</kbd> Get out'
+      : '<kbd>W</kbd><kbd>S</kbd> Drive <kbd>A</kbd><kbd>D</kbd> Steer <kbd>Space</kbd> Brake ' +
+        '<kbd>Shift</kbd> Boost <kbd>H</kbd> Horn ' + (kind === 'police' ? '<kbd>G</kbd> Siren ' : '') +
+        '<kbd>V</kbd> Camera <kbd>E</kbd> Get out';
+  }
+
+  setVehicleInfo(text) {
+    const el = $('vehicle-hud');
+    el.classList.toggle('hidden', !text);
+    if (text && el.textContent !== text) el.textContent = text;
+  }
+
+  toast(text) {
+    const el = $('toast');
+    el.textContent = text;
+    el.classList.add('show');
+    clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
   }
 
   updateInfo({ online, fps, pos, flying, clock }) {

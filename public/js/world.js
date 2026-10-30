@@ -112,11 +112,14 @@ export class World {
   }
 
   load(flat) {
+    this.loading = true;
     for (const k of [...this.blocks.keys()]) {
       const [x, y, z] = k.split(',').map(Number);
       this.set(x, y, z, 0);
     }
     for (let i = 0; i + 3 < flat.length; i += 4) this.set(flat[i], flat[i + 1], flat[i + 2], flat[i + 3]);
+    this.loading = false;
+    this.onLoad?.();
   }
 
   set(x, y, z, v) {
@@ -134,6 +137,7 @@ export class World {
     } else {
       this.blocks.delete(k);
     }
+    if (!this.loading) this.onChange?.(x, y, z);
     return true;
   }
 

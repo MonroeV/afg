@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { buildCharacter, animateCharacter, buildPet, animatePet } from './character.js';
 import { SEAT_SCALE } from './cars.js';
+import { PET_HAPPY, PET_CARRYING } from './pets.js';
 
 function nameTag(name, color) {
   const canvas = document.createElement('canvas');
@@ -77,9 +78,49 @@ export class Avatar {
       this.pet = buildPet(pet, petColor);
       this.petColor = petColor;
       this.pet.pos = this.pos.clone();
-      this.pet.yaw = this.yaw;
+      this.pet.target = this.pos.clone();
+      this.pet.yaw = this.pet.targetYaw = this.yaw;
+      this.pet.action = 0;
+      // A ball the pet can carry in its mouth.
+      this.pet.ball = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 8), new THREE.MeshStandardMaterial({ color: 0xe53935 }));
+      this.pet.ball.position.set(0, -0.08, -0.2);
+      this.pet.ball.visible = false;
+      this.pet.head.add(this.pet.ball);
       this.scene.add(this.pet.group);
     }
+  }
+
+  // A ball this (other) player threw, as their game reports it.
+  updateRemoteBall(dt) {
+    const b = this.remoteBall;
+    if (!Array.isArray(b)) {
+      if (this.ballMesh) this.ballMesh.visible = false;
+      return;
+    }
+    if (!this.ballMesh) {
+      this.ballMesh = new THREE.Mesh(new THREE.SphereGeometry(0.15, 14, 10), new THREE.MeshStandardMaterial({ color: 0xe53935, roughness: 0.4 }));
+      this.ballMesh.castShadow = true;
+      this.scene.add(this.ballMesh);
+      this.ballMesh.position.fromArray(b);
+    }
+    this.ballMesh.visible = true;
+    this.ballMesh.position.lerp(new THREE.Vector3().fromArray(b), Math.min(1, dt * 12));
+  }
+
+  // Where our pet is, for sending to other players: [x, y, z, yaw, action].
+  petState() {
+    const p = this.pet;
+    if (!p) return 0;
+    const r = v => Math.round(v * 100) / 100;
+    return [r(p.pos.x), r(p.pos.y), r(p.pos.z), r(p.yaw), p.action];
+  }
+
+  // Another player's pet, as they sent it.
+  setPetState(state) {
+    if (!this.pet || !Array.isArray(state)) return;
+    this.pet.target.set(state[0], state[1], state[2]);
+    this.pet.targetYaw = state[3];
+    this.pet.action = state[4];
   }
 
   setName(name) {
@@ -100,28 +141,53 @@ export class Avatar {
       pet.pos.copy(this.pos);
       return;
     }
-    // Trot to a spot just behind and beside the owner.
-    const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
-    const target = new THREE.Vector3(this.pos.x + cos * 0.9 + sin * 0.7, this.pos.y, this.pos.z - sin * 0.9 + cos * 0.7);
-    const toTarget = target.clone().sub(pet.pos);
-    const dist = Math.hypot(toTarget.x, toTarget.z);
-    if (dist > 14) pet.pos.copy(target);
     let moving = 0;
-    if (dist > 0.35) {
-      const step = Math.min(dist, Math.max(3, dist * 2.5) * dt);
-      pet.pos.x += (toTarget.x / dist) * step;
-      pet.pos.z += (toTarget.z / dist) * step;
-      moving = Math.min(1, dist);
-      pet.yaw = Math.atan2(-toTarget.x, -toTarget.z);
+    if (this.brain) {
+      // Our own pet thinks for itself.
+      const plan = this.brain.think(dt, { pos: this.pos, yaw: this.yaw, speed: this.speed }, pet.pos, this.ball);
+      pet.action = plan.action;
+      if (plan.dropped) this.onPetEvent?.('dropped');
+      if (plan.goal) {
+        const to = plan.goal.clone().sub(pet.pos);
+        const dist = Math.hypot(to.x, to.z);
+        if (dist > (plan.far ?? 14)) pet.pos.copy(plan.goal); // too far behind: catch up
+        else if (dist > 0.3) {
+          const speed = plan.speed ?? Math.max(3, dist * 2.5);
+          const step = Math.min(dist, speed * dt);
+          pet.pos.x += (to.x / dist) * step;
+          pet.pos.z += (to.z / dist) * step;
+          moving = Math.min(1, dist);
+          pet.yaw = Math.atan2(-to.x, -to.z);
+        } else if (!plan.sniff) {
+          let dy = this.yaw - pet.yaw;
+          dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+          pet.yaw += dy * Math.min(1, dt * 3);
+        }
+      }
+      const ground = this.groundAt ? this.groundAt(pet.pos.x, pet.pos.z, this.pos.y) : this.pos.y;
+      pet.pos.y += (ground - pet.pos.y) * Math.min(1, dt * 10);
+      pet.sniff = plan.sniff;
     } else {
-      let dy = this.yaw - pet.yaw;
+      // Someone else's pet: glide to where their game says it is.
+      const before = pet.pos.clone();
+      if (pet.pos.distanceTo(pet.target) > 14) pet.pos.copy(pet.target);
+      pet.pos.lerp(pet.target, Math.min(1, dt * 10));
+      let dy = pet.targetYaw - pet.yaw;
       dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-      pet.yaw += dy * Math.min(1, dt * 3);
+      pet.yaw += dy * Math.min(1, dt * 10);
+      moving = Math.min(1, before.distanceTo(pet.pos) / Math.max(dt, 1e-3) / 3);
     }
-    pet.pos.y += (this.pos.y - pet.pos.y) * Math.min(1, dt * 8);
     pet.group.position.copy(pet.pos);
     pet.group.rotation.y = pet.yaw;
+    pet.ball.visible = pet.action === PET_CARRYING;
     animatePet(pet, moving, time);
+    if (pet.action === PET_HAPPY) {
+      // Jump for joy and spin around.
+      pet.body.position.y += Math.abs(Math.sin(time * 9)) * 0.35;
+      pet.group.rotation.y = pet.yaw + time * 6;
+    } else if (pet.sniff) {
+      pet.head.rotation.x = -0.5 + Math.sin(time * 12) * 0.08;
+    }
   }
 
   setState(x, y, z, yaw, pitch) {
@@ -161,10 +227,14 @@ export class Avatar {
     if (this.speed > 0.3 && !this.seat) this.dance = 0;
 
     this.root.position.copy(this.pos);
+    this.root.rotation.order = 'YXZ';
     this.root.rotation.y = this.yaw;
+    this.root.rotation.x = this.lying ? Math.PI / 2 : 0; // asleep in bed, on our back
     this.root.scale.setScalar(this.seat ? SEAT_SCALE : 1);
+    if (this.tag) this.tag.visible = !this.lying;
+    this.updateRemoteBall(dt);
     animateCharacter(this.character, {
-      walk: this.walk, speed: this.seat ? 0 : this.speed, pitch: this.pitch, time,
+      walk: this.walk, speed: this.seat || this.lying ? 0 : this.speed, pitch: this.lying ? 0 : this.pitch, time,
       dance: this.dance, wave: this.wave, swing: this.swing, sitting: !!this.seat,
       flying: this.flying,
     });
@@ -178,6 +248,7 @@ export class Avatar {
       this.scene.remove(this.pet.group);
       this.pet.dispose();
     }
+    if (this.ballMesh) this.scene.remove(this.ballMesh);
     this.tag?.material.map.dispose();
   }
 }
@@ -203,8 +274,13 @@ export class Avatars {
   }
 
   applyStates(list, myId) {
-    for (const [id, x, y, z, yaw, pitch] of list) {
-      if (id !== myId) this.list.get(id)?.setState(x, y, z, yaw, pitch);
+    for (const [id, x, y, z, yaw, pitch, pet, ball, flags] of list) {
+      const a = this.list.get(id);
+      if (id === myId || !a) continue;
+      a.setState(x, y, z, yaw, pitch);
+      a.setPetState(pet);
+      a.remoteBall = ball;
+      a.lying = !!(flags & 1);
     }
   }
 

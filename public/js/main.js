@@ -8,13 +8,18 @@ import { World, createBlockMaterials, blockMaterial } from './world.js';
 import { Player, EYE_HEIGHT } from './player.js';
 import { Network } from './network.js';
 import { Avatar, Avatars } from './avatars.js';
-import { Cars, CAR_SPECS, SEAT_SCALE } from './cars.js';
+import { Cars, SEAT_SCALE } from './cars.js';
+import { MAX_HP, FIRE_HP } from './shared/vehicles.js';
+import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey } from './shared/claims.js';
+import { Structures } from './structures.js';
+import { LandView, describeSize } from './landview.js';
+import { Ball, PetBrain } from './pets.js';
 import { DayNight } from './daynight.js';
 import { Editor } from './editor.js';
 import { CharacterClient, Gallery } from './gallery.js';
 import { Hud, renderControls } from './hud.js';
-import { HAMMER, FIREWORKS, ALL_ITEMS, DEFAULT_HOTBAR, isCarItem, makeIcon, ViewModel } from './items.js';
-import { Particles, Fireworks, Sounds } from './effects.js';
+import { HAMMER, FIREWORKS, BALL, CLAIM, ALL_ITEMS, DEFAULT_HOTBAR, makeIcon, ViewModel } from './items.js';
+import { Particles, Fireworks, Sounds, Effects } from './effects.js';
 
 const $ = id => document.getElementById(id);
 const REACH = 7;
@@ -88,12 +93,15 @@ scene.add(headlight, headlight.target);
 const view = new ViewModel();
 const particles = new Particles(scene);
 const fireworks = new Fireworks(scene);
+const effects = new Effects(scene);
+const landView = new LandView(scene);
 const sounds = new Sounds();
 sounds.volume = settings.volume;
 
 // ---------- Game state ----------
 
-let world, player, materials, textures, icons, hud, cars, myBody, editor, gallery;
+let world, player, materials, textures, icons, hud, cars, myBody, editor, gallery, structures, ball;
+let claims = [];
 const net = new Network();
 const avatars = new Avatars(scene);
 let myId = null;
@@ -156,9 +164,15 @@ async function load() {
   view.materials = materials;
   icons = Object.fromEntries(ALL_ITEMS.map(i => [i, makeIcon(i, textures)]));
   world = new World(scene, materials);
+  structures = new Structures(world);
+  world.onChange = (x, y, z) => structures.changed(x, y, z);
+  world.onLoad = () => structures.scan();
+  sky.extraLights = structureLights;
   player = new Player(world);
-  cars = new Cars(scene, world);
+  player.bouncePower = trampolineBounce;
+  cars = new Cars(scene, world, effects);
   player.extraBoxes = () => cars.boxes(myCar?.id);
+  ball = new Ball(scene);
   buildGround();
 
   // Show the town behind the main menu.
@@ -172,6 +186,13 @@ async function load() {
   myBody = new Avatar(scene, { id: 0, name: '', look: settings.look }, { tag: false });
   myBody.snap = true;
   myBody.root.visible = false;
+  myBody.brain = new PetBrain();
+  myBody.ball = ball;
+  myBody.groundAt = groundAt;
+  myBody.onPetEvent = () => {
+    sounds.pet(myBody.pet?.kind);
+    effects.heartsAt(myBody.pet.pos.x, myBody.pet.pos.y + 0.6, myBody.pet.pos.z);
+  };
   renderControls($('menu-controls'));
   renderControls($('pause-controls'));
 
@@ -210,11 +231,12 @@ $('join-form').addEventListener('submit', async e => {
   for (const p of welcome.players) avatars.add(p);
   cars.clear();
   for (const c of welcome.cars) cars.add(c);
+  setClaims(welcome.claims || []);
   sky.time = welcome.time;
   hud.addChat({ system: true, text: online
     ? `Welcome, ${settings.name}! ${welcome.players.length} other builder(s) online.`
     : 'Playing single player. Your world saves in this browser. Run "npm start" to play with friends!' });
-  hud.addChat({ system: true, text: 'Tip: click a car (or press E) to drive it. Press G to dance!' });
+  hud.addChat({ system: true, text: 'Tip: right-click a car or the helicopter to drive it. Press E to see the Build Book!' });
 
   inGame = true;
   player.respawn();
@@ -240,21 +262,45 @@ net.on('look', ({ id, look, name }) => {
   if (name) a?.setName(name);
 });
 net.on('emote', ({ id, kind }) => avatars.list.get(id)?.emote(kind));
-net.on('fx', ({ x, y, z, color, seed }) => {
-  fireworks.launch(x, y, z, color, seed);
-  sounds.launch(loudness(x, y, z, 80));
+net.on('fx', ({ kind, x, y, z, color, seed }) => {
+  if (kind === 'hearts') effects.heartsAt(x, y, z);
+  else if (kind === 'sparkle') effects.sparkle(x, y, z, 30);
+  else {
+    fireworks.launch(x, y, z, color, seed);
+    sounds.launch(loudness(x, y, z, 80));
+  }
 });
+// A vehicle (re)appeared.
 net.on('car', ({ car }) => {
   cars.add(car);
-  const v = loudness(car.x, car.y, car.z, 30);
-  if (v > 0) sounds.spawnCar();
+  if (loudness(car.x, car.y, car.z, 40) > 0) {
+    sounds.spawnCar();
+    effects.sparkle(car.x, car.y, car.z, 40);
+  }
 });
-net.on('car_remove', ({ id }) => {
-  if (myCar?.id === id) leaveCar();
+net.on('car_hp', ({ id, hp, impact }) => {
   const car = cars.list.get(id);
-  if (car) particles.burst(car.pos.x - 0.5, car.pos.y + 0.5, car.pos.z - 0.5, car.model.paint, 14);
+  if (!car) return;
+  const hurt = hp < car.hp;
+  if (hurt && car.hp >= FIRE_HP && hp < FIRE_HP && myCar === car) hud.addChat({ system: true, text: '🔥 Your vehicle is on fire! Get out (E) before it blows up!' });
+  cars.applyHp(car, hp, impact);
+  if (hurt && impact && myCar !== car) sounds.crash(loudness(car.pos.x, car.pos.y, car.pos.z, 40) * 0.6);
+});
+net.on('car_destroy', ({ id, x, y, z }) => {
+  const car = cars.list.get(id);
+  const p = car ? car.pos : new THREE.Vector3(x, y, z);
+  effects.explosion(p.x, p.y + 1, p.z);
+  sounds.explode(loudness(p.x, p.y, p.z, 120));
+  if (car) particles.burst(p.x - 0.5, p.y + 0.5, p.z - 0.5, car.model.paint, 20);
+  if (myCar?.id === id) {
+    leaveCar();
+    player.vel.set(0, 12, 0); // blown clear!
+    hud.addChat({ system: true, text: `💥 Boom! It'll be back in ${car?.spec.flying ? '5 minutes' : '30 seconds'}.` });
+  }
   cars.remove(id);
 });
+net.on('claims', ({ claims: list }) => setClaims(list));
+net.on('wake', () => wakeUp());
 net.on('car_driver', msg => {
   if (myCar?.id === msg.id && msg.driver === myId) return; // that's us, we already know
   cars.setDriver(msg);
@@ -343,6 +389,7 @@ function setIdentity(name, look) {
   $('name').value = name;
   saveSettings();
   myBody.setLook(settings.look);
+  landView.set(claims, name);
   if (inGame) net.send({ t: 'look', look: settings.look, name });
 }
 
@@ -413,6 +460,10 @@ window.addEventListener('keydown', e => {
   if (['Space', 'Tab', 'ControlLeft'].includes(e.code)) e.preventDefault();
   if (e.repeat) return;
   keys.add(e.code);
+  if (sleeping && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space'].includes(e.code)) {
+    wakeUp();
+    return;
+  }
 
   if (e.code === 'KeyT' || e.code === 'Enter') {
     e.preventDefault();
@@ -429,8 +480,7 @@ window.addEventListener('keydown', e => {
     player.flying = !player.flying;
     player.vel.y = 0;
   } else if (e.code === 'KeyR') {
-    if (myCar) leaveCar(true);
-    player.respawn();
+    respawn();
   } else if (e.code === 'KeyX' && myCar) {
     leaveCar(true);
   } else if (e.code === 'KeyH' && myCar) {
@@ -464,16 +514,18 @@ document.addEventListener('mousemove', e => {
 canvas.addEventListener('mousedown', e => {
   if (!locked) return;
   if (myCar) {
-    honk();
+    if (!myCar.spec.flying) honk();
     return;
   }
   mouse.add(e.button);
   if (e.button === 1) {
     e.preventDefault();
     pickBlock();
+  } else if (e.button === 2) {
+    interact();
   } else {
-    useItem(e.button === 0);
-    useCooldown = 0.28;
+    useItem();
+    useCooldown = hud.item === HAMMER ? 0.25 : 0.28;
   }
 });
 window.addEventListener('mouseup', e => mouse.delete(e.button));
@@ -488,11 +540,17 @@ function emote(kind) {
   myBody.emote(kind);
   net.send({ t: 'emote', kind });
   if (kind === 'dance') {
-    sounds.tune();
+    if (onDanceFloor(player.pos)) {
+      sounds.party();
+      myBody.dance = 8;
+      hud.toast('🪩 Dance party!');
+    } else {
+      sounds.tune();
+    }
     // Turn the camera around so you can see yourself dance.
     if (viewMode === 0) {
       viewMode = 2;
-      danceView = 4;
+      danceView = myBody.dance;
     }
   }
 }
@@ -520,11 +578,43 @@ function launchFirework() {
   net.send({ t: 'fx', kind: 'firework', x, y, z, color, seed });
 }
 
-// ---------- Cars ----------
+function throwBall() {
+  ball.throw(eye, lookDir);
+  sounds.swing();
+  if (myBody.pet) setTimeout(() => sounds.pet(myBody.pet?.kind), 250);
+}
+
+// Rays against pets (yours and everyone else's).
+function petRaycast(origin, dir, max) {
+  let best = null;
+  const check = avatar => {
+    const p = avatar.pet;
+    if (!p || !p.group.visible) return;
+    const c = p.pos.clone();
+    c.y += p.kind === 'dragon' ? 1.1 : 0.35;
+    const oc = origin.clone().sub(c);
+    const b = oc.dot(dir), disc = b * b - (oc.lengthSq() - 0.45 * 0.45);
+    if (disc < 0) return;
+    const t = -b - Math.sqrt(disc);
+    if (t > 0 && t < max && (!best || t < best.distance)) best = { pet: p, avatar, distance: t, point: c };
+  };
+  check(myBody);
+  for (const a of avatars.list.values()) check(a);
+  return best;
+}
+
+function petThePet(t) {
+  sounds.pet(t.pet.kind);
+  effects.heartsAt(t.point.x, t.point.y + 0.4, t.point.z);
+  net.send({ t: 'fx', kind: 'hearts', x: t.point.x, y: t.point.y + 0.4, z: t.point.z });
+  if (t.avatar === myBody) myBody.brain.cheer();
+}
+
+// ---------- Vehicles ----------
 
 function requestEnter(car) {
   if (car.driver) {
-    hud.addChat({ system: true, text: 'Someone is already driving that car!' });
+    hud.addChat({ system: true, text: 'Someone is already in there!' });
     return;
   }
   net.send({ t: 'car_enter', id: car.id });
@@ -532,21 +622,30 @@ function requestEnter(car) {
 
 function enterCar(car) {
   if (!car) return;
+  wakeUp();
   myCar = car;
   car.driver = myId;
+  car.gear = 1;
+  car.vel.set(0, 0, 0);
   player.flying = false;
   carCam.yaw = 0;
-  carCam.pitch = -0.15;
+  carCam.pitch = car.spec.flying ? -0.25 : -0.15;
   danceView = 0;
   hud.setCarHelp(car.kind);
-  sounds.engine(0);
+  if (!car.spec.flying) sounds.engine(0.15, 0);
   sounds.spawnCar();
+  if (car.spec.flying && !settings.flownBefore) {
+    hud.addChat({ system: true, text: '🚁 Wait for the rotor to spin up, then hold Space to lift off. Tilt with W/S, turn with A/D, Shift to go down. Land gently!' });
+    settings.flownBefore = true;
+    saveSettings();
+  }
 }
 
-// Gets out of the car. `tell` sends the news to the server.
+// Gets out of the vehicle. `tell` sends the news to the server.
 function leaveCar(tell = false) {
   const car = myCar;
   if (!car) return;
+  if (tell && car.spec.flying && !car.onGround) dropHelicopter(car);
   if (tell) {
     sendCarState();
     net.send({ t: 'car_exit', id: car.id });
@@ -563,35 +662,297 @@ function leaveCar(tell = false) {
   player.yaw = car.h;
   player.pitch = 0;
   hud.setCarHelp(null);
+  hud.setVehicleInfo(null);
   sounds.engine(null);
+}
+
+// Nobody's flying it any more: it falls to the ground (and gets hurt if it was high up).
+function dropHelicopter(car) {
+  const start = car.pos.y;
+  for (let i = 0; i < 400 && !cars.blocked(car.spec, car.pos.x, car.pos.y - 0.25, car.pos.z, car.h, car.id, car.outline); i++) car.pos.y -= 0.25;
+  car.pitch = car.roll = 0;
+  const fall = start - car.pos.y;
+  if (fall > 3) net.send({ t: 'car_damage', id: car.id, amount: Math.min(45, fall * 3), impact: [0, 0, 0] });
 }
 
 function sendCarState() {
   if (!myCar) return;
   const r = v => Math.round(v * 100) / 100;
-  net.send({ t: 'car_state', id: myCar.id, x: r(myCar.pos.x), y: r(myCar.pos.y), z: r(myCar.pos.z), h: r(myCar.h), speed: r(myCar.speed), steer: r(myCar.steer), siren: myCar.siren });
+  net.send({
+    t: 'car_state', id: myCar.id, x: r(myCar.pos.x), y: r(myCar.pos.y), z: r(myCar.pos.z), h: r(myCar.h),
+    speed: r(myCar.speed), steer: r(myCar.steer), siren: myCar.siren, p: r(myCar.pitch), r: r(myCar.roll), rs: r(myCar.rotorSpin),
+  });
 }
 
-function spawnCar(kind) {
-  if (!hit) return;
-  let [x, y, z] = hit.value && isReplaceable(hit.value) ? hit.block : hit.place;
-  const h = player.yaw;
-  // Put the car a little in front of where you clicked, pointing the way you're looking.
-  const cx = x + 0.5 - Math.sin(h) * 1.2, cz = z + 0.5 - Math.cos(h) * 1.2;
-  const spec = CAR_SPECS[kind];
-  if (cars.blocked(spec, cx, y, cz, h)) {
-    hud.addChat({ system: true, text: 'Not enough room for a car there. Try an open road!' });
+function reportDamage(car, amount, impact) {
+  if (amount < 1) return;
+  net.send({ t: 'car_damage', id: car.id, amount: Math.round(amount), impact });
+}
+
+function hitVehicle(t) {
+  sounds.crack();
+  particles.burst(t.point.x - 0.5, t.point.y - 0.5, t.point.z - 0.5, t.car.model.paint, 4);
+  reportDamage(t.car, 8, cars.toLocal(t.car, t.point));
+}
+
+// ---------- Land claims ----------
+
+const claimTool = { a: null, rect: null, confirm: false, unclaimAsk: 0 };
+let lastLandKey = null, landMsgTime = 0;
+
+function setClaims(list) {
+  claims = list;
+  landView.set(claims, settings.name);
+}
+
+const canBuildAt = (x, z) => canBuild(claims, settings.name, x, z);
+
+function notifyLand(x, z) {
+  if (performance.now() - landMsgTime < 2000) return;
+  landMsgTime = performance.now();
+  hud.toast(`🚧 This is ${claimAt(claims, x, z).owner}'s land. You can visit, but not build.`);
+}
+
+function claimProblem(rect) {
+  if (!claimSizeOk(rect)) return '🚩 Too big! Land can be at most 10 × 15 blocks.';
+  const clash = claims.find(c => c.key !== nameKey(settings.name) && rectsOverlap(c, rect));
+  return clash ? `🚩 That overlaps ${clash.owner}'s land.` : null;
+}
+
+function claimCell() {
+  if (!hit) return null;
+  const [x, , z] = hit.ground ? hit.place : hit.block;
+  return [x, z];
+}
+
+function resetClaimTool() {
+  claimTool.a = claimTool.rect = null;
+  claimTool.confirm = false;
+  landView.preview(null);
+}
+
+function claimClick() {
+  const cell = claimCell();
+  if (!cell) return;
+  if (!claimTool.a) {
+    claimTool.a = cell;
+    sounds.click();
+    hud.toast('🚩 Now click the opposite corner of your land.');
     return;
   }
-  net.send({ t: 'car_spawn', kind, x: cx, y, z: cz, h });
+  if (!claimTool.confirm) {
+    const rect = normalizeRect(claimTool.a[0], claimTool.a[1], cell[0], cell[1]);
+    const problem = claimProblem(rect);
+    if (problem) {
+      hud.toast(problem);
+      return;
+    }
+    claimTool.rect = rect;
+    claimTool.confirm = true;
+    landView.preview(rect, true);
+    sounds.click();
+    hud.toast(`🚩 Click once more to claim this ${describeSize(rect)} land! (Right-click to cancel)`);
+    return;
+  }
+  net.send({ t: 'claim', ...claimTool.rect });
+  sounds.claim();
+  resetClaimTool();
+}
+
+function unclaimClick() {
+  if (!claims.some(c => c.key === nameKey(settings.name))) {
+    hud.toast("🚩 You don't own any land yet. Click two corners to claim some!");
+  } else if (performance.now() - claimTool.unclaimAsk < 4000) {
+    net.send({ t: 'unclaim' });
+    claimTool.unclaimAsk = 0;
+  } else {
+    claimTool.unclaimAsk = performance.now();
+    hud.toast('🏳️ Right-click again to give up your land.');
+  }
+}
+
+// ---------- Special structures ----------
+
+let fxTimer = 0, teleCharge = 0, teleCooldown = 0, trampCombo = 0, lastBounceTramp = false;
+let sleeping = null; // { bed, standAt }
+let snoreTimer = 0;
+
+function structureLights() {
+  const out = [];
+  if (!structures) return out;
+  const t = performance.now() / 1000;
+  for (const s of structures.near(camera.position, 60)) {
+    if (s.type === 'campfire') out.push({ x: s.x, y: s.y + 1, z: s.z, color: new THREE.Color(0xff8a3c), intensity: 10 });
+    if (s.type === 'disco') out.push({ x: s.x, y: s.y + 2.5, z: s.z, color: new THREE.Color().setHSL((t * 0.7) % 1, 1, 0.55), intensity: 30, always: true });
+  }
+  return out;
+}
+
+function trampolineBounce(x, y, z, held) {
+  const t = structures?.trampolineAt(x, y, z);
+  lastBounceTramp = !!t;
+  if (!t) {
+    trampCombo = 0;
+    return 19;
+  }
+  // Hold Space as you land to bounce higher each time.
+  trampCombo = held.has('Space') ? Math.min(trampCombo + 1, 5) : 0;
+  return 21 + trampCombo * 5;
+}
+
+function onDanceFloor(pos) {
+  return structures.ofType('disco').some(s => Math.abs(pos.x - s.x - 0.5) < 1.6 && Math.abs(pos.z - s.z - 0.5) < 1.6 && Math.abs(pos.y - s.y - 1) < 0.5);
+}
+
+function fireCannon(s) {
+  player.flying = false;
+  player.launched = true;
+  player.vel.copy(lookDir).multiplyScalar(26);
+  player.vel.y = Math.max(player.vel.y, 4) + 8;
+  player.onGround = false;
+  sounds.cannon();
+  for (let i = 0; i < 12; i++) effects.smokePuff(s.x + 0.5, s.y + 2, s.z + 0.5, 0.2);
+  hud.toast('💥 WHEEEE!');
+}
+
+function goToBed(bed) {
+  if (myCar) return;
+  const px = bed.x + 0.5, pz = bed.z + 0.5, bx = bed.x + bed.dx + 0.5, bz = bed.z + bed.dz + 0.5;
+  const dir = { x: px - bx, z: pz - bz };
+  const top = bed.y + 1;
+  sleeping = { bed, standAt: [bx, top, bz] };
+  // Lie on your back with your head on the pillow.
+  player.pos.set(bx - dir.x * 0.45, top + 0.15, bz - dir.z * 0.45);
+  player.vel.set(0, 0, 0);
+  player.flying = false;
+  player.yaw = Math.atan2(dir.x, dir.z);
+  myBody.lying = true;
+  settings.bed = { x: bed.x, y: bed.y, z: bed.z };
+  saveSettings();
+  net.send({ t: 'sleep', on: true });
+  hud.toast(sky.isNight ? '😴 Zzz… When everyone is asleep, the sun comes up!' : '🛏️ This bed is your home now. Press R to come back here. (Move to get up)');
+}
+
+function wakeUp() {
+  if (!sleeping) return;
+  const [x, y, z] = sleeping.standAt;
+  player.pos.set(x, y, z);
+  sleeping = null;
+  myBody.lying = false;
+  net.send({ t: 'sleep', on: false });
+}
+
+function respawn() {
+  wakeUp();
+  if (myCar) leaveCar(true);
+  const b = settings.bed;
+  const bed = b && structures.ofType('bed').find(s => s.x === b.x && s.y === b.y && s.z === b.z);
+  if (bed) {
+    player.pos.set(bed.x + bed.dx + 0.5, bed.y + 1, bed.z + bed.dz + 0.5);
+    player.vel.set(0, 0, 0);
+    hud.toast('🛏️ Back to your bed!');
+  } else {
+    player.respawn();
+  }
+}
+
+// Effects for structures near you, and teleporting. Returns how loud nearby fires are.
+function updateStructures(dt, time) {
+  fxTimer -= dt;
+  const emit = fxTimer <= 0;
+  if (emit) fxTimer = 0.06;
+  let fire = 0;
+  for (const s of structures.near(camera.position, 45)) {
+    const cx = s.x + 0.5, cz = s.z + 0.5;
+    if (s.type === 'campfire') {
+      if (emit) {
+        effects.flame(cx, s.y + 1.05, cz, 0.9);
+        if (Math.random() < 0.3) effects.smokePuff(cx, s.y + 1.8, cz, 0.3);
+      }
+      fire = Math.max(fire, loudness(cx, s.y, cz, 14) * 0.6);
+    } else if (s.type === 'fountain' && emit) {
+      for (let i = 0; i < 3; i++) effects.spray(cx, s.y + 0.1, cz);
+    } else if (s.type === 'teleporter' && emit && Math.random() < 0.5) {
+      effects.sparkle(cx, s.y + 1, cz, 2);
+    } else if (s.type === 'disco' && emit && Math.random() < 0.25) {
+      const dancers = [myBody, ...avatars.list.values()].filter(a => a.dance > 0 && Math.abs(a.pos.x - cx) < 1.6 && Math.abs(a.pos.z - cz) < 1.6);
+      for (const a of dancers) effects.note(a.pos.x, a.pos.y + 2.2, a.pos.z);
+    }
+  }
+
+  // Stand on a teleporter's lamp for a moment to zoom to the next one.
+  teleCooldown -= dt;
+  const p = player.pos;
+  const tp = !myCar && !sleeping && teleCooldown <= 0 &&
+    structures.ofType('teleporter').find(t => Math.floor(p.x) === t.x && Math.floor(p.z) === t.z && Math.abs(p.y - t.y - 1) < 0.2);
+  if (tp) {
+    teleCharge += dt;
+    if (emit) effects.sparkle(p.x, p.y, p.z, 3);
+    if (teleCharge > 0.6) {
+      teleCharge = 0;
+      const next = structures.nextTeleporter(tp);
+      if (next) {
+        net.send({ t: 'fx', kind: 'sparkle', x: p.x, y: p.y, z: p.z });
+        player.pos.set(next.x + 0.5, next.y + 1, next.z + 0.5);
+        player.vel.set(0, 0, 0);
+        effects.sparkle(player.pos.x, player.pos.y, player.pos.z, 40);
+        net.send({ t: 'fx', kind: 'sparkle', x: player.pos.x, y: player.pos.y, z: player.pos.z });
+        sounds.whoosh();
+        teleCooldown = 2.5;
+      } else {
+        hud.toast('🌀 Build another teleporter somewhere to travel to it!');
+        teleCooldown = 4;
+      }
+    }
+  } else {
+    teleCharge = 0;
+  }
+
+  // Snoring sleepers.
+  snoreTimer -= dt;
+  if (snoreTimer <= 0) {
+    snoreTimer = 1.2;
+    for (const a of [myBody, ...avatars.list.values()]) {
+      if (a.lying) effects.snore(a.pos.x + Math.sin(a.yaw) * 1.6, a.pos.y + 0.4, a.pos.z + Math.cos(a.yaw) * 1.6);
+    }
+  }
+  if (sleeping && !structures.ofType('bed').some(b => b === sleeping.bed || (b.x === sleeping.bed.x && b.y === sleeping.bed.y && b.z === sleeping.bed.z))) wakeUp();
+  return fire;
 }
 
 // ---------- Building ----------
 
 let hit = null;
-let target = null; // { car } when looking at a car
+let target = null; // { car } or { pet } when looking at one
 const lookDir = new THREE.Vector3();
 const eye = new THREE.Vector3();
+let hitState = { key: null, count: 0, timer: 0 };
+let treeTipShown = false;
+
+// Cracks on a block you're hammering (it breaks on the third hit).
+const crack = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+  ctx.lineWidth = 2.5;
+  for (let i = 0; i < 7; i++) {
+    let x = 32, y = 32;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    const a = (i / 7) * Math.PI * 2 + Math.random() * 0.5;
+    for (let j = 0; j < 4; j++) {
+      x += Math.cos(a + (Math.random() - 0.5)) * 9;
+      y += Math.sin(a + (Math.random() - 0.5)) * 9;
+      ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.012, 1.012, 1.012), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
+  mesh.visible = false;
+  scene.add(mesh);
+  return mesh;
+})();
 
 function setBlock(x, y, z, b) {
   if (!world.set(x, y, z, b)) return false;
@@ -622,9 +983,31 @@ function toggleDoor(x, y, z) {
   sounds.door(opening);
 }
 
-function breakBlock() {
-  if (!hit || hit.ground) return;
+// Hammer hits: blocks crack on the first two hits and break on the third.
+function hitBlock() {
+  if (!hit || hit.ground) {
+    sounds.swing();
+    return;
+  }
   const [x, y, z] = hit.block;
+  if (!canBuildAt(x, z)) {
+    notifyLand(x, z);
+    return;
+  }
+  const key = hit.block.join(',');
+  if (hitState.key !== key) hitState = { key, count: 0, timer: 0 };
+  hitState.count++;
+  hitState.timer = 2.5;
+  if (hitState.count < 3) {
+    sounds.crack();
+    particles.burst(x, y, z, blockMaterial(materials, hit.value), 3);
+    crack.position.set(x + 0.5, y + 0.5, z + 0.5);
+    crack.material.opacity = hitState.count === 1 ? 0.45 : 0.9;
+    crack.visible = true;
+    return;
+  }
+  hitState.key = null;
+  crack.visible = false;
   const parts = shapeOf(hit.value) === 'door' ? world.doorParts(x, y, z) : [[x, y, z, hit.value]];
   for (const [px, py, pz, v] of parts) {
     if (setBlock(px, py, pz, 0)) particles.burst(px, py, pz, blockMaterial(materials, v));
@@ -634,6 +1017,10 @@ function breakBlock() {
 
 function placeBlock(item) {
   let [x, y, z] = hit.value && isReplaceable(hit.value) ? hit.block : hit.place;
+  if (!canBuildAt(x, z)) {
+    notifyLand(x, z);
+    return;
+  }
   const existing = world.get(x, y, z);
   if (!inBounds(x, y, z) || (existing && !isReplaceable(existing))) return;
   const shape = BLOCKS[item].shape || 'cube';
@@ -649,40 +1036,58 @@ function placeBlock(item) {
     if (!setBlock(x, y, z, item)) return;
   }
   sounds.place();
+  if (item === 7 && !treeTipShown && (y === 0 || [1, 2].includes(world.get(x, y - 1, z) & 255))) {
+    treeTipShown = true;
+    hud.toast('🌱 A lone log on the grass grows into a tree! Give it a minute.');
+  }
 }
 
-function useItem(primary) {
+// Left click: use whatever you're holding.
+function useItem() {
   const item = hud.item;
   view.swing();
   myBody.swing = 0;
   if (target?.car) {
-    // Left click always means "drive"; removing a car takes a right click with the hammer.
-    if (item === HAMMER && !primary) {
-      if (target.car.driver) hud.addChat({ system: true, text: "You can't remove a car while someone is driving it." });
-      else {
-        net.send({ t: 'car_remove', id: target.car.id });
-        sounds.break();
-      }
-    } else {
-      requestEnter(target.car);
-    }
+    if (item === HAMMER) hitVehicle(target);
+    else requestEnter(target.car);
     return;
   }
-  if (primary && item !== HAMMER && hit && shapeOf(hit.value) === 'door') {
+  if (target?.pet) {
+    if (item === BALL && target.avatar === myBody) throwBall();
+    else if (item !== HAMMER) petThePet(target);
+    return;
+  }
+  if (item === HAMMER) {
+    hitBlock();
+    return;
+  }
+  if (hit && shapeOf(hit.value) === 'door') {
     toggleDoor(...hit.block);
     return;
   }
-  if (primary && item === FIREWORKS) {
-    launchFirework();
-    return;
-  }
-  if (!hit) {
-    sounds.swing();
-    return;
-  }
-  if (item === HAMMER || !primary) breakBlock();
-  else if (isCarItem(item)) spawnCar(item);
+  if (item === FIREWORKS) launchFirework();
+  else if (item === BALL) throwBall();
+  else if (item === CLAIM) claimClick();
+  else if (!hit) sounds.swing();
   else placeBlock(item);
+}
+
+// Right click: interact with things (never breaks anything).
+function interact() {
+  if (claimTool.a) {
+    resetClaimTool();
+    hud.toast('🚩 Claiming cancelled.');
+    return;
+  }
+  if (target?.car) return requestEnter(target.car);
+  if (target?.pet) return petThePet(target);
+  if (hit && !hit.ground) {
+    if (shapeOf(hit.value) === 'door') return toggleDoor(...hit.block);
+    const s = structures.at(...hit.block);
+    if (s?.type === 'bed') return goToBed(s);
+    if (s?.type === 'cannon') return fireCannon(s);
+  }
+  if (hud.item === CLAIM) unclaimClick();
 }
 
 function pickBlock() {
@@ -691,6 +1096,14 @@ function pickBlock() {
   if (existing >= 0) hud.select(existing);
   else hud.setSlot(hit.id);
   saveSettings();
+}
+
+function groundAt(x, z, nearY) {
+  const fx = Math.floor(x), fz = Math.floor(z);
+  for (let y = Math.floor(nearY) + 1; y >= Math.floor(nearY) - 4; y--) {
+    if (world.isSolid(fx, y, fz) && !world.isSolid(fx, y + 1, fz)) return y + 1;
+  }
+  return nearY;
 }
 
 // ---------- Camera ----------
@@ -714,13 +1127,13 @@ function updateCamera(dt) {
     if (carView === 0) {
       const seat = cars.seat(myCar);
       camera.position.copy(seat.position).y += EYE_HEIGHT * SEAT_SCALE;
-      camera.rotation.set(carCam.pitch * 0.6, myCar.h + carCam.yaw, 0);
+      camera.rotation.set(carCam.pitch * 0.6 + myCar.pitch, myCar.h + carCam.yaw, 0);
     } else {
-      if (Math.abs(myCar.speed) > 2) carCam.yaw *= Math.exp(-1.5 * dt);
+      if (myCar.speed > 2) carCam.yaw *= Math.exp(-1.5 * dt);
       const yaw = myCar.h + carCam.yaw + (carView === 2 ? Math.PI : 0);
-      const dist = s.length + 3.5;
+      const dist = s.flying ? 12 : s.length + 3.5;
       const focus = myCar.pos.clone().add(new THREE.Vector3(0, s.height * 0.8, 0));
-      const lift = s.height + 1.2 - carCam.pitch * 4;
+      const lift = (s.flying ? 3 : s.height + 1.2) - carCam.pitch * 4;
       const desired = focus.clone().add(new THREE.Vector3(Math.sin(yaw) * dist, lift, Math.cos(yaw) * dist));
       camera.position.copy(avoidWalls(focus, desired));
       camera.lookAt(focus);
@@ -731,7 +1144,12 @@ function updateCamera(dt) {
   }
   player.eye(eye);
   lookDir.set(-Math.sin(player.yaw) * Math.cos(player.pitch), Math.sin(player.pitch), -Math.cos(player.yaw) * Math.cos(player.pitch));
-  if (viewMode === 0) {
+  if (sleeping) {
+    // Look down at yourself sleeping.
+    const head = new THREE.Vector3(player.pos.x + Math.sin(player.yaw) * 1.4, player.pos.y, player.pos.z + Math.cos(player.yaw) * 1.4);
+    camera.position.copy(avoidWalls(head, head.clone().add(new THREE.Vector3(Math.sin(player.yaw) * 1.2, 2.2, Math.cos(player.yaw) * 1.2))));
+    camera.lookAt(player.pos.x + Math.sin(player.yaw) * 0.8, player.pos.y, player.pos.z + Math.cos(player.yaw) * 0.8);
+  } else if (viewMode === 0) {
     camera.position.copy(eye);
     camera.rotation.set(player.pitch, player.yaw, 0);
   } else if (viewMode === 1) {
@@ -753,7 +1171,7 @@ function updateCamera(dt) {
 
 const timer = new THREE.Timer();
 timer.connect(document);
-let sendTimer = 0, hudTimer = 0, fpsFrames = 0, fpsTime = 0, fps = 0;
+let sendTimer = 0, hudTimer = 0, fpsFrames = 0, fpsTime = 0, fps = 0, landTimer = 0, vehicleHudTimer = 0;
 let menuSpin = 0;
 
 function frame(timestamp) {
@@ -763,20 +1181,29 @@ function frame(timestamp) {
   const time = timer.getElapsed();
   const active = locked && !hud.chatOpen;
   const nightK = 1 - sky.dayK;
+  let fire = 0;
 
   if (inGame) {
     if (myCar) {
-      for (const ev of cars.drive(myCar, dt, active ? keys : noKeys)) sounds[ev === 'bounce' ? 'bounce' : ev === 'land' ? 'land' : 'bump']();
+      for (const ev of cars.drive(myCar, dt, active ? keys : noKeys)) {
+        if (ev.type === 'shift') sounds.shift();
+        else if (ev.type === 'bump') sounds.crash(ev.power);
+        else if (ev.type === 'land') sounds.land();
+        else if (ev.type === 'bounce') sounds.bounce();
+        else if (ev.type === 'damage') reportDamage(ev.other || myCar, ev.amount, ev.impact);
+      }
       player.pos.copy(cars.seat(myCar).position);
       player.vel.set(0, 0, 0);
-      sounds.engine(Math.min(1, Math.abs(myCar.speed) / myCar.spec.maxSpeed));
-    } else {
+      if (myCar.spec.flying) sounds.engine(null);
+      else sounds.engine(myCar.shiftT > 0 ? myCar.rpm * 0.7 : Math.max(0.15, myCar.rpm), myCar.load);
+    } else if (!sleeping) {
       const wasOnGround = player.onGround;
       const vyBefore = player.vel.y;
       player.update(dt, active ? keys : noKeys);
       if (player.bounced) {
         player.bounced = false;
-        sounds.bounce();
+        if (lastBounceTramp) sounds.boing();
+        else sounds.bounce();
       } else if (!wasOnGround && player.onGround && vyBefore < -8) {
         sounds.land();
       } else if (wasOnGround && !player.onGround && player.vel.y > 0) {
@@ -790,20 +1217,23 @@ function frame(timestamp) {
     }
     updateCamera(dt);
 
-    // What are we looking at? Cars count if they're closer than the nearest block.
+    // What are we looking at? Vehicles and pets count if they're closer than the nearest block.
     hit = null;
     target = null;
-    if (locked && !myCar) {
+    if (locked && !myCar && !sleeping) {
       hit = world.raycast(eye, lookDir, REACH);
       const carHit = cars.raycast(eye, lookDir, REACH);
-      if (carHit && (!hit || carHit.distance < hit.distance)) {
-        target = { car: carHit.car };
+      const petHit = petRaycast(eye, lookDir, REACH);
+      const nearest = [carHit, petHit].filter(Boolean).sort((a, b) => a.distance - b.distance)[0];
+      if (nearest && (!hit || nearest.distance < hit.distance)) {
+        target = nearest;
         hit = null;
       }
     }
     const item = hud.item;
-    if (hit && !(hit.ground && item === HAMMER)) {
-      highlight.visible = true;
+    const showHighlight = hit && !(hit.ground && (item === HAMMER || item === BALL || item === FIREWORKS));
+    highlight.visible = !!showHighlight;
+    if (showHighlight) {
       if (hit.ground) {
         highlight.position.set(hit.place[0] + 0.5, 0.003, hit.place[2] + 0.5);
         highlight.scale.set(1, 0.001, 1);
@@ -811,31 +1241,66 @@ function frame(timestamp) {
         highlight.position.set(hit.block[0] + 0.5, hit.block[1] + 0.5, hit.block[2] + 0.5);
         highlight.scale.set(1, 1, 1);
       }
-    } else {
-      highlight.visible = false;
     }
-    if (target?.car) hud.setHint(target.car.driver ? '🚗 Someone is driving this car' : `🚗 Click or press E to drive${item === HAMMER ? ' · Right-click to remove' : ''}`);
-    else if (hit && shapeOf(hit.value) === 'door') hud.setHint(item === HAMMER ? '' : '🚪 Click to open / close');
-    else hud.setHint('');
+    if (hitState.key && (!hit || hit.block.join(',') !== hitState.key)) hitState.timer = Math.min(hitState.timer, 0.3);
+    hitState.timer -= dt;
+    if (hitState.timer <= 0 && hitState.key) {
+      hitState.key = null;
+      crack.visible = false;
+    }
 
-    // Holding the mouse button keeps building/breaking.
-    useCooldown -= dt;
-    if (locked && !myCar && useCooldown <= 0 && (mouse.has(0) || mouse.has(2))) {
-      useItem(mouse.has(0));
-      useCooldown = 0.2;
+    // A hint under the crosshair about what you can do.
+    let hint = '';
+    if (target?.car) {
+      const what = target.car.spec.flying ? '🚁 Right-click or E to fly' : '🚗 Right-click or E to drive';
+      hint = target.car.driver ? '🚗 Someone is in there' : what + (item === HAMMER ? ' · Click to whack it' : '');
+    } else if (target?.pet) {
+      hint = item === BALL && target.avatar === myBody ? '🎾 Click to throw the ball · Right-click to pet' : '🐾 Right-click to pet';
+    } else if (hitState.key) {
+      hint = `🔨 Hit ${hitState.count} of 3`;
+    } else if (item === CLAIM && claimTool.a) {
+      hint = claimTool.confirm ? '🚩 Click to claim · Right-click to cancel' : '🚩 Click the opposite corner';
+    } else {
+      const s = hit && !hit.ground ? structures.at(...hit.block) : null;
+      if (hit && shapeOf(hit.value) === 'door' && item !== HAMMER) hint = '🚪 Click to open / close';
+      else if (s?.type === 'bed') hint = '🛏️ Right-click to sleep';
+      else if (s?.type === 'cannon') hint = '💥 Right-click to launch yourself!';
+      else if (item === CLAIM) hint = '🚩 Click a corner to start claiming land (max 10×15)';
     }
+    hud.setHint(hint);
+
+    // Live preview while picking the second corner of a land claim.
+    if (item !== CLAIM && claimTool.a) resetClaimTool();
+    if (item === CLAIM && claimTool.a && !claimTool.confirm) {
+      const cell = claimCell();
+      if (cell) {
+        const rect = normalizeRect(claimTool.a[0], claimTool.a[1], cell[0], cell[1]);
+        landView.preview(rect, !claimProblem(rect));
+      }
+    }
+
+    // Holding the mouse button keeps hammering or building.
+    useCooldown -= dt;
+    if (locked && !myCar && useCooldown <= 0 && mouse.has(0) && (item === HAMMER || typeof item === 'number')) {
+      useItem();
+      useCooldown = item === HAMMER ? 0.25 : 0.2;
+    }
+
+    ball.update(dt, world);
+    fire = updateStructures(dt, time);
 
     sendTimer -= dt;
     if (sendTimer <= 0) {
       sendTimer = 1 / 15;
       const r = v => Math.round(v * 100) / 100;
       const rot = myCar ? [r(myCar.h), 0] : [r(player.yaw), r(player.pitch)];
-      net.send({ t: 'state', pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot });
+      const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
+      net.send({ t: 'state', pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags: sleeping ? 1 : 0 });
       sendCarState();
     }
 
     // Headlights on the car we're driving.
-    if (myCar && nightK > 0.2) {
+    if (myCar && !myCar.spec.flying && nightK > 0.2) {
       const s = myCar.spec, f = new THREE.Vector3(-Math.sin(myCar.h), 0, -Math.cos(myCar.h));
       headlight.position.copy(myCar.pos).addScaledVector(f, s.length / 2).y += s.ride + s.bodyH * 0.6;
       headlight.target.position.copy(headlight.position).addScaledVector(f, 12).y -= 2;
@@ -845,7 +1310,7 @@ function frame(timestamp) {
     }
 
     // Our own body, seen in the third-person views.
-    myBody.root.visible = myCar ? carView !== 0 : viewMode !== 0;
+    myBody.root.visible = myCar ? carView !== 0 : viewMode !== 0 || !!sleeping;
     myBody.seat = myCar ? cars.seat(myCar) : null;
     myBody.target.copy(player.pos);
     myBody.targetYaw = player.yaw;
@@ -853,6 +1318,32 @@ function frame(timestamp) {
     myBody.flying = player.flying;
     myBody.swing = view.swingT;
     myBody.update(dt, time);
+
+    // Say whose land you just walked onto.
+    landTimer -= dt;
+    if (landTimer <= 0) {
+      landTimer = 0.3;
+      const c = claimAt(claims, Math.floor(player.pos.x), Math.floor(player.pos.z));
+      const key = c ? c.key : null;
+      if (key !== lastLandKey) {
+        lastLandKey = key;
+        if (c) hud.toast(c.key === nameKey(settings.name) ? '🏠 Welcome home! This is your land.' : `🏠 ${c.owner}'s land. You can visit, but not build.`);
+      }
+    }
+
+    vehicleHudTimer -= dt;
+    if (vehicleHudTimer <= 0) {
+      vehicleHudTimer = 0.1;
+      if (myCar) {
+        const kmh = Math.round(Math.abs(myCar.speed) * 3.6);
+        const health = `❤️ ${Math.max(0, Math.round((myCar.hp / MAX_HP) * 100))}%`;
+        let ground = Math.floor(myCar.pos.y);
+        while (ground > 0 && !world.isSolid(Math.floor(myCar.pos.x), ground - 1, Math.floor(myCar.pos.z))) ground--;
+        hud.setVehicleInfo(myCar.spec.flying
+          ? `⬆️ ${Math.max(0, Math.round(myCar.pos.y - ground))} m · ${kmh} km/h · Rotor ${Math.round(myCar.rotorSpin * 100)}% · ${health}`
+          : `Gear ${myCar.gear === 0 ? 'R' : myCar.gear} · ${kmh} km/h · ${health}`);
+      }
+    }
 
     fpsFrames++;
     fpsTime += dt;
@@ -872,7 +1363,7 @@ function frame(timestamp) {
     camera.lookAt(0, 2, 0);
   }
 
-  // Other players sit in the cars they drive.
+  // Other players sit in the vehicles they drive.
   for (const a of avatars.list.values()) a.seat = null;
   for (const car of cars.list.values()) {
     if (car.driver && car.driver !== myId) {
@@ -881,10 +1372,24 @@ function frame(timestamp) {
     }
   }
 
-  // The loudest nearby siren.
-  let siren = 0;
-  for (const car of cars.list.values()) if (car.siren) siren = Math.max(siren, loudness(car.pos.x, car.pos.y, car.pos.z, 70));
-  if (inGame) sounds.siren(siren);
+  // Loudest nearby siren, fire and helicopter.
+  let siren = 0, rotor = 0, rotorSpin = 0;
+  for (const car of cars.list.values()) {
+    if (car.siren) siren = Math.max(siren, loudness(car.pos.x, car.pos.y, car.pos.z, 70));
+    if (car.hp < FIRE_HP) fire = Math.max(fire, loudness(car.pos.x, car.pos.y, car.pos.z, 35));
+    if (car.spec.flying && car.rotorSpin > 0.02) {
+      const level = car === myCar ? 1 : loudness(car.pos.x, car.pos.y, car.pos.z, 120);
+      if (level > rotor) {
+        rotor = level;
+        rotorSpin = car.rotorSpin;
+      }
+    }
+  }
+  if (inGame) {
+    sounds.siren(siren);
+    sounds.fire(fire);
+    sounds.rotor(rotor * Math.min(1, rotorSpin * 3), rotorSpin);
+  }
 
   sky.update(dt, camera, world, materials);
   world.updateVisibility(camera.position, settings.quality === 'low' ? Math.min(140, scene.fog.far) : scene.fog.far);
@@ -892,8 +1397,9 @@ function frame(timestamp) {
   cars.setView(camera.position, scene.fog.far);
   cars.update(dt, time, nightK, myCar?.id);
   particles.update(dt, world);
+  effects.update(dt, camera, renderer.domElement.height);
   for (const p of fireworks.update(dt)) sounds.boom(loudness(p.x, p.y, p.z, 140));
-  const firstPerson = inGame && !myCar && viewMode === 0;
+  const firstPerson = inGame && !myCar && viewMode === 0 && !sleeping;
   view.update(dt, player.moving && player.onGround, camera.aspect, scene.environment, sky.dayK);
 
   renderer.clear();
@@ -914,12 +1420,18 @@ load();
 
 // Handy for poking at the game from the browser console.
 window.buildzone = {
-  scene, camera, sky, net, avatars, renderer, fireworks,
+  scene, camera, sky, net, avatars, renderer, fireworks, effects,
   get world() { return world; },
   get player() { return player; },
   get cars() { return cars; },
   get myCar() { return myCar; },
   get hud() { return hud; },
-  useItem: primary => useItem(primary),
+  get structures() { return structures; },
+  get myBody() { return myBody; },
+  get ball() { return ball; },
+  get claims() { return claims; },
+  get sleeping() { return sleeping; },
+  useItem: () => useItem(),
+  interact: () => interact(),
   setView: v => (viewMode = v),
 };

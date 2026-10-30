@@ -1,22 +1,23 @@
 // Hotbar items: every block, the hammer, cars and fireworks.
 import * as THREE from 'three';
 import { BLOCKS, BLOCK_IDS } from './shared/blocks.js';
-import { CAR_SPECS, buildCarModel } from './cars.js';
 import { blockMaterial } from './world.js';
 
 export const HAMMER = 'hammer';
 export const FIREWORKS = 'fireworks';
-export const CAR_ITEMS = ['car', 'police', 'monster'];
-export const ALL_ITEMS = [HAMMER, FIREWORKS, ...CAR_ITEMS, ...BLOCK_IDS];
-export const DEFAULT_HOTBAR = [HAMMER, 5, 6, 9, 21, 18, 'car', FIREWORKS, 19];
+export const BALL = 'ball';
+export const CLAIM = 'claim';
+export const TOOLS = [HAMMER, BALL, FIREWORKS, CLAIM];
+export const ALL_ITEMS = [...TOOLS, ...BLOCK_IDS];
+export const DEFAULT_HOTBAR = [HAMMER, 5, 6, 9, 21, 18, BALL, FIREWORKS, CLAIM];
 
 export const isBlockItem = item => typeof item === 'number';
-export const isCarItem = item => CAR_ITEMS.includes(item);
 
 export function itemName(item) {
   if (item === HAMMER) return 'Hammer';
   if (item === FIREWORKS) return 'Fireworks';
-  if (isCarItem(item)) return CAR_SPECS[item].name;
+  if (item === BALL) return 'Pet Ball';
+  if (item === CLAIM) return 'Land Flag';
   return BLOCKS[item].name;
 }
 
@@ -64,37 +65,32 @@ export function makeIcon(item, textures) {
     }
     return canvas;
   }
-  if (isCarItem(item)) {
-    const body = item === 'police' ? '#f5f5f5' : item === 'monster' ? '#43a047' : '#e53935';
-    const wheelR = item === 'monster' ? 11 : 7;
-    const baseY = item === 'monster' ? 30 : 38;
-    ctx.fillStyle = body;
+  if (item === BALL) {
+    const g = ctx.createRadialGradient(26, 24, 2, 32, 32, 22);
+    g.addColorStop(0, '#ff8a80');
+    g.addColorStop(1, '#c62828');
+    ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.roundRect(4, baseY - 12, 56, 14, 4);
+    ctx.arc(32, 32, 20, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = '#fdd835';
+    ctx.lineWidth = 5;
     ctx.beginPath();
-    ctx.roundRect(16, baseY - 24, 30, 14, 5);
-    ctx.fill();
-    ctx.fillStyle = '#9fd3ff';
-    ctx.fillRect(20, baseY - 21, 10, 9);
-    ctx.fillRect(33, baseY - 21, 10, 9);
-    if (item === 'police') {
-      ctx.fillStyle = '#e53935'; ctx.fillRect(24, baseY - 29, 8, 5);
-      ctx.fillStyle = '#1e88e5'; ctx.fillRect(32, baseY - 29, 8, 5);
-      ctx.fillStyle = '#111'; ctx.fillRect(4, baseY - 6, 56, 4);
-    }
-    ctx.fillStyle = '#222';
-    for (const x of [16, 48]) {
-      ctx.beginPath();
-      ctx.arc(x, baseY + 3 + (item === 'monster' ? 8 : 0), wheelR, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.fillStyle = '#ccc';
-    for (const x of [16, 48]) {
-      ctx.beginPath();
-      ctx.arc(x, baseY + 3 + (item === 'monster' ? 8 : 0), wheelR * 0.4, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    ctx.arc(32, 32, 20, -0.4, 0.4 + Math.PI);
+    ctx.stroke();
+    return canvas;
+  }
+  if (item === CLAIM) {
+    ctx.fillStyle = '#8d6e63';
+    ctx.fillRect(18, 8, 5, 50);
+    ctx.fillStyle = '#43a047';
+    ctx.beginPath();
+    ctx.moveTo(23, 10); ctx.lineTo(54, 20); ctx.lineTo(23, 32); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.fillText('★', 28, 25);
+    ctx.fillStyle = '#5d4037';
+    ctx.fillRect(10, 54, 22, 6);
     return canvas;
   }
 
@@ -180,11 +176,17 @@ export class ViewModel {
       obj.add(tube, cone, band);
       obj.scale.setScalar(0.75);
       obj.rotation.set(0.2, 0, -0.3);
-    } else if (isCarItem(item)) {
-      obj = buildCarModel(item, item === 'police' ? '#f5f5f5' : item === 'monster' ? '#43a047' : '#e53935').group;
-      obj.scale.setScalar(0.08);
-      obj.rotation.set(0.25, 0.8, 0);
-      obj.position.y = -0.05;
+    } else if (item === BALL) {
+      obj = new THREE.Mesh(new THREE.SphereGeometry(0.11, 20, 14), new THREE.MeshStandardMaterial({ color: 0xe53935, roughness: 0.4 }));
+      obj.add(new THREE.Mesh(new THREE.TorusGeometry(0.111, 0.012, 6, 24), new THREE.MeshStandardMaterial({ color: 0xfdd835 })));
+      obj.position.y = 0.05;
+    } else if (item === CLAIM) {
+      obj = new THREE.Group();
+      obj.add(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.55, 8), new THREE.MeshStandardMaterial({ color: 0x8d6e63 })));
+      const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.14), new THREE.MeshStandardMaterial({ color: 0x43a047, side: THREE.DoubleSide }));
+      flag.position.set(0.11, 0.2, 0);
+      obj.add(flag);
+      obj.rotation.set(0.2, 0.4, -0.2);
     } else {
       const shape = BLOCKS[item].shape || 'cube';
       const mat = blockMaterial(this.materials, item);

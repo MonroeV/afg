@@ -1,9 +1,7 @@
 // Sky, sun, moon, stars and the lights that change from day to night.
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
-import { DAY_LENGTH } from './shared/blocks.js';
-
-const DAY_FRACTION = 0.62; // how much of the cycle is daytime
+import { DAY_LENGTH, DAY_FRACTION } from './shared/blocks.js';
 const smooth = (e0, e1, x) => {
   const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
   return t * t * (3 - 2 * t);
@@ -180,21 +178,33 @@ export class DayNight {
     if (this.lampTimer <= 0 && world) {
       this.lampTimer = 0.5;
       const near = [];
+      const dist = (x, y, z) => (x - camera.position.x) ** 2 + (y - camera.position.y) ** 2 + (z - camera.position.z) ** 2;
       if (lampK > 0) {
         for (const k of world.lamps) {
           const [x, y, z] = k.split(',').map(Number);
-          const d = (x - camera.position.x) ** 2 + (y - camera.position.y) ** 2 + (z - camera.position.z) ** 2;
+          const d = dist(x, y, z);
           if (d < 60 * 60) near.push([d, x, y, z]);
         }
-        near.sort((a, b) => a[0] - b[0]);
       }
+      // Campfires and dance floors glow too (dance floors even in the daytime).
+      for (const e of this.extraLights?.() || []) {
+        const d = dist(e.x, e.y, e.z);
+        if (d < 60 * 60 && (lampK > 0 || e.always)) near.push([d - 400, e.x, e.y, e.z, e]);
+      }
+      near.sort((a, b) => a[0] - b[0]);
       // Lights are never hidden (that would make every material recompile); unused ones just go dark.
       this.lampLights.forEach((l, i) => {
         const n = near[i];
         l.userData.on = !!n;
+        l.userData.extra = n?.[4];
         if (n) l.position.set(n[1] + 0.5, n[2] + 0.3, n[3] + 0.5);
+        if (!n?.[4]) l.color.setHex(0xffc477);
       });
     }
-    for (const l of this.lampLights) l.intensity = l.userData.on ? 14 * lampK : 0;
+    for (const l of this.lampLights) {
+      const e = l.userData.extra;
+      if (e?.color) l.color.copy(e.color);
+      l.intensity = !l.userData.on ? 0 : e ? (e.intensity || 14) * Math.max(lampK, e.always ? 0.7 : 0) : 14 * lampK;
+    }
   }
 }

@@ -23,7 +23,7 @@ export const OPTION_LABELS = {
   jersey: 'Sports Jersey', dress: 'Dress',
   jeans: 'Jeans', shorts: 'Shorts', skirt: 'Skirt', sweatpants: 'Sweatpants',
   backpack: 'Backpack', cape: 'Super Cape', wings: 'Wings',
-  dog: 'Puppy', cat: 'Kitten', bunny: 'Bunny', pig: 'Piglet', dragon: 'Baby Dragon',
+  dog: 'Puppy', bunny: 'Bunny', pig: 'Piglet', dragon: 'Baby Dragon', // (the cat pet shares the 'Kitty' label)
 };
 
 export const SKIN_TONES = ['#ffe0c4', '#f5c9a0', '#e8b088', '#d39a6a', '#b07548', '#8d5a34', '#6b4226', '#4a2c18', '#7fd17a', '#8fb8ff'];

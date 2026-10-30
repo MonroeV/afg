@@ -27,6 +27,8 @@ export class Player {
     this.sprinting = false;
     this.moving = false;
     this.extraBoxes = () => []; // other solid things, like cars
+    this.bouncePower = () => BOUNCE_SPEED; // how hard a bounce pad at (x, y, z) launches you
+    this.keys = new Set();
   }
 
   respawn() {
@@ -43,6 +45,7 @@ export class Player {
 
   // keys: a Set of KeyboardEvent.code values currently held down
   update(dt, keys) {
+    this.keys = keys;
     const forward = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
     const strafe = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
     this.sprinting = keys.has('ShiftLeft') || keys.has('ShiftRight');
@@ -59,7 +62,8 @@ export class Player {
       this.vel.lerp(target, 1 - Math.exp(-10 * dt));
     } else {
       const speed = this.sprinting ? SPRINT_SPEED : WALK_SPEED;
-      const accel = this.onGround ? 14 : 3; // less control in the air
+      // Less control in the air, and almost none while flying out of a cannon.
+      const accel = this.onGround ? 14 : this.launched ? 0.4 : 3;
       const k = 1 - Math.exp(-accel * dt);
       this.vel.x += (wish.x * speed - this.vel.x) * k;
       this.vel.z += (wish.z * speed - this.vel.z) * k;
@@ -122,6 +126,7 @@ export class Player {
 
   landed() {
     this.onGround = true;
+    this.launched = false;
     // Bounce pads launch you upward.
     const x0 = Math.floor(this.pos.x - HALF_WIDTH), x1 = Math.floor(this.pos.x + HALF_WIDTH);
     const z0 = Math.floor(this.pos.z - HALF_WIDTH), z1 = Math.floor(this.pos.z + HALF_WIDTH);
@@ -129,7 +134,7 @@ export class Player {
     for (let x = x0; x <= x1; x++)
       for (let z = z0; z <= z1; z++)
         if (BLOCKS[blockId(this.world.get(x, y, z))]?.bounce) {
-          this.vel.y = BOUNCE_SPEED;
+          this.vel.y = this.bouncePower(x, y, z, this.keys);
           this.onGround = false;
           this.bounced = true;
           return;

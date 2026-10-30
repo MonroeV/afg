@@ -100,10 +100,10 @@ export const WORLD = { min: -128, max: 127, maxY: 63 };
 
 export const SPAWN = { x: 0.5, y: 0, z: 5.5 };
 
-// One full day + night, in seconds.
+// One full day + night, in seconds; the first DAY_FRACTION of it is daytime.
 export const DAY_LENGTH = 600;
-
-export const CAR_KINDS = ['car', 'police', 'monster'];
+export const DAY_FRACTION = 0.62;
+export const isNightTime = time => ((time % DAY_LENGTH) + DAY_LENGTH) % DAY_LENGTH / DAY_LENGTH >= DAY_FRACTION;
 
 export const blockKey = (x, y, z) => `${x},${y},${z}`;
 

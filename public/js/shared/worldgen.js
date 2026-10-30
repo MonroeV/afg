@@ -26,6 +26,21 @@ const LOT = 8; // house lots are 8x8
 const CITY_BLOCK = 2 * LOT; // city blocks hold 2x2 lots
 const PITCH = CITY_BLOCK + 2 * ROAD_HALF + 1;
 
+export const HELIPAD = { x: 47, z: 0, size: 11, heli: { kind: 'heli', color: '#e53935', x: 52.5, y: 0, z: 5.5, h: 0 } };
+
+// The helipad: a road-colored square with a big "H" and lamps on the corners.
+export function helipadBlocks() {
+  const out = [];
+  for (let x = 0; x < HELIPAD.size; x++)
+    for (let z = 0; z < HELIPAD.size; z++) {
+      const h = (x === 2 || x === 3 || x === 7 || x === 8) && z >= 2 && z <= 8 || (z === 5 && x >= 4 && x <= 6);
+      const edge = x === 0 || z === 0 || x === 10 || z === 10;
+      const corner = (x === 0 || x === 10) && (z === 0 || z === 10);
+      out.push([HELIPAD.x + x, 0, HELIPAD.z + z, corner ? B.lamp : h || edge ? B.sidewalk : B.road]);
+    }
+  return out;
+}
+
 export function generateWorld(seed = 2024) {
   const rand = rng(seed);
   const pick = list => list[Math.floor(rand() * list.length)];
@@ -351,7 +366,7 @@ export function generateWorld(seed = 2024) {
   // The main town around spawn, with the plaza in the middle.
   const main = town(0, 0, 3, 3, { plazaAt: [1, 1], parkAt: [2, 0], carChance: 0.4 });
   // Villages in the corners.
-  const villages = [[-84, -84], [84, -84], [-84, 84], [84, 84]].map(([x, z], i) =>
+  [[-84, -84], [84, -84], [-84, 84], [84, 84]].map(([x, z], i) =>
     town(x, z, 2, 2, { parkAt: i === 3 ? [0, 0] : null, carChance: 0.3 }));
 
   // A ring road through the villages, and roads from the main town out to it.
@@ -375,6 +390,11 @@ export function generateWorld(seed = 2024) {
     cars.push({ kind: 'monster', x, y: 0, z, h });
     markUsed(Math.floor(x) - 4, Math.floor(z) - 4, Math.floor(x) + 4, Math.floor(z) + 4);
   }
+
+  // A helipad east of the main town, with the helicopter waiting on it.
+  for (const [x, y, z, v] of helipadBlocks()) put(x, y, z, v);
+  markUsed(HELIPAD.x - 3, HELIPAD.z - 3, HELIPAD.x + 13, HELIPAD.z + 13);
+  cars.push(HELIPAD.heli);
 
   // ---------- Countryside ----------
 

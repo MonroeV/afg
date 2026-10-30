@@ -80,7 +80,7 @@ function loadWorld() {
     // no saved world yet
   }
   if (room.load(data)) {
-    console.log(`Loaded saved world (${room.world.size} blocks, ${room.cars.size} cars)`);
+    console.log(`Loaded saved world (${room.world.size} blocks, ${room.vehicles.size} vehicles)`);
     return;
   }
   if (data) {
@@ -91,7 +91,7 @@ function loadWorld() {
   }
   room.generate();
   saveWorld();
-  console.log(`Generated a new world (${room.world.size} blocks, ${room.cars.size} cars)`);
+  console.log(`Generated a new world (${room.world.size} blocks, ${room.vehicles.size} vehicles)`);
 }
 
 // ---------- Character gallery ----------
