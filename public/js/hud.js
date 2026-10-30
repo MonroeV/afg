@@ -9,7 +9,7 @@ export const CONTROLS = [
   ['W A S D', 'Move'], ['Mouse', 'Look'], ['Space', 'Jump'], ['Click', 'Use item'],
   ['Right click', 'Interact (doors, cars, pets, beds)'], ['Hammer', '3 hits to break'], ['Middle click', 'Copy block'],
   ['1–9 / Wheel', 'Pick item'], ['E', 'Items & Build Book'], ['Shift', 'Sprint'], ['F', 'Fly (Space/C)'],
-  ['V', 'Camera view'], ['G', 'Dance!'], ['B', 'Wave'], ['T / Enter', 'Chat'], ['R', 'Back to your bed / town'],
+  ['V', 'Camera view'], ['G', 'Dance!'], ['B', 'Wave'], ['T / Enter', 'Chat'], ['R', 'Go home (bed, your land, or town)'],
 ];
 
 export function renderControls(el) {

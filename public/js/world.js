@@ -17,19 +17,23 @@ const GEOMETRY = {
 export function createBlockMaterials(textures) {
   const make = (texName, def, extra = {}) => {
     const t = textures[texName];
+    // How shiny each kind of block is. Shiny blocks reflect the world around them.
+    const roughness = def.mirror ? 0.02 : def.gold ? 0.2 : def.metal ? 0.22 : def.water ? 0.03 : def.glossy ? 0.14 : 0.88;
     const m = new THREE.MeshStandardMaterial({
       map: t.map,
       normalMap: t.normalMap,
-      roughness: def.metal ? 0.35 : def.glossy ? 0.25 : 0.88,
-      metalness: def.metal ? 0.85 : 0,
+      roughness,
+      metalness: def.mirror || def.gold ? 1 : def.metal ? 0.85 : 0,
       ...extra,
     });
+    if (def.water) m.normalScale.set(1.6, 1.6);
+    // How strongly it reflects its surroundings (see lighting.js).
+    m.userData.shine = def.mirror ? 1.6 : def.gold ? 1.3 : def.water || def.transparent ? 1.4 : def.metal ? 1 : def.glossy ? 0.6 : 0;
     if (def.cutout) m.alphaTest = 0.5;
     if (def.transparent) {
       m.transparent = true;
       m.depthWrite = false;
       m.roughness = 0.05;
-      m.envMapIntensity = 1.5;
     }
     if (t.emissiveMap) {
       m.emissive = new THREE.Color(0xffffff);

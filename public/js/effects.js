@@ -61,12 +61,35 @@ function glowTexture() {
   return new THREE.CanvasTexture(c);
 }
 
+// How many fireworks (rockets plus bursts) can be in the sky at once.
+export const MAX_FIREWORKS = 8;
+const STYLES = ['peony', 'ring', 'willow', 'chrysanthemum', 'glitter', 'crossette', 'heart', 'smiley'];
+
 export class Fireworks {
-  constructor(scene) {
+  constructor(scene, effects) {
     this.scene = scene;
+    this.effects = effects; // for spark trails
     this.texture = glowTexture();
     this.rockets = [];
     this.bursts = [];
+    // A few colored lights that flash when a firework bursts. They stay in the scene
+    // all the time (just dark when unused) so materials never need recompiling.
+    this.lights = [];
+    for (let i = 0; i < 4; i++) {
+      const light = new THREE.PointLight(0xffffff, 0, 170, 1.6);
+      scene.add(light);
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.texture, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false, opacity: 0 }));
+      halo.scale.setScalar(40);
+      halo.renderOrder = 4;
+      scene.add(halo);
+      this.lights.push({ light, halo, life: 0, color: new THREE.Color() });
+    }
+    this.flash = 0; // 0..1, how much the whole sky is lit up right now
+    this.flashColor = new THREE.Color();
+  }
+
+  get active() {
+    return this.rockets.length + this.bursts.filter(b => !b.child).length;
   }
 
   points(count, size) {
@@ -75,49 +98,113 @@ export class Fireworks {
     geo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(count * 3), 3));
     const mat = new THREE.PointsMaterial({
       size, map: this.texture, vertexColors: true, transparent: true, depthWrite: false,
-      blending: THREE.AdditiveBlending, fog: false,
+      blending: THREE.AdditiveBlending, fog: false, toneMapped: false,
     });
+    mat.color.setScalar(1.5); // extra bright, so it glows
     const pts = new THREE.Points(geo, mat);
     pts.frustumCulled = false;
+    pts.renderOrder = 5;
     this.scene.add(pts);
     return pts;
   }
 
+  // Returns false if the sky is already too full of fireworks.
   launch(x, y, z, color, seed = Math.random()) {
-    const trail = this.points(14, 0.5);
+    if (this.active >= MAX_FIREWORKS) return false;
+    const trail = this.points(16, 0.6);
     this.rockets.push({
       pos: new THREE.Vector3(x, y, z),
-      vel: new THREE.Vector3(Math.sin(seed * 20) * 1.5, 22 + (seed * 7) % 6, Math.cos(seed * 20) * 1.5),
-      fuse: 0.9 + (seed * 3) % 0.4,
+      vel: new THREE.Vector3(Math.sin(seed * 20) * 1.5, 26 + (seed * 7) % 6, Math.cos(seed * 20) * 1.5),
+      fuse: 1.1 + (seed * 3) % 0.5,
       color: new THREE.Color(color),
       seed,
       trail,
       history: [],
     });
+    return true;
+  }
+
+  // Directions for each kind of burst (unit-ish vectors, scaled by speed later).
+  shape(style, n, seed) {
+    const dirs = [];
+    const rand = () => Math.random() * 2 - 1;
+    const sphere = () => new THREE.Vector3(rand(), rand(), rand()).normalize();
+    // A flat shape, turned to face a random way.
+    const tilt = new THREE.Quaternion().setFromEuler(new THREE.Euler(seed * 4, seed * 9, 0));
+    const flat = (x, y) => new THREE.Vector3(x, y, 0).applyQuaternion(tilt);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      if (style === 'ring') dirs.push(i % 5 === 0 ? sphere().multiplyScalar(0.35) : flat(Math.cos(a), Math.sin(a)));
+      else if (style === 'heart') {
+        const hx = 16 * Math.sin(a) ** 3, hy = 13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a);
+        dirs.push(flat(hx / 17, hy / 17));
+      } else if (style === 'smiley') {
+        const part = i % 4;
+        if (part < 2) dirs.push(flat(Math.cos(a), Math.sin(a)));
+        else if (part === 2) dirs.push(flat(Math.cos(Math.PI * 1.15 + (i / n) * Math.PI * 0.7) * 0.6, Math.sin(Math.PI * 1.15 + (i / n) * Math.PI * 0.7) * 0.6));
+        else dirs.push(flat((i % 8 < 4 ? -0.3 : 0.3) + rand() * 0.05, 0.3 + rand() * 0.05));
+      } else dirs.push(sphere().multiplyScalar(style === 'peony' || style === 'crossette' ? 1 : 0.75 + Math.random() * 0.25));
+    }
+    return dirs;
   }
 
   explode(r) {
-    const n = 160;
-    const pts = this.points(n, 0.7);
-    const vel = [];
-    const second = new THREE.Color().setHSL((r.seed * 7) % 1, 1, 0.65);
+    const style = STYLES[Math.floor(r.seed * 1000) % STYLES.length];
+    const n = { crossette: 18, smiley: 200, ring: 180, willow: 160 }[style] || 240;
+    const pts = this.points(n, style === 'crossette' ? 2.2 : 1.2);
+    const second = new THREE.Color().setHSL((r.seed * 7) % 1, 1, 0.6);
+    const gold = new THREE.Color(1, 0.75, 0.3);
     const colors = pts.geometry.attributes.color;
-    const style = Math.floor(r.seed * 100) % 3; // ball, ring or willow
+    const speed = style === 'willow' ? 15 : style === 'crossette' ? 13 : 19;
+    const vel = this.shape(style, n, r.seed).map(d => d.multiplyScalar(speed * (0.9 + Math.random() * 0.15)));
     for (let i = 0; i < n; i++) {
-      let v;
-      if (style === 1) {
-        const a = (i / n) * Math.PI * 2;
-        v = new THREE.Vector3(Math.cos(a), Math.sin(a) * 0.3, Math.sin(a)).multiplyScalar(13);
-      } else {
-        v = new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize().multiplyScalar(7 + Math.random() * 6);
-      }
-      vel.push(v);
-      const c = i % 3 === 0 ? second : r.color;
+      let c = r.color;
+      if (style === 'willow') c = gold;
+      else if (style === 'glitter') c = new THREE.Color().setHSL(Math.random(), 1, 0.65);
+      else if (style === 'peony' || style === 'chrysanthemum') c = i % 3 === 0 ? second : r.color;
+      else if (style === 'smiley') c = new THREE.Color(1, 0.9, 0.2);
       colors.setXYZ(i, c.r, c.g, c.b);
       pts.geometry.attributes.position.setXYZ(i, r.pos.x, r.pos.y, r.pos.z);
     }
     colors.needsUpdate = true;
-    this.bursts.push({ pts, vel, life: 2.2, drag: style === 2 ? 2.2 : 1.4, gravity: style === 2 ? 7 : 4 });
+    const life = style === 'willow' ? 3.6 : 2.6;
+    this.bursts.push({
+      pts, vel, style, life, maxLife: life, age: 0, base: colors.array.slice(),
+      drag: style === 'willow' ? 1.6 : style === 'crossette' ? 1.0 : 1.3,
+      gravity: style === 'willow' ? 5 : 3.5,
+      trails: style === 'willow' || style === 'chrysanthemum',
+      color: r.color,
+    });
+
+    // Light up the town and the sky in the burst's color.
+    const slot = this.lights.reduce((a, b) => (b.life < a.life ? b : a));
+    slot.life = 1;
+    slot.color.copy(style === 'willow' ? gold : r.color);
+    slot.light.position.copy(r.pos);
+    slot.light.color.copy(slot.color);
+    slot.halo.position.copy(r.pos);
+    slot.halo.material.color.copy(slot.color);
+    this.flash = Math.min(1.5, this.flash + 1);
+    this.flashColor.copy(slot.color);
+  }
+
+  // Crossette stars split into little bursts of their own.
+  split(b) {
+    const pos = b.pts.geometry.attributes.position;
+    const per = 14, n = b.vel.length * per;
+    const pts = this.points(n, 0.9);
+    const vel = [];
+    const colors = pts.geometry.attributes.color;
+    for (let i = 0; i < b.vel.length; i++) {
+      for (let j = 0; j < per; j++) {
+        const k = i * per + j;
+        pts.geometry.attributes.position.setXYZ(k, pos.getX(i), pos.getY(i), pos.getZ(i));
+        vel.push(new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize().multiplyScalar(6));
+        colors.setXYZ(k, b.color.r, b.color.g, b.color.b);
+      }
+    }
+    colors.needsUpdate = true;
+    this.bursts.push({ pts, vel, style: 'split', life: 1.4, maxLife: 1.4, age: 0, drag: 1.5, gravity: 4, child: true });
   }
 
   // Returns positions of new explosions (for the boom sound).
@@ -129,18 +216,20 @@ export class Fireworks {
       r.vel.y -= 6 * dt;
       r.pos.addScaledVector(r.vel, dt);
       r.history.unshift(r.pos.clone());
-      r.history.length = Math.min(r.history.length, 14);
+      r.history.length = Math.min(r.history.length, 16);
       const pos = r.trail.geometry.attributes.position, col = r.trail.geometry.attributes.color;
-      for (let j = 0; j < 14; j++) {
+      for (let j = 0; j < 16; j++) {
         const p = r.history[Math.min(j, r.history.length - 1)];
         pos.setXYZ(j, p.x, p.y, p.z);
-        const k = 1 - j / 14;
+        const k = 1 - j / 16;
         col.setXYZ(j, k, k * 0.8, k * 0.5);
       }
       pos.needsUpdate = col.needsUpdate = true;
+      if (Math.random() < 0.6) this.effects?.glow.spawn({ x: r.pos.x, y: r.pos.y, z: r.pos.z, vx: (Math.random() - 0.5) * 2, vy: -2, vz: (Math.random() - 0.5) * 2, life: 0.5, size: 0.2, color: [1, 0.7, 0.3], gravity: 4 });
       if (r.fuse <= 0) {
         this.scene.remove(r.trail);
         r.trail.geometry.dispose();
+        r.trail.material.dispose();
         this.explode(r);
         booms.push(r.pos.clone());
         this.rockets.splice(i, 1);
@@ -149,6 +238,7 @@ export class Fireworks {
     for (let i = this.bursts.length - 1; i >= 0; i--) {
       const b = this.bursts[i];
       b.life -= dt;
+      b.age += dt;
       const pos = b.pts.geometry.attributes.position;
       const drag = Math.exp(-b.drag * dt);
       for (let j = 0; j < b.vel.length; j++) {
@@ -156,10 +246,29 @@ export class Fireworks {
         v.multiplyScalar(drag);
         v.y -= b.gravity * dt;
         pos.setXYZ(j, pos.getX(j) + v.x * dt, pos.getY(j) + v.y * dt, pos.getZ(j) + v.z * dt);
+        // Willows and chrysanthemums leave glittering trails.
+        if (b.trails && j % 7 === 0 && Math.random() < 0.5 && b.age < b.maxLife * 0.8) {
+          const c = b.style === 'willow' ? [1, 0.6, 0.2] : [b.color.r, b.color.g, b.color.b];
+          this.effects?.glow.spawn({ x: pos.getX(j), y: pos.getY(j), z: pos.getZ(j), vy: -0.5, life: 0.6, size: 0.35, color: c, gravity: 1.5, alpha: 0.7 });
+        }
       }
       pos.needsUpdate = true;
-      b.pts.material.opacity = Math.min(1, b.life / 1.2);
-      b.pts.material.size = 0.7 + (2.2 - b.life) * 0.1;
+      if (b.style === 'glitter') {
+        // Twinkle!
+        const col = b.pts.geometry.attributes.color;
+        for (let j = 0; j < b.vel.length; j++) {
+          const k = Math.random() < 0.3 ? 0.15 : 1;
+          col.setXYZ(j, b.base[j * 3] * k, b.base[j * 3 + 1] * k, b.base[j * 3 + 2] * k);
+        }
+        col.needsUpdate = true;
+      }
+      if (b.style === 'crossette' && !b.didSplit && b.age > 0.6) {
+        b.didSplit = true;
+        this.split(b);
+        b.life = Math.min(b.life, 0.15);
+      }
+      b.pts.material.opacity = Math.min(1, b.life / (b.maxLife * 0.45));
+      b.pts.material.size = (b.style === 'crossette' ? 2.2 : 1.2) + b.age * 0.15;
       if (b.life <= 0) {
         this.scene.remove(b.pts);
         b.pts.geometry.dispose();
@@ -167,10 +276,16 @@ export class Fireworks {
         this.bursts.splice(i, 1);
       }
     }
+    for (const l of this.lights) {
+      l.life = Math.max(0, l.life - dt / 1.6);
+      l.light.intensity = 6000 * l.life ** 2;
+      l.halo.material.opacity = l.life * 0.28;
+      l.halo.visible = l.life > 0;
+    }
+    this.flash *= Math.exp(-2.5 * dt);
     return booms;
   }
 }
-
 
 // ---------- Particle emitters (smoke, fire, sparkles, hearts…) ----------
 
@@ -300,7 +415,7 @@ export class Emitter {
 // All the emitters the game uses, with handy effect presets.
 export class Effects {
   constructor(scene) {
-    this.glow = new Emitter(scene, 'glow', { additive: true, max: 2500 });
+    this.glow = new Emitter(scene, 'glow', { additive: true, max: 4000 });
     this.smoke = new Emitter(scene, 'smoke', { max: 1500 });
     this.hearts = new Emitter(scene, 'heart', { max: 200 });
     this.notes = new Emitter(scene, 'note', { max: 200 });

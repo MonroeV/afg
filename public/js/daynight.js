@@ -158,7 +158,8 @@ export class DayNight {
     this.hemi.intensity = 0.14 + 0.41 * this.dayK;
     this.hemi.color.setRGB(0.23 + 0.61 * this.dayK, 0.29 + 0.62 * this.dayK, 0.5 + 0.5 * this.dayK);
     this.hemi.groundColor.setRGB(0.06 + 0.3 * this.dayK, 0.06 + 0.24 * this.dayK, 0.08 + 0.13 * this.dayK);
-    this.scene.environmentIntensity = 0.04 + 0.26 * this.dayK;
+    // Live reflections already get darker at night; the plain sky picture doesn't.
+    this.scene.environmentIntensity = this.liveReflections ? 0.3 : 0.04 + 0.26 * this.dayK;
 
     this.scene.fog.color.copy(this.fogNight).lerp(this.fogDay, this.dayK).lerp(this.fogSunset, sunsetK * 0.6);
     this.scene.fog.near = 40 + 20 * this.dayK;
@@ -173,7 +174,8 @@ export class DayNight {
     // Lamps glow brighter at night and light up their surroundings.
     const lampK = smooth(0.25, 0.85, nightK);
     const lamp = materials?.[18];
-    if (lamp) lamp.emissiveIntensity = 2.2 + 3 * lampK;
+    // With the glow effect on, lamps already shine brighter, so they need less of a boost.
+    if (lamp) lamp.emissiveIntensity = 2.2 + (this.glowOn ? 1.2 : 3) * lampK;
     this.lampTimer -= dt;
     if (this.lampTimer <= 0 && world) {
       this.lampTimer = 0.5;

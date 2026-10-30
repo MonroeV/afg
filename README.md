@@ -13,20 +13,28 @@ customize your character, drive cars, build anything and play with friends.
   It holds 25 characters in a 5×5 grid; when it's full you choose one to replace, or replace the oldest
 - **Day and night**: the sun sets, the stars and moon come out and the street lamps light up
 - **Cars parked around town**: regular cars, a police car with a siren and monster trucks that climb
-  blocks. Automatic gearboxes you can hear shifting. Crash hard and they dent, smoke, catch fire and
-  blow up, then a new one shows up near its parking spot 30 seconds later
+  blocks. A 3-speed automatic you can hear: 1st revs up slowly from a stop, 2nd pulls to top speed,
+  and 3rd is an overdrive that cruises at medium revs. If a car's corner gets caught on something it
+  gently slides itself free. Crash hard and they dent, smoke, catch fire and blow up, then a new one
+  shows up near its parking spot 30 seconds later
 - **Real bumps (Newton's laws)**: when things collide they trade momentum. Ram a parked car and it
   gets shoved (and spins if you hit it off-center) while you slow down; heavy monster trucks barely
   notice small cars; knocked cars can knock into other cars; cars bump people out of the way; you
   can push a parked car by walking into it; and walking or driving into the Pet Ball kicks it
-- **A helicopter** on the helipad east of town. Easy to learn, tricky to master. If it's destroyed,
-  a new one arrives after 5 minutes
+- **A helicopter** on the helipad east of town. It banks into its turns like a real one. Easy to
+  learn, tricky to master. If it's destroyed, a new one arrives after 5 minutes
 - **Claim your own land** (up to 10 × 15 blocks) with the Land Flag so only you can build there
 - **Logs grow into trees**: put a lone log on the grass and watch it grow
 - **Build Book**: special things you can make out of blocks: beds, trampolines, campfires,
-  teleporters, cannons, fountains and dance floors
-- **Doors** that open and close, **fireworks**, **dancing** and **waving**
-- **36 kinds of blocks** with realistic textures: brick, wood, glass, marble, roads, flowers, rainbow…
+  teleporters, cannons, fountains, dance floors and TVs (with cartoons, news, weather and
+  silly commercials)
+- **Doors** that open and close, **dancing** and **waving**
+- **Fireworks** in 8 styles (including hearts and smiley faces) that light up the whole night sky
+  and everything around them
+- **Fancy lighting** (Graphics: High or Medium): shiny things like cars, glass, water, metal, gold
+  and mirrors reflect the world around them, lamps and fireworks glow, and shadows are soft
+- **38 kinds of blocks** with realistic textures: brick, wood, glass, marble, roads, flowers,
+  rainbow, gold, mirrors…
 - **Real-time multiplayer**: see each other, drive together, chat
 - **Single player works too**: with no server, the world runs and saves right in the browser
 
@@ -49,7 +57,7 @@ customize your character, drive cars, build anything and play with friends.
 | G | Dance! (on a dance floor it starts a party) |
 | B | Wave |
 | T or Enter | Chat |
-| R | Go back to your bed (or the town square if you don't have one) |
+| R | Go home: your bed, or your land if you have no bed, or else the town square |
 | Esc | Pause, settings and character customization |
 
 **Driving:** W/S to drive and reverse, A/D to steer, Space to brake, Shift for a boost,
@@ -57,7 +65,8 @@ H (or click) for the horn, G for the police siren, V to change the camera, E to 
 
 **Flying the helicopter:** wait for the rotor to spin up, then hold Space to climb and Shift to go
 down. W/S tilt forward and back (tilting moves you, and you keep sliding until you tilt the other
-way), A/D turn. Land gently, or it gets damaged. Don't let the rotor hit anything!
+way). A/D bank into a turn: the faster you fly, the wider and swoopier the turn. Land gently, or it
+gets damaged. Don't let the rotor hit anything!
 
 **Claiming land:** pick the Land Flag (slot 9), click one corner, click the opposite corner, then
 click once more to claim it. Right-click cancels. With the flag in your hand, right-click twice to
@@ -81,7 +90,8 @@ becomes free again. Anyone can still walk in and use the doors.
 
 To play with someone else on the same Wi-Fi, they can open `http://YOUR-COMPUTER-IP:5010`.
 
-If the game feels slow, press Esc and set **Graphics** to Medium or Low.
+If the game feels slow, press Esc and set **Graphics** to Medium or Low. High has live
+reflections, glow and soft shadows; Medium has cheaper versions; Low turns them off.
 
 ## Putting it online so friends can join
 
@@ -136,6 +146,8 @@ public/
     structures.js      Spots Build Book patterns (beds, teleporters…) in the world
     pets.js            What your pet does (follow, wander, fetch) and the ball
     landview.js        Draws land claim borders
+    lighting.js        Live reflections and the glow effect
+    tv.js              The TV shows
     daynight.js        Sky, sun, moon, stars and night lighting
     items.js           Hotbar items, icons, the item in your hand
     effects.js         Particles, fireworks and sound effects

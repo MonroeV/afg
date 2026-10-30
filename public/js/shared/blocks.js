@@ -43,7 +43,9 @@ export const BLOCKS = {
   33: { name: 'Purple Paint', tex: 'paint_purple' },
   34: { name: 'Green Paint', tex: 'paint_green' },
   35: { name: 'Red Carpet', shape: 'flat', tex: 'paint_red' },
-  36: { name: 'Water', shape: 'flat', tex: 'water', glossy: true },
+  36: { name: 'Water', shape: 'flat', tex: 'water', glossy: true, water: true },
+  37: { name: 'Mirror', tex: 'mirror', mirror: true },
+  38: { name: 'Gold', tex: 'gold', gold: true },
 };
 
 export const BLOCK_IDS = Object.keys(BLOCKS).map(Number);

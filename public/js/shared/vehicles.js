@@ -1,9 +1,9 @@
 // Vehicle sizes and rules, shared by the server (for respawning) and the browser (for driving).
 
 export const VEHICLES = {
-  car: { name: 'Car', mass: 1200, length: 3.6, width: 1.8, ride: 0.32, bodyH: 0.55, cabinH: 0.72, wheelR: 0.34, maxSpeed: 17, accel: 9, gears: 5, respawn: 30 },
-  police: { name: 'Police Car', mass: 1400, length: 3.8, width: 1.85, ride: 0.32, bodyH: 0.55, cabinH: 0.72, wheelR: 0.35, maxSpeed: 21, accel: 11, gears: 6, respawn: 30 },
-  monster: { name: 'Monster Truck', mass: 3000, length: 4.0, width: 2.5, ride: 1.05, bodyH: 0.7, cabinH: 0.85, wheelR: 0.8, maxSpeed: 14, accel: 8, gears: 4, climb: true, respawn: 30 },
+  car: { name: 'Car', mass: 1200, length: 3.6, width: 1.8, ride: 0.32, bodyH: 0.55, cabinH: 0.72, wheelR: 0.34, maxSpeed: 17, accel: 9, gears: 3, respawn: 30 },
+  police: { name: 'Police Car', mass: 1400, length: 3.8, width: 1.85, ride: 0.32, bodyH: 0.55, cabinH: 0.72, wheelR: 0.35, maxSpeed: 21, accel: 11, gears: 3, respawn: 30 },
+  monster: { name: 'Monster Truck', mass: 3000, length: 4.0, width: 2.5, ride: 1.05, bodyH: 0.7, cabinH: 0.85, wheelR: 0.8, maxSpeed: 14, accel: 8, gears: 3, climb: true, respawn: 30 },
   heli: { name: 'Helicopter', mass: 1800, length: 3.4, width: 2.0, tail: 3.0, height: 2.4, rotor: 3.6, flying: true, respawn: 300 },
 };
 for (const s of Object.values(VEHICLES)) s.height ??= s.ride + s.bodyH + s.cabinH;

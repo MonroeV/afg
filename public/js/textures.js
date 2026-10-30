@@ -373,6 +373,21 @@ function water(u, v) {
   return { c, h: ripple * 0.5 + n * 0.5 };
 }
 
+function mirror(u, v) {
+  const border = Math.min(u, v, 1 - u, 1 - v);
+  if (border < 0.05) return { c: [0.25, 0.25, 0.28], h: 1 };
+  const n = fbm(u, v, 16, 2, 220);
+  return { c: [0.9 + n * 0.04, 0.92 + n * 0.04, 0.95], h: border < 0.07 ? 0.6 : 0.5 };
+}
+
+function gold(u, v) {
+  const n = fbm(u, v, 3, 4, 230, 24); // brushed
+  const border = Math.min(u, v, 1 - u, 1 - v);
+  let c = mixc([0.85, 0.6, 0.16], [1, 0.84, 0.38], n);
+  if (border < 0.04) c = shade(c, 0.75);
+  return { c, h: border < 0.04 ? 0.3 : 0.6 + n * 0.1 };
+}
+
 const GENERATORS = {
   grass_top: grassTop,
   grass_side: grassSide,
@@ -411,6 +426,8 @@ const GENERATORS = {
   paint_orange: concrete([0.95, 0.5, 0.15], 0.1),
   paint_purple: concrete([0.5, 0.28, 0.75], 0.1),
   paint_green: concrete([0.25, 0.62, 0.25], 0.1),
+  mirror,
+  gold,
 };
 
 const NORMAL_STRENGTH = {

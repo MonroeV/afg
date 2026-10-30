@@ -32,9 +32,10 @@ export function buildCarModel(kind, color) {
   const s = CAR_SPECS[kind];
   const g = new THREE.Group();
   const mats = {
-    paint: new THREE.MeshStandardMaterial({ color, metalness: 0.45, roughness: 0.28 }),
+    // Car paint with a glossy clear coat on top, so it reflects the world around it.
+    paint: new THREE.MeshPhysicalMaterial({ color, metalness: 0.5, roughness: 0.4, clearcoat: 1, clearcoatRoughness: 0.06 }),
     dark: new THREE.MeshStandardMaterial({ color: 0x1d1f24, roughness: 0.7 }),
-    glass: new THREE.MeshStandardMaterial({ color: 0x223344, metalness: 0.6, roughness: 0.08, transparent: true, opacity: 0.55 }),
+    glass: new THREE.MeshPhysicalMaterial({ color: 0x223344, metalness: 0.2, roughness: 0.02, transparent: true, opacity: 0.5, envMapIntensity: 2 }),
     chrome: new THREE.MeshStandardMaterial({ color: 0xdfe4ea, metalness: 0.95, roughness: 0.2 }),
     head: new THREE.MeshStandardMaterial({ color: 0xfff6d8, emissive: 0xfff2c0, emissiveIntensity: 0.3 }),
     tail: new THREE.MeshStandardMaterial({ color: 0xaa1111, emissive: 0xff2020, emissiveIntensity: 0.3 }),
@@ -123,8 +124,8 @@ function buildHeliModel(color) {
   const s = VEHICLES.heli;
   const g = new THREE.Group();
   const mats = {
-    paint: new THREE.MeshStandardMaterial({ color, metalness: 0.45, roughness: 0.3 }),
-    white: new THREE.MeshStandardMaterial({ color: 0xf2f2f2, metalness: 0.3, roughness: 0.35 }),
+    paint: new THREE.MeshPhysicalMaterial({ color, metalness: 0.5, roughness: 0.4, clearcoat: 1, clearcoatRoughness: 0.06 }),
+    white: new THREE.MeshPhysicalMaterial({ color: 0xf2f2f2, metalness: 0.3, roughness: 0.35, clearcoat: 1, clearcoatRoughness: 0.08 }),
     dark: new THREE.MeshStandardMaterial({ color: 0x24272d, roughness: 0.6 }),
     glass: new THREE.MeshStandardMaterial({ color: 0x223344, metalness: 0.6, roughness: 0.08, transparent: true, opacity: 0.5 }),
     tail: new THREE.MeshStandardMaterial({ color: 0xaa1111, emissive: 0xff2020, emissiveIntensity: 0.6 }),
@@ -190,8 +191,13 @@ function footprintsOverlap(sa, ax, az, ah, sb, bx, bz, bh) {
   return true;
 }
 
-// Top speed of each gear: low gears are short, high gears are long.
-const gearTop = (spec, gear) => spec.maxSpeed * (gear / spec.gears) ** 0.8;
+// A three-speed automatic. Each gear's top speed, as a fraction of the car's top speed:
+// 1st is short, 2nd pulls all the way up to top speed, and 3rd is an overdrive that
+// would only redline at well over top speed, so it cruises at medium revs.
+const GEAR_TOPS = [0, 0.3, 1.0, 1 / 0.58];
+const IDLE_RPM = 0.14;
+const gearTop = (spec, gear) => spec.maxSpeed * GEAR_TOPS[gear];
+const rpmIn = (spec, gear, speed) => IDLE_RPM + (1 - IDLE_RPM) * Math.min(1, Math.max(0, speed) / gearTop(spec, gear));
 
 export class Cars {
   constructor(scene, world, effects) {
@@ -227,6 +233,10 @@ export class Cars {
     };
     this.list.set(car.id, car);
     this.scene.add(model.group);
+    // Shiny paint and windows reflect the world around them.
+    model.group.traverse(o => {
+      if (o.isMesh && o.material.metalness !== undefined && o.material.roughness < 0.5) this.reflections?.addShiny(o.material, o.material.transparent ? 1.4 : 1);
+    });
     this.applyHp(car, car.hp);
     this.place(car);
     return car;
@@ -236,7 +246,11 @@ export class Cars {
     const car = this.list.get(id);
     if (!car) return;
     this.scene.remove(car.model.group);
-    car.model.group.traverse(o => o.isMesh && o.geometry.dispose());
+    car.model.group.traverse(o => {
+      if (!o.isMesh) return;
+      o.geometry.dispose();
+      this.reflections?.removeShiny(o.material);
+    });
     this.list.delete(id);
   }
 
@@ -564,25 +578,29 @@ export class Cars {
     const events = [];
     const health = 0.55 + 0.45 * (car.hp / MAX_HP); // wrecked cars are sluggish
 
-    // Automatic gearbox: shift up near the top of each gear, down when slowing.
+    // Automatic gearbox: 1st revs up slowly from a stop, shifts to 2nd at high revs,
+    // and drops into overdrive (3rd) once you're near top speed.
     car.shiftT = Math.max(0, car.shiftT - dt);
     const fwd = Math.max(0, car.speed);
     if (car.speed < -0.5) car.gear = 0; // reverse
     else if (car.gear === 0) car.gear = 1;
     if (car.gear > 0) {
-      if (fwd / gearTop(s, car.gear) > 0.95 && car.gear < s.gears && throttle > 0 && !car.shiftT) {
+      const upshift = car.gear === 1 ? rpmIn(s, 1, fwd) > 0.93 : car.gear === 2 && fwd > s.maxSpeed * 0.93;
+      if (upshift && throttle > 0 && !car.shiftT) {
         car.gear++;
-        car.shiftT = 0.25;
+        car.shiftT = 0.3;
         events.push({ type: 'shift' });
-      } else if (car.gear > 1 && fwd < gearTop(s, car.gear - 1) * 0.7) {
+      } else if (car.gear === 3 && fwd < s.maxSpeed * 0.7 || car.gear === 2 && fwd < gearTop(s, 1) * 0.6) {
         car.gear--;
         if (throttle > 0) events.push({ type: 'shift' });
       }
-      car.rpm = Math.min(1, fwd / gearTop(s, car.gear));
+      car.rpm = rpmIn(s, car.gear, fwd);
     } else {
-      car.rpm = Math.min(1, -car.speed / 7);
+      car.rpm = IDLE_RPM + (1 - IDLE_RPM) * Math.min(1, -car.speed / 7);
     }
-    const gearPull = car.gear > 0 ? 1.45 - 0.13 * car.gear : 1;
+    // Getting going takes effort: in 1st the pull builds up as the revs rise.
+    const firstFrac = Math.min(1, fwd / gearTop(s, 1));
+    const gearPull = car.gear === 1 ? 0.15 + 0.45 * firstFrac : car.gear === 2 ? 0.8 : car.gear === 3 ? 0.35 : 0.7;
     const pull = s.accel * gearPull * health * (car.shiftT > 0 ? 0.1 : 1) * (boost ? 1.35 : 1);
 
     if (throttle > 0) car.speed += (car.speed < 0 ? s.accel * 2.5 : pull) * dt;
@@ -630,9 +648,50 @@ export class Cars {
     }
     this.hitPeople(car, events);
     this.fall(car, dt, events);
+    this.checkStuck(car, dt, throttle);
     car.target.copy(car.pos);
     car.targetH = car.h;
     return events;
+  }
+
+  // If you're pressing the gas but the car hasn't really moved (its corner is caught
+  // on the corner of something), slide it gently to a nearby spot where it can drive.
+  checkStuck(car, dt, throttle) {
+    const s = car.spec;
+    if (car.unstick) {
+      const u = car.unstick;
+      const k = Math.min(dt / u.duration, 1 - u.done);
+      const x = car.pos.x + u.dx * k, z = car.pos.z + u.dz * k, h = car.h + u.dh * k;
+      if (!this.blocked(s, x, car.pos.y, z, h, car.id, car.outline)) {
+        car.pos.set(x, car.pos.y, z);
+        car.h = h;
+      }
+      u.done += k;
+      if (u.done >= 1) car.unstick = null;
+      return;
+    }
+    car.stuckCheck = (car.stuckCheck || 0) + dt;
+    if (car.stuckCheck < 0.4) return;
+    const moved = car.stuckFrom ? Math.hypot(car.pos.x - car.stuckFrom.x, car.pos.z - car.stuckFrom.z) : 1;
+    car.stuckCheck = 0;
+    car.stuckFrom = car.pos.clone();
+    if (!throttle || moved > 0.15 || car.vy !== 0) return;
+    const f = this.fwd(car).multiplyScalar(throttle > 0 ? 1 : -1);
+    const side = new THREE.Vector3(-f.z, 0, f.x);
+    const tries = [];
+    for (const m of [0.12, 0.25, 0.4, 0.6, 0.85])
+      for (const sign of [1, -1]) {
+        tries.push([side.x * m * sign, side.z * m * sign, 0]);
+        tries.push([side.x * m * sign, side.z * m * sign, 0.06 * sign]);
+      }
+    for (const dh of [0.08, -0.08, 0.16, -0.16]) tries.push([0, 0, dh]);
+    for (const [dx, dz, dh] of tries) {
+      const x = car.pos.x + dx, z = car.pos.z + dz, h = car.h + dh;
+      if (this.blocked(s, x, car.pos.y, z, h, car.id, car.outline)) continue;
+      if (this.blocked(s, x + f.x * 0.4, car.pos.y, z + f.z * 0.4, h, car.id, car.outline)) continue;
+      car.unstick = { dx, dz, dh, duration: 0.3, done: 0 };
+      return;
+    }
   }
 
   // Helicopter flight. Tilting moves you, but also steals lift, and you keep sliding
@@ -648,15 +707,21 @@ export class Cars {
     car.collective += ((up ? 1 : down ? 0.2 : 0.5) - car.collective) * Math.min(1, 1.6 * dt);
     const pitchIn = (keys.has('KeyW') ? -0.45 : 0) + (keys.has('KeyS') ? 0.35 : 0);
     car.pitch += (pitchIn - car.pitch) * Math.min(1, 1.8 * dt);
+    // Turning: the helicopter banks (leans) into the turn like a bird, and the tilted
+    // rotor pulls it sideways into the curve. Faster flight means wider, swoopier turns.
     const yawIn = (keys.has('KeyA') ? 1 : 0) - (keys.has('KeyD') ? 1 : 0);
-    car.yawRate += (yawIn * 1.3 * lift - car.yawRate) * Math.min(1, 2.2 * dt);
+    const flatSpeed = Math.hypot(car.vel.x, car.vel.z);
+    car.yawRate += (yawIn * (0.9 + Math.min(flatSpeed, 15) / 15 * 0.5) * lift - car.yawRate) * Math.min(1, 2.2 * dt);
     car.h += car.yawRate * dt;
-    car.roll += (-car.yawRate * 0.25 - car.roll) * Math.min(1, 3 * dt);
+    const bank = car.onGround ? 0 : yawIn * (0.2 + Math.min(flatSpeed, 15) / 15 * 0.25) * lift;
+    car.roll += (bank - car.roll) * Math.min(1, 2.5 * dt);
 
     // Forces: lift along the tilted rotor, gravity down, a bit of air drag.
     const thrust = lift * car.collective * 2 * HELI_GRAVITY * health;
     const fwd = new THREE.Vector3(-Math.sin(car.h), 0, -Math.cos(car.h));
     car.vel.addScaledVector(fwd, thrust * Math.sin(-car.pitch) * dt);
+    const left = new THREE.Vector3(-Math.cos(car.h), 0, Math.sin(car.h));
+    car.vel.addScaledVector(left, thrust * Math.sin(car.roll) * dt);
     car.vel.y += (thrust * Math.cos(car.pitch) * Math.cos(car.roll) - HELI_GRAVITY) * dt;
     const drag = Math.exp(-0.32 * dt);
     car.vel.x *= drag;

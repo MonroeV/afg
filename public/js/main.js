@@ -12,6 +12,8 @@ import { Cars, SEAT_SCALE } from './cars.js';
 import { MAX_HP, FIRE_HP, PERSON_MASS } from './shared/vehicles.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey } from './shared/claims.js';
 import { Structures } from './structures.js';
+import { TVs, CHANNELS } from './tv.js';
+import { Reflections, Glow } from './lighting.js';
 import { LandView, describeSize } from './landview.js';
 import { Ball, PetBrain } from './pets.js';
 import { DayNight } from './daynight.js';
@@ -58,16 +60,25 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.05, 1000);
 camera.rotation.order = 'YXZ';
 const sky = new DayNight(renderer, scene);
+const reflections = new Reflections(renderer, scene);
+const glow = new Glow(renderer, scene, camera);
 
+// Graphics settings. Live reflections and glow look great but need a good graphics card.
 const QUALITY = {
-  high: { pixelRatio: 2, shadowMap: 2048, lamps: 8 },
-  medium: { pixelRatio: 1, shadowMap: 1024, lamps: 6 },
-  low: { pixelRatio: 0.75, shadowMap: 0, lamps: 3 },
+  high: { pixelRatio: 2, shadowMap: 2048, shadowSoftness: 3, lamps: 8, bloom: true, reflections: 128, reflectEvery: 1.2 },
+  medium: { pixelRatio: 1, shadowMap: 1024, shadowSoftness: 2, lamps: 6, bloom: true, reflections: 64, reflectEvery: 4 },
+  low: { pixelRatio: 0.75, shadowMap: 0, shadowSoftness: 1, lamps: 3, bloom: false, reflections: 0 },
 };
 function applyQuality() {
   const q = QUALITY[settings.quality] || QUALITY.high;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, q.pixelRatio));
+  const pixelRatio = Math.min(window.devicePixelRatio, q.pixelRatio);
+  renderer.setPixelRatio(pixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
+  glow.enabled = sky.glowOn = q.bloom;
+  glow.setSize(window.innerWidth, window.innerHeight, pixelRatio);
+  reflections.configure(q.reflections, q.reflectEvery);
+  sky.liveReflections = reflections.live;
+  sky.sun.shadow.radius = q.shadowSoftness;
   sky.sun.castShadow = q.shadowMap > 0;
   if (q.shadowMap && sky.sun.shadow.mapSize.x !== q.shadowMap) {
     sky.sun.shadow.mapSize.set(q.shadowMap, q.shadowMap);
@@ -92,8 +103,9 @@ scene.add(headlight, headlight.target);
 
 const view = new ViewModel();
 const particles = new Particles(scene);
-const fireworks = new Fireworks(scene);
 const effects = new Effects(scene);
+const fireworks = new Fireworks(scene, effects);
+const tvs = new TVs(scene);
 const landView = new LandView(scene);
 const sounds = new Sounds();
 sounds.volume = settings.volume;
@@ -161,6 +173,7 @@ async function load() {
   const anisotropy = renderer.capabilities.getMaxAnisotropy();
   textures = await generateTextures(anisotropy, p => ($('loading-fill').style.width = `${p * 100}%`));
   materials = createBlockMaterials(textures);
+  for (const m of new Set(Object.values(materials).flat())) if (m.userData.shine) reflections.addShiny(m, m.userData.shine);
   view.materials = materials;
   icons = Object.fromEntries(ALL_ITEMS.map(i => [i, makeIcon(i, textures)]));
   world = new World(scene, materials);
@@ -171,6 +184,7 @@ async function load() {
   player = new Player(world);
   player.bouncePower = trampolineBounce;
   cars = new Cars(scene, world, effects);
+  cars.reflections = reflections;
   player.extraBoxes = () => cars.boxes(myCar?.id);
   player.onPushCar = pushCar;
   cars.people = () => [...avatars.list.values()].filter(a => !a.seat && !a.lying).map(a => ({ id: a.id, pos: a.pos }));
@@ -241,7 +255,7 @@ $('join-form').addEventListener('submit', async e => {
   hud.addChat({ system: true, text: 'Tip: right-click a car or the helicopter to drive it. Press E to see the Build Book!' });
 
   inGame = true;
-  player.respawn();
+  respawn(true);
   $('menu').classList.add('hidden');
   $('hud').classList.remove('hidden');
   lock();
@@ -267,8 +281,7 @@ net.on('emote', ({ id, kind }) => avatars.list.get(id)?.emote(kind));
 net.on('fx', ({ kind, x, y, z, color, seed }) => {
   if (kind === 'hearts') effects.heartsAt(x, y, z);
   else if (kind === 'sparkle') effects.sparkle(x, y, z, 30);
-  else {
-    fireworks.launch(x, y, z, color, seed);
+  else if (fireworks.launch(x, y, z, color, seed)) {
     sounds.launch(loudness(x, y, z, 80));
   }
 });
@@ -592,7 +605,10 @@ function launchFirework() {
   }
   const color = FIREWORK_COLORS[Math.floor(Math.random() * FIREWORK_COLORS.length)];
   const seed = Math.random();
-  fireworks.launch(x, y, z, color, seed);
+  if (!fireworks.launch(x, y, z, color, seed)) {
+    hud.toast('🎆 The sky is full of fireworks! Wait a moment.');
+    return;
+  }
   sounds.launch(1);
   net.send({ t: 'fx', kind: 'firework', x, y, z, color, seed });
 }
@@ -852,6 +868,12 @@ function structureLights() {
   for (const s of structures.near(camera.position, 60)) {
     if (s.type === 'campfire') out.push({ x: s.x, y: s.y + 1, z: s.z, color: new THREE.Color(0xff8a3c), intensity: 10 });
     if (s.type === 'disco') out.push({ x: s.x, y: s.y + 2.5, z: s.z, color: new THREE.Color().setHSL((t * 0.7) % 1, 1, 0.55), intensity: 30, always: true });
+    if (s.type === 'tv') {
+      // The screen softly lights up a dark room in the color of the show.
+      const sc = tvs.find(s);
+      const flicker = 0.85 + Math.sin(t * 7) * 0.1 + Math.sin(t * 13) * 0.05;
+      out.push({ x: s.x + s.ax * s.width / 2 - 0.5 * s.ax, y: s.y, z: s.z + s.az * s.width / 2 - 0.5 * s.az, color: new THREE.Color(CHANNELS[sc?.channel || 0].glow), intensity: 7 * flicker });
+    }
   }
   return out;
 }
@@ -910,15 +932,39 @@ function wakeUp() {
   net.send({ t: 'sleep', on: false });
 }
 
-function respawn() {
+// A safe place to stand on your own land: open ground nearest its middle,
+// or else on top of whatever has been built there.
+function landSpawn() {
+  const mine = claims.find(c => c.key === nameKey(settings.name));
+  if (!mine) return null;
+  const cx = (mine.x0 + mine.x1) / 2, cz = (mine.z0 + mine.z1) / 2;
+  const cells = [];
+  for (let x = mine.x0; x <= mine.x1; x++) for (let z = mine.z0; z <= mine.z1; z++) cells.push([x, z, Math.hypot(x + 0.5 - cx, z + 0.5 - cz)]);
+  cells.sort((a, b) => a[2] - b[2]);
+  const roomAt = (x, y, z) => !world.isSolid(x, y, z) && !world.isSolid(x, y + 1, z);
+  for (const [x, z] of cells) if (roomAt(x, 0, z)) return [x + 0.5, 0, z + 0.5];
+  for (const [x, z] of cells) {
+    let top = 62;
+    while (top >= 0 && !world.isSolid(x, top, z)) top--;
+    if (roomAt(x, top + 1, z)) return [x + 0.5, top + 1, z + 0.5];
+  }
+  return null;
+}
+
+// Back home: your bed if you have one, then your land, then the town square.
+function respawn(joining = false) {
   wakeUp();
   if (myCar) leaveCar(true);
   const b = settings.bed;
   const bed = b && structures.ofType('bed').find(s => s.x === b.x && s.y === b.y && s.z === b.z);
+  const land = !bed && landSpawn();
+  player.vel.set(0, 0, 0);
   if (bed) {
     player.pos.set(bed.x + bed.dx + 0.5, bed.y + 1, bed.z + bed.dz + 0.5);
-    player.vel.set(0, 0, 0);
-    hud.toast('🛏️ Back to your bed!');
+    hud.toast(joining ? '🛏️ Welcome back! You woke up next to your bed.' : '🛏️ Back to your bed!');
+  } else if (land) {
+    player.pos.set(...land);
+    hud.toast(joining ? '🏠 Welcome back to your land!' : '🏠 Home sweet home: back on your land!');
   } else {
     player.respawn();
   }
@@ -1154,6 +1200,14 @@ function interact() {
     const s = structures.at(...hit.block);
     if (s?.type === 'bed') return goToBed(s);
     if (s?.type === 'cannon') return fireCannon(s);
+    if (s?.type === 'tv') {
+      const name = tvs.nextChannel(s);
+      if (name) {
+        sounds.click();
+        hud.toast(`📺 ${name}`);
+      }
+      return;
+    }
   }
   if (hud.item === CLAIM) unclaimClick();
 }
@@ -1257,7 +1311,11 @@ function frame(timestamp) {
       player.pos.copy(cars.seat(myCar).position);
       player.vel.set(0, 0, 0);
       if (myCar.spec.flying) sounds.engine(null);
-      else sounds.engine(myCar.shiftT > 0 ? myCar.rpm * 0.7 : Math.max(0.15, myCar.rpm), myCar.load);
+      else {
+        // The engine note follows the revs smoothly (so you hear each gear change).
+        myCar.rpmShown = (myCar.rpmShown ?? myCar.rpm) + (myCar.rpm - (myCar.rpmShown ?? myCar.rpm)) * Math.min(1, dt * 9);
+        sounds.engine(myCar.rpmShown, myCar.load);
+      }
     } else if (!sleeping) {
       const wasOnGround = player.onGround;
       const vyBefore = player.vel.y;
@@ -1327,6 +1385,7 @@ function frame(timestamp) {
       if (hit && shapeOf(hit.value) === 'door' && item !== HAMMER) hint = '🚪 Click to open / close';
       else if (s?.type === 'bed') hint = '🛏️ Right-click to sleep';
       else if (s?.type === 'cannon') hint = '💥 Right-click to launch yourself!';
+      else if (s?.type === 'tv') hint = '📺 Right-click to change the channel';
       else if (item === CLAIM) hint = '🚩 Click a corner to start claiming land (max 10×15)';
     }
     hud.setHint(hint);
@@ -1410,7 +1469,7 @@ function frame(timestamp) {
         while (ground > 0 && !world.isSolid(Math.floor(myCar.pos.x), ground - 1, Math.floor(myCar.pos.z))) ground--;
         hud.setVehicleInfo(myCar.spec.flying
           ? `⬆️ ${Math.max(0, Math.round(myCar.pos.y - ground))} m · ${kmh} km/h · Rotor ${Math.round(myCar.rotorSpin * 100)}% · ${health}`
-          : `Gear ${myCar.gear === 0 ? 'R' : myCar.gear} · ${kmh} km/h · ${health}`);
+          : `Gear ${myCar.gear === 0 ? 'R' : myCar.gear === 3 ? '3 (overdrive)' : myCar.gear} · ${kmh} km/h · ${health}`);
       }
     }
 
@@ -1461,6 +1520,11 @@ function frame(timestamp) {
   }
 
   sky.update(dt, camera, world, materials);
+  if (structures) {
+    tvs.sync(structures);
+    const phase = sky.phase;
+    tvs.update(dt, time, camera.position, { players: avatars.list.size + 1, clock: sky.clockText(), night: sky.isNight, dayPhase: phase < 0.62 ? phase / 0.62 : 0 });
+  }
   world.updateVisibility(camera.position, settings.quality === 'low' ? Math.min(140, scene.fog.far) : scene.fog.far);
   avatars.update(dt, time);
   cars.setView(camera.position, scene.fog.far);
@@ -1468,12 +1532,33 @@ function frame(timestamp) {
   if (inGame) for (const ev of cars.events) vehicleEvent(ev, ev.other);
   particles.update(dt, world);
   effects.update(dt, camera, renderer.domElement.height);
-  for (const p of fireworks.update(dt)) sounds.boom(loudness(p.x, p.y, p.z, 140));
+  for (const p of fireworks.update(dt)) sounds.boom(loudness(p.x, p.y, p.z, 160));
+  // Bursts light up the whole night sky in their color.
+  if (fireworks.flash > 0.01 && nightK > 0.2) {
+    const f = Math.min(1, fireworks.flash) * nightK;
+    sky.hemi.intensity += f * 0.5;
+    sky.hemi.color.lerp(fireworks.flashColor, f * 0.5);
+    scene.fog.color.lerp(fireworks.flashColor, f * 0.2);
+  }
   const firstPerson = inGame && !myCar && viewMode === 0 && !sleeping;
   view.update(dt, player.moving && player.onGround, camera.aspect, scene.environment, sky.dayK);
 
-  renderer.clear();
-  renderer.render(scene, camera);
+  // Water ripples drift slowly.
+  const water = materials?.[36];
+  if (water) {
+    water.normalMap.offset.x += dt * 0.02;
+    water.normalMap.offset.y += dt * 0.013;
+    water.map.offset.x += dt * 0.006;
+  }
+
+  reflections.update(dt, camera, [highlight, crack]);
+  reflections.refresh(sky.dayK);
+  if (glow.enabled) {
+    glow.render(sky.dayK);
+  } else {
+    renderer.clear();
+    renderer.render(scene, camera);
+  }
   if (firstPerson) {
     renderer.clearDepth();
     renderer.render(view.scene, view.camera);
@@ -1484,13 +1569,14 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  glow.setSize(window.innerWidth, window.innerHeight, renderer.getPixelRatio());
 });
 
 load();
 
 // Handy for poking at the game from the browser console.
 window.buildzone = {
-  scene, camera, sky, net, avatars, renderer, fireworks, effects,
+  scene, camera, sky, net, avatars, renderer, fireworks, effects, glow, reflections,
   get world() { return world; },
   get player() { return player; },
   get cars() { return cars; },
