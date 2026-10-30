@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BLOCKS, blockId } from './shared/blocks.js';
-import { VEHICLES, MAX_HP, SMOKE_HP, FIRE_HP, outlinePoints, rotorPoints, vehicleBlocked, toWorld } from './shared/vehicles.js';
+import { VEHICLES, MAX_HP, SMOKE_HP, FIRE_HP, PERSON_MASS, outlinePoints, rotorPoints, vehicleBlocked, toWorld } from './shared/vehicles.js';
 
 export const CAR_SPECS = VEHICLES;
 
@@ -175,6 +175,21 @@ function buildHeliModel(color) {
 const solidAt = (world, x, y, z) => world.isSolid(Math.floor(x), Math.floor(y), Math.floor(z));
 const UP = new THREE.Vector3(0, 1, 0);
 
+// Do two vehicles' rectangles (seen from above) overlap? Checks along each car's
+// length and width (the "separating axis" test).
+function footprintsOverlap(sa, ax, az, ah, sb, bx, bz, bh) {
+  const axes = [[-Math.sin(ah), -Math.cos(ah)], [Math.cos(ah), -Math.sin(ah)], [-Math.sin(bh), -Math.cos(bh)], [Math.cos(bh), -Math.sin(bh)]];
+  const half = (s, h, [ux, uz]) => {
+    const f = [-Math.sin(h), -Math.cos(h)], side = [Math.cos(h), -Math.sin(h)];
+    return Math.abs(ux * f[0] + uz * f[1]) * s.length / 2 + Math.abs(ux * side[0] + uz * side[1]) * s.width / 2;
+  };
+  for (const u of axes) {
+    const gap = Math.abs((bx - ax) * u[0] + (bz - az) * u[1]);
+    if (gap > half(sa, ah, u) + half(sb, bh, u) - 0.05) return false;
+  }
+  return true;
+}
+
 // Top speed of each gear: low gears are short, high gears are long.
 const gearTop = (spec, gear) => spec.maxSpeed * (gear / spec.gears) ** 0.8;
 
@@ -197,7 +212,9 @@ export class Cars {
       model,
       pos: new THREE.Vector3(data.x, data.y, data.z),
       target: new THREE.Vector3(data.x, data.y, data.z),
-      vel: new THREE.Vector3(),
+      vel: new THREE.Vector3(), // helicopter velocity
+      push: new THREE.Vector3(), // a shove from a crash: sideways skid (or rolling, for a loose car)
+      loose: false, // true while this game is moving a knocked car that nobody is driving
       h: data.h,
       targetH: data.h,
       hp: data.hp ?? MAX_HP,
@@ -231,6 +248,8 @@ export class Cars {
     const car = this.list.get(id);
     if (!car) return;
     car.driver = driver;
+    car.loose = false;
+    car.push.set(0, 0, 0);
     car.target.set(x, y, z);
     car.targetH = h;
     if (!driver) car.speed = car.steer = car.siren = 0;
@@ -240,7 +259,7 @@ export class Cars {
   applyStates(states, myCarId) {
     for (const [id, x, y, z, h, speed, steer, siren, pitch, roll, rotor] of states) {
       const car = this.list.get(id);
-      if (!car || id === myCarId) continue;
+      if (!car || id === myCarId || car.loose) continue;
       car.target.set(x, y, z);
       car.targetH = h;
       car.speed = speed;
@@ -309,7 +328,9 @@ export class Cars {
       const s = car.spec, c = Math.abs(Math.cos(car.h)), n = Math.abs(Math.sin(car.h));
       const ex = c * s.width / 2 + n * s.length / 2, ez = n * s.width / 2 + c * s.length / 2;
       const bottom = s.flying ? 0.3 : s.ride * 0.6;
-      out.push([car.pos.x - ex, car.pos.y + bottom, car.pos.z - ez, car.pos.x + ex, car.pos.y + (s.flying ? 2.0 : s.height), car.pos.z + ez]);
+      const box = [car.pos.x - ex, car.pos.y + bottom, car.pos.z - ez, car.pos.x + ex, car.pos.y + (s.flying ? 2.0 : s.height), car.pos.z + ez];
+      box.car = car; // so a player walking into it can push it
+      out.push(box);
     }
     return out;
   }
@@ -347,8 +368,7 @@ export class Cars {
     if (vehicleBlocked(this.isSolid, spec, x, y, z, h, points || outlinePoints(spec))) return true;
     for (const other of this.list.values()) {
       if (other.id === ignoreId || Math.abs(other.pos.y - y) > 2) continue;
-      const r = (spec.length + other.spec.length) * 0.32;
-      if (Math.hypot(other.pos.x - x, other.pos.z - z) < r) {
+      if (footprintsOverlap(spec, x, z, h, other.spec, other.pos.x, other.pos.z, other.h)) {
         this.lastHit = other;
         return true;
       }
@@ -356,9 +376,182 @@ export class Cars {
     return false;
   }
 
+  // ---------- Momentum ----------
+
+  fwd(car) {
+    return new THREE.Vector3(-Math.sin(car.h), 0, -Math.cos(car.h));
+  }
+
+  velocityOf(car) {
+    if (car.spec.flying) return car.vel.clone();
+    return this.fwd(car).multiplyScalar(car.speed).add(car.push);
+  }
+
+  // Splits a new velocity into "rolling forward/back" (speed) and "skidding" (push).
+  setVelocity(car, v) {
+    if (car.spec.flying) {
+      car.vel.copy(v);
+      return;
+    }
+    const f = this.fwd(car);
+    const along = v.x * f.x + v.z * f.z;
+    if (car.loose) {
+      car.push.set(v.x, 0, v.z);
+    } else {
+      car.speed = along;
+      car.push.set(v.x - f.x * along, 0, v.z - f.z * along);
+    }
+  }
+
+  // Two vehicles bumped: trade momentum (Newton's laws). The heavier one barely moves,
+  // the lighter one gets knocked back, both slow down, and off-center hits make things spin.
+  collide(a, b) {
+    const events = [];
+    const va = this.velocityOf(a), vb = this.velocityOf(b);
+    const toB = new THREE.Vector3(b.pos.x - a.pos.x, 0, b.pos.z - a.pos.z);
+    if (toB.lengthSq() < 1e-6) toB.copy(this.fwd(a));
+    toB.normalize();
+
+    // Where they touch: the point of A's body pointing at B, kept inside B's outline.
+    const rel = va.clone().sub(vb).setY(0);
+    const dir = rel.lengthSq() > 0.01 ? rel.normalize() : toB.clone();
+    const fa = this.fwd(a), sa = new THREE.Vector3(-fa.z, 0, fa.x);
+    const reach = Math.abs(dir.dot(fa)) * a.spec.length / 2 + Math.abs(dir.dot(sa)) * a.spec.width / 2;
+    const contact = a.pos.clone().addScaledVector(dir, reach);
+    const local = contact.clone().sub(b.pos).applyAxisAngle(UP, -b.h);
+    local.x = Math.max(-b.spec.width / 2, Math.min(b.spec.width / 2, local.x));
+    local.z = Math.max(-b.spec.length / 2, Math.min(b.spec.length / 2, local.z));
+    // The push goes straight into whichever side of B was hit.
+    const sideHit = Math.abs(local.x) / b.spec.width > Math.abs(local.z) / b.spec.length;
+    const n = (sideHit ? new THREE.Vector3(-Math.sign(local.x), 0, 0) : new THREE.Vector3(0, 0, -Math.sign(local.z))).applyAxisAngle(UP, b.h);
+    if (n.dot(toB) < 0) n.negate();
+
+    const closing = va.clone().sub(vb).dot(n);
+    if (closing <= 0.05) return events;
+    const ma = a.spec.mass, mb = b.spec.mass, bounce = 0.25;
+    const J = ((1 + bounce) * closing) / (1 / ma + 1 / mb);
+    const dva = n.clone().multiplyScalar(-J / ma), dvb = n.clone().multiplyScalar(J / mb);
+    this.setVelocity(a, va.add(dva));
+
+    // Turning force: lever arm (contact point from B's middle) times the push,
+    // divided by how hard a box that size is to spin.
+    const r = local.applyAxisAngle(UP, b.h);
+    const inertia = (b.spec.length ** 2 + b.spec.width ** 2) / 12;
+    const spin = (r.z * dvb.x - r.x * dvb.z) / inertia;
+    if (b.id === this.myCarId) {
+      this.setVelocity(b, vb.clone().add(dvb)); // a loose car rolled into the car we're driving
+    } else if (b.driver) {
+      events.push({ type: 'impulse', other: b, dv: dvb, spin });
+    } else {
+      b.loose = true;
+      b.push.add(dvb);
+      b.yawRate = (b.yawRate || 0) + spin;
+    }
+    if (closing > 1.5) events.push({ type: 'bump', power: Math.min(1, closing / 15) });
+    if (closing > 7) {
+      // The lighter vehicle takes more of the damage.
+      const total = (closing - 7) * 3;
+      const at = (car, p) => this.toLocal(car, p).map(v => Math.max(-2, Math.min(2, v)));
+      events.push({ type: 'damage', amount: total * (2 * mb) / (ma + mb), impact: at(a, b.pos) });
+      events.push({ type: 'damage', other: b, amount: total * (2 * ma) / (ma + mb), impact: at(b, a.pos) });
+    }
+    return events;
+  }
+
+  // Bumping into people knocks them back (cartoon style: no harm done).
+  // `people` is a list of { id, pos } for other players standing around.
+  hitPeople(car, events) {
+    if (!this.people) return;
+    const s = car.spec, now = performance.now();
+    car.bumped ??= {};
+    for (const person of this.people()) {
+      const local = person.pos.clone().sub(car.pos).applyAxisAngle(UP, -car.h);
+      if (Math.abs(local.x) > s.width / 2 + 0.35 || Math.abs(local.z) > s.length / 2 + 0.35) continue;
+      if (local.y < -1.5 || local.y > s.height) continue;
+      if (now - (car.bumped[person.id] || 0) < 600) continue;
+      const n = new THREE.Vector3(person.pos.x - car.pos.x, 0, person.pos.z - car.pos.z).normalize();
+      const v = this.velocityOf(car);
+      const closing = v.dot(n);
+      if (closing < 1) continue;
+      car.bumped[person.id] = now;
+      const mc = s.mass, mp = PERSON_MASS, bounce = 0.15;
+      const J = ((1 + bounce) * closing) / (1 / mc + 1 / mp);
+      this.setVelocity(car, v.addScaledVector(n, -J / mc));
+      const dv = n.multiplyScalar(Math.min(12, J / mp));
+      dv.y = Math.min(9, 3 + closing * 0.4);
+      events.push({ type: 'push', id: person.id, dv });
+      events.push({ type: 'bump', power: 0.3 });
+    }
+  }
+
+  // Falling, landing and bounce pads (for cars, driven or loose).
+  fall(car, dt, events) {
+    const s = car.spec;
+    car.vy -= GRAVITY * dt;
+    const ny = car.pos.y + car.vy * dt;
+    const sin = Math.sin(car.h), cos = Math.cos(car.h);
+    const feet = [];
+    for (const lx of [-s.width / 2 + 0.2, s.width / 2 - 0.2])
+      for (const lz of [-s.length / 2 + 0.3, s.length / 2 - 0.3]) feet.push([car.pos.x + lx * cos + lz * sin, car.pos.z - lx * sin + lz * cos]);
+    const landed = car.vy <= 0 && feet.some(([x, z]) => solidAt(this.world, x, ny - 0.001, z));
+    if (landed) {
+      car.pos.y = Math.floor(ny - 0.001) + 1;
+      if (car.vy < -12) {
+        events.push({ type: 'land' });
+        if (car.vy < -16) events.push({ type: 'damage', amount: (-car.vy - 16) * 3, impact: [0, 0, 0] });
+      }
+      car.vy = 0;
+      const below = Math.floor(car.pos.y - 0.5);
+      if (feet.some(([x, z]) => BLOCKS[blockId(this.world.get(Math.floor(x), below, Math.floor(z)))]?.bounce)) {
+        car.vy = 17;
+        events.push({ type: 'bounce' });
+      }
+    } else {
+      car.pos.y = ny;
+    }
+  }
+
+  // A car nobody is driving that got knocked: it rolls easily forward and back,
+  // skids to a stop sideways, spins a little, and can knock into other cars.
+  simulateLoose(car, dt) {
+    const s = car.spec;
+    const events = [];
+    const f = this.fwd(car);
+    const along = car.push.dot(f);
+    const side = car.push.clone().addScaledVector(f, -along);
+    const roll = s.flying ? 5 : 1.1, skid = s.flying ? 5 : 5.5;
+    car.push.copy(f).multiplyScalar(along * Math.exp(-roll * dt)).addScaledVector(side, Math.exp(-skid * dt));
+    car.yawRate = (car.yawRate || 0) * Math.exp(-4.5 * dt); // tires resist spinning
+
+    const nx = car.pos.x + car.push.x * dt, nz = car.pos.z + car.push.z * dt, nh = car.h + car.yawRate * dt;
+    if (!this.blocked(s, nx, car.pos.y, nz, nh, car.id, car.outline)) {
+      car.pos.x = nx;
+      car.pos.z = nz;
+      car.h = nh;
+    } else if (this.lastHit) {
+      events.push(...this.collide(car, this.lastHit));
+      car.yawRate *= 0.5;
+    } else {
+      if (car.push.length() > 4) events.push({ type: 'bump', power: Math.min(1, car.push.length() / 15) });
+      car.push.multiplyScalar(-0.3);
+      car.yawRate *= -0.3;
+    }
+    if (!s.flying) this.fall(car, dt, events);
+    car.target.copy(car.pos);
+    car.targetH = car.h;
+    if (car.push.lengthSq() < 0.003 && Math.abs(car.yawRate) < 0.02 && car.vy === 0) {
+      car.loose = false;
+      car.push.set(0, 0, 0);
+      car.yawRate = 0;
+      car.settled = true; // tell everyone where it ended up
+    }
+    return events;
+  }
+
   // Drives the vehicle the local player is in. Returns events for sounds and damage:
   // { type: 'shift' | 'bump' | 'land' | 'bounce' | 'damage', amount, impact, other }
   drive(car, dt, keys) {
+    this.myCarId = car.id;
     return car.spec.flying ? this.fly(car, dt, keys) : this.driveCar(car, dt, keys);
   }
 
@@ -404,55 +597,39 @@ export class Cars {
     const steer = car.steer * (1 - 0.45 * Math.min(1, Math.abs(car.speed) / s.maxSpeed));
     const newH = car.h + (car.speed * Math.tan(steer) / (s.length * 0.62)) * dt;
 
-    const nx = car.pos.x - Math.sin(newH) * car.speed * dt;
-    const nz = car.pos.z - Math.cos(newH) * car.speed * dt;
+    // Any sideways shove from a crash becomes a skid that the tires quickly stop.
+    const f0 = this.fwd(car);
+    car.speed += car.push.dot(f0);
+    car.push.addScaledVector(f0, -car.push.dot(f0)).multiplyScalar(Math.exp(-5 * dt));
+
+    const nx = car.pos.x - Math.sin(newH) * car.speed * dt + car.push.x * dt;
+    const nz = car.pos.z - Math.cos(newH) * car.speed * dt + car.push.z * dt;
     if (!this.blocked(s, nx, car.pos.y, nz, newH, car.id, car.outline)) {
       car.pos.x = nx;
       car.pos.z = nz;
       car.h = newH;
-    } else if (s.climb && car.vy <= 0 && !this.blocked(s, nx, car.pos.y + 1.05, nz, newH, car.id, car.outline)) {
+    } else if (s.climb && car.vy <= 0 && !this.lastHit && !this.blocked(s, nx, car.pos.y + 1.05, nz, newH, car.id, car.outline)) {
       // Monster trucks can climb up one block.
       car.pos.set(nx, Math.floor(car.pos.y + 1.05), nz);
       car.h = newH;
       car.speed *= 0.8;
+    } else if (this.lastHit) {
+      // Hit another vehicle: momentum is shared between the two.
+      events.push(...this.collide(car, this.lastHit));
     } else {
       const impact = Math.abs(car.speed);
-      const other = this.lastHit;
       if (impact > 4) events.push({ type: 'bump', power: Math.min(1, impact / 20) });
-      // Hitting things hard damages the car (and whatever car it hit).
+      // Hitting walls hard damages the car.
       if (impact > 7) {
-        const amount = (impact - 7) * 3;
         const front = car.speed > 0 ? -1 : 1;
-        events.push({ type: 'damage', amount, impact: [0, s.ride + s.bodyH * 0.6, front * s.length / 2] });
-        if (other) events.push({ type: 'damage', other, amount: amount * 0.8, impact: this.toLocal(other, car.pos) });
+        events.push({ type: 'damage', amount: (impact - 7) * 3, impact: [0, s.ride + s.bodyH * 0.6, front * s.length / 2] });
       }
       car.speed *= -0.3;
+      car.push.multiplyScalar(-0.3);
       if (!this.blocked(s, car.pos.x, car.pos.y, car.pos.z, newH, car.id, car.outline)) car.h = newH;
     }
-
-    // Gravity, landing, and bounce pads.
-    car.vy -= GRAVITY * dt;
-    const ny = car.pos.y + car.vy * dt;
-    const sin = Math.sin(car.h), cos = Math.cos(car.h);
-    const feet = [];
-    for (const lx of [-s.width / 2 + 0.2, s.width / 2 - 0.2])
-      for (const lz of [-s.length / 2 + 0.3, s.length / 2 - 0.3]) feet.push([car.pos.x + lx * cos + lz * sin, car.pos.z - lx * sin + lz * cos]);
-    const landed = car.vy <= 0 && feet.some(([x, z]) => solidAt(this.world, x, ny - 0.001, z));
-    if (landed) {
-      car.pos.y = Math.floor(ny - 0.001) + 1;
-      if (car.vy < -12) {
-        events.push({ type: 'land' });
-        if (car.vy < -16) events.push({ type: 'damage', amount: (-car.vy - 16) * 3, impact: [0, 0, 0] });
-      }
-      car.vy = 0;
-      const below = Math.floor(car.pos.y - 0.5);
-      if (feet.some(([x, z]) => BLOCKS[blockId(this.world.get(Math.floor(x), below, Math.floor(z)))]?.bounce)) {
-        car.vy = 17;
-        events.push({ type: 'bounce' });
-      }
-    } else {
-      car.pos.y = ny;
-    }
+    this.hitPeople(car, events);
+    this.fall(car, dt, events);
     car.target.copy(car.pos);
     car.targetH = car.h;
     return events;
@@ -514,6 +691,8 @@ export class Cars {
         // Settle right down onto whatever we landed on.
         for (let i = 0; i < 25 && !this.blocked(s, car.pos.x, car.pos.y - 0.02, car.pos.z, car.h, car.id, car.outline); i++) car.pos.y -= 0.02;
         car.vel.y = 0;
+      } else if (this.lastHit) {
+        events.push(...this.collide(car, this.lastHit));
       } else {
         if (speed > 4) {
           events.push({ type: 'bump', power: Math.min(1, speed / 15) });
@@ -547,9 +726,13 @@ export class Cars {
   }
 
   update(dt, time, nightK, myCarId) {
+    this.myCarId = myCarId;
     const k = 1 - Math.exp(-10 * dt);
+    this.events = [];
     for (const car of this.list.values()) {
-      if (car.id !== myCarId) {
+      if (car.loose && !car.driver) {
+        this.events.push(...this.simulateLoose(car, dt).map(e => ({ ...e, other: e.other || car })));
+      } else if (car.id !== myCarId) {
         car.pos.lerp(car.target, k);
         let dh = car.targetH - car.h;
         dh = Math.atan2(Math.sin(dh), Math.cos(dh));

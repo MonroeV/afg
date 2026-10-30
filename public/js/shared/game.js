@@ -363,6 +363,37 @@ export class GameRoom {
       this.damageVehicle(v, Math.max(0, Math.min(45, num(msg.amount))), impact);
     },
 
+    // A parked car got knocked (by someone's car, or by someone pushing it): its new spot.
+    car_nudge(client, msg) {
+      const v = this.vehicles.get(msg.id);
+      if (!v || v.driver || !this.allow(client, 'nudge', 40, 80)) return;
+      if (Math.hypot(client.pos[0] - v.x, client.pos[2] - v.z) > 40) return;
+      v.x = clampWorld(msg.x);
+      v.y = Math.max(0, Math.min(WORLD.maxY, num(msg.y)));
+      v.z = clampWorld(msg.z);
+      v.h = num(msg.h);
+      v.nudgedAt = Date.now();
+      this.onDirty();
+    },
+
+    // Someone crashed into a car another player is driving: pass the shove on to that driver.
+    car_impulse(client, msg) {
+      const v = this.vehicles.get(msg.id);
+      if (!v || !v.driver || v.driver === client.id || !this.allow(client, 'impulse', 10, 20)) return;
+      if (Math.hypot(client.pos[0] - v.x, client.pos[2] - v.z) > 25) return;
+      const clamp = n => Math.max(-30, Math.min(30, num(n)));
+      this.clients.get(v.driver)?.send({ t: 'car_impulse', id: v.id, vx: clamp(msg.vx), vz: clamp(msg.vz), spin: clamp(msg.spin) });
+    },
+
+    // A vehicle bumped into a person: knock them back (on their screen).
+    push(client, msg) {
+      const target = this.clients.get(msg.id);
+      if (!target || target === client || !target.joined || !this.allow(client, 'push', 10, 20)) return;
+      if (Math.hypot(client.pos[0] - target.pos[0], client.pos[2] - target.pos[2]) > 15) return;
+      const clamp = n => Math.max(-25, Math.min(25, num(n)));
+      target.send({ t: 'push', vx: clamp(msg.vx), vy: clamp(msg.vy), vz: clamp(msg.vz) });
+    },
+
     horn(client) {
       if (!client.car || !this.allow(client, 'horn', 3, 4)) return;
       this.broadcast({ t: 'horn', id: client.car }, client);
@@ -518,7 +549,8 @@ export class GameRoom {
     if (list.length < 2) return;
     const cars = [];
     for (const v of this.vehicles.values()) {
-      if (v.driver) cars.push([v.id, v.x, v.y, v.z, v.h, v.speed, v.steer, v.siren, v.pitch, v.roll, v.rotor]);
+      // Driven vehicles, plus parked ones that are rolling after being knocked.
+      if (v.driver || now - (v.nudgedAt || 0) < 1500) cars.push([v.id, v.x, v.y, v.z, v.h, v.speed, v.steer, v.siren, v.pitch, v.roll, v.rotor]);
     }
     this.broadcast({ t: 'states', list, cars });
   }

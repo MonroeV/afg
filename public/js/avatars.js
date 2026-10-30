@@ -212,6 +212,8 @@ export class Avatar {
       this.pos.copy(this.target);
       this.yaw = this.targetYaw;
     } else {
+      // Glide to where they are, but jump straight there after a teleport.
+      if (this.pos.distanceToSquared(this.target) > 100) this.pos.copy(this.target);
       this.pos.lerp(this.target, k);
       let dy = this.targetYaw - this.yaw;
       dy = Math.atan2(Math.sin(dy), Math.cos(dy));

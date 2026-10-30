@@ -9,7 +9,7 @@ import { Player, EYE_HEIGHT } from './player.js';
 import { Network } from './network.js';
 import { Avatar, Avatars } from './avatars.js';
 import { Cars, SEAT_SCALE } from './cars.js';
-import { MAX_HP, FIRE_HP } from './shared/vehicles.js';
+import { MAX_HP, FIRE_HP, PERSON_MASS } from './shared/vehicles.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey } from './shared/claims.js';
 import { Structures } from './structures.js';
 import { LandView, describeSize } from './landview.js';
@@ -172,6 +172,8 @@ async function load() {
   player.bouncePower = trampolineBounce;
   cars = new Cars(scene, world, effects);
   player.extraBoxes = () => cars.boxes(myCar?.id);
+  player.onPushCar = pushCar;
+  cars.people = () => [...avatars.list.values()].filter(a => !a.seat && !a.lying).map(a => ({ id: a.id, pos: a.pos }));
   ball = new Ball(scene);
   buildGround();
 
@@ -300,6 +302,23 @@ net.on('car_destroy', ({ id, x, y, z }) => {
   cars.remove(id);
 });
 net.on('claims', ({ claims: list }) => setClaims(list));
+// Someone crashed into the car we're driving.
+net.on('car_impulse', ({ id, vx, vz, spin }) => {
+  if (myCar?.id !== id) return;
+  cars.setVelocity(myCar, cars.velocityOf(myCar).add(new THREE.Vector3(vx, 0, vz)));
+  myCar.h += spin * 0.25; // spun by the hit (the driver feels it as a sudden turn)
+  sounds.crash(Math.min(1, Math.hypot(vx, vz) / 10));
+});
+// A vehicle bumped into us.
+net.on('push', ({ vx, vy, vz }) => {
+  if (myCar) return;
+  wakeUp();
+  player.vel.add(new THREE.Vector3(vx, vy, vz));
+  player.launched = true;
+  player.onGround = false;
+  player.flying = false;
+  sounds.crash(0.3);
+});
 net.on('wake', () => wakeUp());
 net.on('car_driver', msg => {
   if (myCar?.id === msg.id && msg.driver === myId) return; // that's us, we already know
@@ -682,6 +701,55 @@ function sendCarState() {
     t: 'car_state', id: myCar.id, x: r(myCar.pos.x), y: r(myCar.pos.y), z: r(myCar.pos.z), h: r(myCar.h),
     speed: r(myCar.speed), steer: r(myCar.steer), siren: myCar.siren, p: r(myCar.pitch), r: r(myCar.roll), rs: r(myCar.rotorSpin),
   });
+}
+
+// Things that happen to vehicles: sounds, damage, and shoves to pass on to other players.
+function vehicleEvent(ev, car) {
+  const volume = car === myCar ? 1 : loudness(car.pos.x, car.pos.y, car.pos.z, 50);
+  if (ev.type === 'shift') sounds.shift();
+  else if (ev.type === 'bump') sounds.crash(ev.power * volume);
+  else if (ev.type === 'land') sounds.land();
+  else if (ev.type === 'bounce') sounds.bounce();
+  else if (ev.type === 'damage') reportDamage(ev.other || car, ev.amount, ev.impact);
+  else if (ev.type === 'impulse') net.send({ t: 'car_impulse', id: ev.other.id, vx: ev.dv.x, vz: ev.dv.z, spin: ev.spin });
+  else if (ev.type === 'push') net.send({ t: 'push', id: ev.id, vx: ev.dv.x, vy: ev.dv.y, vz: ev.dv.z });
+}
+
+// Walking into a parked car pushes it. People are much lighter than cars, so it moves
+// slowly, and it rolls forward and back much more easily than sideways.
+function pushCar(car, axis, speed) {
+  if (car.driver || Math.abs(speed) < 0.5) return;
+  const dv = new THREE.Vector3();
+  dv[axis] = speed * (PERSON_MASS / (PERSON_MASS + car.spec.mass)) * 0.35;
+  car.loose = true;
+  car.push.add(dv);
+}
+
+// The ball gets kicked when you run into it (or drive into it).
+function kickBall() {
+  if (!ball.active || ball.carried) return;
+  let center, vel, radius;
+  if (myCar) {
+    center = myCar.pos;
+    vel = cars.velocityOf(myCar);
+    radius = Math.max(myCar.spec.width, myCar.spec.length) / 2;
+  } else {
+    center = player.pos;
+    vel = player.vel;
+    radius = 0.5;
+  }
+  const n = new THREE.Vector3(ball.pos.x - center.x, 0, ball.pos.z - center.z);
+  const dist = n.length();
+  if (dist > radius || ball.pos.y < center.y - 0.3 || ball.pos.y > center.y + 1.2 || dist < 1e-4) return;
+  n.normalize();
+  const closing = vel.dot(n) - ball.vel.dot(n);
+  if (closing <= 0.3) return;
+  // A ball is so light that it flies off at about twice your speed.
+  ball.vel.addScaledVector(n, closing * 1.6);
+  ball.vel.y = Math.max(ball.vel.y, 2 + closing * 0.3);
+  ball.restTime = 0;
+  ball.age = 0;
+  sounds.swing();
 }
 
 function reportDamage(car, amount, impact) {
@@ -1185,13 +1253,7 @@ function frame(timestamp) {
 
   if (inGame) {
     if (myCar) {
-      for (const ev of cars.drive(myCar, dt, active ? keys : noKeys)) {
-        if (ev.type === 'shift') sounds.shift();
-        else if (ev.type === 'bump') sounds.crash(ev.power);
-        else if (ev.type === 'land') sounds.land();
-        else if (ev.type === 'bounce') sounds.bounce();
-        else if (ev.type === 'damage') reportDamage(ev.other || myCar, ev.amount, ev.impact);
-      }
+      for (const ev of cars.drive(myCar, dt, active ? keys : noKeys)) vehicleEvent(ev, myCar);
       player.pos.copy(cars.seat(myCar).position);
       player.vel.set(0, 0, 0);
       if (myCar.spec.flying) sounds.engine(null);
@@ -1286,6 +1348,7 @@ function frame(timestamp) {
       useCooldown = item === HAMMER ? 0.25 : 0.2;
     }
 
+    kickBall();
     ball.update(dt, world);
     fire = updateStructures(dt, time);
 
@@ -1297,6 +1360,12 @@ function frame(timestamp) {
       const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
       net.send({ t: 'state', pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags: sleeping ? 1 : 0 });
       sendCarState();
+      // Parked cars we knocked (or pushed): tell everyone where they are.
+      for (const car of cars.list.values()) {
+        if (!car.loose && !car.settled) continue;
+        car.settled = false;
+        net.send({ t: 'car_nudge', id: car.id, x: r(car.pos.x), y: r(car.pos.y), z: r(car.pos.z), h: r(car.h) });
+      }
     }
 
     // Headlights on the car we're driving.
@@ -1396,6 +1465,7 @@ function frame(timestamp) {
   avatars.update(dt, time);
   cars.setView(camera.position, scene.fog.far);
   cars.update(dt, time, nightK, myCar?.id);
+  if (inGame) for (const ev of cars.events) vehicleEvent(ev, ev.other);
   particles.update(dt, world);
   effects.update(dt, camera, renderer.domElement.height);
   for (const p of fireworks.update(dt)) sounds.boom(loudness(p.x, p.y, p.z, 140));
@@ -1432,6 +1502,7 @@ window.buildzone = {
   get claims() { return claims; },
   get sleeping() { return sleeping; },
   useItem: () => useItem(),
+  kickBall: () => kickBall(),
   interact: () => interact(),
   setView: v => (viewMode = v),
 };

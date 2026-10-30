@@ -109,16 +109,23 @@ export class Player {
     if (d > 0) region[a + 3] += d;
     else region[a] += d;
     const o1 = (a + 1) % 3, o2 = (a + 2) % 3;
-    let allowed = d;
+    let allowed = d, stopper = null;
     for (const b of this.boxesNear(region)) {
       // Only boxes that overlap us on the other two axes can block this move.
       if (b[o1] >= p[o1 + 3] - 1e-7 || b[o1 + 3] <= p[o1] + 1e-7) continue;
       if (b[o2] >= p[o2 + 3] - 1e-7 || b[o2 + 3] <= p[o2] + 1e-7) continue;
-      if (d > 0 && b[a] >= p[a + 3] - 1e-4) allowed = Math.min(allowed, b[a] - p[a + 3]);
-      else if (d < 0 && b[a + 3] <= p[a] + 1e-4) allowed = Math.max(allowed, b[a + 3] - p[a]);
+      if (d > 0 && b[a] >= p[a + 3] - 1e-4 && b[a] - p[a + 3] < allowed) {
+        allowed = b[a] - p[a + 3];
+        stopper = b;
+      } else if (d < 0 && b[a + 3] <= p[a] + 1e-4 && b[a + 3] - p[a] > allowed) {
+        allowed = b[a + 3] - p[a];
+        stopper = b;
+      }
     }
     this.pos[axis] += allowed;
     if (allowed !== d) {
+      // Walking into a car pushes on it (and it pushes back: we stop).
+      if (stopper?.car && axis !== 'y') this.onPushCar?.(stopper.car, axis, this.vel[axis]);
       this.vel[axis] = 0;
       if (axis === 'y' && d < 0) this.landed();
     }

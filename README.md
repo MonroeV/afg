@@ -15,6 +15,10 @@ customize your character, drive cars, build anything and play with friends.
 - **Cars parked around town**: regular cars, a police car with a siren and monster trucks that climb
   blocks. Automatic gearboxes you can hear shifting. Crash hard and they dent, smoke, catch fire and
   blow up, then a new one shows up near its parking spot 30 seconds later
+- **Real bumps (Newton's laws)**: when things collide they trade momentum. Ram a parked car and it
+  gets shoved (and spins if you hit it off-center) while you slow down; heavy monster trucks barely
+  notice small cars; knocked cars can knock into other cars; cars bump people out of the way; you
+  can push a parked car by walking into it; and walking or driving into the Pet Ball kicks it
 - **A helicopter** on the helipad east of town. Easy to learn, tricky to master. If it's destroyed,
   a new one arrives after 5 minutes
 - **Claim your own land** (up to 10 × 15 blocks) with the Land Flag so only you can build there
