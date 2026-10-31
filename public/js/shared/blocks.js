@@ -128,7 +128,8 @@ export function isValidBlock(v) {
   if (v >= SPLIT) {
     // An item standing on a floor or among railings.
     const item = itemOf(v), floor = floorOf(v);
-    return item > 0 && shapeOf(item) === 'model' && isValidBlock(item) && canHoldItem(floor) && isValidBlock(floor);
+    const shape = shapeOf(item);
+    return item > 0 && (shape === 'model' || shape === 'door') && isValidBlock(item) && canHoldItem(floor) && isValidBlock(floor);
   }
   if (v === 0) return true;
   const def = BLOCKS[v & 255];
@@ -136,6 +137,7 @@ export function isValidBlock(v) {
   const meta = blockMeta(v);
   if (def.shape === 'door' || def.shape === 'flat') return true;
   if (def.shape === 'rail') return meta > 0;
+  if (def.light && (v & 255) !== STREET_LAMP) return meta === 0 || meta === LIGHT_OFF;
   return def.shape === 'ladder' ? meta < 4 : meta === 0;
 }
 
@@ -144,6 +146,47 @@ export const turnLine = v => {
   const other = BLOCKS[blockId(v)]?.turns;
   return other ? v - blockId(v) + other : v;
 };
+
+// ---------- Light switches ----------
+// Lamps can be switched off and on with a right-click (meta bit 1). Street lamps can't:
+// they come on by themselves when it gets dark.
+export const LIGHT_OFF = 1;
+const STREET_LAMP = 46;
+export const switchable = v => !!BLOCKS[v & 255]?.light && (v & 255) !== STREET_LAMP;
+export const lightOff = v => switchable(v) && (blockMeta(v) & LIGHT_OFF) !== 0;
+export const toggleLight = v => stack(itemOf(v) ^ (LIGHT_OFF << 8), floorOf(v));
+
+// A door opened or closed (keeping whatever it stands on).
+export const setDoorOpen = (v, open) => stack((itemOf(v) & ~(DOOR_OPEN << 8)) | (open ? DOOR_OPEN << 8 : 0), floorOf(v));
+
+// ---------- Painted sides ----------
+// Every side of a block can have its own paint color. Paint is kept beside the blocks, by
+// spot: "x,y,z" for the block (or the item in the middle), "x,y,z|f" for the floor or
+// railing under an item. Each entry is six colors, in the order +x, -x, +y, -y, +z, -z:
+// an RGB number (0xrrggbb), or -1 for "not painted".
+export const faceIndex = ([nx, ny, nz]) => (nx > 0 ? 0 : nx < 0 ? 1 : ny > 0 ? 2 : ny < 0 ? 3 : nz > 0 ? 4 : nz < 0 ? 5 : 2);
+export const validFaces = f => Array.isArray(f) && f.length === 6 && f.every(c => Number.isInteger(c) && c >= -1 && c <= 0xffffff);
+export const hexToRgb = hex => parseInt(hex.slice(1), 16);
+export const rgbToHex = c => `#${c.toString(16).padStart(6, '0')}`;
+
+// Paint stays when a block changes state (a door opening, a light switching off, a road line
+// turning) but not when it becomes a different block.
+const paintKind = v => (v ? Math.min(blockId(v), BLOCKS[blockId(v)]?.turns ?? 999) : 0);
+// Updates the paint map `paints` when spot k changes from `old` to `v`. A floor keeps its
+// paint when something is put on it or taken off it (the paint moves between "k" and "k|f").
+export function carryPaint(paints, k, old, v) {
+  const f = `${k}|f`;
+  const move = (from, to) => {
+    const p = paints.get(from);
+    paints.delete(from);
+    paints.delete(to);
+    if (p) paints.set(to, p);
+  };
+  if (!floorOf(old) && floorOf(v) && paintKind(itemOf(old)) === paintKind(floorOf(v))) return move(k, f);
+  if (floorOf(old) && !floorOf(v) && paintKind(floorOf(old)) === paintKind(itemOf(v))) return move(f, k);
+  if (paintKind(itemOf(old)) !== paintKind(itemOf(v))) paints.delete(k);
+  if (paintKind(floorOf(old)) !== paintKind(floorOf(v))) paints.delete(f);
+}
 
 // ---------- Railings ----------
 // A railing runs along one or more edges of a cell (meta bits: 1 = -z side, 2 = +x,

@@ -188,8 +188,9 @@ function leaves(u, v) {
 function glass(u, v) {
   const border = Math.min(u, v, 1 - u, 1 - v);
   if (border < 0.04) return { c: [0.82, 0.86, 0.88], h: 1, a: 1 };
+  // Mostly clear, with a couple of faint shine streaks.
   const streak = Math.abs(((u + v) % 0.5) - 0.18) < 0.03 || Math.abs(((u + v) % 0.5) - 0.26) < 0.012;
-  return { c: [0.72, 0.86, 0.95], h: 0.5, a: streak ? 0.45 : 0.18 };
+  return { c: [0.72, 0.86, 0.95], h: 0.5, a: streak ? 0.24 : 0.1 };
 }
 
 function sand(u, v) {
@@ -346,7 +347,7 @@ function tintedGlass(u, v) {
   if (border < 0.035) return { c: [0.2, 0.23, 0.27], h: 1, a: 1 };
   const streak = Math.abs(((u + v * 0.6) % 0.6) - 0.2) < 0.04;
   const sky = 1 - v * 0.5;
-  return { c: mixc([0.16, 0.3, 0.46], [0.42, 0.62, 0.8], sky * 0.6 + (streak ? 0.3 : 0)), h: 0.5, a: streak ? 0.75 : 0.6 };
+  return { c: mixc([0.16, 0.3, 0.46], [0.42, 0.62, 0.8], sky * 0.6 + (streak ? 0.3 : 0)), h: 0.5, a: streak ? 0.5 : 0.38 };
 }
 
 function sidewalk(u, v) {

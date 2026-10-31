@@ -176,15 +176,44 @@ export class PetBrain {
       return new THREE.Vector3(owner.pos.x + cos * 0.9 + sin * 0.7, owner.pos.y, owner.pos.z - sin * 0.9 + cos * 0.7);
     };
 
-    if (ball?.active && !ball.carried && this.state !== 'return') this.state = 'fetch';
+    if (ball?.active && !ball.carried && this.state !== 'return' && this.state !== 'fetch') {
+      // Spotted the ball! A moment to watch where it's going, then off it runs.
+      this.state = 'fetch';
+      this.react = 0.3 + Math.random() * 0.4;
+      this.chase = 1.5;
+      this.topSpeed = 6.2 + Math.random() * 1.8;
+      this.aim = null;
+      this.aimTimer = 0;
+      this.missTimer = 0;
+    }
     if (this.state === 'fetch') {
       if (!ball?.active) this.state = 'follow';
       else {
-        if (petPos.distanceTo(ball.pos) < 0.7 && ball.pos.y - petPos.y < 1.2) {
-          ball.carried = true;
-          this.state = 'return';
+        this.react -= dt;
+        if (this.react > 0) return { goal: null, action: PET_IDLE, look: ball.pos };
+        // It only checks where the ball is every so often (and not exactly), so it runs past
+        // it, swings round and has another go, like a real puppy.
+        this.aimTimer -= dt;
+        if (!this.aim || this.aimTimer <= 0) {
+          this.aimTimer = 0.2 + Math.random() * 0.2;
+          this.aim = ball.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.5, 0, (Math.random() - 0.5) * 0.5));
         }
-        return { goal: ball.pos.clone(), speed: 8, action: PET_MOVING, far: 60 };
+        this.chase = Math.min(this.topSpeed, this.chase + dt * 7); // picks up speed
+        this.missTimer -= dt;
+        const reach = Math.hypot(petPos.x - ball.pos.x, petPos.z - ball.pos.z), high = ball.pos.y - petPos.y;
+        if (this.missTimer <= 0 && reach < 0.75 && high < 0.8) {
+          // A slow ball on the ground is easy to grab; a fast or bouncing one gets away
+          // about half the time (a skid, and it tries again).
+          const easy = Math.hypot(ball.vel.x, ball.vel.z) < 2.5 && high < 0.45;
+          if (easy || Math.random() < 0.45) {
+            ball.carried = true;
+            this.state = 'return';
+          } else {
+            this.missTimer = 0.7;
+            this.chase *= 0.4;
+          }
+        }
+        if (this.state === 'fetch') return { goal: this.aim, speed: this.chase, action: PET_MOVING, far: 60, turnRate: 5 };
       }
     }
     if (this.state === 'return') {
@@ -195,7 +224,7 @@ export class PetBrain {
         this.cheer();
         return { goal: null, action: PET_HAPPY, dropped: true };
       }
-      return { goal: front, speed: 7, action: PET_CARRYING, far: 60 };
+      return { goal: front, speed: 5.5, action: PET_CARRYING, far: 60, turnRate: 6 };
     }
     if (this.happy > 0) return { goal: null, action: PET_HAPPY };
 

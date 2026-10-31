@@ -153,16 +153,33 @@ export class Avatar {
         if (dist > (plan.far ?? 14)) pet.pos.copy(plan.goal); // too far behind: catch up
         else if (dist > 0.3) {
           const speed = plan.speed ?? Math.max(3, dist * 2.5);
-          const step = Math.min(dist, speed * dt);
-          pet.pos.x += (to.x / dist) * step;
-          pet.pos.z += (to.z / dist) * step;
+          if (plan.turnRate) {
+            // Running like an animal: it can only turn so fast (so it swings wide and
+            // overshoots), and it slows down for sharp turns.
+            let dy = Math.atan2(-to.x, -to.z) - pet.yaw;
+            dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+            pet.yaw += Math.max(-plan.turnRate * dt, Math.min(plan.turnRate * dt, dy));
+            const step = Math.min(dist, speed * dt * Math.max(0.25, Math.cos(dy)));
+            pet.pos.x -= Math.sin(pet.yaw) * step;
+            pet.pos.z -= Math.cos(pet.yaw) * step;
+          } else {
+            const step = Math.min(dist, speed * dt);
+            pet.pos.x += (to.x / dist) * step;
+            pet.pos.z += (to.z / dist) * step;
+            pet.yaw = Math.atan2(-to.x, -to.z);
+          }
           moving = Math.min(1, dist);
-          pet.yaw = Math.atan2(-to.x, -to.z);
         } else if (!plan.sniff) {
           let dy = this.yaw - pet.yaw;
           dy = Math.atan2(Math.sin(dy), Math.cos(dy));
           pet.yaw += dy * Math.min(1, dt * 3);
         }
+      }
+      if (!plan.goal && plan.look) {
+        // Watching something (the ball flying off).
+        let dy = Math.atan2(-(plan.look.x - pet.pos.x), -(plan.look.z - pet.pos.z)) - pet.yaw;
+        dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+        pet.yaw += dy * Math.min(1, dt * 8);
       }
       const ground = this.groundAt ? this.groundAt(pet.pos.x, pet.pos.z, this.pos.y) : this.pos.y;
       pet.pos.y += (ground - pet.pos.y) * Math.min(1, dt * 10);

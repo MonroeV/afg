@@ -629,3 +629,8 @@ body.touch .panel { padding: 18px; }
   #pause button { margin: 0; padding: 11px; font-size: 15px; }
   #pause label { margin: 0; }
 }
+
+/* "Your own color" paint swatch: a color picker that looks like the other swatches. */
+.swatch.own { position: relative; display: inline-grid; place-items: center; cursor: pointer; overflow: hidden; }
+.swatch.own::after { content: "+"; font-weight: 900; font-size: 18px; color: #fff; text-shadow: 0 1px 3px #000; }
+.swatch.own input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }

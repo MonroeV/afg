@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   BLOCKS, WORLD, PAINT_COLORS, blockKey, blockId, blockMeta, paintOf, withPaint, makeBlock, shapeOf, isSolidBlock, doorBox,
-  railBoxes, railMask, itemOf, floorOf, DOOR_OPEN, DOOR_TOP,
+  railBoxes, railMask, itemOf, floorOf, carryPaint, rgbToHex, switchable, lightOff, DOOR_OPEN, DOOR_TOP,
 } from './shared/blocks.js';
 import { modelGeometry, modelMaterials } from './models.js';
 
@@ -45,6 +45,31 @@ export function railGeometry(mask) {
   return (railGeometries[mask] = mergeGeometries(parts));
 }
 
+// A box in a cell turned by quarter turns around the cell's middle (for ladders). The box
+// is given around the middle ([-0.5, 0.5] across), and returned from the cell's corner.
+function turnBox(b, quarter) {
+  const a = quarter * Math.PI / 2, c = Math.round(Math.cos(a)), s = Math.round(Math.sin(a));
+  const xs = [], zs = [];
+  for (const [x, z] of [[b[0], b[2]], [b[3], b[2]], [b[0], b[5]], [b[3], b[5]]]) {
+    xs.push(x * c + z * s + 0.5);
+    zs.push(-x * s + z * c + 0.5);
+  }
+  return [Math.min(...xs), b[1], Math.min(...zs), Math.max(...xs), b[4], Math.max(...zs)];
+}
+
+// What you can click on a lamp model: the box around its shape.
+const modelBoxes = {};
+function modelPickBox(id) {
+  if (!modelBoxes[id]) {
+    const g = modelGeometry(BLOCKS[id].model);
+    g.computeBoundingBox();
+    const { min, max } = g.boundingBox;
+    const pad = 0.04;
+    modelBoxes[id] = [Math.max(0, min.x - pad), Math.max(0, min.y - pad), Math.max(0, min.z - pad), Math.min(1, max.x + pad), Math.min(1, max.y + pad), Math.min(1, max.z + pad)];
+  }
+  return modelBoxes[id];
+}
+
 // Does a ray hit a box? Returns the distance and the face it went in through.
 export function rayBox(o, d, b) {
   let t0 = 0, t1 = Infinity, axis = -1;
@@ -69,28 +94,99 @@ export function rayBox(o, d, b) {
 }
 
 // Painted blocks: instead of just tinting the texture (which can't make dark blocks
-// light), recolor it, keeping its light and dark details. White instance color = not painted.
+// light), recolor it, keeping its light and dark details. A block can be painted all over
+// (the white-or-colored instance color; white = not painted), and each of its six sides can
+// have its own paint too (the paintA/paintB instance attributes: one packed RGB number per
+// side, or -1). Doors use their own sides (PAINT_LOCAL) so the paint swings with them.
 function paintable(material) {
   material.onBeforeCompile = shader => {
-    shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `
-      #if defined( USE_COLOR )
-        if ( vColor.r + vColor.g + vColor.b < 2.99 ) {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+        #ifdef USE_INSTANCING
+          attribute vec3 paintA;
+          attribute vec3 paintB;
+        #endif
+        varying vec4 vFacePaint;`)
+      .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
+        vFacePaint = vec4(0.0);
+        #ifdef USE_INSTANCING
+          #ifdef PAINT_LOCAL
+            vec3 pn = objectNormal;
+          #else
+            vec3 pn = mat3(instanceMatrix) * objectNormal;
+          #endif
+          vec3 an = abs(pn);
+          float packed = an.x >= an.y && an.x >= an.z ? (pn.x > 0.0 ? paintA.x : paintA.y)
+            : an.y >= an.z ? (pn.y > 0.0 ? paintA.z : paintB.x)
+            : (pn.z > 0.0 ? paintB.y : paintB.z);
+          // Unpack the RGB, and turn it from screen colors into the linear light the shader uses.
+          if (packed >= 0.0) vFacePaint = vec4(pow(vec3(floor(packed / 65536.0), mod(floor(packed / 256.0), 256.0), mod(packed, 256.0)) / 255.0, vec3(2.2)), 1.0);
+        #endif`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying vec4 vFacePaint;`)
+      .replace('#include <color_fragment>', `
+        vec3 paintTint = vec3(1.0);
+        bool painted = false;
+        #if defined( USE_COLOR )
+          if ( vColor.r + vColor.g + vColor.b < 2.99 ) { paintTint = vColor.rgb; painted = true; }
+        #endif
+        if ( vFacePaint.a > 0.5 ) { paintTint = vFacePaint.rgb; painted = true; }
+        if ( painted ) {
+          // Close to the paint's own color on any block, light or dark, with a little of the
+          // block's texture showing through.
           float lum = dot( diffuseColor.rgb, vec3( 0.299, 0.587, 0.114 ) );
-          diffuseColor.rgb = vColor.rgb * ( 0.3 + lum * 1.25 );
+          diffuseColor.rgb = paintTint * ( 0.62 + lum * 0.5 );
         }
-      #endif
-    `).replace('#include <emissivemap_fragment>', `
-      #include <emissivemap_fragment>
-      #if defined( USE_COLOR )
+      `)
+      .replace('#include <metalnessmap_fragment>', `
+        #include <metalnessmap_fragment>
+        // Paint is a coat over the block: it isn't mirror-shiny or metallic, so its color shows.
+        if ( painted ) {
+          roughnessFactor = max( roughnessFactor, 0.55 );
+          metalnessFactor = min( metalnessFactor, 0.2 );
+        }
+      `)
+      .replace('#include <emissivemap_fragment>', `
+        #include <emissivemap_fragment>
         // Painted lamps and neon glow in their new color.
-        if ( vColor.r + vColor.g + vColor.b < 2.99 ) {
+        if ( painted ) {
           float glow = dot( totalEmissiveRadiance, vec3( 0.299, 0.587, 0.114 ) );
-          totalEmissiveRadiance = vColor.rgb * glow * 1.3;
+          totalEmissiveRadiance = paintTint * glow * 1.3;
         }
-      #endif
-    `);
+      `);
   };
   return material;
+}
+
+// Wind from a helicopter flying low: flowers bend away from it and flutter. The game sets
+// these every frame (center = the spot on the ground under the helicopter).
+export const WIND = { center: { value: new THREE.Vector3() }, strength: { value: 0 }, time: { value: 0 } };
+function windy(material) {
+  const paint = material.onBeforeCompile;
+  material.onBeforeCompile = shader => {
+    paint(shader);
+    shader.uniforms.uWindCenter = WIND.center;
+    shader.uniforms.uWindStrength = WIND.strength;
+    shader.uniforms.uWindTime = WIND.time;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>
+        uniform vec3 uWindCenter;
+        uniform float uWindStrength;
+        uniform float uWindTime;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vec3 windAt = (instanceMatrix * vec4(transformed, 1.0)).xyz;
+          vec2 away = windAt.xz - uWindCenter.xz;
+          float windDist = length(away);
+          float bend = uWindStrength * clamp(1.0 - windDist / 9.0, 0.0, 1.0) * clamp(transformed.y, 0.0, 1.0);
+          if (bend > 0.0) {
+            float flutter = 0.65 + 0.35 * sin(uWindTime * 23.0 + windAt.x * 3.1 + windAt.z * 2.3);
+            transformed.xz += away / max(windDist, 0.3) * bend * 0.45 * flutter;
+            transformed.y -= bend * 0.18;
+          }
+        #endif`);
+  };
 }
 
 export function createBlockMaterials(textures) {
@@ -107,7 +203,8 @@ export function createBlockMaterials(textures) {
     });
     if (def.water) m.normalScale.set(1.6, 1.6);
     // How strongly it reflects its surroundings (see lighting.js).
-    m.userData.shine = def.mirror ? 1.6 : def.gold ? 1.3 : def.water || def.transparent ? 1.4 : def.metal ? 1 : def.glossy ? 0.6 : 0;
+    // (Windows only reflect a little, so you can still see in and out through them.)
+    m.userData.shine = def.mirror ? 1.6 : def.gold ? 1.3 : def.water ? 1.4 : def.transparent ? 0.5 : def.metal ? 1 : def.glossy ? 0.6 : 0;
     paintable(m);
     if (def.cutout) m.alphaTest = 0.5;
     if (def.transparent) {
@@ -123,7 +220,8 @@ export function createBlockMaterials(textures) {
     return m;
   };
 
-  // Materials are keyed by "render key": the block id, plus a part for doors.
+  // Materials are keyed by "render key": the block id, plus a part for doors, or ":off" for
+  // a lamp that's switched off.
   const materials = {};
   for (const [id, def] of Object.entries(BLOCKS)) {
     const shape = def.shape || 'cube';
@@ -131,22 +229,39 @@ export function createBlockMaterials(textures) {
       materials[id] = modelMaterials(def.model);
       paintable(materials[id][0]);
       paintable(materials[id][2]);
+      if (switchable(Number(id))) {
+        // Switched off: the shade or bulb is just a dull, unlit color.
+        const off = modelMaterials(def.model);
+        off[1] = new THREE.MeshStandardMaterial({ color: off[1].userData.baseColor.clone().multiplyScalar(0.4), vertexColors: true, roughness: 0.6 });
+        paintable(off[0]);
+        paintable(off[2]);
+        materials[`${id}:off`] = off;
+      }
     } else if (shape === 'door') {
       const edge = make(def.tex.edge, def);
+      edge.defines = { PAINT_LOCAL: 1 };
       for (const part of ['bottom', 'top']) {
         const face = make(def.tex[part], def, { alphaTest: 0.5 });
+        face.defines = { PAINT_LOCAL: 1 };
         materials[`${id}:${part}`] = [edge, edge, edge, edge, face, face];
       }
       // Garage doors (three or more doors in a row) are ribbed metal.
       const garage = make('garage', { metal: true });
+      garage.defines = { PAINT_LOCAL: 1 };
       garage.metalness = 0.25;
       garage.roughness = 0.6;
       garage.userData.shine = 0.3; // painted metal: only a soft reflection
       materials[`${id}:garage`] = [garage, garage, garage, garage, garage, garage];
     } else if (shape === 'plant') {
       materials[id] = make(def.tex, def, { alphaTest: 0.5, side: THREE.DoubleSide });
+      windy(materials[id]);
     } else if (typeof def.tex === 'string') {
       materials[id] = make(def.tex, def);
+      if (switchable(Number(id))) {
+        const off = make(def.tex, def);
+        off.emissive = new THREE.Color(0);
+        materials[`${id}:off`] = off;
+      }
     } else {
       // BoxGeometry face order: +x, -x, +y (top), -y (bottom), +z, -z
       const side = make(def.tex.side, def), top = make(def.tex.top, def), bottom = make(def.tex.bottom, def);
@@ -175,6 +290,7 @@ export class World {
     this.layers = {}; // "chunk|render key" -> { mesh, keys: [], index: Map(key -> instance index) }
     this.cellLayer = new Map(); // "x,y,z" -> the layer its instance is in
     this.lamps = new Set(); // keys of light-giving blocks
+    this.paints = new Map(); // painted sides, by spot (see blocks.js)
     this.revision = 0; // goes up whenever anything changes
     this.matrix = new THREE.Matrix4();
     this.tmp = new THREE.Matrix4();
@@ -234,6 +350,34 @@ export class World {
     }
   }
 
+  // What the crosshair can hit in a cell: the real shapes of thin things (a carpet, a door,
+  // a ladder, a lamp…), so you can point past them at what's behind. Each box says which
+  // part of the spot it belongs to: the item, or the floor / railing under it.
+  pickBoxes(v, x, y, z) {
+    const out = [];
+    const add = (b, part) => out.push({ box: [x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]], part });
+    const shapeBoxes = (u, part) => {
+      const shape = shapeOf(u);
+      if (shape === 'cube') add([0, 0, 0, 1, 1, 1], part);
+      else if (shape === 'flat') {
+        add([0, 0, 0, 1, 0.06, 1], part);
+        for (const b of railBoxes(blockMeta(u), 1)) add(b, part);
+      } else if (shape === 'rail') for (const b of railBoxes(blockMeta(u), 1)) add(b, part);
+      else if (shape === 'plant') add([0.15, 0, 0.15, 0.85, 0.85, 0.85], part);
+      else if (shape === 'ladder') add(turnBox([-0.42, 0, -0.5, 0.42, 1, -0.38], blockMeta(u)), part);
+      else if (shape === 'model') add(modelPickBox(blockId(u)), part);
+      else if (shape === 'door') {
+        // The door's panel (or, for an open garage door, just the roll at the top).
+        const boxes = [];
+        this.partBoxes(u, x, y, z, boxes);
+        for (const b of boxes) out.push({ box: b, part });
+      }
+    };
+    shapeBoxes(itemOf(v), 'item');
+    if (floorOf(v)) shapeBoxes(floorOf(v), 'floor');
+    return out;
+  }
+
   load(flat) {
     this.loading = true;
     for (const k of [...this.blocks.keys()]) {
@@ -260,6 +404,7 @@ export class World {
       this.removeInstance(k);
       this.lamps.delete(k);
     }
+    carryPaint(this.paints, k, old, v);
     if (v) {
       this.blocks.set(k, v);
       this.addInstance(v, k, x, y, z);
@@ -391,6 +536,7 @@ export class World {
       return `${id}:${blockMeta(v) & DOOR_TOP ? 'top' : 'bottom'}`;
     }
     if (shapeOf(v) === 'rail') return `${id}:${blockMeta(v)}`;
+    if (lightOff(v)) return `${id}:off`;
     return String(id);
   }
 
@@ -401,7 +547,8 @@ export class World {
       const cx = (Math.floor(x / CHUNK) + 0.5) * CHUNK, cz = (Math.floor(z / CHUNK) + 0.5) * CHUNK;
       layer = this.layers[key] = {
         mesh: null, keys: [], index: new Map(), def,
-        geometry: def.shape === 'model' ? modelGeometry(def.model) : def.shape === 'rail' ? railGeometry(blockMeta(v)) : GEOMETRY[def.shape || 'cube'],
+        // Each layer has its own copy of the shape, to hold its blocks' painted sides.
+        geometry: (def.shape === 'model' ? modelGeometry(def.model) : def.shape === 'rail' ? railGeometry(blockMeta(v)) : GEOMETRY[def.shape || 'cube']).clone(),
         material: this.materials[renderKey] ?? this.materials[blockId(v)],
         center: new THREE.Vector3(cx, 32, cz),
       };
@@ -420,6 +567,15 @@ export class World {
     if (layer.def.transparent) mesh.renderOrder = 1;
     // Every instance has a color: white for normal blocks, the paint color for painted ones.
     mesh.setColorAt(0, this.color.setRGB(1, 1, 1));
+    // And the paint on each of its six sides (-1 = not painted).
+    const sides = ['paintA', 'paintB'].map(name => {
+      const attr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(-1), 3);
+      const before = layer.geometry.getAttribute(name);
+      if (before && layer.mesh) attr.array.set(before.array.subarray(0, layer.keys.length * 3));
+      layer.geometry.setAttribute(name, attr);
+      return attr;
+    });
+    layer.sides = sides;
     if (layer.mesh) {
       const n = layer.keys.length;
       mesh.instanceMatrix.array.set(layer.mesh.instanceMatrix.array.subarray(0, n * 16));
@@ -479,6 +635,15 @@ export class World {
     layer.mesh.setMatrixAt(i, this.instanceMatrix(v, x, y, z));
     const paint = paintOf(v);
     layer.mesh.setColorAt(i, paint ? this.color.set(PAINT_COLORS[paint]) : this.color.setRGB(1, 1, 1));
+    // Painted sides: "a,b,c" for the block or item, "a,b,c|f" for a floor part ("|rail" is
+    // just the railings drawn on a floor, painted with it).
+    const faces = this.paints.get(k.replace('|rail', '').replace('|floor', '|f'));
+    const [a, b] = layer.sides;
+    for (let f = 0; f < 3; f++) {
+      a.array[i * 3 + f] = faces ? faces[f] : -1;
+      b.array[i * 3 + f] = faces ? faces[f + 3] : -1;
+    }
+    a.needsUpdate = b.needsUpdate = true;
     layer.mesh.count = layer.keys.length;
     layer.mesh.instanceMatrix.needsUpdate = true;
     layer.mesh.instanceColor.needsUpdate = true;
@@ -497,6 +662,10 @@ export class World {
       layer.mesh.setMatrixAt(i, this.matrix);
       layer.mesh.getColorAt(last, this.color);
       layer.mesh.setColorAt(i, this.color);
+      for (const attr of layer.sides) {
+        attr.array.copyWithin(i * 3, last * 3, last * 3 + 3);
+        attr.needsUpdate = true;
+      }
       layer.keys[i] = lastKey;
       layer.index.set(lastKey, i);
     }
@@ -505,6 +674,42 @@ export class World {
     layer.mesh.count = layer.keys.length;
     layer.mesh.instanceMatrix.needsUpdate = true;
     layer.mesh.instanceColor.needsUpdate = true;
+  }
+
+  // ---------- Paint ----------
+
+  facePaint(key) {
+    return this.paints.get(key) || null;
+  }
+
+  // Sets the six side colors of a spot ("x,y,z" or "x,y,z|f"). Returns true if anything changed.
+  setPaint(key, faces) {
+    const old = this.paints.get(key);
+    const empty = !faces || faces.every(c => c < 0);
+    if (empty ? !old : old && old.every((c, i) => c === faces[i])) return false;
+    if (empty) this.paints.delete(key);
+    else this.paints.set(key, faces.slice());
+    const [x, y, z] = key.split('|')[0].split(',').map(Number);
+    this.rerender(x, y, z);
+    this.revision++;
+    return true;
+  }
+
+  loadPaints(list) {
+    const cells = new Set();
+    for (const key of this.paints.keys()) cells.add(key.split('|')[0]);
+    this.paints = new Map(list || []);
+    for (const key of this.paints.keys()) cells.add(key.split('|')[0]);
+    for (const c of cells) this.rerender(...c.split(',').map(Number));
+    this.revision++;
+  }
+
+  // The color a light shines in: its paint (all over, or on any side), if it's painted.
+  lightTint(key, v) {
+    if (paintOf(v)) return PAINT_COLORS[paintOf(v)];
+    const faces = this.paints.get(key);
+    const c = faces && [2, 0, 1, 4, 5, 3].map(i => faces[i]).find(f => f >= 0);
+    return c >= 0 ? rgbToHex(c) : null;
   }
 
   // Draws a block again (when its neighbors change how it should look).
@@ -544,16 +749,16 @@ export class World {
       }
       if (x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max) return null;
       const v = this.get(x, y, z);
-      if (v && shapeOf(v) === 'rail') {
-        // Railings only fill part of their cell: you can point (and click) past them.
+      if (v && (shapeOf(v) !== 'cube' || floorOf(v))) {
+        // Thin things only fill part of their cell: you can point (and click) past them.
         let best = null;
-        for (const b of railBoxes(blockMeta(v), 1)) {
-          const h = rayBox(origin, dir, [x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
-          if (h && h.t <= maxDist && (!best || h.t < best.t)) best = h;
+        for (const p of this.pickBoxes(v, x, y, z)) {
+          const h = rayBox(origin, dir, p.box);
+          if (h && h.t <= maxDist && (!best || h.t < best.t)) best = { ...h, ...p };
         }
-        if (best) return this.hitResult(v, x, y, z, best.normal, best.t, origin, dir);
+        if (best) return { ...this.hitResult(v, x, y, z, best.normal, best.t, origin, dir), part: best.part, box: best.box };
       } else if (v) {
-        return this.hitResult(v, x, y, z, normal, t, origin, dir);
+        return { ...this.hitResult(v, x, y, z, normal, t, origin, dir), part: 'item' };
       }
       if (tMaxX < tMaxY && tMaxX < tMaxZ) {
         x += stepX; t = tMaxX; tMaxX += tDeltaX; normal = [-stepX, 0, 0];

@@ -28,7 +28,8 @@ export function itemName(item) {
   return BLOCKS[item].name;
 }
 
-// Draws a small icon for the hotbar and the item menu. `paint` is the brush's color.
+// Draws a small icon for the hotbar and the item menu. `paint` is the brush's color (a
+// palette number or a '#rrggbb' color).
 export function makeIcon(item, textures, paint = 1) {
   const size = 64;
   const canvas = document.createElement('canvas');
@@ -43,7 +44,7 @@ export function makeIcon(item, textures, paint = 1) {
     ctx.fillStyle = '#c0c4c8';
     ctx.fillRect(-7, -6, 14, 9);
     if (item === BRUSH) {
-      ctx.fillStyle = PAINT_COLORS[paint] || '#e53935';
+      ctx.fillStyle = typeof paint === 'string' ? paint : PAINT_COLORS[paint] || '#e53935';
       ctx.beginPath();
       ctx.moveTo(-8, -6); ctx.lineTo(8, -6); ctx.lineTo(6, -24); ctx.lineTo(0, -28); ctx.lineTo(-6, -24);
       ctx.fill();

@@ -812,6 +812,30 @@ export class Sounds {
     }
   }
 
+  // Rushing, gusty wind (under a helicopter flying low); level 0 silences it.
+  wind(level) {
+    const ctx = this.ensure();
+    if (!ctx) return;
+    if (!this.windNode) {
+      if (level <= 0) return;
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      src.loop = true;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 520;
+      filter.Q.value = 0.5;
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      src.connect(filter).connect(gain).connect(this.master);
+      src.start();
+      this.windNode = { gain, filter };
+    }
+    const t = ctx.currentTime, gust = 0.75 + 0.25 * Math.sin(t * 1.7) * Math.sin(t * 0.63 + 1);
+    this.windNode.filter.frequency.setTargetAtTime(380 + level * 500 * gust, t, 0.2);
+    this.windNode.gain.gain.setTargetAtTime(level * 0.35 * gust, t, 0.15);
+  }
+
   // A wailing siren; level 0 silences it.
   siren(level) {
     const ctx = this.ensure();

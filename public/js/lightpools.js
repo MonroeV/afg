@@ -2,7 +2,7 @@
 // so only the closest lamps get one; these glowing pools are nearly free, so every lamp
 // you can see spreads a wide, gentle glow around it.
 import * as THREE from 'three';
-import { BLOCKS, PAINT_COLORS, blockId, paintOf } from './shared/blocks.js';
+import { BLOCKS, blockId, lightOff } from './shared/blocks.js';
 
 function poolTexture() {
   const c = document.createElement('canvas');
@@ -50,10 +50,10 @@ export class LightPools {
       const v = world.get(x, y, z);
       const block = BLOCKS[blockId(v)];
       const light = block?.light;
-      if (!light) continue;
+      if (!light || lightOff(v)) continue;
       // Lamps under a roof are indoor lamps: their glow stays on in the daytime too.
       const indoor = light.always || world.isCovered(x, y, z);
-      const color = paintOf(v) ? PAINT_COLORS[paintOf(v)] : light.color;
+      const color = world.lightTint(k, v) || light.color;
       lists[indoor ? 'indoor' : 'outdoor'].push({ x, z, floor: this.floorFor(world, x, y, z, block), light, color, power: light.power * (indoor ? 1.3 : 1) });
     }
     const m = new THREE.Matrix4(), q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)), color = new THREE.Color();

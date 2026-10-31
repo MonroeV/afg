@@ -1,7 +1,7 @@
 // The game "room": the world, players, vehicles, land claims, growing trees and the clock.
 // The Node server runs one of these for everybody. When there is no server,
 // the browser runs its own copy so single player works exactly the same way.
-import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, DOOR_OPEN, DAY_LENGTH, WORLD, isNightTime } from './blocks.js';
+import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, floorOf, validFaces, carryPaint, DOOR_OPEN, DAY_LENGTH, WORLD, isNightTime } from './blocks.js';
 import { sanitizeLook, cleanName } from './avatar.js';
 import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, orientRoadLines } from './worldgen.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot } from './vehicles.js';
@@ -22,6 +22,7 @@ export class GameRoom {
     this.onDirty = onDirty;
     this.log = log;
     this.world = new Map(); // "x,y,z" -> block value
+    this.paints = new Map(); // painted sides: "x,y,z" or "x,y,z|f" -> six colors (see blocks.js)
     this.vehicles = new Map(); // id -> vehicle
     this.homes = new Map(); // id -> where a vehicle lives: { id, kind, color, x, y, z, h }
     this.respawns = []; // { home, at }
@@ -113,6 +114,7 @@ export class GameRoom {
     const parked = new Set([...this.vehicles.values()].map(v => v.home));
     this.respawns = [...this.homes.values()].filter(h => !parked.has(h.id)).map(home => ({ home: home.id, at: Date.now() + 30000 }));
     this.claims = (data.claims || []).filter(c => c && c.key);
+    this.paints = new Map((data.paints || []).filter(([k, f]) => typeof k === 'string' && this.world.has(k.split('|')[0]) && validFaces(f)));
     this.names = data.names || {};
     this.saplings = data.saplings || [];
     this.expireClaims();
@@ -151,6 +153,7 @@ export class GameRoom {
       claims: this.claims,
       names: this.names,
       saplings: this.saplings,
+      paints: [...this.paints],
     };
   }
 
@@ -245,6 +248,7 @@ export class GameRoom {
       time: this.time,
       dayLength: DAY_LENGTH,
       world: this.flatBlocks(),
+      paints: [...this.paints],
       cars: [...this.vehicles.values()].map(publicVehicle),
       claims: this.claims,
       players: [...this.clients.values()].filter(o => o.joined && o !== client).map(publicPlayer),
@@ -327,8 +331,26 @@ export class GameRoom {
       const k = blockKey(x, y, z);
       if (b === 0) this.world.delete(k);
       else this.world.set(k, b);
+      // Paint goes with the block: it's gone when the block is broken or replaced.
+      carryPaint(this.paints, k, old, b);
       this.broadcast({ t: 'set', x, y, z, b }, client);
       if (blockId(b) === LOG && blockId(old) !== LOG) this.maybePlant(x, y, z);
+      this.onDirty();
+    },
+
+    // Painting one or more sides of a block (or of the floor under a lamp or door).
+    paint(client, { x, y, z, floor, faces }) {
+      const v = this.get(x, y, z);
+      if (!inBounds(x, y, z) || !v || (floor && !floorOf(v)) || !(faces === null || validFaces(faces))) return;
+      const key = blockKey(x, y, z) + (floor ? '|f' : '');
+      if (!this.allow(client, 'paint', 20, 60) || !canBuild(this.claims, client.name, x, z)) {
+        // Too fast, or not your land: put the paint back the way it was for this player.
+        client.send({ t: 'paint', x, y, z, floor: !!floor, faces: this.paints.get(key) || null });
+        return;
+      }
+      if (!faces || faces.every(c => c < 0)) this.paints.delete(key);
+      else this.paints.set(key, faces.slice());
+      this.broadcast({ t: 'paint', x, y, z, floor: !!floor, faces: this.paints.get(key) || null }, client);
       this.onDirty();
     },
 

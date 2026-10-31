@@ -3,6 +3,8 @@ import { ALL_ITEMS, TOOLS, HAMMER, itemName } from './items.js';
 import { BLOCKS, PAINT_COLORS, PAINT_NAMES } from './shared/blocks.js';
 import { RECIPES } from './structures.js';
 
+export const CUSTOM_PAINT = 16; // the paint number for "your own color"
+
 const $ = id => document.getElementById(id);
 
 export const CONTROLS = [
@@ -165,6 +167,25 @@ export class Hud {
       });
       row.append(b);
     });
+    // Your own color: tap it to pick any color you like.
+    const own = document.createElement('label');
+    own.className = 'swatch own' + (this.settings.paint === CUSTOM_PAINT ? ' selected' : '');
+    own.title = 'Your own color';
+    own.style.background = this.settings.customColor;
+    const input = document.createElement('input');
+    input.type = 'color';
+    input.value = this.settings.customColor;
+    const choose = () => {
+      this.settings.customColor = input.value;
+      this.settings.paint = CUSTOM_PAINT;
+      own.style.background = input.value;
+      [...row.children].forEach(c => c.classList.toggle('selected', c === own));
+      this.onPaint?.(CUSTOM_PAINT);
+    };
+    input.addEventListener('input', choose);
+    input.addEventListener('click', choose);
+    own.append(input);
+    row.append(own);
     grid.append(row);
   }
 

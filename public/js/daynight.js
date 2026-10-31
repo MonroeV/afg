@@ -1,7 +1,7 @@
 // Sky, sun, moon, stars and the lights that change from day to night.
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
-import { DAY_LENGTH, DAY_FRACTION, BLOCKS, PAINT_COLORS, blockId, paintOf } from './shared/blocks.js';
+import { DAY_LENGTH, DAY_FRACTION, BLOCKS, blockId, lightOff } from './shared/blocks.js';
 
 // How bright lamps are. Light fades gently with distance (decay 1) so it spreads wide
 // instead of making a harsh bright spot right next to the lamp.
@@ -204,14 +204,13 @@ export class DayNight {
         const [x, y, z] = k.split(',').map(Number);
         const v = world.get(x, y, z);
         const light = BLOCKS[blockId(v)]?.light;
-        if (!light) continue;
+        if (!light || lightOff(v)) continue;
         if (!this.covered.has(k)) this.covered.set(k, world.isCovered(x, y, z));
         const indoor = light.always || this.covered.get(k);
         if (!(indoor || lampK > 0.02)) continue;
         const d = dist(x, y, z);
         if (d >= 70 * 70) continue;
-        const paint = paintOf(v);
-        const def = { ...light, always: indoor, power: light.power * (indoor ? 1.4 : 1), color: paint ? PAINT_COLORS[paint] : light.color };
+        const def = { ...light, always: indoor, power: light.power * (indoor ? 1.4 : 1), color: world.lightTint(k, v) || light.color };
         near.push({ key: `${k}:${v}`, d, x: x + 0.5, y: y + (light.y ?? 0.5), z: z + 0.5, def });
       }
       // Campfires, dance floors and TVs glow too (dance floors even in the daytime).

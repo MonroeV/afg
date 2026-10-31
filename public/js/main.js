@@ -2,12 +2,14 @@
 import * as THREE from 'three';
 import {
   BLOCKS, WORLD, inBounds, blockId, blockMeta, shapeOf, isReplaceable, makeBlock, doorFacingFromYaw, paintOf, withPaint,
-  railMask, railBoxes, nearestRailEdge, canHoldItem, stack, itemOf, floorOf, turnLine, PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP,
+  railMask, railBoxes, nearestRailEdge, canHoldItem, stack, itemOf, floorOf, turnLine, blockKey, faceIndex, hexToRgb,
+  switchable, lightOff, toggleLight, setDoorOpen,
+  PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP,
 } from './shared/blocks.js';
 import { generateWorld } from './shared/worldgen.js';
 import { randomLook, sanitizeLook } from './shared/avatar.js';
 import { generateTextures } from './textures.js';
-import { World, createBlockMaterials, blockMaterial, rayBox, RAILING } from './world.js';
+import { World, createBlockMaterials, blockMaterial, RAILING, WIND } from './world.js';
 import { Player, EYE_HEIGHT } from './player.js';
 import { Network } from './network.js';
 import { Avatar, Avatars } from './avatars.js';
@@ -23,7 +25,7 @@ import { Ball, PetBrain } from './pets.js';
 import { DayNight } from './daynight.js';
 import { Editor } from './editor.js';
 import { CharacterClient, Gallery } from './gallery.js';
-import { Hud, renderControls } from './hud.js';
+import { Hud, renderControls, CUSTOM_PAINT } from './hud.js';
 import { HAMMER, FIREWORKS, BALL, CLAIM, BRUSH, SCRAPER, LADDER, ALL_ITEMS, DEFAULT_HOTBAR, makeIcon, ViewModel } from './items.js';
 import { Particles, Fireworks, Sounds, Effects } from './effects.js';
 import { TouchControls, IS_TOUCH } from './touch.js';
@@ -36,7 +38,7 @@ const DOOR = 21;
 
 // ---------- Saved settings ----------
 
-const settings = { name: '', look: null, sensitivity: 1, volume: 0.4, quality: 'high', paint: 1, hotbar: DEFAULT_HOTBAR.slice() };
+const settings = { name: '', look: null, sensitivity: 1, volume: 0.4, quality: 'high', paint: 1, customColor: '#ff9ec7', hotbar: DEFAULT_HOTBAR.slice() };
 let savedSettings = {};
 try {
   savedSettings = JSON.parse(localStorage.getItem('buildzone') || '{}') || {};
@@ -52,7 +54,11 @@ if (settings.hotbar[0] !== HAMMER) {
   if (at > 0) settings.hotbar[at] = settings.hotbar[0];
   settings.hotbar[0] = HAMMER;
 }
-if (!PAINT_COLORS[settings.paint]) settings.paint = 1;
+if (!PAINT_COLORS[settings.paint] && settings.paint !== CUSTOM_PAINT) settings.paint = 1;
+if (!/^#[0-9a-f]{6}$/i.test(settings.customColor)) settings.customColor = '#ff9ec7';
+// The brush's color: a palette color, or your own.
+const paintHex = () => (settings.paint === CUSTOM_PAINT ? settings.customColor : PAINT_COLORS[settings.paint]);
+const paintName = () => (settings.paint === CUSTOM_PAINT ? 'your color' : PAINT_NAMES[settings.paint]);
 settings.look = settings.look ? sanitizeLook(settings.look) : randomLook();
 function saveSettings() {
   try {
@@ -197,8 +203,8 @@ async function load() {
   // Lamp models' glowing parts get brighter at night (indoor ones stay on all day).
   sky.glowMaterials = Object.entries(BLOCKS).filter(([, d]) => d.shape === 'model').map(([id, d]) => ({ material: materials[id][1], always: !!d.light?.always }));
   view.materials = materials;
-  icons = Object.fromEntries(ALL_ITEMS.map(i => [i, makeIcon(i, textures, settings.paint)]));
-  view.setPaint(PAINT_COLORS[settings.paint]);
+  icons = Object.fromEntries(ALL_ITEMS.map(i => [i, makeIcon(i, textures, paintHex())]));
+  view.setPaint(paintHex());
   world = new World(scene, materials);
   structures = new Structures(world);
   world.onChange = (x, y, z) => structures.changed(x, y, z);
@@ -271,6 +277,7 @@ $('join-form').addEventListener('submit', async e => {
 
   myId = welcome.id;
   world.load(welcome.world);
+  world.loadPaints(welcome.paints);
   avatars.clear();
   for (const p of welcome.players) avatars.add(p);
   cars.clear();
@@ -295,6 +302,7 @@ net.on('set', ({ x, y, z, b }) => {
   const old = world.get(x, y, z);
   if (world.set(x, y, z, b) && !b && old) particles.burst(x, y, z, blockMaterial(materials, old), 6);
 });
+net.on('paint', ({ x, y, z, floor, faces }) => world.setPaint(blockKey(x, y, z) + (floor ? '|f' : ''), faces));
 net.on('states', ({ list, cars: carStates }) => {
   avatars.applyStates(list, myId);
   cars.applyStates(carStates || [], myCar?.id);
@@ -1004,6 +1012,90 @@ function hitVehicle(t) {
   reportDamage(t.car, 8, cars.toLocal(t.car, t.point));
 }
 
+// ---------- Helicopter downwash ----------
+// A helicopter flying low blows things around under it: dust (or sand, or spray off the
+// water) rushing outward, leaves torn off the trees, flowers bending flat, the ball rolling
+// away and people pushed back a little.
+
+const WASH_HEIGHT = 12; // how low it has to be
+let washTimer = 0;
+
+// The top of whatever is under (x, z), at or below height y.
+function groundBelow(x, y, z) {
+  const fx = Math.floor(x), fz = Math.floor(z);
+  for (let gy = Math.min(WORLD.maxY, Math.floor(y)); gy >= 0; gy--) if (world.isSolid(fx, gy, fz)) return gy + 1;
+  return 0;
+}
+
+// What the wind kicks up from the ground at (x, z): its color and how it flies.
+function washDebris(x, gy, z) {
+  const fx = Math.floor(x), fz = Math.floor(z);
+  const on = blockId(floorOf(world.get(fx, gy, fz)) || itemOf(world.get(fx, gy, fz))), under = gy > 0 ? blockId(world.get(fx, gy - 1, fz)) : 0;
+  if (on === 36) return { color: [0.88, 0.95, 1], up: 2.5, size: 0.7, alpha: 0.7 }; // spray
+  if (under === 10) return { color: [0.9, 0.8, 0.56], up: 0.8, size: 0.85, alpha: 0.7 }; // sand
+  if ([22, 23, 24, 55, 56, 57].includes(on) || [3, 4, 13].includes(under)) return { color: [0.72, 0.71, 0.68], up: 0.6, size: 0.85, alpha: 0.6 };
+  return { color: [0.66, 0.62, 0.46], up: 0.7, size: 0.8, alpha: 0.65 }; // grass and dirt
+}
+
+function updateDownwash(dt, time) {
+  let wash = null;
+  for (const car of cars.list.values()) {
+    if (!car.spec.flying || car.rotorSpin < 0.3) continue;
+    const ground = groundBelow(car.pos.x, car.pos.y, car.pos.z);
+    const height = car.pos.y - ground;
+    if (height > WASH_HEIGHT) continue;
+    const s = (1 - Math.max(0, height) / WASH_HEIGHT) * Math.min(1, (car.rotorSpin - 0.3) / 0.5);
+    if (!wash || s > wash.s) wash = { car, ground, s };
+  }
+  WIND.time.value = time;
+  WIND.strength.value += ((wash?.s ?? 0) - WIND.strength.value) * Math.min(1, dt * 4);
+  sounds.wind(wash ? wash.s * Math.max(riding() === wash.car ? 0.5 : 0, loudness(wash.car.pos.x, wash.ground, wash.car.pos.z, 40)) : 0);
+  if (!wash) return;
+  const { car, ground, s } = wash;
+  const cx = car.pos.x, cz = car.pos.z;
+  WIND.center.value.set(cx, ground, cz);
+  // Dust rushing outward in a ring.
+  washTimer += dt * 160 * s;
+  for (; washTimer >= 1; washTimer--) {
+    const a = Math.random() * Math.PI * 2, r = 1 + Math.random() * 4.5;
+    const x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r;
+    const gy = groundBelow(x, ground + 1.5, z);
+    if (Math.abs(gy - ground) > 2) continue;
+    const d = washDebris(x, gy, z), speed = (4 + 7 * s) * (0.7 + Math.random() * 0.6);
+    effects.smoke.spawn({
+      x, y: gy + 0.15, z, vx: Math.cos(a) * speed, vy: d.up * (0.5 + Math.random()), vz: Math.sin(a) * speed,
+      life: 0.8 + Math.random() * 0.8, size: d.size, grow: 1.8, color: d.color, alpha: d.alpha * (0.6 + s * 0.4), drag: 1.3,
+    });
+  }
+  // Leaves blown off the trees underneath.
+  if (Math.random() < s * dt * 20) {
+    const a = Math.random() * Math.PI * 2, r = Math.random() * 5;
+    const x = Math.floor(cx + Math.cos(a) * r), z = Math.floor(cz + Math.sin(a) * r);
+    for (let y = Math.floor(car.pos.y) - 1; y >= ground; y--) {
+      if (blockId(world.get(x, y, z)) !== 8) continue;
+      for (let i = 0; i < 3; i++) {
+        effects.smoke.spawn({
+          x: x + Math.random(), y: y + Math.random(), z: z + Math.random(),
+          vx: Math.cos(a) * (3 + Math.random() * 4), vy: -1 + Math.random() * 2, vz: Math.sin(a) * (3 + Math.random() * 4),
+          life: 1.4 + Math.random(), size: 0.22, grow: 0, color: [0.25 + Math.random() * 0.15, 0.55, 0.18], alpha: 0.95, drag: 0.8, gravity: 1.5,
+        });
+      }
+      break;
+    }
+  }
+  // Shove the ball and anyone standing underneath out from the middle.
+  const push = (pos, vel, power) => {
+    const dx = pos.x - cx, dz = pos.z - cz, d = Math.hypot(dx, dz);
+    if (d > 6.5 || pos.y - ground > 3 || d < 0.05) return false;
+    const k = power * s * (1 - d / 6.5) * dt;
+    vel.x += (dx / d) * k;
+    vel.z += (dz / d) * k;
+    return true;
+  };
+  if (ball.active && !ball.carried && push(ball.pos, ball.vel, 22)) ball.restTime = 0;
+  if (!riding() && !sleeping) push(player.pos, player.vel, 14);
+}
+
 // ---------- Land claims ----------
 
 const claimTool = { a: null, rect: null, confirm: false, unclaimAsk: 0 };
@@ -1211,7 +1303,7 @@ function updateStructures(dt, time) {
   if (emit) {
     for (const [x, y, z] of flameLamps) {
       const flame = BLOCKS[world.get(x, y, z) & 255]?.light;
-      if (!flame || (x - camera.position.x) ** 2 + (z - camera.position.z) ** 2 > 30 * 30) continue;
+      if (!flame || lightOff(world.get(x, y, z)) || (x - camera.position.x) ** 2 + (z - camera.position.z) ** 2 > 30 * 30) continue;
       effects.flame(x + 0.5, y + flame.y + 0.05, z + 0.5, flame.flame);
       if (flame.flame > 0.5) fire = Math.max(fire, loudness(x, y, z, 8) * 0.4);
     }
@@ -1345,7 +1437,7 @@ function toggleDoor(x, y, z) {
   if (!parts.length) return;
   const opening = !(blockMeta(world.get(x, y, z)) & DOOR_OPEN);
   // Everything in the group ends up the same way (open or closed).
-  const changes = parts.map(([px, py, pz, v]) => [px, py, pz, v, opening ? v | (DOOR_OPEN << 8) : v & ~(DOOR_OPEN << 8)]).filter(c => c[3] !== c[4]);
+  const changes = parts.map(([px, py, pz, v]) => [px, py, pz, v, setDoorOpen(v, opening)]).filter(c => c[3] !== c[4]);
   // Vehicles parked in the doorway (that would be shut in by closing it).
   const near = [...cars.list.values()].filter(c => c.pos.distanceTo(new THREE.Vector3(x, y, z)) < 12);
   const inDoorway = () => near.filter(c => cars.blocked(c.spec, c.pos.x, c.pos.y, c.pos.z, c.h, c.id, c.outline));
@@ -1396,13 +1488,13 @@ function hitBlock() {
   }
   hitState.key = null;
   crack.visible = false;
-  if (floorOf(hit.value)) {
+  if (floorOf(hit.value) && (hit.part === 'floor' || shapeOf(hit.value) !== 'door')) {
     // A torch on a sidewalk (or among railings): knock off the part you hit, keep the rest.
+    // Hitting the floor takes its railings off first, then the floor itself.
     const item = itemOf(hit.value), floor = floorOf(hit.value);
-    const railing = aimingAtRailing(hit);
-    const rest = !railing ? floor : shapeOf(floor) === 'rail' ? item : stack(item, blockId(floor));
+    const rest = hit.part !== 'floor' ? floor : railMask(floor) && shapeOf(floor) === 'flat' ? stack(item, blockId(floor)) : item;
     setBlock(x, y, z, rest);
-    particles.burst(x, y, z, railing ? materials[RAILING] : blockMaterial(materials, item));
+    particles.burst(x, y, z, hit.part === 'floor' ? blockMaterial(materials, floor) : blockMaterial(materials, item));
     sounds.break();
     return;
   }
@@ -1415,7 +1507,8 @@ function hitBlock() {
   }
   const parts = blockGroup(x, y, z, hit.value);
   for (const [px, py, pz, v] of parts) {
-    if (setBlock(px, py, pz, 0)) particles.burst(px, py, pz, blockMaterial(materials, v));
+    // Anything standing on a carpet (like a door) leaves the carpet behind.
+    if (setBlock(px, py, pz, floorOf(v))) particles.burst(px, py, pz, blockMaterial(materials, v));
   }
   sounds.break();
 }
@@ -1423,6 +1516,7 @@ function hitBlock() {
 function placeBlock(item) {
   if (BLOCKS[item].shape === 'rail') return placeRail();
   if (BLOCKS[item].shape === 'model' && placeOnFloor(item)) return;
+  if (BLOCKS[item].shape === 'flat' && placeUnder(item)) return;
   let [x, y, z] = hit.value && isReplaceable(hit.value) ? hit.block : hit.place;
   if (!canBuildAt(x, z)) {
     notifyLand(x, z);
@@ -1459,7 +1553,8 @@ function placeBlock(item) {
         break;
       }
     }
-    setBlock(x, y, z, makeBlock(DOOR, facing));
+    // On a carpet (or any floor), the door stands on it.
+    setBlock(x, y, z, canHoldItem(existing) ? stack(makeBlock(DOOR, facing), existing) : makeBlock(DOOR, facing));
     setBlock(x, y + 1, z, makeBlock(DOOR, facing | DOOR_TOP));
     // Three in a row make a garage door: 3 blocks tall (so cars fit under it when it's
     // rolled up), or as tall as the garage door it joins.
@@ -1489,15 +1584,19 @@ function placeOnFloor(item) {
   return true;
 }
 
-// In a spot with railings and something in the middle: is the look ray on a railing first?
-function aimingAtRailing(h) {
-  const mask = railMask(h.value);
-  if (!mask) return false;
-  const [x, y, z] = h.block;
-  const at = b => rayBox(eye, lookDir, [x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
-  const middle = shapeOf(h.value) === 'model' ? at(BLOCKS[blockId(h.value)].box || [0.3, 0, 0.3, 0.7, 1, 0.7]) : null;
-  const rail = railBoxes(mask, 1).map(at).filter(Boolean).sort((a, b) => a.t - b.t)[0];
-  return !!rail && (!middle || rail.t < middle.t);
+// A carpet (or any floor) slides in under a door or a standing lamp: click the door (or
+// lamp), or the floor right under it.
+function placeUnder(item) {
+  const standing = v => v && !floorOf(v) && ((shapeOf(v) === 'door' && !(blockMeta(v) & DOOR_TOP)) || (shapeOf(v) === 'model' && BLOCKS[blockId(v)].box));
+  let cell = null;
+  if (hit.value && shapeOf(hit.value) === 'door') cell = [hit.block[0], world.doorColumn(...hit.block).lo, hit.block[2]];
+  else if (standing(hit.value)) cell = hit.block;
+  else if (standing(world.get(...hit.place))) cell = hit.place;
+  if (!cell || !standing(world.get(...cell))) return false;
+  const [x, y, z] = cell;
+  if (!canBuildAt(x, z)) notifyLand(x, z);
+  else if (setBlock(x, y, z, stack(world.get(x, y, z), item))) sounds.place();
+  return true;
 }
 
 // Left click: use whatever you're holding.
@@ -1520,7 +1619,7 @@ function useItem() {
     return;
   }
   if (item === BRUSH || item === SCRAPER) {
-    paintBlock(item === BRUSH ? settings.paint : 0);
+    paintBlock(item === BRUSH ? paintHex() : null);
     return;
   }
   if (item === FIREWORKS) launchFirework();
@@ -1540,7 +1639,13 @@ function interact() {
   if (target?.car) return requestEnter(target.car);
   if (target?.pet) return petThePet(target);
   if (hit && !hit.ground) {
-    if (shapeOf(hit.value) === 'door') return toggleDoor(...hit.block);
+    if (shapeOf(hit.value) === 'door' && hit.part !== 'floor') return toggleDoor(...hit.block);
+    if (switchable(hit.value) && hit.part !== 'floor') {
+      // Light switch: off, and on again.
+      if (!canBuildAt(hit.block[0], hit.block[2])) return notifyLand(hit.block[0], hit.block[2]);
+      if (setBlock(...hit.block, toggleLight(hit.value))) sounds.click();
+      return;
+    }
     if (BLOCKS[blockId(hit.value)]?.turns && !floorOf(hit.value)) {
       // Turn a road line (or parking line) to run the other way.
       if (!canBuildAt(hit.block[0], hit.block[2])) return notifyLand(hit.block[0], hit.block[2]);
@@ -1664,8 +1769,8 @@ function placeRail() {
 const paintMaterials = {};
 function choosePaint(i) {
   settings.paint = i;
-  icons[BRUSH] = makeIcon(BRUSH, textures, i);
-  view.setPaint(PAINT_COLORS[i]);
+  icons[BRUSH] = makeIcon(BRUSH, textures, paintHex());
+  view.setPaint(paintHex());
   const at = settings.hotbar.indexOf(BRUSH);
   if (at >= 0) {
     hud.buildHotbar();
@@ -1676,8 +1781,29 @@ function choosePaint(i) {
   saveSettings();
 }
 
-// Paints the block you're looking at (paint 0 = scrape it back to its original colors).
-function paintBlock(paint) {
+// Which side of the thing you're pointing at the crosshair is on (0-5: +x, -x, +y, -y,
+// +z, -z). Doors count their sides as they're turned, so the paint swings open with them.
+function hitSide(h, part) {
+  const n = h.normal.some(c => c) ? h.normal : [0, 1, 0];
+  if (shapeOf(part) !== 'door') return faceIndex(n);
+  const meta = blockMeta(part);
+  const swung = meta & DOOR_OPEN && world.doorRole(...h.block).kind !== 'garage';
+  const a = (meta & 3) * Math.PI / 2 + (swung ? Math.PI / 2 : 0), c = Math.cos(a), s = Math.sin(a);
+  return faceIndex([Math.round(n[0] * c - n[2] * s), n[1], Math.round(n[0] * s + n[2] * c)]);
+}
+
+// The paint on the side you're pointing at (-1 if none).
+function sidePaint(h) {
+  const floor = h.part === 'floor', part = floor ? floorOf(h.value) : itemOf(h.value);
+  const faces = world.facePaint(blockKey(...h.block) + (floor ? '|f' : ''));
+  const side = faces?.[hitSide(h, part)] ?? -1;
+  return side >= 0 ? side : paintOf(part) ? hexToRgb(PAINT_COLORS[paintOf(part)]) : -1;
+}
+
+// Paints the side of the block you're looking at, and only that side (color null = scrape
+// that side back to its own colors). A door's whole side is painted at once, and so is a
+// whole garage door or ladder.
+function paintBlock(color) {
   if (!hit || hit.ground) {
     sounds.swing();
     return;
@@ -1687,25 +1813,42 @@ function paintBlock(paint) {
     notifyLand(x, z);
     return;
   }
-  // In a spot with railings and a torch, paint whichever you're pointing at.
-  const onRailing = floorOf(hit.value) && aimingAtRailing(hit);
-  if (!paint && !paintOf(onRailing ? floorOf(hit.value) : hit.value)) {
-    hud.toast("🧽 That block isn't painted.");
-    return;
-  }
-  if (onRailing) {
-    if (setBlock(x, y, z, stack(itemOf(hit.value), withPaint(floorOf(hit.value), paint)))) sounds.paint();
-    return;
-  }
-  // A garage door is painted all at once; double doors can have a different color on each side.
-  const garage = shapeOf(hit.value) === 'door' && world.doorRole(x, y, z).kind === 'garage';
+  const floor = hit.part === 'floor';
+  const part = floor ? floorOf(hit.value) : itemOf(hit.value);
+  const side = hitSide(hit, part);
+  const cells = floor ? [[x, y, z]]
+    : shapeOf(part) === 'door' && world.doorRole(x, y, z).kind === 'garage' ? world.doorGroup(x, y, z) : blockGroup(x, y, z, hit.value);
   let changed = false;
-  for (const [px, py, pz, v] of garage ? world.doorGroup(x, y, z) : blockGroup(x, y, z, hit.value)) changed = setBlock(px, py, pz, withPaint(v, paint)) || changed;
-  if (!changed) return;
-  const color = paint ? PAINT_COLORS[paint] : '#dddddd';
-  paintMaterials[color] ??= new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
-  particles.burst(x, y, z, paintMaterials[color], 8);
+  for (const [cx, cy, cz] of cells) changed = paintSide(cx, cy, cz, floor, side, color) || changed;
+  if (!changed) {
+    if (!color) hud.toast("🧽 That side isn't painted.");
+    return;
+  }
+  const shown = color || '#dddddd';
+  paintMaterials[shown] ??= new THREE.MeshStandardMaterial({ color: shown, roughness: 0.6 });
+  const p = hit.point;
+  particles.burst(p.x - 0.5 + hit.normal[0] * 0.2, p.y - 0.5 + hit.normal[1] * 0.2, p.z - 0.5 + hit.normal[2] * 0.2, paintMaterials[shown], 6);
   sounds.paint();
+}
+
+function paintSide(x, y, z, floor, side, color) {
+  const v = world.get(x, y, z);
+  const part = floor ? floorOf(v) : itemOf(v);
+  const key = blockKey(x, y, z) + (floor ? '|f' : '');
+  let faces = (world.facePaint(key) || Array(6).fill(-1)).slice();
+  // Painted all over the old way? Put that color on every side first (and take the
+  // all-over paint off), so painting one side leaves the others as they were.
+  const all = paintOf(part);
+  if (all) {
+    faces = faces.map(c => (c >= 0 ? c : hexToRgb(PAINT_COLORS[all])));
+    setBlock(x, y, z, floor ? stack(itemOf(v), withPaint(part, 0)) : withPaint(v, 0));
+  }
+  const want = color ? hexToRgb(color) : -1;
+  if (faces[side] === want && !all) return false;
+  faces[side] = want;
+  world.setPaint(key, faces);
+  net.send({ t: 'paint', x, y, z, floor, faces: faces.every(c => c < 0) ? null : faces });
+  return true;
 }
 
 function pickBlock() {
@@ -1875,8 +2018,10 @@ function frame(timestamp) {
         highlight.position.set(hit.place[0] + 0.5, 0.003, hit.place[2] + 0.5);
         highlight.scale.set(1, 0.001, 1);
       } else {
-        highlight.position.set(hit.block[0] + 0.5, hit.block[1] + 0.5, hit.block[2] + 0.5);
-        highlight.scale.set(1, 1, 1);
+        // Outline exactly what you're pointing at (a carpet, a door, a lamp…), or the whole block.
+        const b = hit.box || [...hit.block, hit.block[0] + 1, hit.block[1] + 1, hit.block[2] + 1];
+        highlight.position.set((b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2);
+        highlight.scale.set(Math.max(0.02, b[3] - b[0]), Math.max(0.02, b[4] - b[1]), Math.max(0.02, b[5] - b[2]));
       }
     }
     if (hitState.key && (!hit || hit.block.join(',') !== hitState.key)) hitState.timer = Math.min(hitState.timer, 0.3);
@@ -1902,9 +2047,11 @@ function frame(timestamp) {
       hint = claimTool.confirm ? '🚩 Click to claim · Right-click to cancel' : '🚩 Click the opposite corner';
     } else {
       const s = hit && !hit.ground ? structures.at(...hit.block) : null;
-      if (item === BRUSH && hit && !hit.ground) hint = `🎨 Click to paint it ${PAINT_NAMES[settings.paint]}`;
-      else if (item === SCRAPER && hit && !hit.ground) hint = paintOf(hit.value) ? '🧽 Click to scrape off the paint' : '';
+      if (item === BRUSH && hit && !hit.ground) hint = `🎨 Click to paint this side ${paintName()}`;
+      else if (item === SCRAPER && hit && !hit.ground) hint = sidePaint(hit) >= 0 ? '🧽 Click to scrape the paint off this side' : '';
       else if (hit && shapeOf(hit.value) === 'door') hint = '🚪 Right-click to open / close';
+      else if (hit && switchable(hit.value) && hit.part !== 'floor' && item !== HAMMER) hint = lightOff(hit.value) ? '💡 Right-click to turn it on' : '💡 Right-click to turn it off';
+      else if (hit && blockId(hit.value) === 46 && item !== HAMMER) hint = '🌙 Street lamps turn on by themselves at night';
       else if (hit && BLOCKS[blockId(hit.value)]?.turns && !floorOf(hit.value) && item !== HAMMER) hint = '↻ Right-click to turn the line';
       else if (hit && shapeOf(hit.value) === 'ladder' && item !== HAMMER) hint = '🪜 Walk into it and hold W or Space to climb';
       else if (item === RAILING && hit) hint = railPreview && withRail(railPreview) ? '🚧 Click to add a railing here' : '🚧 Point near the edge of a floor, or at the side of a block';
@@ -1933,6 +2080,7 @@ function frame(timestamp) {
     }
 
     kickBall();
+    updateDownwash(dt, time);
     ball.update(dt, ballBoxes);
     // No pet to fetch it? It pops back into your hand after a while.
     if (ball.active && !myBody.pet && ball.restTime > 4) ball.active = false;

@@ -14,7 +14,9 @@ customize your character, drive cars, build anything and play with friends.
 - **Pets** that follow you, wander around and sniff things when you stand still, play fetch with
   the Pet Ball, and jump for joy when you pet them (you can pet other people's pets too). The ball
   flies in a big arc with a little trail and a shadow under it, and bounces off the ground, walls,
-  railings, cars and people (with a boing and a puff of dust) before rolling to a stop
+  railings, cars and people (with a boing and a puff of dust) before rolling to a stop. Pets chase
+  it like real puppies: they watch where it goes first, run past it and swing back round, and a
+  bouncing ball sometimes gets away from them
 - **Character Gallery**: save your character (with your name) so anyone can pick it later.
   It holds 25 characters in a 5×5 grid; when it's full you choose one to replace, or replace the oldest
 - **Day and night**: the sun sets, the stars and moon come out and the street lamps light up
@@ -31,8 +33,10 @@ customize your character, drive cars, build anything and play with friends.
   notice small cars; knocked cars can knock into other cars; cars bump people out of the way; you
   can push a parked car by walking into it; and walking or driving into the Pet Ball kicks it
 - **A helicopter** on the helipad east of town. It turns to face wherever you look (steer with the
-  mouse), slides sideways with A and D, and banks into its turns like a real one. Easy to learn,
-  tricky to master. If it's destroyed, a new one arrives after 5 minutes
+  mouse), slides sideways with A and D, and banks into its turns like a real one. Fly it low and
+  its wind blows dust (or sand, or spray off the water) out in a ring, tears leaves off trees,
+  flattens the flowers and pushes the ball and people away. Easy to learn, tricky to master. If
+  it's destroyed, a new one arrives after 5 minutes
 - **Claim your own land** (up to 10 × 15 blocks) with the Land Flag so only you can build there
 - **Logs grow into trees**: put a lone log on the grass and watch it grow
 - **Build Book**: special things you can make out of blocks: beds, trampolines, campfires,
@@ -53,12 +57,18 @@ customize your character, drive cars, build anything and play with friends.
   can paint it any color
 - **Torches and lamps on anything**: lamps, lanterns and tiki torches stand on top of a sidewalk,
   road or carpet (instead of replacing it), and in the middle of a railing spot, so a fence can
-  have lanterns on it. The hammer (or paint brush) works on whichever part you point at
+  have lanterns on it. Doors can stand on a carpet too (put the carpet down first, or click a door
+  with a carpet to slide one under it). The hammer (or paint brush) works on whichever part you
+  point at: the crosshair hits the real shape of thin things like carpets, doors, ladders and
+  lamps, so you can point past them at the wall behind
+- **Light switches**: right-click a lamp to turn it off, and again to turn it back on. Street lamps
+  look after themselves: on at night, off in the day
 - **Road lines** run the way you're facing when you place them; right-click one to turn it. Parking
   lines work the same way
-- **Paint anything**: pick one of 15 paint colors and use the Paint Brush on any block (carpets,
-  doors, lamps and neon too; painted lamps glow in their new color). The Paint Scraper takes the
-  paint off again
+- **Paint anything, one side at a time**: the Paint Brush paints just the side of the block under
+  the crosshair, so one block can have six different colors. Pick one of 15 paint colors, or the
+  "+" swatch for any color you like. It works on carpets, doors, lamps and neon too (painted lamps
+  shine in their new color). The Paint Scraper takes the paint off one side
 - **Dancing** and **waving**
 - **Fireworks** in 8 styles (including hearts and smiley faces) that light up the whole night sky
   and everything around them
@@ -71,7 +81,8 @@ customize your character, drive cars, build anything and play with friends.
 
   Lamps cast a soft glow that spreads wide around them, and the towns use them all: street lamps,
   porch lanterns, ceiling lights and table lamps in houses, garden lights and tiki torches in parks.
-  Any lamp with a roof over it counts as indoors, so it lights up the room day and night
+  Any lamp with a roof over it counts as indoors, so it lights up the room day and night. Windows
+  are clear enough to see in and out, with just a little reflection
 - **57 kinds of blocks** with realistic textures: brick, wood, glass, tinted glass, marble, roads,
   parking lines, flowers, rainbow, gold, mirrors, lamps, ladders, railings…
 - **Sounds that don't get old**: every sound is a little different each time, every vehicle has its
@@ -91,7 +102,7 @@ customize your character, drive cars, build anything and play with friends.
 | Space | Jump |
 | Left click | Use the item in your hand (place a block, paint, throw the ball, launch fireworks) |
 | Left click with the Hammer | Break a block: it takes 3 hits (glass and carpet break in 1), so you don't break things by accident |
-| Right click | Interact: open and close doors, get in vehicles, pet pets, sleep in beds, fire cannons |
+| Right click | Interact: open and close doors, switch lights on and off, turn road lines, get in vehicles, pet pets, sleep in beds, fire cannons |
 | Middle click | Copy the block you're looking at |
 | 1–9 or mouse wheel | Choose hotbar slot. Slot 1 always holds the Hammer; anything you pick while slot 1 is selected goes in slot 2 |
 | E | Open the item menu and the Build Book, or get in/out of a vehicle you're looking at |
