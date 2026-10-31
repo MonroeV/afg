@@ -35,7 +35,43 @@ function nameTag(name, color) {
 
 // What a player is doing, sent with their position: bits of `flags`. The top 24 bits are
 // the color of the balloon they're holding.
-export const FLAG = { sleeping: 1, sitting: 2, crouching: 4, balloon: 8 };
+export const FLAG = { sleeping: 1, sitting: 2, crouching: 4, balloon: 8, jet: 16, trail: 32 };
+
+// A speech bubble: rounded and white, with up to two lines of text and a little tail.
+function speechBubble(text) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 160;
+  const ctx = canvas.getContext('2d');
+  ctx.font = 'bold 30px system-ui, sans-serif';
+  // Wrap onto two lines if it's long.
+  const words = text.split(' '), lines = [''];
+  for (const w of words) {
+    const tryLine = lines[lines.length - 1] ? `${lines[lines.length - 1]} ${w}` : w;
+    if (ctx.measureText(tryLine).width > 460 && lines[lines.length - 1] && lines.length < 2) lines.push(w);
+    else lines[lines.length - 1] = tryLine;
+  }
+  const width = Math.min(500, Math.max(...lines.map(l => ctx.measureText(l).width)) + 40), height = lines.length * 38 + 26;
+  const x0 = (512 - width) / 2, y0 = 120 - height;
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.roundRect(x0, y0, width, height, 22);
+  ctx.moveTo(240, 120); ctx.lineTo(256, 146); ctx.lineTo(272, 120);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#222';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  lines.forEach((l, i) => ctx.fillText(l, 256, y0 + 32 + i * 38, 480));
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  sprite.scale.set(2.4, 0.75, 1);
+  sprite.renderOrder = 11;
+  return sprite;
+}
 
 // A character in the world that can walk, dance, wave and sit in cars.
 export class Avatar {
@@ -295,21 +331,49 @@ export class Avatar {
     this.root.position.copy(this.pos);
     this.root.rotation.order = 'YXZ';
     this.root.rotation.y = this.yaw;
-    this.root.rotation.x = this.lying ? Math.PI / 2 : 0; // asleep in bed, on our back
+    // Lying back into bed (or sitting up out of it), and sitting down, happen smoothly.
+    this.lieK = (this.lieK ?? 0) + ((this.lying ? 1 : 0) - (this.lieK ?? 0)) * Math.min(1, dt * 3.2);
+    this.sitK = (this.sitK ?? 0) + ((this.sitting ? 1 : 0) - (this.sitK ?? 0)) * Math.min(1, dt * 7);
+    this.root.rotation.x = this.lieK * Math.PI / 2; // asleep in bed, on our back
     this.root.scale.setScalar(this.seat ? SEAT_SCALE : 1);
     if (this.tag) {
-      this.tag.visible = !this.lying;
+      this.tag.visible = this.lieK < 0.5;
       this.tag.position.y = this.crouching ? 2.05 : 2.35;
     }
     this.updateRemoteBall(dt);
     this.updateBalloon(time);
+    if (this.bubble) {
+      this.bubbleT -= dt;
+      this.bubble.material.opacity = Math.min(1, this.bubbleT * 2);
+      if (this.bubbleT <= 0) this.unsay();
+    }
     const sitting = !!this.seat || this.sitting;
+    // Climbing into bed (or out) your knees bend as you sit on the edge, then straighten as you
+    // lie back (or stand up).
+    const sit = this.seat ? 1 : Math.max(this.sitK, Math.sin(Math.PI * Math.min(1, this.lieK)) * 0.9);
     animateCharacter(this.character, {
-      walk: this.walk, speed: sitting || this.lying ? 0 : this.speed, pitch: this.lying ? 0 : this.pitch, time,
-      dance: this.dance, wave: this.wave, swing: this.swing, sitting,
+      walk: this.walk, speed: sitting || this.lying ? 0 : this.speed, pitch: this.lieK > 0.5 ? 0 : this.pitch, time,
+      dance: this.dance, wave: this.wave, swing: this.swing, sit,
       flying: this.flying, crouch: this.crouching && !sitting,
     });
     this.updatePet(dt, time);
+  }
+
+  // Says something (in a speech bubble over their head, for a few seconds).
+  say(text, seconds = 4.5) {
+    this.unsay();
+    this.bubble = speechBubble(text);
+    this.bubble.position.y = 2.95;
+    this.bubbleT = seconds;
+    this.root.add(this.bubble);
+  }
+
+  unsay() {
+    if (!this.bubble) return;
+    this.root.remove(this.bubble);
+    this.bubble.material.map.dispose();
+    this.bubble.material.dispose();
+    this.bubble = null;
   }
 
   // A balloon on a string, held up in the right hand.
@@ -337,6 +401,7 @@ export class Avatar {
   }
 
   dispose() {
+    this.unsay();
     this.scene.remove(this.root);
     this.character.dispose();
     if (this.pet) {
@@ -379,6 +444,8 @@ export class Avatars {
       a.sitting = !!(flags & FLAG.sitting);
       a.crouching = !!(flags & FLAG.crouching);
       a.balloon = flags & FLAG.balloon ? `#${((flags >>> 8) & 0xffffff).toString(16).padStart(6, '0')}` : null;
+      a.jet = !!(flags & FLAG.jet);
+      a.trail = !!(flags & FLAG.trail);
     }
   }
 

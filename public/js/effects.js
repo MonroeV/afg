@@ -176,10 +176,12 @@ export class Fireworks {
       color: r.color,
     });
 
-    // Light up the town and the sky in the burst's color.
+    // Light up the town and the sky in the burst's color: the pure, deep version of it (the
+    // stars themselves are paler), so a red burst really turns everything red.
     const slot = this.lights.reduce((a, b) => (b.life < a.life ? b : a));
     slot.life = 1;
-    slot.color.copy(style === 'willow' ? gold : r.color);
+    const hsl = (style === 'willow' ? gold : r.color).getHSL({});
+    slot.color.setHSL(hsl.h, 1, 0.5);
     slot.light.position.copy(r.pos);
     slot.light.color.copy(slot.color);
     slot.halo.position.copy(r.pos);
@@ -278,8 +280,9 @@ export class Fireworks {
     }
     for (const l of this.lights) {
       l.life = Math.max(0, l.life - dt / 1.6);
-      l.light.intensity = 6000 * l.life ** 2;
-      l.halo.material.opacity = l.life * 0.28;
+      // (Not so bright that it washes out to white.)
+      l.light.intensity = 3200 * l.life ** 2;
+      l.halo.material.opacity = l.life * 0.35;
       l.halo.visible = l.life > 0;
     }
     this.flash *= Math.exp(-2.5 * dt);
@@ -463,6 +466,24 @@ export class Effects {
         life: 2.5 + Math.random() * 3, size: 0.12 + Math.random() * 0.22, grow: 0.02, color: [c.r, c.g, c.b], gravity: -0.25, drag: 1.1, alpha: 1.6,
       });
     }
+  }
+
+  // Rainbow sparkles left behind by the Rainbow Trail.
+  trail(x, y, z, hue) {
+    const c = new THREE.Color().setHSL(hue % 1, 1, 0.6);
+    this.glow.spawn({
+      x: x + (Math.random() - 0.5) * 0.35, y: y + 0.1 + Math.random() * 0.35, z: z + (Math.random() - 0.5) * 0.35,
+      vx: (Math.random() - 0.5) * 0.3, vy: 0.25 + Math.random() * 0.4, vz: (Math.random() - 0.5) * 0.3,
+      life: 1.1 + Math.random() * 0.5, size: 0.24, grow: -0.12, color: [c.r, c.g, c.b],
+    });
+  }
+
+  // Jetpack flames under someone's feet.
+  jet(x, y, z) {
+    for (const s of [-0.13, 0.13]) {
+      this.glow.spawn({ x: x + s, y, z, vx: (Math.random() - 0.5) * 0.4, vy: -3 - Math.random() * 2, vz: (Math.random() - 0.5) * 0.4, life: 0.35, size: 0.4, grow: -0.6, color: [1, 0.45 + Math.random() * 0.4, 0.1], alpha: 0.95 });
+    }
+    if (Math.random() < 0.3) this.smoke.spawn({ x, y: y - 0.4, z, vx: (Math.random() - 0.5), vy: -0.5, vz: (Math.random() - 0.5), life: 1.4, size: 0.5, grow: 1, color: [0.6, 0.6, 0.6], alpha: 0.5, drag: 1 });
   }
 
   // A water balloon bursting.
@@ -676,6 +697,8 @@ export class Sounds {
   }
 
   pop() { this.tone(900, 1600, 0.05, 0.12, 'sine'); }
+  coin() { this.together(() => { this.tone(1320, 1320, 0.07, 0.16, 'square'); this.tone(1760, 1760, 0.2, 0.16, 'square', 0.07); }); }
+  jet() { this.noiseHit(260, 0.16, 0.55, 'lowpass'); }
   splash(volume = 1) { this.noiseHit(1800, 0.35, 0.9 * volume, 'bandpass'); this.noiseHit(500, 0.25, 0.6 * volume, 'lowpass'); }
   squeak() { this.tone(900, 1400, 0.12, 0.18, 'sine'); this.tone(1400, 1000, 0.1, 0.12, 'sine', 0.1); }
   shutter() { this.noiseHit(4000, 0.05, 0.5, 'highpass'); this.noiseHit(2500, 0.06, 0.4, 'highpass', 0.08); }

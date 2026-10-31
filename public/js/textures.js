@@ -520,6 +520,29 @@ function checkers(dark, cells) {
   };
 }
 
+// A filing cabinet: three metal drawers with handles and little labels.
+function filing(u, v) {
+  const m = metal(u, v);
+  const drawer = Math.floor(v * 3), fv = (v * 3) % 1;
+  if (fv < 0.05 || fv > 0.95 || u < 0.05 || u > 0.95) return { c: shade(m.c, 0.55), h: 0.2 };
+  const handle = Math.abs(u - 0.5) < 0.16 && Math.abs(fv - 0.32) < 0.05;
+  if (handle) return { c: [0.85, 0.86, 0.88], h: 1 };
+  const label = Math.abs(u - 0.5) < 0.1 && Math.abs(fv - 0.58) < 0.08;
+  if (label) return { c: drawer === 1 ? [0.95, 0.85, 0.5] : [0.96, 0.96, 0.94], h: 0.7 };
+  return { c: shade([0.55, 0.6, 0.66], 0.85 + m.c[0] * 0.3), h: 0.6 };
+}
+
+// Diamond: pale blue facets that catch the light, with a few bright sparkles.
+function diamond(u, v) {
+  const f = worley(u, v, 5, 870);
+  const n = fbm(u, v, 6, 3, 871);
+  const edge = f < 0.06;
+  const spark = hash(Math.floor(u * 40), Math.floor(v * 40), 872) > 0.985;
+  if (spark) return { c: [1, 1, 1], h: 1, e: 1 };
+  const k = 0.75 + n * 0.25 + (edge ? 0.2 : 0);
+  return { c: [0.6 * k, 0.9 * k, 1 * k], h: edge ? 1 : 0.5 + f, e: edge ? 0.25 : 0.05 };
+}
+
 const GENERATORS = {
   grass_top: grassTop,
   grass_side: grassSide,
@@ -576,6 +599,8 @@ const GENERATORS = {
   speed_pad: speedPad,
   race_start: checkers([0.15, 0.65, 0.25], 4),
   race_finish: checkers([0.08, 0.08, 0.1], 6),
+  filing,
+  diamond,
 };
 
 const NORMAL_STRENGTH = {

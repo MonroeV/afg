@@ -1,6 +1,6 @@
 // Builds the starting world: a main town around spawn, villages in each corner,
 // roads joining them, parks, playgrounds, trees, flowers and parked cars.
-import { WORLD, DOOR_TOP, makeBlock, blockId, turnLine, stack } from './blocks.js';
+import { WORLD, DOOR_TOP, BED_FOOT, makeBlock, blockId, turnLine, stack, itemOf, floorOf, shapeOf } from './blocks.js';
 
 const B = {
   grass: 1, dirt: 2, stone: 3, cobble: 4, brick: 5, planks: 6, log: 7, leaves: 8, glass: 9,
@@ -12,7 +12,15 @@ const B = {
   lantern: 45, streetLamp: 46, gardenLight: 47, tikiTorch: 48, partyLights: 49,
   neonPink: 50, neonBlue: 51, neonGreen: 52, ladder: 53, railing: 54, lineX: 55, parkingLine: 56, parkingLineX: 57,
   parkingSign: 58, tintedGlass: 59,
+  chair: 60, couch: 61, table: 62, bookshelf: 63, bed: 64, painting: 65, poster: 66, flowerPot: 67, teddy: 68,
+  desk: 73, officeChair: 74, computer: 75, filing: 76, cooler: 77, whiteboard: 78, piano: 79, fishTank: 80, statue: 81,
+  diamond: 82, throne: 83, discoBall: 84, trophy: 85, register: 86,
 };
+
+// Which way furniture faces (meta bits 0-1) to look along a world direction.
+const faceDir = (dx, dz) => (dz > 0 ? 0 : dx > 0 ? 1 : dz < 0 ? 2 : 3);
+// The meta for a picture hanging on a wall that's in direction (wx, wz) from its cell.
+const onWall = (wx, wz) => faceDir(-wx, -wz);
 
 function rng(seed) {
   let s = seed >>> 0;
@@ -226,13 +234,15 @@ export function generateWorld(seed = 2024) {
     P(Math.floor(w / 2), twoStory ? 2 : H - 1, Math.floor(d / 2), ceiling);
     if (twoStory) P(Math.floor(w / 2), H - 1, Math.floor(d / 2), B.ceilingLight);
 
-    // A little furniture: a bed, a table with flowers and a rug.
+    // A little furniture: a bed, a table with flowers and a rug. (More gets added later: see
+    // furnishHouses.) sv: which way along z the inside of the house goes from the front.
+    const sv = facesSouth ? -1 : 1;
     if (twoStory) {
-      P(w - 2, 4, 1, B.red);
-      P(w - 2, 4, 2, B.concrete);
+      P(w - 2, 4, 1, makeBlock(B.bed, faceDir(0, sv)));
+      P(w - 2, 4, 2, makeBlock(B.bed, faceDir(0, sv) | BED_FOOT));
     } else {
-      P(w - 2, 0, d - 2, B.red);
-      P(w - 2, 0, d - 3, B.concrete);
+      P(w - 2, 0, d - 2, stack(makeBlock(B.bed, faceDir(0, -sv)), B.floor));
+      P(w - 2, 0, d - 3, stack(makeBlock(B.bed, faceDir(0, -sv) | BED_FOOT), B.floor));
       // A table with a lamp (or flowers, or a candle) and sometimes a floor lamp.
       P(1, 0, d - 2, B.planks);
       P(1, 1, d - 2, pick([B.tableLamp, B.tableLamp, B.flowers, B.candle, B.lavaLamp]));
@@ -431,6 +441,19 @@ export function generateWorld(seed = 2024) {
     markUsed(...lake.area);
     cars.push(...lake.cars);
   }
+  // The Luxe Store, and furniture in the houses and towers.
+  const getB = (x, y, z) => map.get(`${x},${y},${z}`) || 0;
+  const store = buildStore({ get: getB, set: put, canUse: (x, z) => !used.has(`${x},${z}`) });
+  if (store) markUsed(...store.area);
+  const each = fn => {
+    for (const [k, v] of [...map]) {
+      const [x, y, z] = k.split(',').map(Number);
+      fn(x, y, z, v);
+    }
+  };
+  furnishHouses({ each, get: getB, set: put, canUse: () => true });
+  const towers = furnishTowers({ each, get: getB, set: put, canUse: () => true });
+  const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null };
 
   // ---------- Countryside ----------
 
@@ -485,7 +508,7 @@ export function generateWorld(seed = 2024) {
     const [x, y, z] = k.split(',').map(Number);
     blocks.push([x, y, z, v]);
   }
-  return { blocks, cars: placed };
+  return { blocks, cars: placed, places, claims: store ? [store.claim] : [] };
 }
 
 // Saved worlds from before the new lamps: put proper lamp heads on the town's street lamps
@@ -575,6 +598,392 @@ function makeSite(road, side, a) {
     return x > 0 ? 2 : x < 0 ? 8 : z > 0 ? 4 : 1;
   };
   return { road, side, at, pos, dirU, dirV, edge };
+}
+
+// ---------- Furnishing ----------
+// Houses and towers built by the world generator get furniture: chairs, couches, pictures,
+// bookshelves, teddy bears; desks, computers and plants in the office towers; a piano and a
+// fish tank in the penthouses. In a saved world only rooms nobody has changed get any, and
+// furniture only ever goes into empty spots (nothing anyone built is touched).
+
+// What the generator ever put inside a house (in any version of the game).
+const HOUSE_GROUND = new Set([B.floor, B.carpet, B.red, B.concrete, B.planks, B.floorLamp, B.bed]);
+const HOUSE_ABOVE = new Set([B.planks, B.red, B.concrete, B.tableLamp, B.flowers, B.candle, B.lavaLamp, B.ceilingLight, B.chandelier, B.lamp, B.floorLamp, B.bed]);
+const SIDES4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+
+// A little random number generator for one spot, so the same house always gets the same things.
+const spotRand = (x, z) => rng(((x + 1000) * 7919) ^ ((z + 1000) * 104729));
+
+// The generated house rooms in a world: wood floors with walls around them, and nothing in
+// them that the generator didn't put there.
+function houseRooms({ each, get, canUse }) {
+  const seen = new Set(), rooms = [];
+  const ground = v => v && HOUSE_GROUND.has(blockId(itemOf(v))) && (!floorOf(v) || blockId(floorOf(v)) === B.floor);
+  const starts = [];
+  each((x, y, z, v) => {
+    if (y === 0 && v === B.floor) starts.push([x, z]);
+  });
+  for (const [sx, sz] of starts) {
+    if (seen.has(`${sx},${sz}`)) continue;
+    const region = [], queue = [[sx, sz]];
+    seen.add(`${sx},${sz}`);
+    while (queue.length && region.length <= 80) {
+      const [x, z] = queue.pop();
+      region.push([x, z]);
+      for (const [dx, dz] of SIDES4) {
+        const k = `${x + dx},${z + dz}`;
+        if (!seen.has(k) && ground(get(x + dx, 0, z + dz))) {
+          seen.add(k);
+          queue.push([x + dx, z + dz]);
+        }
+      }
+    }
+    if (region.length < 4 || region.length > 80) continue;
+    const xs = region.map(c => c[0]), zs = region.map(c => c[1]);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);
+    if ((x1 - x0 + 1) * (z1 - z0 + 1) !== region.length) continue; // houses are rectangles
+    // Walls all round, with one door.
+    let doors = [], ok = true;
+    for (let x = x0 - 1; x <= x1 + 1 && ok; x++)
+      for (let z = z0 - 1; z <= z1 + 1 && ok; z++) {
+        if (x >= x0 && x <= x1 && z >= z0 && z <= z1) continue;
+        const corner = (x === x0 - 1 || x === x1 + 1) && (z === z0 - 1 || z === z1 + 1);
+        const v = get(x, 0, z);
+        if (blockId(itemOf(v)) === B.door && !corner) doors.push([x, z]);
+        else if (!v || shapeOf(v) !== 'cube') ok = false;
+      }
+    if (!ok || doors.length !== 1) continue;
+    // One floor (roof right above) or two (an upstairs floor of planks with a hole for the stairs).
+    let roofAt3 = true;
+    for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) if (shapeOf(get(x, 3, z)) !== 'cube' || !get(x, 3, z)) roofAt3 = false;
+    const H = roofAt3 ? 3 : 7;
+    for (let x = x0; x <= x1 && ok; x++)
+      for (let z = z0; z <= z1 && ok; z++) {
+        if (!canUse(x, z)) ok = false;
+        for (let y = 1; y < H && ok; y++) {
+          const v = get(x, y, z);
+          if (v && !(HOUSE_ABOVE.has(blockId(itemOf(v))) && !floorOf(v))) ok = false;
+        }
+      }
+    if (!ok) continue;
+    const [dx, dz] = doors[0];
+    const inward = dx < x0 ? [1, 0] : dx > x1 ? [-1, 0] : dz < z0 ? [0, 1] : [0, -1];
+    rooms.push({ x0, z0, x1, z1, H, door: [dx, dz], inward });
+  }
+  return rooms;
+}
+
+export function furnishHouses({ each, get, set, canUse }) {
+  let count = 0;
+  for (const room of houseRooms({ each, get, canUse })) {
+    furnishRoom(room, 0, get, set);
+    if (room.H === 7) furnishRoom(room, 4, get, set);
+    count++;
+  }
+  return count;
+}
+
+// Adds furniture to one floor of a room: things go along the walls (the middle stays clear,
+// and so does the way in), and only into empty spots.
+function furnishRoom({ x0, z0, x1, z1, door, inward, H }, y, get, set) {
+  const rand = spotRand(x0 * 3 + y, z0);
+  const w = x1 - x0 + 1, d = z1 - z0 + 1, small = w * d <= 9;
+  const entry = [door[0] + inward[0], door[1] + inward[1]];
+  const nearEntry = (x, z) => Math.abs(x - entry[0]) + Math.abs(z - entry[1]) <= 1;
+  const upstairs = y > 0;
+  // A spot is free if it's bare floor with nothing above it (upstairs: plank floor below).
+  const inRoom = (x, z) => x >= x0 && x <= x1 && z >= z0 && z <= z1;
+  const free = (x, z) => {
+    if (!inRoom(x, z) || nearEntry(x, z)) return false;
+    if (get(x, y + 1, z) || get(x, y + 2, z)) return false;
+    // Keep the way up the stairs clear (downstairs) and round the hole at the top (upstairs).
+    if (H === 7 && !upstairs && SIDES4.some(([dx, dz]) => get(x + dx, 0, z + dz) === B.planks)) return false;
+    if (upstairs && SIDES4.some(([dx, dz]) => inRoom(x + dx, z + dz) && !get(x + dx, y - 1, z + dz))) return false;
+    return upstairs ? !get(x, y, z) && blockId(get(x, y - 1, z)) === B.planks : get(x, y, z) === B.floor;
+  };
+  // Upstairs, the row next to the stairs stays clear so you can walk up.
+  const wallsOf = (x, z) => SIDES4.filter(([dx, dz]) => x + dx < x0 || x + dx > x1 || z + dz < z0 || z + dz > z1);
+  const place = (x, z, v) => set(x, y, z, upstairs || shapeOf(v) === 'cube' ? v : stack(v, B.floor));
+  let items = 0;
+  const max = small ? 2 : upstairs ? 3 : 4;
+
+  // A couch (two seats) against a wall, facing into the room.
+  if (!small && !upstairs) {
+    search: for (let x = x0; x <= x1; x++)
+      for (let z = z0; z <= z1; z++) {
+        for (const [wx, wz] of wallsOf(x, z)) {
+          const ax = wz ? 1 : 0, az = wx ? 1 : 0; // along the wall
+          if (free(x, z) && free(x + ax, z + az) && wallsOf(x + ax, z + az).some(([a, b]) => a === wx && b === wz)) {
+            const q = faceDir(-wx, -wz);
+            place(x, z, makeBlock(B.couch, q));
+            place(x + ax, z + az, makeBlock(B.couch, q));
+            items += 2;
+            break search;
+          }
+        }
+      }
+  }
+  // A chair at the table, a teddy by the bed, a bookshelf in a corner, a flower pot.
+  const spots = [];
+  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) if (free(x, z) && wallsOf(x, z).length) spots.push([x, z]);
+  const near = (x, z, test) => SIDES4.find(([dx, dz]) => test(get(x + dx, y, z + dz)));
+  for (const [x, z] of spots) {
+    if (items >= max) break;
+    if (!free(x, z)) continue;
+    const table = near(x, z, v => v === B.planks && !upstairs);
+    const bed = near(x, z, v => [B.red, B.concrete, B.bed].includes(blockId(itemOf(v))));
+    const corner = wallsOf(x, z).length >= 2;
+    if (table && rand() < 0.8) {
+      place(x, z, makeBlock(B.chair, faceDir(table[0], table[1])));
+    } else if (bed && rand() < 0.6) {
+      const [wx, wz] = wallsOf(x, z)[0];
+      place(x, z, makeBlock(B.teddy, faceDir(-wx, -wz)));
+    } else if (corner && rand() < 0.5) {
+      place(x, z, B.bookshelf);
+    } else if (rand() < 0.35) {
+      place(x, z, B.flowerPot);
+    } else continue;
+    items++;
+  }
+  // Pictures on the walls (not over windows), at eye height.
+  let pictures = 0;
+  for (let x = x0; x <= x1 && pictures < 2; x++)
+    for (let z = z0; z <= z1 && pictures < 2; z++) {
+      for (const [wx, wz] of wallsOf(x, z)) {
+        const wall = get(x + wx, y + 1, z + wz);
+        if (pictures >= 2 || get(x, y + 1, z) || !wall || shapeOf(wall) !== 'cube' || blockId(wall) === B.glass || nearEntry(x, z)) continue;
+        if (rand() > 0.35) continue;
+        const art = rand() < 0.5 ? B.painting : B.poster;
+        set(x, y + 1, z, makeBlock(art, onWall(wx, wz) | (Math.floor(rand() * 4) << 2)));
+        pictures++;
+      }
+    }
+}
+
+// The office towers: found by their tinted glass. Each floor nobody has changed gets desks,
+// computers, chairs, plants and a whiteboard; the top floor is a fancy penthouse, and the
+// lobby gets a reception desk (and someone to work at it).
+export function furnishTowers({ each, get, set, canUse }) {
+  const cols = new Map();
+  each((x, y, z, v) => {
+    if (blockId(v) === B.tintedGlass) cols.set(`${x},${z}`, [x, z]);
+  });
+  const seen = new Set(), towers = [];
+  for (const [k, [sx, sz]] of cols) {
+    if (seen.has(k)) continue;
+    const group = [], queue = [[sx, sz]];
+    seen.add(k);
+    while (queue.length) {
+      const [x, z] = queue.pop();
+      group.push([x, z]);
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+        const nk = `${x + dx},${z + dz}`;
+        if (cols.has(nk) && !seen.has(nk)) {
+          seen.add(nk);
+          queue.push([x + dx, z + dz]);
+        }
+      }
+    }
+    const xs = group.map(c => c[0]), zs = group.map(c => c[1]);
+    const t = { x0: Math.min(...xs), x1: Math.max(...xs), z0: Math.min(...zs), z1: Math.max(...zs) };
+    if (t.x1 - t.x0 < 6 || t.x1 - t.x0 !== t.z1 - t.z0) continue;
+    const tower = furnishTower(t, get, set, canUse);
+    if (tower) towers.push(tower);
+  }
+  return towers.sort((a, b) => b.size - a.size);
+}
+
+function furnishTower({ x0, x1, z0, z1 }, get, set, canUse) {
+  const n = x1 - x0 - 1, ix0 = x0 + 1, iz0 = z0 + 1, ix1 = x1 - 1, iz1 = z1 - 1, mid = Math.floor(n / 2);
+  // The front is the side with the doors.
+  let front = null;
+  for (let x = x0; x <= x1; x++) for (const z of [z0, z1]) if (blockId(get(x, 0, z)) === B.door) front = z === z0 ? 'z0' : 'z1';
+  for (let z = z0; z <= z1; z++) for (const x of [x0, x1]) if (blockId(get(x, 0, z)) === B.door) front = x === x0 ? 'x0' : 'x1';
+  if (!front) return null;
+  // Local spots: a across the front, b deeper inside. f points inside from the doors.
+  const frame = {
+    z0: { at: (a, b) => [ix0 + a, iz0 + b], f: [0, 1], r: [1, 0] },
+    z1: { at: (a, b) => [ix1 - a, iz1 - b], f: [0, -1], r: [-1, 0] },
+    x0: { at: (a, b) => [ix0 + b, iz1 - a], f: [1, 0], r: [0, -1] },
+    x1: { at: (a, b) => [ix1 - b, iz0 + a], f: [-1, 0], r: [0, 1] },
+  }[front];
+  const { at, f, r } = frame;
+  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) if (!canUse(x, z)) return null;
+  // The ladder and the pillar it leans on: keep clear around them.
+  const keep = [];
+  for (let x = ix0; x <= ix1; x++) for (let z = iz0; z <= iz1; z++) {
+    const v = get(x, 1, z);
+    if (blockId(v) === B.ladder || blockId(v) === B.concrete) keep.push([x, z]);
+  }
+  const kept = (x, z) => keep.some(([kx, kz]) => Math.abs(kx - x) <= 1 && Math.abs(kz - z) <= 1);
+  // Floors: the marble slabs inside (the top one is the roof).
+  let roof = 0;
+  for (let y = 1; y < 64; y++) if (blockId(get(ix0 + mid, y, iz0 + mid)) === B.marble) roof = y;
+  const floors = [0];
+  for (let y = 4; y < roof; y += 4) if (blockId(get(ix0 + mid, y, iz0 + mid)) === B.marble) floors.push(y);
+  const LIGHTS = new Set([B.ceilingLight, B.chandelier, B.ladder, B.concrete]);
+  const untouched = (y0, y1) => {
+    for (let x = ix0; x <= ix1; x++) for (let z = iz0; z <= iz1; z++) for (let y = y0; y <= y1; y++) {
+      const v = get(x, y, z);
+      if (v && !LIGHTS.has(blockId(v))) return false;
+    }
+    return true;
+  };
+  const dir = (k, [dx, dz]) => [dx * k, dz * k];
+  let lobby = null;
+  floors.forEach((fy, i) => {
+    const top = i === floors.length - 1, y = fy + 1, ceil = top ? roof - 1 : floors[i + 1] - 1;
+    if (!untouched(y, ceil)) return;
+    const on = v => (fy === 0 ? stack(v, B.sidewalk) : v); // the lobby floor is sidewalk
+    const put = (a, b, v, dy = 0) => {
+      const [x, z] = at(a, b);
+      if (a < 0 || b < 0 || a >= n || b >= n || kept(x, z) || get(x, (fy === 0 ? 0 : y) + dy, z) && !(fy === 0 && dy === 0)) return false;
+      if (fy === 0 && dy === 0 && get(x, 0, z) !== B.sidewalk) return false;
+      set(x, (fy === 0 ? 0 : y) + dy, z, dy === 0 ? on(v) : v);
+      return true;
+    };
+    const wallPic = (a, b, art, design, dy = 1) => {
+      const [x, z] = at(a, b);
+      if (kept(x, z)) return;
+      const [wx, wz] = a === 0 ? dir(-1, r) : a === n - 1 ? r : b === n - 1 ? f : dir(-1, f);
+      if (!get(x, (fy === 0 ? 0 : y) + dy, z)) set(x, (fy === 0 ? 0 : y) + dy, z, makeBlock(art, onWall(wx, wz) | (design << 2)));
+    };
+    if (fy === 0) {
+      // The lobby: a reception desk facing the doors, couches, plants and a fish tank.
+      const back = n - 3;
+      for (const a of [mid - 1, mid, mid + 1]) put(a, back, makeBlock(B.desk, faceDir(...f)));
+      put(mid, back, makeBlock(B.computer, faceDir(...f)), 1);
+      for (const b of [1, 2]) {
+        put(0, b, makeBlock(B.couch, faceDir(...r)));
+        put(n - 1, b, makeBlock(B.couch, faceDir(...dir(-1, r))));
+      }
+      put(0, 0, B.flowerPot);
+      put(n - 1, 0, B.flowerPot);
+      put(0, back - 1, B.fishTank);
+      wallPic(n - 1, back - 1, B.painting, 1);
+      const [lx, lz] = at(mid, n - 2);
+      lobby = { x: lx + 0.5, y: 0, z: lz + 0.5, area: [ix0, iz0, ix1, iz1], face: Math.atan2(f[0], f[1]) };
+      return;
+    }
+    if (top) {
+      // The penthouse: couches on a rug, a grand piano, a fish tank, gold statues, a chandelier.
+      for (let a = mid - 1; a <= mid + 1; a++) for (let b = n - 4; b <= n - 2; b++) put(a, b, B.carpet);
+      for (let a = mid - 1; a <= mid + 1; a++) {
+        const [x, z] = at(a, n - 2);
+        if (blockId(get(x, y, z)) === B.carpet) set(x, y, z, stack(makeBlock(B.couch, faceDir(...dir(-1, f))), B.carpet));
+      }
+      put(1, 1, makeBlock(B.piano, faceDir(...f)));
+      put(n - 1, mid, B.fishTank);
+      put(0, n - 1, makeBlock(B.statue, faceDir(...f)));
+      put(n - 1, n - 1, makeBlock(B.statue, faceDir(...f)));
+      put(n - 1, 0, B.flowerPot);
+      const [cx, cz] = at(mid, mid);
+      if (!get(cx, ceil, cz)) set(cx, ceil, cz, B.chandelier);
+      wallPic(0, mid, B.painting, 3);
+      return;
+    }
+    // An office: rows of desks with computers and chairs, filing cabinets, a water cooler,
+    // plants and a whiteboard.
+    for (const b of [1, 4, 7]) {
+      if (b + 1 >= n) continue;
+      for (const a of [1, 3, 5, 7]) {
+        if (a >= n - 1) continue;
+        const [x, z] = at(a, b), [cx2, cz2] = at(a, b + 1);
+        if (kept(x, z) || kept(cx2, cz2)) continue;
+        if (put(a, b, makeBlock(B.desk, faceDir(...f)))) {
+          put(a, b, makeBlock(B.computer, faceDir(...f)), 1);
+          put(a, b + 1, makeBlock(B.officeChair, faceDir(...dir(-1, f))));
+        }
+      }
+    }
+    put(n - 1, 0, B.filing);
+    put(n - 1, 1, B.filing);
+    put(0, mid, B.cooler);
+    put(0, 0, B.flowerPot);
+    put(n - 1, n - 1, B.flowerPot);
+    wallPic(0, 3, B.whiteboard, i % 4);
+  });
+  return { size: n, lobby };
+}
+
+// The Luxe Store: a fancy shop by a road, with gold trim, a glass front, chandeliers, a red
+// carpet up to the counter and the store's best things on display. It belongs to the store
+// (a claim), so nobody can knock it down. Returns where it is, or null if there's no room.
+export function buildStore({ get, set, canUse }) {
+  const roads = exitRoads();
+  const L = 12, D = 11;
+  for (const name of ['east', 'south', 'west', 'north', 'ringS', 'ringE', 'ringN', 'ringW']) {
+    const road = roads[name];
+    for (const side of [1, -1]) {
+      for (let a = road.from + 2; a + L <= road.to - 1; a += 2) {
+        const site = makeSite(road, side, a);
+        if (!siteFree(site, L, D, 7, get, canUse)) continue;
+        return storeAt(site, L, D, set);
+      }
+    }
+  }
+  return null;
+}
+
+function storeAt(site, L, D, set) {
+  const put = (u, y, v, b) => {
+    const [x, z] = site.at(u, v);
+    set(x, y, z, b);
+  };
+  const [ox, oz] = site.at(0, 0);
+  const [fx, fz] = site.dirV; // from the road into the store
+  const inward = faceDir(fx, fz), outward = faceDir(-fx, -fz);
+  // The path from the road, lamps and flowers out front.
+  for (let u = 0; u < L; u++) put(u, 0, 0, B.sidewalk);
+  for (const u of [3, 8]) put(u, 0, 0, stack(B.lantern, B.sidewalk));
+  for (const u of [1, 2, 9, 10]) put(u, 0, 0, stack(B.flowerPot, B.sidewalk));
+  // Walls (marble with gold corners and a gold band), a glass front with double doors, and a roof.
+  for (let u = 0; u < L; u++)
+    for (let v = 1; v < D; v++) {
+      const edgeU = u === 0 || u === L - 1, edgeV = v === 1 || v === D - 1;
+      if (!edgeU && !edgeV) {
+        put(u, 0, v, u === 5 || u === 6 ? B.carpet : B.floor);
+        put(u, 4, v, B.marble);
+        continue;
+      }
+      for (let y = 0; y < 5; y++) {
+        let b = (edgeU && edgeV) || y === 3 ? B.gold : B.marble;
+        if (y === 4) b = B.marble;
+        if (v === 1 && !edgeU && y < 3) b = y === 0 && (u === 5 || u === 6) ? 0 : y === 1 && (u === 5 || u === 6) ? 0 : B.glass;
+        if (b) put(u, y, v, b);
+      }
+    }
+  const doorFacing = site.road.axis === 'x' ? 0 : 1;
+  for (const u of [5, 6]) {
+    put(u, 0, 1, makeBlock(B.door, doorFacing));
+    put(u, 1, 1, makeBlock(B.door, doorFacing | DOOR_TOP));
+  }
+  // A glowing sign along the top of the front, and party lights under it.
+  for (let u = 1; u < L - 1; u++) put(u, 5, 1, u % 2 ? B.neonPink : B.gold);
+  for (let u = 0; u < L; u++) put(u, 2, 0, B.partyLights);
+  // Inside: chandeliers, display pedestals with the store's best things, a disco ball, a
+  // golden throne, and a counter at the back with a cash register.
+  put(3, 3, 4, B.chandelier);
+  put(8, 3, 4, B.chandelier);
+  put(5, 3, 6, B.discoBall);
+  for (const [u, v, item] of [[2, 3, B.diamond], [9, 3, B.trophy], [2, 6, B.statue], [9, 6, B.fishTank]]) {
+    put(u, 0, v, B.gold);
+    put(u, 1, v, item === B.statue ? makeBlock(item, outward) : item);
+  }
+  put(1, 0, 8, makeBlock(B.throne, faceDir(...site.dirU)));
+  put(10, 0, 8, stack(makeBlock(B.piano, faceDir(-site.dirU[0], -site.dirU[1])), B.floor));
+  for (const u of [4, 5, 6, 7]) put(u, 0, 8, stack(makeBlock(B.desk, inward), B.floor));
+  put(5, 1, 8, makeBlock(B.register, inward));
+  put(6, 1, 8, B.flowerPot);
+  for (const [u, v] of [[1, 2], [10, 2]]) put(u, 0, v, stack(B.flowerPot, B.floor));
+  const [px, pz] = site.pos(6, 9.5), [ax, az] = site.at(1, 2), [bx, bz] = site.at(L - 2, D - 2);
+  const [cx0, cz0] = site.at(0, 0), [cx1, cz1] = site.at(L - 1, D - 1);
+  const rect = [Math.min(cx0, cx1), Math.min(cz0, cz1), Math.max(cx0, cx1), Math.max(cz0, cz1)];
+  return {
+    area: [rect[0] - 1, rect[1] - 1, rect[2] + 1, rect[3] + 1],
+    place: { x: px, y: 0, z: pz, area: [Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz)], face: Math.atan2(fx, fz), door: [ox, oz] },
+    claim: { owner: 'Luxe Store', key: 'luxe store', x0: rect[0], z0: rect[1], x1: rect[2], z1: rect[3], createdAt: 0, permanent: true },
+  };
 }
 
 function siteFree(site, L, D, tall, get, canUse) {

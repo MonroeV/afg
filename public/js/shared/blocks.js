@@ -105,6 +105,23 @@ export const BLOCKS = {
   70: { name: 'Speed Pad', shape: 'flat', tex: 'speed_pad', facing: true, speedPad: true },
   71: { name: 'Race Start', shape: 'flat', tex: 'race_start', race: 'start' },
   72: { name: 'Race Finish', shape: 'flat', tex: 'race_finish', race: 'finish' },
+  // Office furniture (the skyscrapers are full of it)
+  73: { name: 'Desk', shape: 'model', model: 'desk', facing: true, box: [0, 0, 0, 1, 1, 1] },
+  74: { name: 'Office Chair', shape: 'model', model: 'officeChair', facing: true, seat: 0.55, box: [0.2, 0, 0.2, 0.8, 0.55, 0.8] },
+  75: { name: 'Computer', shape: 'model', model: 'computer', facing: true, box: [0.15, 0, 0.3, 0.85, 0.55, 0.7] },
+  76: { name: 'Filing Cabinet', tex: { top: 'metal', side: 'filing', bottom: 'metal' } },
+  77: { name: 'Water Cooler', shape: 'model', model: 'waterCooler', box: [0.28, 0, 0.28, 0.72, 1, 0.72] },
+  78: { name: 'Whiteboard', shape: 'picture', art: 'office' },
+  // Fancy things (the penthouse has them)
+  79: { name: 'Grand Piano', shape: 'model', model: 'piano', facing: true, piano: true, box: [0.02, 0, 0.02, 0.98, 0.95, 0.98] },
+  80: { name: 'Fish Tank', shape: 'model', model: 'fishTank', box: [0.05, 0, 0.15, 0.95, 0.85, 0.85] },
+  81: { name: 'Gold Statue', shape: 'model', model: 'statue', facing: true, box: [0.2, 0, 0.2, 0.8, 1, 0.8] },
+  // Only from the Luxe Store (`price` in coins). You can use them once you've bought them.
+  82: { name: 'Diamond Block', tex: 'diamond', glossy: true, price: 15 },
+  83: { name: 'Golden Throne', shape: 'model', model: 'throne', facing: true, seat: 0.5, box: [0.1, 0, 0.1, 0.9, 0.5, 0.9], price: 25 },
+  84: { name: 'Disco Ball', shape: 'model', model: 'discoBall', disco: true, light: { color: 0xff7af0, power: 0.9, range: 22, always: true, y: 0.6 }, price: 20 },
+  85: { name: 'Golden Trophy', shape: 'model', model: 'trophy', box: [0.3, 0, 0.3, 0.7, 0.8, 0.7], price: 12 },
+  86: { name: 'Cash Register', shape: 'model', model: 'register', facing: true, shop: true, box: [0.15, 0, 0.2, 0.85, 0.5, 0.8] },
 };
 
 // Furniture that faces you: which quarter turn makes its front (+z in the model) face
@@ -117,7 +134,26 @@ export const NOTE_FREQS = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24,
 export const PICTURES = {
   painting: ['Sunset', 'Mountains', 'Flowers', 'Starry Night'],
   poster: ['Cat', 'Puppy', 'Rocket', 'Dinosaur'],
+  office: ['Sales Chart', 'Big Ideas', 'World Map', 'Calendar'],
 };
+
+// ---------- The Luxe Store ----------
+// Things you buy with coins. Blocks have their price in BLOCKS; these are the other things.
+export const SHOP_TOOLS = {
+  jetpack: { name: 'Jetpack', price: 40, about: 'Hold Space in the air to blast off with rocket flames!' },
+  trail: { name: 'Rainbow Trail', price: 18, about: 'Run and leave a trail of rainbow sparkles behind you.' },
+  showtime: { name: 'Firework Show', price: 30, about: 'One click launches a whole fireworks show around you.' },
+};
+export const SHOP_ABOUT = {
+  82: 'A sparkling block of pure diamond.', 83: 'Sit like royalty (right-click to sit).',
+  84: 'A mirror ball that fills the room with party light.', 85: 'For the champion of BuildZone!',
+};
+// What's for sale, cheapest first: [item, price].
+export const SHOP_ITEMS = [
+  ...Object.entries(BLOCKS).filter(([, d]) => d.price).map(([id, d]) => [Number(id), d.price]),
+  ...Object.entries(SHOP_TOOLS).map(([id, t]) => [id, t.price]),
+].sort((a, b) => a[1] - b[1]);
+export const isExclusive = v => !!BLOCKS[v & 255]?.price || !!BLOCKS[Math.floor(v / 65536) & 255]?.price;
 
 // Paint colors for the Paint Brush (index 1-15; 0 means "not painted").
 export const PAINT_COLORS = [

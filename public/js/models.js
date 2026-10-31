@@ -129,6 +129,109 @@ export const MODELS = {
     trim: [ball(0.018, 0.455, 0.51, 0.63), ball(0.018, 0.545, 0.51, 0.63), ball(0.02, 0.5, 0.465, 0.66)],
     colors: { body: 0xa8703f, accent: 0xe8c9a0, trim: 0x1d1410, metal: 0 },
   },
+  // ---------- Office ----------
+  desk: {
+    body: [
+      box(1, 0.07, 1, 0.5, 0.965, 0.5),
+      box(0.36, 0.86, 0.86, 0.79, 0.47, 0.5), // drawers
+      box(0.06, 0.93, 0.06, 0.06, 0.465, 0.12), box(0.06, 0.93, 0.06, 0.06, 0.465, 0.88),
+      box(0.62, 0.5, 0.04, 0.32, 0.68, 0.07), // modesty panel at the back
+    ],
+    trim: [0.25, 0.5, 0.75].map(y => box(0.12, 0.03, 0.02, 0.79, y + 0.05, 0.935)),
+    colors: { body: 0x6d4c33, trim: 0xc9ccd1, metal: 0 },
+  },
+  officeChair: {
+    body: [
+      // A five-legged star on the floor.
+      ...[0, 1, 2, 3, 4].map(i => new THREE.BoxGeometry(0.05, 0.04, 0.3).translate(0, 0.03, 0.15).rotateY(i * Math.PI * 0.4).translate(0.5, 0, 0.5)),
+      cyl(0.03, 0.03, 0.34, 0.5, 0.22, 0.5),
+    ],
+    accent: [box(0.56, 0.1, 0.54, 0.5, 0.48, 0.52), box(0.5, 0.5, 0.08, 0.5, 0.82, 0.22)],
+    trim: [box(0.06, 0.04, 0.4, 0.2, 0.62, 0.5), box(0.06, 0.04, 0.4, 0.8, 0.62, 0.5), box(0.04, 0.12, 0.04, 0.2, 0.56, 0.5), box(0.04, 0.12, 0.04, 0.8, 0.56, 0.5)],
+    colors: { body: 0x2b2f36, accent: 0x2f3e5c, trim: 0x1d1f24, metal: 0 },
+  },
+  computer: {
+    body: [box(0.66, 0.44, 0.05, 0.5, 0.42, 0.37), box(0.08, 0.2, 0.06, 0.5, 0.12, 0.34), box(0.32, 0.03, 0.2, 0.5, 0.015, 0.34)],
+    glow: [box(0.6, 0.38, 0.02, 0.5, 0.42, 0.4)],
+    accent: [box(0.5, 0.03, 0.16, 0.5, 0.015, 0.68)],
+    trim: [box(0.07, 0.03, 0.1, 0.83, 0.015, 0.68)],
+    colors: { body: 0x23262b, glow: 0x7fd0ff, accent: 0xe8e8e8, trim: 0x9aa0a6, metal: 0 },
+  },
+  waterCooler: {
+    body: [box(0.42, 0.56, 0.42, 0.5, 0.28, 0.5)],
+    glow: [cyl(0.15, 0.15, 0.36, 0.5, 0.76, 0.5), cyl(0.06, 0.12, 0.06, 0.5, 0.59, 0.5)],
+    trim: [box(0.05, 0.05, 0.05, 0.42, 0.42, 0.72), box(0.05, 0.05, 0.05, 0.58, 0.42, 0.72), box(0.3, 0.02, 0.1, 0.5, 0.3, 0.74)],
+    colors: { body: 0xf2f2f0, glow: 0x9fd8ff, trim: 0x4a90d9, metal: 0 },
+  },
+  // ---------- Fancy things ----------
+  piano: {
+    body: [
+      box(0.92, 0.3, 0.78, 0.5, 0.66, 0.44),
+      new THREE.BoxGeometry(0.88, 0.02, 0.74).rotateX(-0.65).translate(0.5, 0.97, 0.3), // the lid, propped open
+      box(0.02, 0.4, 0.02, 0.15, 1.0, 0.42),
+      ...[[0.1, 0.12], [0.9, 0.12], [0.5, 0.82]].map(([x, z]) => cyl(0.04, 0.03, 0.52, x, 0.26, z)),
+      box(0.9, 0.08, 0.16, 0.5, 0.55, 0.9),
+    ],
+    accent: [box(0.84, 0.04, 0.13, 0.5, 0.61, 0.9)],
+    trim: Array.from({ length: 9 }, (_, i) => box(0.035, 0.03, 0.07, 0.14 + i * 0.09, 0.64, 0.87)),
+    colors: { body: 0x0d0d0f, accent: 0xf7f6f0, trim: 0x0d0d0f, metal: 0.25 },
+  },
+  fishTank: {
+    body: [
+      box(0.9, 0.34, 0.7, 0.5, 0.17, 0.5),
+      ...[[0.06, 0.17], [0.94, 0.17], [0.06, 0.83], [0.94, 0.83]].map(([x, z]) => box(0.03, 0.5, 0.03, x, 0.6, z)),
+      box(0.92, 0.04, 0.72, 0.5, 0.87, 0.5),
+    ],
+    glow: [box(0.86, 0.44, 0.64, 0.5, 0.58, 0.5)],
+    accent: [box(0.03, 0.18, 0.005, 0.25, 0.44, 0.823), box(0.03, 0.24, 0.005, 0.3, 0.47, 0.823), box(0.03, 0.14, 0.005, 0.78, 0.42, 0.823)],
+    trim: [box(0.1, 0.05, 0.005, 0.45, 0.62, 0.824), box(0.04, 0.06, 0.005, 0.39, 0.62, 0.824), box(0.08, 0.04, 0.005, 0.66, 0.52, 0.824), box(0.03, 0.05, 0.005, 0.71, 0.52, 0.824), box(0.07, 0.04, 0.005, 0.58, 0.72, 0.824)],
+    colors: { body: 0x2a2018, glow: 0x3aa0e8, accent: 0x3fae4a, trim: 0xff8a1f, metal: 0 },
+  },
+  statue: {
+    body: [box(0.5, 0.36, 0.5, 0.5, 0.18, 0.5), box(0.56, 0.05, 0.56, 0.5, 0.385, 0.5)],
+    accent: [
+      box(0.18, 0.3, 0.12, 0.5, 0.62, 0.5), ball(0.08, 0.5, 0.86, 0.5),
+      box(0.05, 0.26, 0.05, 0.62, 0.86, 0.5), box(0.05, 0.22, 0.05, 0.38, 0.6, 0.5),
+      box(0.07, 0.22, 0.08, 0.45, 0.33, 0.5).translate(0, 0.14, 0), box(0.07, 0.22, 0.08, 0.55, 0.33, 0.5).translate(0, 0.14, 0),
+      cone(0.05, 0.1, 0.62, 1.03, 0.5, 5),
+    ],
+    colors: { body: 0xefeae0, accent: 0xffc83d, metal: 0, accentMetal: 0.9 },
+  },
+  // ---------- From the Luxe Store ----------
+  throne: {
+    body: [
+      ...[[0.15, 0.15], [0.85, 0.15], [0.15, 0.85], [0.85, 0.85]].map(([x, z]) => box(0.08, 0.4, 0.08, x, 0.2, z)),
+      box(0.78, 0.08, 0.74, 0.5, 0.42, 0.5),
+      box(0.78, 0.95, 0.1, 0.5, 0.9, 0.12),
+      box(0.1, 0.24, 0.62, 0.12, 0.58, 0.5), box(0.1, 0.24, 0.62, 0.88, 0.58, 0.5),
+      ...[0.18, 0.5, 0.82].map(x => ball(0.06, x, 1.4, 0.12)),
+    ],
+    accent: [box(0.64, 0.1, 0.6, 0.5, 0.5, 0.53), box(0.6, 0.7, 0.05, 0.5, 0.88, 0.18)],
+    trim: [ball(0.045, 0.5, 1.15, 0.19)],
+    colors: { body: 0xffc83d, accent: 0xa3122f, trim: 0x37d0ff, metal: 0.85 },
+  },
+  discoBall: {
+    body: [cyl(0.012, 0.012, 0.3, 0.5, 0.85, 0.5), ball(0.22, 0.5, 0.52, 0.5)],
+    glow: [[1, 0], [0, 1], [-1, 0], [0, -1], [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]].map(([x, z], i) => ball(0.035, 0.5 + x * 0.205, 0.52 + ((i % 3) - 1) * 0.08, 0.5 + z * 0.205)),
+    glowColors: [0xff4fd8, 0x4fd2ff, 0xffe04f, 0x7dff6a],
+    colors: { body: 0xd8dde4, glow: 0xffffff, metal: 1 },
+  },
+  trophy: {
+    body: [box(0.32, 0.12, 0.32, 0.5, 0.06, 0.5), box(0.24, 0.06, 0.24, 0.5, 0.15, 0.5)],
+    accent: [
+      cyl(0.03, 0.06, 0.2, 0.5, 0.28, 0.5), cyl(0.17, 0.07, 0.26, 0.5, 0.51, 0.5),
+      new THREE.TorusGeometry(0.07, 0.015, 4, 10).translate(0.32, 0.55, 0.5), new THREE.TorusGeometry(0.07, 0.015, 4, 10).translate(0.68, 0.55, 0.5),
+    ],
+    trim: [ball(0.04, 0.5, 0.42, 0.66)],
+    colors: { body: 0x1d1f24, accent: 0xffc83d, trim: 0xe53935, metal: 0, accentMetal: 0.9 },
+  },
+  register: {
+    body: [box(0.66, 0.24, 0.5, 0.5, 0.12, 0.5), box(0.5, 0.12, 0.3, 0.5, 0.3, 0.42).rotateX(0)],
+    glow: [box(0.3, 0.12, 0.02, 0.5, 0.42, 0.28)],
+    accent: [box(0.06, 0.18, 0.06, 0.5, 0.33, 0.3)],
+    trim: Array.from({ length: 9 }, (_, i) => box(0.06, 0.02, 0.06, 0.4 + (i % 3) * 0.1, 0.37, 0.48 + Math.floor(i / 3) * 0.08)),
+    colors: { body: 0x5b6470, glow: 0x7dff9a, accent: 0x3b414a, trim: 0xf2f2f2, metal: 0 },
+  },
 };
 
 // A couch piece. Side by side, couches join up into one long couch: the arms only go on
@@ -210,7 +313,7 @@ export function modelMaterials(name) {
   const body = new THREE.MeshStandardMaterial({ color: c.body, roughness: soft ? 0.75 : 0.45, metalness: c.metal ?? 0.3 });
   const glow = new THREE.MeshBasicMaterial({ color: c.glow ?? 0xffffff, vertexColors: true, toneMapped: true });
   glow.userData.baseColor = new THREE.Color(c.glow ?? 0xffffff);
-  const accent = new THREE.MeshStandardMaterial({ color: c.accent ?? c.body, roughness: soft ? 0.9 : 0.6, metalness: soft ? 0 : 0.1 });
+  const accent = new THREE.MeshStandardMaterial({ color: c.accent ?? c.body, roughness: c.accentMetal ? 0.3 : soft ? 0.9 : 0.6, metalness: c.accentMetal ?? (soft ? 0 : 0.1) });
   const trim = new THREE.MeshStandardMaterial({ color: c.trim ?? c.accent ?? c.body, roughness: soft ? 0.85 : 0.6, metalness: 0 });
   return [body, glow, accent, trim];
 }

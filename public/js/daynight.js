@@ -15,6 +15,14 @@ const smooth = (e0, e1, x) => {
 function makeSky() {
   const sky = new Sky();
   sky.scale.setScalar(1000);
+  // Looking straight up, rounding can make the view direction a hair longer than 1, and
+  // acos() of that is "not a number": one bad pixel that the glow effect then smears over
+  // the whole screen (it went black). Keep it in range, and keep the sun's disc bright but
+  // well inside what the glow's half-float pictures can hold.
+  sky.material.fragmentShader = sky.material.fragmentShader
+    .replace('acos( max( 0.0, direction.y ) )', 'acos( clamp( direction.y, 0.0, 1.0 ) )')
+    .replace('acos( direction.y )', 'acos( clamp( direction.y, -1.0, 1.0 ) )')
+    .replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( clamp( texColor, 0.0, 2000.0 ), 1.0 );');
   const u = sky.material.uniforms;
   u.turbidity.value = 3;
   u.rayleigh.value = 1.2;
@@ -144,6 +152,9 @@ export class DayNight {
     const nightK = 1 - this.dayK;
     const sunsetK = (1 - smooth(0.05, 0.35, Math.abs(h))) * smooth(-0.15, 0, h);
 
+    // The sky box goes everywhere with you: left in the middle of the world, its far corners
+    // were beyond what the camera draws (black) when you looked up from the edge of town.
+    this.sky.position.copy(camera.position);
     this.sky.material.uniforms.sunPosition.value.copy(this.sunDir);
     this.sky.material.uniforms.time.value += dt;
 

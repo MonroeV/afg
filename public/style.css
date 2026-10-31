@@ -500,6 +500,30 @@ button.secondary {
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+/* Your coins, and the Luxe Store. */
+#coins {
+  position: absolute; top: 96px; left: 14px; padding: 5px 12px; border-radius: 12px;
+  background: rgba(0, 0, 0, 0.55); font-size: 18px; font-weight: 800; color: #ffd54f; text-shadow: 0 1px 2px #000;
+  transition: transform 0.15s;
+}
+#coins.bump { transform: scale(1.25); }
+body.touch #coins { top: 62px; left: 8px; font-size: 14px; }
+.shop-panel { width: min(820px, 100%); max-height: 100%; overflow-y: auto; }
+.shop-panel h2 { color: #ffd54f; text-shadow: 0 2px 6px rgba(255, 180, 0, 0.5); }
+.shop-coins { font-size: 22px; font-weight: 900; color: #ffd54f; margin-bottom: 12px; }
+.shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.shop-card {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px;
+  border-radius: 12px; background: linear-gradient(160deg, rgba(255, 213, 79, 0.16), rgba(255, 255, 255, 0.04));
+  border: 2px solid rgba(255, 213, 79, 0.35); text-align: center; font-size: 12px;
+}
+.shop-card canvas { width: 64px; height: 64px; }
+.shop-card b { font-size: 15px; color: #fff; }
+.shop-about { color: var(--muted); min-height: 30px; }
+.shop-card button { margin-top: 6px; padding: 8px; font-size: 15px; letter-spacing: 1px; }
+.shop-card.owned { border-color: #7dff8a; }
+#shop-done { max-width: 260px; }
+
 /* The race clock. */
 #race {
   position: absolute; top: 14px; left: 50%; transform: translateX(-50%);

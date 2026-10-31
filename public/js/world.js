@@ -30,6 +30,10 @@ const PICTURE_BOX = [-0.45, 0.16, -0.5, 0.45, 0.84, -0.44];
 
 export const RAILING = 54;
 
+// The railings on a railing or floor block. (A speed pad's meta is the way it points, so it
+// has none: it used to grow railings!)
+const flatRails = v => (BLOCKS[blockId(v)]?.facing ? 0 : blockMeta(v));
+
 // A railing along each edge in `mask`: a post at each end, a handrail on top, a rail
 // near the bottom and thin bars in between. Built for the -z edge, then turned.
 const railGeometries = {};
@@ -247,7 +251,7 @@ export function createBlockMaterials(textures) {
     const shape = def.shape || 'cube';
     if (shape === 'picture') {
       // One material set per picture: the picture on the front, the frame color elsewhere.
-      const frame = new THREE.MeshStandardMaterial({ color: def.art === 'poster' ? 0xf4f4f4 : 0x9a7330, roughness: 0.5, metalness: def.art === 'poster' ? 0 : 0.4 });
+      const frame = new THREE.MeshStandardMaterial({ color: def.art === 'poster' ? 0xf4f4f4 : def.art === 'office' ? 0xc0c4c8 : 0x9a7330, roughness: 0.5, metalness: def.art === 'painting' ? 0.4 : 0.1 });
       for (let i = 0; i < 4; i++) {
         const tex = new THREE.CanvasTexture(pictureCanvas(def.art, i));
         tex.colorSpace = THREE.SRGBColorSpace;
@@ -381,7 +385,7 @@ export class World {
       const b = def.box && (def.facing ? turnCellBox(def.box, blockMeta(v) & 3) : def.box);
       if (b) out.push([x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
     } else if (shape === 'rail' || shape === 'flat') {
-      for (const b of railBoxes(blockMeta(v))) out.push([x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
+      for (const b of railBoxes(flatRails(v))) out.push([x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
     }
   }
 
@@ -396,7 +400,7 @@ export class World {
       if (shape === 'cube') add([0, 0, 0, 1, 1, 1], part);
       else if (shape === 'flat') {
         add([0, 0, 0, 1, 0.06, 1], part);
-        for (const b of railBoxes(blockMeta(u), 1)) add(b, part);
+        for (const b of railBoxes(flatRails(u), 1)) add(b, part);
       } else if (shape === 'rail') for (const b of railBoxes(blockMeta(u), 1)) add(b, part);
       else if (shape === 'plant') add([0.15, 0, 0.15, 0.85, 0.85, 0.85], part);
       else if (shape === 'ladder') add(turnBox([-0.42, 0, -0.5, 0.42, 1, -0.38], blockMeta(u)), part);
@@ -732,7 +736,7 @@ export class World {
   }
 
   addPart(v, k, x, y, z) {
-    const rails = shapeOf(v) === 'flat' ? blockMeta(v) : 0;
+    const rails = shapeOf(v) === 'flat' ? flatRails(v) : 0;
     if (!rails) return this.addOne(v, k, x, y, z);
     // A flat block with railings on it: the railings are a second instance, and they get the paint.
     this.addOne(v & 0x0fff, k, x, y, z);

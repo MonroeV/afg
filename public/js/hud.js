@@ -1,5 +1,5 @@
 // The on-screen parts of the game: hotbar, item menu, chat and info panels.
-import { ALL_ITEMS, HAMMER, BRUSH, SCRAPER, TABS, SEARCH_WORDS, itemName } from './items.js';
+import { ALL_ITEMS, HAMMER, BRUSH, SCRAPER, TABS, SEARCH_WORDS, itemName, fromStore } from './items.js';
 import { BLOCKS, PAINT_COLORS, PAINT_NAMES } from './shared/blocks.js';
 import { RECIPES } from './structures.js';
 
@@ -60,6 +60,7 @@ export class Hud {
     this.selected = 0;
     this.itemNameTimer = 0;
     this.chatOpen = false;
+    this.owned = new Set(); // things bought at the Luxe Store
     this.buildHotbar();
     this.buildInventory();
   }
@@ -178,10 +179,20 @@ export class Hud {
   }
 
   // Everything whose name (or a word about it) matches what's typed in the search box.
+  // Can you use this? (Things from the Luxe Store, once you've bought them.)
+  usable(item) {
+    return !fromStore(item) || this.owned.has(item);
+  }
+
+  setOwned(list) {
+    this.owned = new Set(list);
+    if (!$('inventory').classList.contains('hidden')) this.renderGrid();
+  }
+
   found() {
     const q = $('inv-search').value.trim().toLowerCase();
     if (!q) return [];
-    return ALL_ITEMS.filter(i => !(typeof i === 'number' && BLOCKS[i].hidden))
+    return ALL_ITEMS.filter(i => !(typeof i === 'number' && BLOCKS[i].hidden) && this.usable(i))
       .filter(i => `${itemName(i)} ${SEARCH_WORDS[i] || ''}`.toLowerCase().includes(q));
   }
 
@@ -196,7 +207,7 @@ export class Hud {
       this.items(grid, list);
       return;
     }
-    const recent = (this.settings.recent || []).filter(i => ALL_ITEMS.includes(i)).slice(0, 8);
+    const recent = (this.settings.recent || []).filter(i => ALL_ITEMS.includes(i) && this.usable(i)).slice(0, 8);
     if (this.tab === 'paint') {
       this.buildPaints(grid);
       this.items(grid, [BRUSH, SCRAPER]);
@@ -211,8 +222,14 @@ export class Hud {
       this.items(grid, recent, 'recent');
     }
     const tab = TABS.find(t => t.id === this.tab);
+    if (tab.id === 'fun') {
+      // Your things from the Luxe Store, first.
+      const mine = tab.items.filter(i => fromStore(i) && this.owned.has(i));
+      this.section(grid, mine.length ? '⭐ From the Luxe Store' : '⭐ Collect gold coins around town and buy amazing things at the Luxe Store!');
+      this.items(grid, mine, 'store');
+    }
     this.section(grid, `${tab.icon} ${tab.name}`);
-    this.items(grid, tab.items);
+    this.items(grid, tab.items.filter(i => !fromStore(i)));
   }
 
   section(grid, text) {

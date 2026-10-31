@@ -37,6 +37,8 @@ export class Player {
     this.stick = null; // { x, y } from a touch joystick, if there is one
     this.crouching = false;
     this.balloon = false; // holding a balloon: you float down gently
+    this.jetpack = false; // holding the jetpack: Space blasts you up
+    this.jetting = false;
     this.boost = new THREE.Vector3(); // a speed pad's push
     this.boostT = 0;
   }
@@ -91,8 +93,9 @@ export class Player {
       this.vel.lerp(target, 1 - Math.exp(-10 * dt));
     } else {
       const speed = this.crouching ? CROUCH_SPEED : this.sprinting ? SPRINT_SPEED : WALK_SPEED;
-      // Less control in the air, and almost none while flying out of a cannon.
-      const accel = this.onGround ? 14 : this.launched ? 0.4 : 3;
+      // Less control in the air, and almost none while flying out of a cannon (a jetpack
+      // steers better).
+      const accel = this.onGround ? 14 : this.launched ? 0.4 : this.jetting ? 6 : 3;
       const k = 1 - Math.exp(-accel * dt);
       // A speed pad's push fades away over a moment.
       const push = this.boostT > 0 ? this.boostT / BOOST_TIME : 0;
@@ -102,6 +105,12 @@ export class Player {
         this.vel.y = JUMP_SPEED;
         this.onGround = false;
       }
+    }
+    // The jetpack: hold Space to blast upward (harder than gravity pulls you down).
+    this.jetting = this.jetpack && !this.flying && !this.climbing && keys.has('Space') && this.pos.y < 60;
+    if (this.jetting) {
+      this.vel.y = Math.min(this.vel.y + 40 * dt, 7);
+      this.launched = false;
     }
     // Gravity is added half before and half after moving, so a jump is just as high at
     // any frame rate (on a slow phone too).

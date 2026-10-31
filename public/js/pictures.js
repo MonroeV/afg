@@ -256,10 +256,95 @@ const POSTERS = [
   },
 ];
 
+// Whiteboards for the offices.
+function whiteboard(ctx) {
+  ctx.fillStyle = '#fbfbf8';
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#b8bdc4';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(3, 3, W - 6, H - 6);
+  ctx.fillStyle = '#9aa0a8';
+  ctx.fillRect(20, H - 8, 88, 4); // the marker tray
+}
+const OFFICE = [
+  // Sales going up and up.
+  ctx => {
+    whiteboard(ctx);
+    const bars = [18, 26, 22, 38, 46, 58];
+    bars.forEach((h, i) => {
+      ctx.fillStyle = ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa'][i];
+      ctx.fillRect(22 + i * 15, 78 - h, 11, h);
+    });
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(16, 14); ctx.lineTo(16, 79); ctx.lineTo(116, 79);
+    ctx.stroke();
+    ctx.strokeStyle = '#e53935';
+    ctx.beginPath();
+    ctx.moveTo(26, 56); ctx.lineTo(56, 48); ctx.lineTo(86, 30); ctx.lineTo(108, 16);
+    ctx.stroke();
+    poly(ctx, '#e53935', 108, 12, 112, 20, 103, 18);
+  },
+  // A big idea (a light bulb) and some scribbles.
+  ctx => {
+    whiteboard(ctx);
+    circle(ctx, 46, 38, 16, '#fff59d');
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(46, 38, 16, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = '#90a4ae';
+    ctx.fillRect(39, 54, 14, 9);
+    for (let i = 0; i < 6; i++) {
+      const a = i * 1.05 - 2.6;
+      ctx.beginPath();
+      ctx.moveTo(46 + Math.cos(a) * 21, 38 + Math.sin(a) * 21);
+      ctx.lineTo(46 + Math.cos(a) * 28, 38 + Math.sin(a) * 28);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#1e88e5';
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(76, 22 + i * 14);
+      for (let x = 76; x < 114; x += 6) ctx.lineTo(x, 22 + i * 14 + (x % 12 ? -2 : 2));
+      ctx.stroke();
+    }
+  },
+  // A map of the world.
+  ctx => {
+    whiteboard(ctx);
+    ctx.fillStyle = '#7cc4ef';
+    ctx.fillRect(10, 10, W - 20, H - 26);
+    ctx.fillStyle = '#5ba65b';
+    for (const [x, y, rx, ry] of [[34, 34, 16, 12], [40, 58, 8, 12], [70, 30, 14, 10], [72, 52, 9, 10], [98, 36, 14, 12], [104, 62, 8, 5]]) {
+      ctx.beginPath();
+      ctx.ellipse(x, y, rx, ry, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    circle(ctx, 72, 31, 3, '#e53935');
+  },
+  // This month's calendar, with a birthday circled.
+  ctx => {
+    whiteboard(ctx);
+    ctx.fillStyle = '#e53935';
+    ctx.fillRect(14, 12, W - 28, 12);
+    ctx.strokeStyle = '#9aa0a8';
+    ctx.lineWidth = 1;
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 7; c++) ctx.strokeRect(14 + c * 14.3, 26 + r * 11, 14.3, 11);
+    ctx.strokeStyle = '#e53935';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(14 + 4 * 14.3 + 7, 26 + 2 * 11 + 5.5, 7, 0, Math.PI * 2);
+    ctx.stroke();
+  },
+];
+
 const cache = {};
 
 // The canvas for picture number `index` (0-3) of a kind ('painting' or 'poster').
 export function pictureCanvas(kind, index) {
   const key = `${kind}:${index}`;
-  return (cache[key] ??= make((kind === 'poster' ? POSTERS : PAINTINGS)[index % 4]));
+  return (cache[key] ??= make((kind === 'poster' ? POSTERS : kind === 'office' ? OFFICE : PAINTINGS)[index % 4]));
 }

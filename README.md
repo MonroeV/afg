@@ -82,7 +82,7 @@ customize your character, drive cars, build anything and play with friends.
   shine in their new color). The Paint Scraper takes the paint off one side
 - **Dancing** and **waving**
 - **Fireworks** in 8 styles (including hearts and smiley faces) that light up the whole night sky
-  and everything around them
+  and everything around them in their own color (a red one turns the whole town red)
 - **Fancy lighting** (Graphics: High or Medium): shiny things like cars, glass, water, metal, gold
   and mirrors reflect the world around them, lamps and fireworks glow softly (no harsh glare),
   and shadows are soft
@@ -95,11 +95,32 @@ customize your character, drive cars, build anything and play with friends.
   porch lanterns, ceiling lights and table lamps in houses, garden lights and tiki torches in parks.
   Any lamp with a roof over it counts as indoors, so it lights up the room day and night. Windows
   are clear enough to see in and out, with just a little reflection
+- **Gold coins and the Luxe Store**: gold coins lie about all over town (walk, or drive, into
+  them to collect them; the big orange ones are worth 2 and the shiny blue ones 5). You also get
+  10 coins the first time you play each day and 3 for finishing a race. Spend them at the **Luxe
+  Store**, a fancy shop beside one of the roads out of town: talk to Penny at the counter (or
+  right-click the cash register) to see what's for sale. Things you can only get there: the
+  **Jetpack** (hold Space to blast off), the **Rainbow Trail**, the **Firework Show** (one click,
+  a whole show), the **Diamond Block**, the **Golden Throne**, the **Disco Ball** and the
+  **Golden Trophy**. What you've bought shows up at the top of the 🎉 Fun tab. Your coins belong to
+  your name, like your land
+- **People in town**: Penny runs the Luxe Store, Rex sits at the tower's reception desk and Mayor
+  Maple strolls around the town square. They say hello when you come near (in a speech bubble),
+  walk over to pet your pet, love your cool stuff ("A JETPACK?!"), cheer at fireworks, gasp at
+  exploding cars, dance when you dance, and complain when you hit them with a water balloon.
+  Right-click them for tips
+- **Furnished towns**: the houses have couches, chairs at the tables, pictures on the walls,
+  bookshelves, flower pots and teddy bears; the skyscrapers have offices on every floor (desks,
+  computers, office chairs, filing cabinets, water coolers, whiteboards), a reception desk in the
+  lobby, and a penthouse at the top with a grand piano (right-click to play a tune), a fish tank and
+  gold statues
 - **Furniture**: chairs, couches, tables, beds, bookshelves, flower pots, teddy bears, paintings
   and posters. Furniture turns to face you when you put it down. Right-click a chair or couch to
-  sit on it (move or jump to get up), and everyone sees you sitting. Put couches side by side and
+  sit on it (you turn round and lower yourself onto it; move or jump to get up), and everyone
+  sees you sitting. Put couches side by side and
   they join into one long couch, with arms only on the ends. A bed is two blocks long: right-click
-  to sleep in it (it's your home spot, like the Build Book bed), and it's a little bit bouncy.
+  to climb in (you sit on the edge and lie back, and the camera floats up to look down at you),
+  move to get up again (you sit up and step out beside the bed) (it's your home spot, like the Build Book bed), and it's a little bit bouncy.
   Hang a painting or poster on any wall (sunsets, mountains, flowers, a starry night, a cat, a
   puppy, a rocket and a dinosaur) and right-click it to change the picture. Tables are just the
   right height for a lamp or a teddy bear, and you can hug the teddy bear (right-click)
@@ -124,7 +145,7 @@ customize your character, drive cars, build anything and play with friends.
   of a build and pastes it somewhere else (scroll to turn it around). Up to 4096 blocks at a time,
   and Z undoes your last Fill or Paste. Plus a Camera (or press P) that saves a photo of what you
   see to your Downloads, and H to hide the HUD for clean photos and videos
-- **72 kinds of blocks** with realistic textures: brick, wood, glass, tinted glass, marble, roads,
+- **86 kinds of blocks** with realistic textures: brick, wood, glass, tinted glass, marble, roads,
   parking lines, flowers, rainbow, gold, mirrors, lamps, ladders, railings, bookshelves…
 - **Sounds that don't get old**: every sound is a little different each time, every vehicle has its
   own engine and horn note, and a steady engine or helicopter hum slowly settles into the
@@ -287,7 +308,9 @@ When a new version of the game needs to upgrade an older save, the server first 
 helicopter (only where there's empty ground), lamp heads on the town's street lamps, road lines
 turned to run along their roads, the skyscrapers and parking lots, and the lake with its boats
 (built only on empty land that nobody has claimed: the landmarks beside the roads out of town or
-along the ring road, the lake wherever there's room, smaller if it has to be). If `world.json` can't be read, or was saved by a newer version of the game,
+along the ring road, the lake wherever there's room, smaller if it has to be), the Luxe Store
+(on empty land), and furniture: only in houses and towers that are exactly as the town was first
+built (nobody has changed or claimed them), and only in their empty spots. If `world.json` can't be read, or was saved by a newer version of the game,
 the server stops with a message instead of touching it.
 
 ## The Character Gallery
@@ -324,7 +347,9 @@ public/
     lighting.js        Live reflections and the glow effect
     lightpools.js      Soft pools of light on the ground under every lamp
     models.js          3D models for the lamps and furniture
-    pictures.js        The paintings and posters (drawn in code)
+    pictures.js        The paintings, posters and whiteboards (drawn in code)
+    petmove.js         How pets find their way around and move (jumps, ladders, no walls)
+    shop.js            The Luxe Store's window
     tv.js              The TV shows
     daynight.js        Sky, sun, moon, stars and night lighting
     items.js           Hotbar items, icons, the item in your hand
@@ -334,10 +359,11 @@ public/
       blocks.js        The list of blocks
       avatar.js        Character options
       characters.js    The saved character list (25 spots)
-      game.js          The game rules: blocks, players, vehicles, land, growing trees, the clock
+      game.js          The game rules: blocks, players, vehicles, land, growing trees, the clock, coins
+      npcs.js          The town's people (Penny, Rex and Mayor Maple), run by the server
       vehicles.js      Vehicle sizes, and finding a free spot to respawn them
       claims.js        Land claim rules
-      worldgen.js      Builds the towns
+      worldgen.js      Builds the towns (and furnishes them, and the Luxe Store)
 ```
 
 ### Ideas for what to add next

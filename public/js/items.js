@@ -1,6 +1,6 @@
 // Hotbar items: every block, the hammer, cars and fireworks.
 import * as THREE from 'three';
-import { BLOCKS, BLOCK_IDS, PAINT_COLORS } from './shared/blocks.js';
+import { BLOCKS, BLOCK_IDS, PAINT_COLORS, SHOP_TOOLS } from './shared/blocks.js';
 import { blockMaterial, railGeometry } from './world.js';
 import { modelGeometry, modelMaterials } from './models.js';
 import { pictureCanvas } from './pictures.js';
@@ -18,13 +18,19 @@ export const BALLOON = 'balloon';
 export const FILL = 'fill';
 export const COPY = 'copy';
 export const CAMERA = 'camera';
-export const TOOLS = [HAMMER, BRUSH, SCRAPER, BALL, FIREWORKS, CLAIM, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA];
+// From the Luxe Store:
+export const JETPACK = 'jetpack';
+export const TRAIL = 'trail';
+export const SHOWTIME = 'showtime';
+export const TOOLS = [HAMMER, BRUSH, SCRAPER, BALL, FIREWORKS, CLAIM, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME];
+// Things you have to buy at the Luxe Store before you can use them.
+export const fromStore = item => (typeof item === 'number' ? !!BLOCKS[item]?.price : !!SHOP_TOOLS[item]);
 export const ALL_ITEMS = [...TOOLS, ...BLOCK_IDS];
 
 // The tabs of the item menu. Blocks not listed anywhere go under Blocks (or Lights).
-const HOME = [60, 61, 62, 64, 63, 65, 66, 67, 68, 21, 53, 54, 25, 35, 20];
+const HOME = [60, 61, 62, 64, 63, 65, 66, 67, 68, 21, 53, 54, 25, 35, 20, 73, 74, 75, 76, 77, 78, 79, 80, 81, 86];
 const TOWN = [22, 23, 56, 24, 58, 27, 36, 1, 7, 8];
-const FUN = [BALL, FIREWORKS, WATER_BALLOON, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28];
+const FUN = [JETPACK, TRAIL, SHOWTIME, 82, 83, 84, 85, BALL, FIREWORKS, WATER_BALLOON, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28];
 const listed = new Set([...HOME, ...TOWN, ...FUN]);
 const visible = i => typeof i !== 'number' || !BLOCKS[i].hidden;
 export const TABS = [
@@ -32,7 +38,7 @@ export const TABS = [
   { id: 'fun', icon: '🎉', name: 'Fun', items: FUN },
   { id: 'blocks', icon: '🧱', name: 'Blocks', items: BLOCK_IDS.filter(i => !listed.has(i) && !BLOCKS[i].light && !BLOCKS[i].shape && visible(i)) },
   { id: 'home', icon: '🛋️', name: 'Home', items: HOME },
-  { id: 'lights', icon: '💡', name: 'Lights', items: BLOCK_IDS.filter(i => BLOCKS[i].light) },
+  { id: 'lights', icon: '💡', name: 'Lights', items: BLOCK_IDS.filter(i => BLOCKS[i].light && !BLOCKS[i].price) },
   { id: 'town', icon: '🌳', name: 'Town', items: TOWN },
   { id: 'paint', icon: '🎨', name: 'Paint' },
   { id: 'book', icon: '📖', name: 'Build Book' },
@@ -45,7 +51,10 @@ export const SEARCH_WORDS = {
   [WATER_BALLOON]: 'throw splash water fight', [BUBBLES]: 'bubble blow', [BALLOON]: 'float fly slow fall', [FILL]: 'fill wall floor big box builder',
   [COPY]: 'copy paste clone duplicate builder', [CAMERA]: 'photo picture screenshot', [CLAIM]: 'land claim home', [BALL]: 'pet dog fetch throw',
   61: 'sofa', 60: 'seat sit', 62: 'desk', 64: 'sleep', 65: 'picture art wall', 66: 'picture art wall cat dog rocket dinosaur', 67: 'plant flower',
-  68: 'toy bear hug', 69: 'piano song note sound', 70: 'boost fast arrow run', 71: 'race timer go', 72: 'race timer end', 19: 'trampoline jump',
+  68: 'toy bear hug', 69: 'piano song note sound', 73: 'office table', 74: 'office seat sit', 75: 'pc screen office', 76: 'office drawers',
+  77: 'office water drink', 78: 'office board chart', 79: 'music play keys', 80: 'aquarium fish', 81: 'gold', 82: 'gem shiny store',
+  83: 'gold king queen chair store', 84: 'party light store', 85: 'gold cup winner store', 86: 'shop store buy',
+  [JETPACK]: 'fly rocket store', [TRAIL]: 'rainbow sparkle store', [SHOWTIME]: 'fireworks show store', 70: 'boost fast arrow run', 71: 'race timer go', 72: 'race timer end', 19: 'trampoline jump',
   36: 'pool lake', 48: 'torch', 45: 'torch', 21: 'garage', 54: 'fence rail',
 };
 // The hammer always lives in slot 1.
@@ -66,6 +75,7 @@ export function itemName(item) {
   if (item === FILL) return 'Fill Wand';
   if (item === COPY) return 'Copy Wand';
   if (item === CAMERA) return 'Camera';
+  if (SHOP_TOOLS[item]) return SHOP_TOOLS[item].name;
   return BLOCKS[item].name;
 }
 
@@ -253,6 +263,68 @@ export function makeIcon(item, textures, paint = 1) {
     ctx.fill();
     ctx.fillStyle = '#ffeb3b';
     ctx.fillRect(46, 22, 7, 4);
+    return canvas;
+  }
+  if (item === JETPACK) {
+    for (const x of [18, 36]) {
+      const g = ctx.createLinearGradient(x, 0, x + 12, 0);
+      g.addColorStop(0, '#9aa3ad');
+      g.addColorStop(0.5, '#eef1f4');
+      g.addColorStop(1, '#7d8690');
+      ctx.fillStyle = g;
+      roundRect(ctx, x, 8, 12, 34, 5);
+      ctx.fillStyle = '#e53935';
+      ctx.fillRect(x, 14, 12, 4);
+      ctx.fillStyle = '#ffb300';
+      ctx.beginPath();
+      ctx.moveTo(x + 1, 42); ctx.lineTo(x + 11, 42); ctx.lineTo(x + 6, 60); ctx.fill();
+      ctx.fillStyle = '#fff3a0';
+      ctx.beginPath();
+      ctx.moveTo(x + 3, 42); ctx.lineTo(x + 9, 42); ctx.lineTo(x + 6, 52); ctx.fill();
+    }
+    ctx.fillStyle = '#546e7a';
+    ctx.fillRect(28, 16, 10, 18);
+    return canvas;
+  }
+  if (item === TRAIL) {
+    const colors = ['#ff4d4d', '#ffb300', '#fdd835', '#66bb6a', '#29b6f6', '#7e57c2'];
+    colors.forEach((c, i) => {
+      ctx.strokeStyle = c;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(32, 44, 26 - i * 4, Math.PI, Math.PI * 1.9);
+      ctx.stroke();
+    });
+    ctx.fillStyle = '#fff';
+    for (const [x, y] of [[50, 12], [12, 20], [56, 30]]) {
+      ctx.beginPath();
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2, r = k % 2 ? 2 : 6;
+        ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+      }
+      ctx.fill();
+    }
+    return canvas;
+  }
+  if (item === SHOWTIME) {
+    for (const [x, c, rot] of [[16, '#e53935', -0.3], [32, '#1e88e5', 0], [48, '#43a047', 0.3]]) {
+      ctx.save();
+      ctx.translate(x, 40);
+      ctx.rotate(rot);
+      ctx.fillStyle = c;
+      ctx.fillRect(-5, -14, 10, 22);
+      ctx.fillStyle = '#fdd835';
+      ctx.beginPath();
+      ctx.moveTo(-6, -14); ctx.lineTo(6, -14); ctx.lineTo(0, -24); ctx.fill();
+      ctx.restore();
+    }
+    for (const [x, y, c] of [[10, 10, '#ff7af0'], [32, 6, '#fdd835'], [54, 12, '#4dd2ff']]) {
+      ctx.fillStyle = c;
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        ctx.fillRect(x + Math.cos(a) * 5 - 1, y + Math.sin(a) * 5 - 1, 3, 3);
+      }
+    }
     return canvas;
   }
   if (item === CLAIM) {
@@ -465,6 +537,36 @@ export class ViewModel {
       lens.position.z = -0.06;
       obj.add(lens);
       obj.rotation.set(0.1, 0.2, 0);
+    } else if (item === JETPACK) {
+      obj = new THREE.Group();
+      const steel = new THREE.MeshStandardMaterial({ color: 0xc9d0d8, metalness: 0.8, roughness: 0.3 });
+      for (const x of [-0.06, 0.06]) {
+        const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.26, 12), steel);
+        tank.position.x = x;
+        obj.add(tank);
+      }
+      const band = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.04, 0.1), new THREE.MeshStandardMaterial({ color: 0xe53935 }));
+      band.position.y = 0.08;
+      obj.add(band);
+      obj.rotation.set(0.3, 0.6, 0);
+    } else if (item === TRAIL || item === SHOWTIME) {
+      obj = new THREE.Group();
+      if (item === TRAIL) {
+        obj.add(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.016, 0.36, 6), new THREE.MeshStandardMaterial({ color: 0xffffff })));
+        ['#ff4d4d', '#fdd835', '#29b6f6', '#7e57c2'].forEach((c, i) => {
+          const b = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), new THREE.MeshBasicMaterial({ color: c }));
+          b.position.set(Math.cos(i * 1.6) * 0.04, 0.21 + i * 0.012, Math.sin(i * 1.6) * 0.04);
+          obj.add(b);
+        });
+      } else {
+        [0xe53935, 0x1e88e5, 0x43a047].forEach((c, i) => {
+          const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.24, 10), new THREE.MeshStandardMaterial({ color: c }));
+          tube.position.set((i - 1) * 0.075, 0, 0);
+          tube.rotation.z = (i - 1) * -0.2;
+          obj.add(tube);
+        });
+      }
+      obj.rotation.set(0.3, 0.4, -0.25);
     } else if (item === CLAIM) {
       obj = new THREE.Group();
       obj.add(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.55, 8), new THREE.MeshStandardMaterial({ color: 0x8d6e63 })));

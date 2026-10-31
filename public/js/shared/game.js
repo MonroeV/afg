@@ -1,13 +1,17 @@
 // The game "room": the world, players, vehicles, land claims, growing trees and the clock.
 // The Node server runs one of these for everybody. When there is no server,
 // the browser runs its own copy so single player works exactly the same way.
-import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, DOOR_OPEN, DAY_LENGTH, WORLD, isNightTime } from './blocks.js';
+import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, isExclusive, DOOR_OPEN, DAY_LENGTH, WORLD, isNightTime, SHOP_ITEMS, BLOCKS, SHOP_TOOLS } from './blocks.js';
 import { sanitizeLook, cleanName } from './avatar.js';
-import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines } from './worldgen.js';
+import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines, buildStore, furnishHouses, furnishTowers } from './worldgen.js';
+import { NpcCrew } from './npcs.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot } from './vehicles.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS } from './claims.js';
 
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
+const COIN_COUNT = 26; // gold coins lying around the world at once
+const DAILY_BONUS = 10;
+const RACE_PRIZE = 3;
 const TICK_RATE = 15;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LOG = 7, LEAVES = 8, GRASS = 1, DIRT = 2, RACE_FINISH = 72;
@@ -32,6 +36,12 @@ export class GameRoom {
     this.names = {}; // lowercase name -> last time someone played with it
     this.saplings = []; // logs growing into trees
     this.races = {}; // finish line "x,y,z" -> best times [{ name, key, time }]
+    this.places = null; // where the store, the tower lobby and the town square are (for the NPCs)
+    this.wallets = {}; // name key -> { coins, owned: [items], day }
+    this.coins = new Map(); // id -> [x, y, z, value]: gold coins to pick up
+    this.coinTimers = []; // when to put new coins out
+    this.nextCoin = 1;
+    this.npcs = new NpcCrew(this);
     this.nextId = 1;
     this.nextVehicleId = 1;
     this.nextHomeId = 1;
@@ -46,10 +56,20 @@ export class GameRoom {
   // ---------- World data ----------
 
   generate() {
-    const { blocks, cars } = generateWorld();
+    const { blocks, cars, places, claims } = generateWorld();
     this.world.clear();
     for (const [x, y, z, v] of blocks) this.world.set(blockKey(x, y, z), v);
     this.setHomes(cars);
+    this.places = places;
+    this.claims = claims.slice();
+    this.populate();
+  }
+
+  // People at work, and coins lying about.
+  populate() {
+    this.npcs.setup(this.places);
+    this.coins.clear();
+    for (let i = 0; i < COIN_COUNT; i++) this.dropCoin();
   }
 
   setHomes(list) {
@@ -109,6 +129,8 @@ export class GameRoom {
       this.upgradeLamps();
       this.upgradeTo5();
       this.upgradeTo6();
+      this.upgradeTo7();
+      this.populate();
       return true;
     }
     this.vehicles.clear();
@@ -125,11 +147,40 @@ export class GameRoom {
     for (const [k, list] of Object.entries(data.races && typeof data.races === 'object' ? data.races : {})) {
       if (Array.isArray(list)) this.races[k] = list.filter(r => r && typeof r.name === 'string' && Number.isFinite(r.time)).slice(0, 5);
     }
+    this.wallets = {};
+    for (const [k, w] of Object.entries(data.wallets && typeof data.wallets === 'object' ? data.wallets : {})) {
+      if (w && Number.isFinite(w.coins)) this.wallets[k] = { coins: Math.max(0, Math.floor(w.coins)), owned: Array.isArray(w.owned) ? w.owned.filter(i => SHOP_ITEMS.some(([s]) => s === i)) : [], day: w.day || '' };
+    }
+    this.places = data.places && typeof data.places === 'object' ? data.places : null;
     this.expireClaims();
     if (data.version < 4) this.upgradeLamps();
     if (data.version < 5) this.upgradeTo5();
     if (data.version < 6) this.upgradeTo6();
+    if (data.version < 7) this.upgradeTo7();
+    this.populate();
     return true;
+  }
+
+  // Worlds saved before version 7: the Luxe Store (on empty land), and furniture in the
+  // houses and towers nobody has changed (only in empty spots: nothing anyone built is touched).
+  upgradeTo7() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const each = fn => {
+      for (const [k, v] of [...this.world]) {
+        const [x, y, z] = k.split(',').map(Number);
+        fn(x, y, z, v);
+      }
+    };
+    const canUse = this.freeLand();
+    const store = buildStore({ get, set, canUse });
+    if (store) this.claims.push(store.claim);
+    furnishHouses({ each, get, set, canUse });
+    const towers = furnishTowers({ each, get, set, canUse });
+    this.places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers.find(t => t.lobby)?.lobby || null };
+    this.onDirty();
   }
 
   // Land a new landmark may be built on: nobody has claimed it, and no vehicle is parked
@@ -176,6 +227,8 @@ export class GameRoom {
       paints: [...this.paints],
       // Best race times, for finish lines that are still there.
       races: Object.fromEntries(Object.entries(this.races).filter(([k]) => this.isFinish(k))),
+      places: this.places,
+      wallets: this.wallets,
     };
   }
 
@@ -251,6 +304,46 @@ export class GameRoom {
     this.names[nameKey(name)] = Date.now();
   }
 
+  // ---------- Coins and the store ----------
+
+  wallet(client) {
+    return (this.wallets[nameKey(client.name)] ??= { coins: 0, owned: [], day: '' });
+  }
+
+  sendWallet(client) {
+    const w = this.wallet(client);
+    client.send({ t: 'wallet', coins: w.coins, owned: w.owned });
+  }
+
+  owns(client, v) {
+    const owned = this.wallet(client).owned;
+    return [itemOf(v) & 255, floorOf(v) & 255].every(id => !BLOCKS[id]?.price || owned.includes(id));
+  }
+
+  pay(client, amount) {
+    this.wallet(client).coins += amount;
+    this.sendWallet(client);
+    this.onDirty();
+  }
+
+  // A gold coin somewhere out of doors: on a road, a path or the grass, with sky above.
+  dropCoin() {
+    for (let tries = 0; tries < 60; tries++) {
+      const x = Math.floor(Math.random() * 220) - 110, z = Math.floor(Math.random() * 220) - 110;
+      const here = this.get(x, 0, z);
+      if (here && shapeOf(here) !== 'flat') continue;
+      if (blockId(itemOf(here)) === 36) continue; // not in the water
+      let open = true;
+      for (let y = 1; y < 12 && open; y++) if (this.get(x, y, z)) open = false;
+      if (!open || [...this.coins.values()].some(c => Math.hypot(c[0] - x, c[2] - z) < 8)) continue;
+      const r = Math.random(), value = r < 0.08 ? 5 : r < 0.3 ? 2 : 1;
+      const id = this.nextCoin++;
+      this.coins.set(id, [x + 0.5, 0, z + 0.5, value]);
+      this.broadcast({ t: 'coin_new', id, x: x + 0.5, y: 0, z: z + 0.5, value });
+      return;
+    }
+  }
+
   // ---------- Messages ----------
 
   handle(client, msg) {
@@ -280,7 +373,19 @@ export class GameRoom {
       cars: [...this.vehicles.values()].map(publicVehicle),
       claims: this.claims,
       players: [...this.clients.values()].filter(o => o.joined && o !== client).map(publicPlayer),
+      npcs: this.npcs.info(),
+      coins: [...this.coins].map(([id, c]) => [id, ...c]),
     });
+    // Coins: your wallet, and a little present the first time you play each day.
+    const wallet = this.wallet(client);
+    const today = new Date().toISOString().slice(0, 10);
+    if (wallet.day !== today) {
+      wallet.day = today;
+      wallet.coins += DAILY_BONUS;
+      client.send({ t: 'chat', system: true, text: `🪙 Daily bonus: ${DAILY_BONUS} coins! Spend them at the Luxe Store.` });
+      this.onDirty();
+    }
+    this.sendWallet(client);
     this.broadcast({ t: 'join', ...publicPlayer(client) }, client);
     this.broadcast({ t: 'chat', system: true, text: `${client.name} joined` });
     this.log(`${client.name} joined (${this.clients.size} online)`);
@@ -319,6 +424,7 @@ export class GameRoom {
       if (c) c.car = 0;
     }
     this.broadcast({ t: 'car_destroy', id: v.id, x: v.x, y: v.y, z: v.z });
+    this.npcs.onExplosion(v.x, v.y, v.z);
     if (this.homes.has(v.home)) this.respawns.push({ home: v.home, at: Date.now() + VEHICLES[v.kind].respawn * 1000 });
     this.onDirty();
   }
@@ -338,11 +444,17 @@ export class GameRoom {
       client.pet = numbers(msg.pet, 5);
       client.ball = numbers(msg.ball, 3);
       client.flags = num(msg.flags) | 0;
+      client.hold = typeof msg.hold === 'string' || typeof msg.hold === 'number' ? String(msg.hold).slice(0, 16) : '';
     },
 
     set(client, { x, y, z, b }) {
       if (!inBounds(x, y, z) || !isValidBlock(b)) return;
       const old = this.get(x, y, z);
+      // Things from the Luxe Store can only be put down by someone who bought them.
+      if (isExclusive(b) && !this.owns(client, b) && !(isExclusive(old) && (old & ~(15 << 8)) === (b & ~(15 << 8)))) {
+        client.send({ t: 'set', x, y, z, b: old });
+        return;
+      }
       // Room for a whole ladder or garage door at once. Too fast? Undo it for that player.
       if (!this.allow(client, 'set', 40, 160)) {
         client.send({ t: 'set', x, y, z, b: old });
@@ -402,12 +514,14 @@ export class GameRoom {
     emote(client, msg) {
       if (!['dance', 'wave'].includes(msg.kind) || !this.allow(client, 'emote', 1, 3)) return;
       this.broadcast({ t: 'emote', id: client.id, kind: msg.kind }, client);
+      if (msg.kind === 'dance') this.npcs.onDance(client);
     },
 
     fx(client, msg) {
       if (!['firework', 'hearts', 'sparkle', 'bubbles', 'balloon'].includes(msg.kind) || !this.allow(client, 'fx', 5, 10)) return;
       const color = /^#[0-9a-f]{6}$/i.test(msg.color) ? msg.color : '#ffffff';
       this.broadcast({ t: 'fx', kind: msg.kind, x: num(msg.x), y: num(msg.y), z: num(msg.z), color, seed: num(msg.seed), dir: numbers(msg.dir, 3) || undefined }, client);
+      if (msg.kind === 'firework') setTimeout(() => this.npcs.onFirework(num(msg.x), num(msg.y) + 30, num(msg.z)), 1600);
     },
 
     // Lots of blocks at once: the Fill Wand, the Copy Wand's paste, and undoing them.
@@ -422,7 +536,7 @@ export class GameRoom {
         const [x, y, z, b] = cells.slice(i, i + 4);
         if (!inBounds(x, y, z) || !isValidBlock(b)) continue;
         const old = this.get(x, y, z);
-        if (tooFast || !canBuild(this.claims, client.name, x, z)) {
+        if (tooFast || !canBuild(this.claims, client.name, x, z) || (isExclusive(b) && !this.owns(client, b))) {
           // Not allowed: put it back the way it was for this player.
           back.push(x, y, z, old);
           if (!tooFast) blocked ??= claimAt(this.claims, x, z);
@@ -451,6 +565,41 @@ export class GameRoom {
       if (!p || !v) return;
       const color = /^#[0-9a-f]{6}$/i.test(msg.color) ? msg.color : '#42a5f5';
       this.broadcast({ t: 'throw', id: client.id, p, v: v.map(n => Math.max(-40, Math.min(40, n))), color }, client);
+      this.npcs.onThrow(client, p, v);
+    },
+
+    // Picking up a gold coin (you have to really be next to it).
+    coin(client, { id }) {
+      const c = this.coins.get(id);
+      if (!c || !this.allow(client, 'coin', 6, 10)) return;
+      if (Math.hypot(client.pos[0] - c[0], client.pos[2] - c[2]) > 3 || Math.abs(client.pos[1] - c[1]) > 3) return;
+      this.coins.delete(id);
+      this.broadcast({ t: 'coin_gone', id, by: client.id });
+      this.pay(client, c[3]);
+      client.send({ t: 'coin_got', value: c[3] });
+      this.coinTimers.push(Date.now() + 15000 + Math.random() * 25000);
+    },
+
+    // Buying something at the Luxe Store.
+    buy(client, { item }) {
+      const entry = SHOP_ITEMS.find(([i]) => i === item);
+      if (!entry || !this.allow(client, 'buy', 1, 3)) return;
+      const w = this.wallet(client), [, price] = entry;
+      const name = typeof item === 'number' ? BLOCKS[item].name : SHOP_TOOLS[item].name;
+      const reply = text => client.send({ t: 'chat', system: true, text });
+      if (w.owned.includes(item)) return reply(`🛍️ You already have the ${name}!`);
+      if (w.coins < price) return reply(`🪙 The ${name} costs ${price} coins, and you have ${w.coins}. Find more coins around town!`);
+      w.coins -= price;
+      w.owned.push(item);
+      this.sendWallet(client);
+      this.onDirty();
+      reply(`🛍️ You bought the ${name}! It's in your items now (press E).`);
+      this.npcs.onBuy(client, item);
+    },
+
+    // Right-clicking one of the town's people.
+    npc_talk(client, { id }) {
+      if (this.allow(client, 'talk', 1, 3)) this.npcs.onTalk(client, num(id));
     },
 
     // Someone got splashed: tell whoever threw it.
@@ -478,6 +627,8 @@ export class GameRoom {
       const medal = ['🥇', '🥈', '🥉', '4th', '5th'][place] || '';
       this.broadcast({ t: 'chat', system: true, text: `🏁 ${client.name} finished in ${time.toFixed(2)} s!${record ? ' 🥇 NEW RECORD!' : place >= 0 ? ` ${medal} on the leaderboard` : ''}` });
       client.send({ t: 'race_board', board: this.races[key].map(r => [r.name, r.time]) });
+      this.pay(client, RACE_PRIZE);
+      client.send({ t: 'chat', system: true, text: `🪙 +${RACE_PRIZE} coins for finishing the race!` });
     },
 
     // The first one in drives; up to two more can ride along as passengers.
@@ -647,7 +798,7 @@ export class GameRoom {
   expireClaims() {
     const limit = Date.now() - CLAIM_EXPIRE_DAYS * DAY_MS;
     const before = this.claims.length;
-    this.claims = this.claims.filter(c => (this.names[c.key] || c.createdAt) > limit);
+    this.claims = this.claims.filter(c => c.permanent || (this.names[c.key] || c.createdAt) > limit);
     if (this.claims.length !== before) {
       this.broadcast({ t: 'claims', claims: this.claims });
       this.onDirty();
@@ -699,18 +850,24 @@ export class GameRoom {
     for (const s of this.saplings.filter(s => s.at <= now)) {
       if (this.growSapling(s)) this.saplings.splice(this.saplings.indexOf(s), 1);
     }
+    // New coins to replace the ones picked up, and the town's people going about their day.
+    for (const at of this.coinTimers.filter(at => at <= now)) {
+      this.coinTimers.splice(this.coinTimers.indexOf(at), 1);
+      this.dropCoin();
+    }
+    if (this.clients.size) this.npcs.update(dt);
 
     if (t.state > 0) return;
     t.state = 1 / TICK_RATE;
     const list = [];
     for (const c of this.clients.values()) if (c.joined) list.push([c.id, ...c.pos, ...c.rot, c.pet, c.ball, c.flags]);
-    if (list.length < 2) return;
+    if (!list.length || (list.length < 2 && !this.npcs.list.length)) return;
     const cars = [];
     for (const v of this.vehicles.values()) {
       // Driven vehicles, plus parked ones that are rolling after being knocked.
       if (v.driver || now - (v.nudgedAt || 0) < 1500) cars.push([v.id, v.x, v.y, v.z, v.h, v.speed, v.steer, v.siren, v.pitch, v.roll, v.rotor, v.driver ? v.flags : 0]);
     }
-    this.broadcast({ t: 'states', list, cars });
+    this.broadcast({ t: 'states', list, cars, npcs: this.npcs.states() });
   }
 }
 

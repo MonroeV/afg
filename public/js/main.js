@@ -9,7 +9,7 @@ import {
 import { generateWorld } from './shared/worldgen.js';
 import { randomLook, sanitizeLook } from './shared/avatar.js';
 import { generateTextures } from './textures.js';
-import { World, createBlockMaterials, blockMaterial, RAILING, WIND } from './world.js';
+import { World, createBlockMaterials, blockMaterial, RAILING, WIND, rayBox } from './world.js';
 import { Player, EYE_HEIGHT, CROUCH_DROP } from './player.js';
 import { Network } from './network.js';
 import { Avatar, Avatars, FLAG } from './avatars.js';
@@ -28,10 +28,12 @@ import { Editor } from './editor.js';
 import { CharacterClient, Gallery } from './gallery.js';
 import { Hud, renderControls, CUSTOM_PAINT } from './hud.js';
 import {
-  HAMMER, FIREWORKS, BALL, CLAIM, BRUSH, SCRAPER, LADDER, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA,
+  HAMMER, FIREWORKS, BALL, CLAIM, BRUSH, SCRAPER, LADDER, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME,
   ALL_ITEMS, DEFAULT_HOTBAR, makeIcon, ViewModel,
 } from './items.js';
 import { MAX_MANY } from './shared/game.js';
+import { NPC_ACT } from './shared/npcs.js';
+import { Shop } from './shop.js';
 import { Particles, Fireworks, Sounds, Effects } from './effects.js';
 import { TouchControls, IS_TOUCH } from './touch.js';
 
@@ -134,6 +136,7 @@ const headlight = new THREE.SpotLight(0xfff2d0, 0, 50, 0.62, 0.85, 1.2); // a wi
 scene.add(headlight, headlight.target);
 
 const view = new ViewModel();
+const tmpColor = new THREE.Color();
 const particles = new Particles(scene);
 const effects = new Effects(scene);
 const fireworks = new Fireworks(scene, effects);
@@ -145,7 +148,11 @@ sounds.volume = settings.volume;
 
 // ---------- Game state ----------
 
-let world, player, materials, textures, icons, hud, cars, myBody, editor, gallery, structures, ball;
+let world, player, materials, textures, icons, hud, cars, myBody, editor, gallery, structures, ball, shop;
+const npcs = new Map(); // the town's people (run by the server): id -> Avatar
+const coinMap = new Map(); // gold coins lying about: id -> { x, y, z, value, asked }
+let wallet = { coins: 0, owned: [] };
+let shopOpen = false;
 let claims = [];
 const net = new Network();
 const avatars = new Avatars(scene);
@@ -248,6 +255,15 @@ async function load() {
       if (fillable(item)) lastBlock = item;
     },
   });
+  shop = new Shop({
+    icons, sounds,
+    onBuy: item => net.send({ t: 'buy', item }),
+    onClose: () => {
+      shopOpen = false;
+      lock();
+      updateOverlays();
+    },
+  });
   editor = new Editor();
   gallery = new Gallery(new CharacterClient(), sounds);
   myBody = new Avatar(scene, { id: 0, name: '', look: settings.look }, { tag: false });
@@ -331,6 +347,9 @@ $('join-form').addEventListener('submit', async e => {
   world.loadPaints(welcome.paints);
   avatars.clear();
   for (const p of welcome.players) avatars.add(p);
+  for (const n of welcome.npcs || []) npcs.set(n.id, new Avatar(scene, { id: n.id, name: n.name, look: n.look }));
+  for (const [id, x, y, z, value] of welcome.coins || []) coinMap.set(id, { x, y, z, value });
+  $('coins').classList.remove('hidden');
   cars.clear();
   for (const c of welcome.cars) cars.add(c);
   setClaims(welcome.claims || []);
@@ -354,9 +373,48 @@ net.on('set', ({ x, y, z, b }) => {
   if (world.set(x, y, z, b) && !b && old) particles.burst(x, y, z, blockMaterial(materials, old), 6);
 });
 net.on('paint', ({ x, y, z, floor, faces }) => world.setPaint(blockKey(x, y, z) + (floor ? '|f' : ''), faces));
-net.on('states', ({ list, cars: carStates }) => {
+net.on('states', ({ list, cars: carStates, npcs: npcStates }) => {
   avatars.applyStates(list, myId);
   cars.applyStates(carStates || [], myCar?.id);
+  // The town's people: where they are and what they're doing.
+  for (const [id, x, y, z, yaw, action] of npcStates || []) {
+    const a = npcs.get(id);
+    if (!a) continue;
+    a.setState(x, y, z, yaw, 0);
+    if (action === NPC_ACT.wave && a.wave <= 0) a.emote('wave');
+    if (action === NPC_ACT.dance || action === NPC_ACT.cheer) a.dance = Math.max(a.dance, 0.6);
+    a.crouching = action === NPC_ACT.pet;
+  }
+});
+net.on('npc_say', ({ id, text }) => {
+  const a = npcs.get(id);
+  if (!a) return;
+  a.say(text);
+  if (a.pos.distanceTo(player.pos) < 16) hud.addChat({ name: a.name, color: '#ffd54f', text });
+});
+net.on('npc_pet', () => myBody.brain?.cheer()); // somebody petted our pet: it's so happy!
+net.on('shop_open', () => openShop());
+net.on('wallet', ({ coins, owned }) => {
+  const more = coins > wallet.coins;
+  wallet = { coins, owned };
+  hud.setOwned(owned);
+  shop.update(coins, owned);
+  const el = $('coins');
+  el.textContent = `🪙 ${coins}`;
+  if (more) {
+    el.classList.add('bump');
+    setTimeout(() => el.classList.remove('bump'), 180);
+  }
+});
+net.on('coin_new', ({ id, x, y, z, value }) => coinMap.set(id, { x, y, z, value }));
+net.on('coin_gone', ({ id }) => {
+  const c = coinMap.get(id);
+  if (c) effects.sparkle(c.x, c.y + 0.4, c.z, 16);
+  coinMap.delete(id);
+});
+net.on('coin_got', ({ value }) => {
+  sounds.coin();
+  hud.toast(value > 1 ? `🪙 +${value} coins! A big one!` : '🪙 +1 coin');
 });
 net.on('join', info => avatars.add(info));
 net.on('leave', ({ id }) => avatars.remove(id));
@@ -423,7 +481,8 @@ net.on('car_impulse', ({ id, vx, vz, spin }) => {
 // A vehicle bumped into us.
 net.on('push', ({ vx, vy, vz }) => {
   if (riding()) return;
-  wakeUp();
+  wakeUp(true);
+  standUp(true);
   player.vel.add(new THREE.Vector3(vx, vy, vz));
   player.launched = true;
   player.onGround = false;
@@ -500,7 +559,7 @@ function goFullscreen() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -526,14 +585,14 @@ $('go-home').addEventListener('click', () => {
 // Back to the main menu: get out of any vehicle, save, and start the page fresh.
 $('exit-menu').addEventListener('click', () => {
   getOut();
-  wakeUp();
+  wakeUp(true);
   saveSettings();
   setTimeout(() => {
     net.leave();
     location.reload();
   }, 150); // a moment for "I got out of the car" to reach the server
 });
-canvas.addEventListener('click', () => inGame && !locked && !inventoryOpen && !editorOpen && !galleryOpen && lock());
+canvas.addEventListener('click', () => inGame && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && lock());
 $('sensitivity').addEventListener('input', e => {
   settings.sensitivity = Number(e.target.value);
   saveSettings();
@@ -638,6 +697,10 @@ let useCooldown = 0;
 
 window.addEventListener('keydown', e => {
   if (!inGame || hud.chatOpen || editorOpen || galleryOpen) return;
+  if (shopOpen) {
+    if (e.code === 'Escape' || e.code === 'KeyE') shop.close();
+    return;
+  }
   if (inventoryOpen) {
     if (e.code === 'Escape') {
       saveSettings();
@@ -660,12 +723,12 @@ window.addEventListener('keydown', e => {
   if (['Space', 'Tab', 'ControlLeft', 'ControlRight'].includes(e.code) || e.ctrlKey || e.metaKey) e.preventDefault();
   if (e.repeat) return;
   keys.add(e.code);
-  if (sleeping && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space'].includes(e.code)) {
-    wakeUp();
-    return;
-  }
-  if (seated && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space'].includes(e.code)) {
-    standUp();
+  if ((sleeping || seated) && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space'].includes(e.code)) {
+    // Get up (once you've finished getting in).
+    if (!move) {
+      wakeUp();
+      standUp();
+    }
     return;
   }
 
@@ -919,7 +982,8 @@ function requestEnter(car) {
 
 function enterCar(car) {
   if (!car) return;
-  wakeUp();
+  wakeUp(true);
+  standUp(true);
   myCar = car;
   car.driver = myId;
   car.gear = 1;
@@ -944,7 +1008,8 @@ function enterCar(car) {
 // Hop in as a passenger: someone else drives, you look around and enjoy the ride.
 function enterRide(car) {
   if (!car) return;
-  wakeUp();
+  wakeUp(true);
+  standUp(true);
   myRide = car;
   player.flying = false;
   carCam.yaw = 0;
@@ -1327,12 +1392,11 @@ function goToBed(bed) {
   const px = bed.x + 0.5, pz = bed.z + 0.5, bx = bed.x + bed.dx + 0.5, bz = bed.z + bed.dz + 0.5;
   const dir = { x: px - bx, z: pz - bz };
   const top = bed.top ?? bed.y + 1;
-  sleeping = { bed, standAt: [bx, top, bz] };
-  // Lie on your back with your head on the pillow.
-  player.pos.set(bx - dir.x * 0.45, bed.lieY ?? top + 0.15, bz - dir.z * 0.45);
+  sleeping = { bed, standAt: bedsideSpot(bed) || [bx, top, bz] };
+  // Climb in and lie back, head on the pillow (the body tips back as it goes, see avatars.js).
   player.vel.set(0, 0, 0);
   player.flying = false;
-  player.yaw = Math.atan2(dir.x, dir.z);
+  scriptMove([bx - dir.x * 0.45, bed.lieY ?? top + 0.15, bz - dir.z * 0.45], Math.atan2(dir.x, dir.z), 1.1, { arc: 0.45 });
   myBody.lying = true;
   settings.bed = { x: bed.x, y: bed.y, z: bed.z };
   saveSettings();
@@ -1340,13 +1404,61 @@ function goToBed(bed) {
   hud.toast(sky.isNight ? '😴 Zzz… When everyone is asleep, the sun comes up!' : '🛏️ This bed is your home now. Press R to come back here. (Move to get up)');
 }
 
-function wakeUp() {
+// A free spot on the floor beside a Bed block to get up onto: off the foot end, or either
+// side. (Build Book beds are solid blocks, so you just stand up on them.)
+function bedsideSpot(bed) {
+  if (bed.top === undefined) return null;
+  const { x, y, z, dx, dz } = bed, fx = x + dx, fz = z + dz;
+  const room = (cx, cz) => !world.isSolid(cx, y, cz) && !world.isSolid(cx, y + 1, cz) && (y === 0 || world.isSolid(cx, y - 1, cz));
+  for (const [cx, cz] of [[fx + dx, fz + dz], [fx + dz, fz - dx], [fx - dz, fz + dx], [x + dz, z - dx], [x - dz, z + dx]]) {
+    if (room(cx, cz)) return [cx + 0.5, y, cz + 0.5];
+  }
+  return null;
+}
+
+// Getting up: sit up, swing round and stand beside the bed (or straight away, when being
+// sent home or shoved).
+function wakeUp(instant = false) {
   if (!sleeping) return;
   const [x, y, z] = sleeping.standAt;
-  player.pos.set(x, y, z);
   sleeping = null;
   myBody.lying = false;
   net.send({ t: 'sleep', on: false });
+  if (instant) {
+    move = null;
+    player.pos.set(x, y, z);
+  } else {
+    scriptMove([x, y, z], player.yaw + Math.PI, 0.9, { arc: 0.35 });
+  }
+}
+
+// ---------- Little scripted moves ----------
+// Sitting down, getting up, climbing into bed and out again: you glide there along a gentle
+// curve (eased in and out) while your body bends into the new pose.
+
+let move = null; // { from, to, fromYaw, toYaw, t, dur, arc, then }
+
+function scriptMove(to, toYaw, dur, { arc = 0, then = null } = {}) {
+  move = { from: player.pos.clone(), to: new THREE.Vector3(...to), fromYaw: player.yaw, toYaw, t: 0, dur, arc, then };
+}
+
+// Returns true while a scripted move is happening (you can't walk about meanwhile).
+function updateMove(dt) {
+  if (!move) return false;
+  move.t = Math.min(1, move.t + dt / move.dur);
+  const k = move.t * move.t * (3 - 2 * move.t); // ease in and out
+  player.pos.lerpVectors(move.from, move.to, k);
+  player.pos.y += Math.sin(Math.PI * k) * move.arc;
+  let dy = move.toYaw - move.fromYaw;
+  dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+  player.yaw = move.fromYaw + dy * k;
+  player.vel.set(0, 0, 0);
+  if (move.t >= 1) {
+    const then = move.then;
+    move = null;
+    then?.();
+  }
+  return true;
 }
 
 // A safe place to stand on your own land: open ground nearest its middle,
@@ -1370,8 +1482,9 @@ function landSpawn() {
 
 // Back home: your bed if you have one, then your land, then the town square.
 function respawn(joining = false) {
-  wakeUp();
-  standUp();
+  wakeUp(true);
+  standUp(true);
+  move = null;
   getOut();
   const b = settings.bed;
   const bed = b && structures.ofType('bed').find(s => s.x === b.x && s.y === b.y && s.z === b.z);
@@ -1463,7 +1576,7 @@ function updateStructures(dt, time) {
       if (a.lying) effects.snore(a.pos.x + Math.sin(a.yaw) * 1.6, a.pos.y + 0.4, a.pos.z + Math.cos(a.yaw) * 1.6);
     }
   }
-  if (sleeping && !structures.ofType('bed').some(b => b === sleeping.bed || (b.x === sleeping.bed.x && b.y === sleeping.bed.y && b.z === sleeping.bed.z))) wakeUp();
+  if (sleeping && !structures.ofType('bed').some(b => b === sleeping.bed || (b.x === sleeping.bed.x && b.y === sleeping.bed.y && b.z === sleeping.bed.z))) wakeUp(true);
   return fire;
 }
 
@@ -1732,6 +1845,8 @@ function useItem() {
   if (item === WATER_BALLOON) return throwWaterBalloon();
   if (item === BUBBLES) return blowBubbles(1);
   if (item === CAMERA) return takePhoto();
+  if (item === SHOWTIME) return fireworkShow();
+  if (target?.npc || item === JETPACK || item === TRAIL) return;
   if (item === BALLOON) {
     const p = eye.clone().addScaledVector(lookDir, 0.8);
     letBalloonGo(p.x, p.y + 0.8, p.z, paintHex());
@@ -1782,6 +1897,10 @@ function interact() {
   }
   if (target?.car) return requestEnter(target.car);
   if (target?.pet) return petThePet(target);
+  if (target?.npc) {
+    net.send({ t: 'npc_talk', id: target.npc.id });
+    return;
+  }
   if (hit && !hit.ground) {
     if (shapeOf(hit.value) === 'door' && hit.part !== 'floor') return toggleDoor(...hit.block);
     if (switchable(hit.value) && hit.part !== 'floor') {
@@ -1796,6 +1915,8 @@ function interact() {
       if (def?.hug) return hugTeddy(...hit.block);
       if (def?.shape === 'picture') return nextPicture(...hit.block, hit.value);
       if (def?.music) return changeNote(...hit.block, hit.value);
+      if (def?.shop) return openShop();
+      if (def?.piano) return playPiano(...hit.block);
     }
     if (BLOCKS[blockId(hit.value)]?.turns && !floorOf(hit.value)) {
       // Turn a road line (or parking line) to run the other way.
@@ -2021,23 +2142,30 @@ function sitOn(x, y, z, v) {
   const def = BLOCKS[blockId(v)], a = (blockMeta(v) & 3) * Math.PI / 2;
   const fx = Math.sin(a), fz = Math.cos(a);
   seated = { x, y, z, standAt: [x + 0.5 + Math.round(fx), y, z + 0.5 + Math.round(fz)] };
-  player.pos.set(x + 0.5 - fx * 0.06, y + def.seat - 0.72, z + 0.5 - fz * 0.06); // hips on the seat
   player.vel.set(0, 0, 0);
   player.flying = false;
-  player.yaw = a + Math.PI;
-  player.pitch = -0.1;
-  sounds.land();
+  // Turn round and lower yourself onto the seat (hips on the seat).
+  scriptMove([x + 0.5 - fx * 0.06, y + def.seat - 0.72, z + 0.5 - fz * 0.06], a + Math.PI, 0.55, { arc: 0.06, then: () => sounds.land() });
+  player.pitch = Math.max(player.pitch, -0.3);
   hud.toast('🛋️ Comfy! Move or jump to get up.');
 }
 
-function standUp() {
+function standUp(instant = false) {
   if (!seated) return;
   const { x, y, z, standAt } = seated;
   seated = null;
+  // Step out in front, or (no room there) climb out over the top.
+  const from = player.pos.clone();
   player.pos.set(...standAt);
-  // No room in front? Climb out over the top instead.
-  if (player.overlapsSomething()) player.pos.set(x + 0.5, y + 1, z + 0.5);
+  const to = player.overlapsSomething() ? [x + 0.5, y + 1, z + 0.5] : standAt;
+  player.pos.copy(from);
   player.vel.set(0, 0, 0);
+  if (instant) {
+    move = null;
+    player.pos.set(...to);
+  } else {
+    scriptMove(to, player.yaw, 0.45, { arc: 0.12 });
+  }
 }
 
 function hugTeddy(x, y, z) {
@@ -2246,7 +2374,7 @@ function updateFlying(dt) {
         else if (f.by !== myId && !riding() && touches(f.pos, player.pos, player.crouching)) {
           done = true;
           splashed(f.by);
-        } else if ([...avatars.list.values()].some(a => a.id !== f.by && !a.seat && touches(f.pos, a.pos))) done = true;
+        } else if ([...avatars.list.values(), ...npcs.values()].some(a => a.id !== f.by && !a.seat && touches(f.pos, a.pos))) done = true;
       }
       f.mesh.position.copy(f.pos);
       if (done || f.age > 6) {
@@ -2569,9 +2697,118 @@ function toggleHud() {
   hud.toast(hudHidden ? '🙈 HUD hidden. Press H to bring it back.' : '👀 HUD is back.');
 }
 
+// ---------- Coins, the Luxe Store, and the town's people ----------
+
+// Gold coins: they spin and bob, and you pick one up by walking (or driving) into it.
+const COIN_LOOK = { 1: 0xffc83d, 2: 0xffa000, 5: 0x8ff0ff };
+const coinMesh = new THREE.InstancedMesh(
+  new THREE.CylinderGeometry(0.3, 0.3, 0.07, 20).rotateX(Math.PI / 2),
+  new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.85, roughness: 0.25, emissive: 0x4a3000 }),
+  64,
+);
+coinMesh.count = 0;
+coinMesh.frustumCulled = false;
+coinMesh.castShadow = true;
+scene.add(coinMesh);
+const coinMatrix = new THREE.Matrix4(), coinQuat = new THREE.Quaternion(), coinScale = new THREE.Vector3(), coinPos = new THREE.Vector3();
+
+function updateCoins(dt, time) {
+  let i = 0;
+  for (const [id, c] of coinMap) {
+    if (i >= 64) break;
+    const s = c.value === 5 ? 1.35 : c.value === 2 ? 1.15 : 1;
+    coinQuat.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, time * 2.2 + id);
+    coinPos.set(c.x, c.y + 0.75 + Math.sin(time * 2 + id) * 0.12, c.z);
+    coinMesh.setMatrixAt(i, coinMatrix.compose(coinPos, coinQuat, coinScale.setScalar(s)));
+    coinMesh.setColorAt(i, tmpColor.set(COIN_LOOK[c.value] || COIN_LOOK[1]));
+    i++;
+    // Close enough to grab? Ask the server (once every couple of seconds).
+    const p = player.pos;
+    if (Math.hypot(p.x - c.x, p.z - c.z) < (myCar ? 2 : 1.1) && Math.abs(p.y - c.y) < 2 && time - (c.asked ?? -9) > 2) {
+      c.asked = time;
+      net.send({ t: 'coin', id });
+    }
+  }
+  coinMesh.count = i;
+  coinMesh.instanceMatrix.needsUpdate = true;
+  if (coinMesh.instanceColor) coinMesh.instanceColor.needsUpdate = true;
+}
+
+// Jetpack flames and rainbow trails (yours and everyone else's).
+let sparkleTimer = 0, jetSoundTimer = 0;
+function updateSparkly(dt, time) {
+  sparkleTimer -= dt;
+  jetSoundTimer -= dt;
+  const trailNow = sparkleTimer <= 0;
+  if (trailNow) sparkleTimer = 0.035;
+  if (player.jetting && !riding()) {
+    effects.jet(player.pos.x, player.pos.y + 0.35, player.pos.z);
+    if (jetSoundTimer <= 0) {
+      jetSoundTimer = 0.12;
+      sounds.jet();
+    }
+  }
+  if (trailNow && hud.item === TRAIL && !riding() && Math.hypot(player.vel.x, player.vel.z) > 1) effects.trail(player.pos.x, player.pos.y, player.pos.z, time * 0.5);
+  for (const a of avatars.list.values()) {
+    if (a.seat) continue;
+    if (a.jet) effects.jet(a.pos.x, a.pos.y + 0.35, a.pos.z);
+    if (a.trail && trailNow && a.speed > 0.15) effects.trail(a.pos.x, a.pos.y, a.pos.z, time * 0.5 + a.id);
+  }
+}
+
+// The town's people, under the crosshair.
+function npcRaycast(origin, dir, max) {
+  let best = null;
+  for (const a of npcs.values()) {
+    const p = a.pos;
+    const h = rayBox(origin, dir, [p.x - 0.4, p.y, p.z - 0.4, p.x + 0.4, p.y + 1.95, p.z + 0.4]);
+    if (h && h.t < max && (!best || h.t < best.distance)) best = { npc: a, distance: h.t };
+  }
+  return best;
+}
+
+function openShop() {
+  if (shopOpen || !inGame) return;
+  shopOpen = true;
+  unlock();
+  shop.open();
+  updateOverlays();
+}
+
+// The Firework Show: rockets all around you, one after another.
+function fireworkShow() {
+  const p = player.pos.clone();
+  sounds.launch(1);
+  hud.toast('🎇 SHOWTIME!');
+  for (let i = 0; i < 8; i++) {
+    setTimeout(() => {
+      const a = (i / 8) * Math.PI * 2, r = 4 + (i % 2) * 3;
+      const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r, y = p.y;
+      const color = FIREWORK_COLORS[i % FIREWORK_COLORS.length], seed = Math.random();
+      if (!fireworks.launch(x, y, z, color, seed)) return;
+      sounds.launch(0.7);
+      net.send({ t: 'fx', kind: 'firework', x, y, z, color, seed });
+    }, i * 380);
+  }
+}
+
+// The grand piano plays a little tune (a different one each time).
+const TUNES = [[0, 2, 4, 0, 0, 2, 4, 0], [4, 4, 5, 7, 7, 5, 4, 2], [7, 4, 4, 5, 2, 2, 0, 4, 7], [0, 4, 7, 11, 9, 7, 4, 2, 0]];
+let tuneIndex = 0;
+function playPiano(x, y, z) {
+  const tune = TUNES[tuneIndex++ % TUNES.length];
+  tune.forEach((n, i) => setTimeout(() => {
+    sounds.note(NOTE_FREQS[n], 'piano', 0.9);
+    effects.note(x + 0.5, y + 1.3, z + 0.5);
+  }, i * 230));
+}
+
 // ---------- Camera ----------
 
 const tmp = new THREE.Vector3();
+const tmpMatrix = new THREE.Matrix4();
+const sleepCam = { pos: new THREE.Vector3(), quat: new THREE.Quaternion() };
+let camSleepK = 0;
 
 // Moves `desired` closer to `focus` if a wall is in the way.
 function avoidWalls(focus, desired) {
@@ -2610,12 +2847,15 @@ function updateCamera(dt) {
   eye.y -= CROUCH_DROP * crouchK;
   lookDir.set(-Math.sin(player.yaw) * Math.cos(player.pitch), Math.sin(player.pitch), -Math.cos(player.yaw) * Math.cos(player.pitch));
   if (sleeping) {
-    // Look down at yourself sleeping, from above the foot of the bed (beds have headboards).
-    const dir = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)); // feet to head
-    const above = player.pos.clone().addScaledVector(dir, 0.9).add(new THREE.Vector3(0, 0.8, 0));
-    camera.position.copy(avoidWalls(above, player.pos.clone().addScaledVector(dir, -0.7).add(new THREE.Vector3(0, 2.1, 0))));
-    camera.lookAt(player.pos.x + dir.x * 1.2, player.pos.y + 0.2, player.pos.z + dir.z * 1.2);
-  } else if (viewMode === 0) {
+    // Looking down at yourself sleeping, from above the foot of the bed (beds have
+    // headboards). Worked out from where you'll be lying, even while you're climbing in.
+    const lie = move ? move.to : player.pos, yaw = move ? move.toYaw : player.yaw;
+    const dir = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)); // feet to head
+    const above = lie.clone().addScaledVector(dir, 0.9).add(new THREE.Vector3(0, 0.8, 0));
+    sleepCam.pos.copy(avoidWalls(above, lie.clone().addScaledVector(dir, -0.7).add(new THREE.Vector3(0, 2.1, 0))));
+    sleepCam.quat.setFromRotationMatrix(tmpMatrix.lookAt(sleepCam.pos, tmp.set(lie.x + dir.x * 1.2, lie.y + 0.2, lie.z + dir.z * 1.2), camera.up));
+  }
+  if (viewMode === 0) {
     camera.position.copy(eye);
     camera.rotation.set(player.pitch, player.yaw, 0);
   } else if (viewMode === 1) {
@@ -2627,6 +2867,12 @@ function updateCamera(dt) {
     const desired = eye.clone().addScaledVector(flat, 3.2).add(new THREE.Vector3(0, 0.3, 0));
     camera.position.copy(avoidWalls(eye, desired));
     camera.lookAt(eye.x, eye.y - 0.4, eye.z);
+  }
+  // Glide over to the sleeping view (and back again when you get up).
+  camSleepK += ((sleeping ? 1 : 0) - camSleepK) * Math.min(1, dt * 2.4);
+  if (camSleepK > 0.002) {
+    camera.position.lerp(sleepCam.pos, camSleepK);
+    camera.quaternion.slerp(sleepCam.quat, camSleepK);
   }
   const targetFov = BASE_FOV + (player.sprinting && player.moving ? 6 : 0);
   camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 8);
@@ -2645,7 +2891,7 @@ let menuSpin = 0, lastFrame = 0, frameCount = 0, crouchK = 0;
 // menu (nothing much is moving then).
 function frameRateNow() {
   if (!inGame) return 30;
-  if (!locked || inventoryOpen || editorOpen || galleryOpen) return 12;
+  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen) return 12;
   return settings.fps || 1000;
 }
 
@@ -2668,8 +2914,10 @@ function frame(timestamp) {
   if (touch) {
     touch.setMode(myCar ? (myCar.spec.flying ? 'heli' : 'car') : myRide ? 'ride' : player?.flying ? 'fly' : 'walk');
     touch.update();
-    if (sleeping && (touch.stick.x || touch.stick.y || touch.keys.has('Space'))) wakeUp();
-    if (seated && (touch.stick.x || touch.stick.y || touch.keys.has('Space'))) standUp();
+    if ((sleeping || seated) && !move && (touch.stick.x || touch.stick.y || touch.keys.has('Space'))) {
+      wakeUp();
+      standUp();
+    }
   }
   const nightK = 1 - sky.dayK;
   let fire = 0;
@@ -2691,15 +2939,18 @@ function frame(timestamp) {
     } else if (myRide) {
       player.pos.copy(cars.seat(myRide, mySeat()).position);
       player.vel.set(0, 0, 0);
+    } else if (updateMove(dt)) {
+      // Gliding into (or out of) a seat or a bed.
     } else if (seated) {
       // Sitting still. (If the chair gets broken, you stand up.)
       player.vel.set(0, 0, 0);
-      if (!BLOCKS[blockId(itemOf(world.get(seated.x, seated.y, seated.z)))]?.seat) standUp();
+      if (!BLOCKS[blockId(itemOf(world.get(seated.x, seated.y, seated.z)))]?.seat) standUp(true);
     } else if (!sleeping) {
       const wasOnGround = player.onGround;
       const vyBefore = player.vel.y;
       player.stick = touch?.enabled && active ? touch.stick : null;
       player.balloon = hud.item === BALLOON;
+      player.jetpack = hud.item === JETPACK;
       player.update(dt, active ? held : noKeys);
       if (player.springed) {
         player.springed = false;
@@ -2729,7 +2980,8 @@ function frame(timestamp) {
       hit = world.raycast(eye, lookDir, REACH);
       const carHit = cars.raycast(eye, lookDir, REACH);
       const petHit = petRaycast(eye, lookDir, REACH);
-      const nearest = [carHit, petHit].filter(Boolean).sort((a, b) => a.distance - b.distance)[0];
+      const npcHit = npcRaycast(eye, lookDir, REACH);
+      const nearest = [carHit, petHit, npcHit].filter(Boolean).sort((a, b) => a.distance - b.distance)[0];
       if (nearest && (!hit || nearest.distance < hit.distance)) {
         target = nearest;
         hit = null;
@@ -2770,6 +3022,8 @@ function frame(timestamp) {
       hint = full ? "🚗 It's full" : target.car.driver ? '🚗 Right-click or E to ride along' : what + (item === HAMMER ? ' · Click to whack it' : '');
     } else if (target?.pet) {
       hint = item === BALL && target.avatar === myBody ? '🎾 Click to throw the ball · Right-click to pet' : '🐾 Right-click to pet';
+    } else if (target?.npc) {
+      hint = target.npc.id === -1 ? '🛍️ Right-click to shop at the Luxe Store' : `💬 Right-click to talk to ${target.npc.name.replace(/ \S+$/, '')}`;
     } else if (hitState.key) {
       hint = `🔨 Hit ${hitState.count} of 3`;
     } else if (player.climbing) {
@@ -2802,6 +3056,8 @@ function frame(timestamp) {
       else if (def?.shape === 'picture' && !tool) hint = '🖼️ Right-click to hang a different picture';
       else if (def?.music && !tool) hint = `🎵 ${NOTE_NAMES[blockMeta(hit.value)]} · Walk on it to play · Right-click: next note`;
       else if (def?.speedPad && item !== HAMMER) hint = '⚡ Run (or drive) over it the way the arrows point!';
+      else if (def?.shop && !tool) hint = '🛍️ Right-click to open the Luxe Store';
+      else if (def?.piano && !tool) hint = '🎹 Right-click to play a tune';
       else if (def?.race === 'start' && item !== HAMMER) hint = '🏁 Start line: step off it to start the clock, then race to a Finish line!';
       else if (def?.race === 'finish' && item !== HAMMER) hint = '🏁 Finish line: cross it after a Start line to set a time';
       else if (s?.type === 'cannon') hint = '💥 Right-click to launch yourself!';
@@ -2811,6 +3067,9 @@ function frame(timestamp) {
       else if (item === BUBBLES) hint = '🫧 Hold the mouse button to blow bubbles';
       else if (item === BALLOON) hint = player.onGround ? '🎈 Jump off something high and float down! Click to let a balloon go' : '🎈 Wheee!';
       else if (item === CAMERA) hint = '📸 Click (or press P) to take a photo · H hides the HUD';
+      else if (item === JETPACK) hint = player.jetting ? '🚀 WHOOSH!' : '🚀 Hold Space to blast off!';
+      else if (item === TRAIL) hint = '🌈 Run around to leave a rainbow trail!';
+      else if (item === SHOWTIME) hint = '🎇 Click for a fireworks show! (Best at night)';
     }
     hud.setHint(hint);
 
@@ -2855,8 +3114,9 @@ function frame(timestamp) {
       const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
       const balloon = hud.item === BALLOON && !riding() && !sleeping;
       const flags = (sleeping ? FLAG.sleeping : 0) | (seated ? FLAG.sitting : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
+        (player.jetting && !riding() ? FLAG.jet : 0) | (hud.item === TRAIL && !riding() ? FLAG.trail : 0) |
         (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
-      net.send({ t: 'state', pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags });
+      net.send({ t: 'state', pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item });
       sendCarState();
       // Parked cars we knocked (or pushed): tell everyone where they are.
       for (const car of cars.list.values()) {
@@ -2877,7 +3137,8 @@ function frame(timestamp) {
     }
 
     // Our own body, seen in the third-person views.
-    myBody.root.visible = riding() ? carView !== 0 : viewMode !== 0 || !!sleeping;
+    // (Getting into bed, you see yourself once the camera has pulled back out of your head.)
+    myBody.root.visible = riding() ? carView !== 0 : viewMode !== 0 || camSleepK > 0.3;
     myBody.seat = riding() ? cars.seat(riding(), mySeat()) : null;
     myBody.target.copy(player.pos);
     myBody.targetYaw = player.yaw;
@@ -2976,6 +3237,11 @@ function frame(timestamp) {
   world.updateVisibility(camera.position, settings.quality === 'low' ? Math.min(140, scene.fog.far) : scene.fog.far);
   world.update(dt);
   avatars.update(dt, time);
+  for (const a of npcs.values()) a.update(dt, time);
+  if (inGame) {
+    updateCoins(dt, time);
+    updateSparkly(dt, time);
+  }
   cars.setView(camera.position, scene.fog.far);
   cars.update(dt, time, nightK, myCar?.id);
   if (inGame) for (const ev of cars.events) vehicleEvent(ev, ev.other);
@@ -2984,10 +3250,15 @@ function frame(timestamp) {
   for (const p of fireworks.update(dt)) sounds.boom(loudness(p.x, p.y, p.z, 160));
   // Bursts light up the whole night sky in their color.
   if (fireworks.flash > 0.01 && nightK > 0.2) {
-    const f = Math.min(1, fireworks.flash) * nightK;
-    sky.hemi.intensity += f * 0.5;
-    sky.hemi.color.lerp(fireworks.flashColor, f * 0.5);
-    scene.fog.color.lerp(fireworks.flashColor, f * 0.2);
+    // The whole town is bathed in the burst's color: the sky light, the light bouncing off
+    // the ground, the moonlight and the haze all take on its hue.
+    const f = Math.min(1, fireworks.flash) * nightK, c = fireworks.flashColor;
+    sky.hemi.intensity += f * 0.7;
+    sky.hemi.color.lerp(c, Math.min(1, f * 1.1));
+    sky.hemi.groundColor.lerp(c, f * 0.7);
+    sky.sun.color.lerp(c, f * 0.9);
+    sky.sun.intensity += f * 0.4;
+    scene.fog.color.lerp(tmpColor.copy(c).multiplyScalar(0.35), f * 0.6);
   }
   const firstPerson = inGame && !riding() && viewMode === 0 && !sleeping;
   // While the ball is off being thrown (or fetched), it isn't in your hand.
@@ -3046,6 +3317,11 @@ window.buildzone = {
   get claims() { return claims; },
   get sleeping() { return sleeping; },
   get seated() { return seated; },
+  get npcs() { return npcs; },
+  get coinMap() { return coinMap; },
+  get coinCount() { return coinMap.size; },
+  get npcNames() { return [...npcs.values()].map(a => a.name).join(', '); },
+  get wallet() { return wallet; },
   get wand() { return wand; },
   get flying() { return flying; },
   get race() { return race; },

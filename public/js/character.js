@@ -546,10 +546,14 @@ export function animateCharacter(ch, s) {
     armRz = 2.6;
     swingR = Math.sin(t * 12) * 0.3;
   }
-  // (A positive turn swings a leg or arm forward, the way the face looks.)
-  if (s.sitting) {
-    legL = legR = Math.PI / 2;
-    swingL = swingR = 0.55;
+  // (A positive turn swings a leg or arm forward, the way the face looks.) `sit` blends
+  // smoothly from standing (0) to sitting (1).
+  const sit = s.sit ?? (s.sitting ? 1 : 0);
+  if (sit > 0) {
+    legL += (Math.PI / 2 - legL) * sit;
+    legR += (Math.PI / 2 - legR) * sit;
+    swingL += (0.55 - swingL) * sit;
+    swingR += (0.55 - swingR) * sit;
   }
   // Crouching: knees forward and a little lower, arms out in front for balance.
   let crouchDrop = 0;
