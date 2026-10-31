@@ -8,6 +8,10 @@
 //   paint  (4 bits)  0 = original colors, 1-15 = painted (see PAINT_COLORS)
 // Old saves have paint 0 everywhere, so they load unchanged.
 //
+// A small thing in the middle of a cell (a torch, a lamp…) can also stand on a floor block
+// (sidewalk, road, carpet) or among railings without replacing them. Then the value is
+// `item + floor * 65536`: the low 16 bits are the item as above, the high 16 bits the floor.
+//
 // shape: 'cube' (default), 'door' (two blocks tall, opens), 'flat' (a thin floor
 // layer you can walk over, like roads), 'plant' (crossed sprites, no collision) or
 // 'model' (a small 3D object such as a lamp; `box` is the part you bump into, if any),
@@ -42,7 +46,7 @@ export const BLOCKS = {
   20: { name: 'Floor Tiles', tex: 'tiles', glossy: true },
   21: { name: 'Door', shape: 'door', tex: { bottom: 'door_bottom', top: 'door_top', edge: 'planks' } },
   22: { name: 'Road', shape: 'flat', tex: 'asphalt' },
-  23: { name: 'Road Line', shape: 'flat', tex: 'road_line' },
+  23: { name: 'Road Line', shape: 'flat', tex: 'road_line', turns: 55, along: 'z' },
   24: { name: 'Sidewalk', shape: 'flat', tex: 'sidewalk' },
   25: { name: 'Wood Floor', shape: 'flat', tex: 'planks' },
   26: { name: 'Roof Tiles', tex: 'roof' },
@@ -77,6 +81,12 @@ export const BLOCKS = {
   52: { name: 'Neon Green', tex: 'neon_green', emissive: true, light: { color: 0x5cff6a, power: 0.9, range: 22, always: true } },
   53: { name: 'Ladder', shape: 'ladder', tex: 'planks' },
   54: { name: 'Railing', shape: 'rail', tex: 'railing' },
+  // Lines that can be turned (right-click) come in pairs: `turns` is the other way round.
+  55: { name: 'Road Line', shape: 'flat', tex: 'road_line_turned', turns: 23, along: 'x', hidden: true },
+  56: { name: 'Parking Line', shape: 'flat', tex: 'parking_line', turns: 57, along: 'z' },
+  57: { name: 'Parking Line', shape: 'flat', tex: 'parking_line_turned', turns: 56, along: 'x', hidden: true },
+  58: { name: 'Parking Sign', tex: 'parking_sign' },
+  59: { name: 'Tinted Glass', tex: 'tinted_glass', transparent: true, fragile: true },
 };
 
 // Paint colors for the Paint Brush (index 1-15; 0 means "not painted").
@@ -94,7 +104,11 @@ export const BLOCK_IDS = Object.keys(BLOCKS).map(Number);
 export const blockId = v => v & 255;
 export const blockMeta = v => (v >> 8) & 15;
 export const paintOf = v => (v >> 12) & 15;
-export const withPaint = (v, paint) => (v & 0x0fff) | (paint << 12);
+export const SPLIT = 65536;
+export const itemOf = v => v % SPLIT; // the item in the middle (or the whole block)
+export const floorOf = v => Math.floor(v / SPLIT); // the floor or railing under it (0 if none)
+export const stack = (item, floor) => item + floor * SPLIT;
+export const withPaint = (v, paint) => stack((itemOf(v) & 0x0fff) | (paint << 12), floorOf(v));
 export const makeBlock = (id, meta = 0) => id | (meta << 8);
 export const shapeOf = v => BLOCKS[v & 255]?.shape || 'cube';
 
@@ -110,7 +124,12 @@ export const isReplaceable = v => {
 };
 
 export function isValidBlock(v) {
-  if (!Number.isInteger(v) || v < 0 || v > 0xffff) return false;
+  if (!Number.isInteger(v) || v < 0 || v >= SPLIT * SPLIT) return false;
+  if (v >= SPLIT) {
+    // An item standing on a floor or among railings.
+    const item = itemOf(v), floor = floorOf(v);
+    return item > 0 && shapeOf(item) === 'model' && isValidBlock(item) && canHoldItem(floor) && isValidBlock(floor);
+  }
   if (v === 0) return true;
   const def = BLOCKS[v & 255];
   if (!def) return false;
@@ -120,6 +139,12 @@ export function isValidBlock(v) {
   return def.shape === 'ladder' ? meta < 4 : meta === 0;
 }
 
+// A road (or parking) line turned the other way round, keeping its paint and anything on it.
+export const turnLine = v => {
+  const other = BLOCKS[blockId(v)]?.turns;
+  return other ? v - blockId(v) + other : v;
+};
+
 // ---------- Railings ----------
 // A railing runs along one or more edges of a cell (meta bits: 1 = -z side, 2 = +x,
 // 4 = +z, 8 = -x). It stops you walking (or falling) off that side but not the others.
@@ -128,10 +153,14 @@ export const RAIL_EDGES = [1, 2, 4, 8];
 const RAIL_THICK = 0.12;
 export const RAIL_HEIGHT = 1.6; // taller than it looks, so you can't jump over it (jumps reach 1.45)
 
-export const railMask = v => {
+const partRails = v => {
   const shape = shapeOf(v);
-  return shape === 'rail' || shape === 'flat' ? blockMeta(v) : 0;
+  return v && (shape === 'rail' || shape === 'flat') ? blockMeta(v) : 0;
 };
+export const railMask = v => partRails(itemOf(v)) | partRails(floorOf(v));
+
+// Floors and railings can have an item (a torch, a lamp…) standing in the middle of them.
+export const canHoldItem = v => v > 0 && v < SPLIT && (shapeOf(v) === 'flat' || shapeOf(v) === 'rail');
 
 // The railing pieces as boxes inside the cell: [x0, y0, z0, x1, y1, z1] from its corner.
 export function railBoxes(mask, height = RAIL_HEIGHT) {

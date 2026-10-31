@@ -314,6 +314,41 @@ function roadLine(u, v) {
   return a;
 }
 
+// The same yellow line, turned to run the other way.
+const roadLineTurned = (u, v) => roadLine(v, u);
+
+// Parking lots: a white stripe along one edge of the asphalt (the edge between two spaces).
+function parkingLine(u, v) {
+  const a = asphalt(u, v);
+  if (u < 0.08) {
+    const wear = fbm(u, v, 16, 3, 163);
+    if (wear > 0.25) return { c: mixc([0.86, 0.86, 0.84], [0.97, 0.97, 0.95], wear), h: 0.6 };
+  }
+  return a;
+}
+const parkingLineTurned = (u, v) => parkingLine(v, u);
+
+// A blue parking sign with a big white P.
+function parkingSign(u, v) {
+  const border = Math.min(u, v, 1 - u, 1 - v);
+  if (border < 0.06) return { c: [0.92, 0.93, 0.95], h: 1 };
+  const stem = u > 0.3 && u < 0.43 && v > 0.18 && v < 0.82;
+  const d = Math.hypot(u - 0.48, v - 0.37);
+  const bowl = u > 0.36 && d < 0.2 && d > 0.09;
+  if (stem || bowl) return { c: [0.97, 0.97, 0.97], h: 0.9 };
+  const n = fbm(u, v, 8, 3, 164);
+  return { c: shade([0.12, 0.33, 0.72], 0.92 + n * 0.12), h: 0.5 };
+}
+
+// Skyscraper windows: blue tinted glass in a dark frame, with a soft sky reflection.
+function tintedGlass(u, v) {
+  const border = Math.min(u, v, 1 - u, 1 - v);
+  if (border < 0.035) return { c: [0.2, 0.23, 0.27], h: 1, a: 1 };
+  const streak = Math.abs(((u + v * 0.6) % 0.6) - 0.2) < 0.04;
+  const sky = 1 - v * 0.5;
+  return { c: mixc([0.16, 0.3, 0.46], [0.42, 0.62, 0.8], sky * 0.6 + (streak ? 0.3 : 0)), h: 0.5, a: streak ? 0.75 : 0.6 };
+}
+
 function sidewalk(u, v) {
   const n = fbm(u, v, 8, 5, 170);
   const slab = Math.min((u * 2) % 1, (v * 2) % 1, 1 - (u * 2) % 1, 1 - (v * 2) % 1) < 0.025;
@@ -449,6 +484,11 @@ const GENERATORS = {
   door_top: (u, v) => doorPanel(u, v, true),
   asphalt,
   road_line: roadLine,
+  road_line_turned: roadLineTurned,
+  parking_line: parkingLine,
+  parking_line_turned: parkingLineTurned,
+  parking_sign: parkingSign,
+  tinted_glass: tintedGlass,
   sidewalk,
   roof: roofTiles,
   flowers,

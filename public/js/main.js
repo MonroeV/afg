@@ -2,12 +2,12 @@
 import * as THREE from 'three';
 import {
   BLOCKS, WORLD, inBounds, blockId, blockMeta, shapeOf, isReplaceable, makeBlock, doorFacingFromYaw, paintOf, withPaint,
-  railMask, railBoxes, nearestRailEdge, PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP,
+  railMask, railBoxes, nearestRailEdge, canHoldItem, stack, itemOf, floorOf, turnLine, PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP,
 } from './shared/blocks.js';
 import { generateWorld } from './shared/worldgen.js';
 import { randomLook, sanitizeLook } from './shared/avatar.js';
 import { generateTextures } from './textures.js';
-import { World, createBlockMaterials, blockMaterial, RAILING } from './world.js';
+import { World, createBlockMaterials, blockMaterial, rayBox, RAILING } from './world.js';
 import { Player, EYE_HEIGHT } from './player.js';
 import { Network } from './network.js';
 import { Avatar, Avatars } from './avatars.js';
@@ -377,7 +377,7 @@ net.on('car_driver', msg => {
 });
 net.on('horn', ({ id }) => {
   const car = cars.list.get(id);
-  if (car) sounds.horn(loudness(car.pos.x, car.pos.y, car.pos.z, 60));
+  if (car) sounds.horn(loudness(car.pos.x, car.pos.y, car.pos.z, 60), hornPitch(car));
 });
 net.on('time', ({ time }) => (sky.time = time));
 net.on('disconnect', () => {
@@ -724,8 +724,13 @@ function emote(kind) {
   }
 }
 
+// Every vehicle's horn has its own note.
+function hornPitch(car) {
+  return car.kind === 'police' ? 1.06 : car.kind === 'monster' ? 0.82 : 0.92 + ((car.id * 0.618) % 1) * 0.14;
+}
+
 function honk() {
-  sounds.horn(1);
+  sounds.horn(1, hornPitch(myCar));
   net.send({ t: 'horn' });
 }
 
@@ -819,6 +824,7 @@ function enterCar(car) {
   carCam.pitch = car.spec.flying ? -0.25 : -0.15;
   danceView = 0;
   hud.setCarHelp(car.kind);
+  sounds.setEngineVoice(car.id, car.kind);
   if (!car.spec.flying) sounds.engine(0.15, 0);
   sounds.spawnCar();
   if (car.spec.flying && settings.heliTip !== 2) { // shown again when the controls change
@@ -1317,6 +1323,22 @@ function blockedByPlayer(x, y, z) {
   return false;
 }
 
+// Makes every column of the garage door at (x, y, z) the same height: at least 3 blocks, as
+// tall as its tallest column, plus `extra` rows. Only builds where there's room.
+function growGarage(x, y, z, extra) {
+  const columns = world.doorRow(x, y, z).cells.map(([cx, cy, cz]) => ({ cx, cz, ...world.doorColumn(cx, cy, cz) }));
+  const tall = Math.max(3, ...columns.map(c => c.hi - c.lo + 1 + extra));
+  const open = blockMeta(world.get(x, y, z)) & DOOR_OPEN;
+  for (const c of columns) {
+    const top = world.get(c.cx, c.hi, c.cz);
+    for (let yy = c.hi + 1; yy < c.lo + tall; yy++) {
+      const here = world.get(c.cx, yy, c.cz);
+      if (!inBounds(c.cx, yy, c.cz) || (here && !isReplaceable(here)) || !canBuildAt(c.cx, c.cz)) break;
+      setBlock(c.cx, yy, c.cz, makeBlock(DOOR, (blockMeta(top) & 3) | DOOR_TOP | open));
+    }
+  }
+}
+
 // Opens or closes a door, together with the doors next to it (double doors and garage doors).
 function toggleDoor(x, y, z) {
   const parts = world.doorGroup(x, y, z);
@@ -1324,9 +1346,13 @@ function toggleDoor(x, y, z) {
   const opening = !(blockMeta(world.get(x, y, z)) & DOOR_OPEN);
   // Everything in the group ends up the same way (open or closed).
   const changes = parts.map(([px, py, pz, v]) => [px, py, pz, v, opening ? v | (DOOR_OPEN << 8) : v & ~(DOOR_OPEN << 8)]).filter(c => c[3] !== c[4]);
+  // Vehicles parked in the doorway (that would be shut in by closing it).
+  const near = [...cars.list.values()].filter(c => c.pos.distanceTo(new THREE.Vector3(x, y, z)) < 12);
+  const inDoorway = () => near.filter(c => cars.blocked(c.spec, c.pos.x, c.pos.y, c.pos.z, c.h, c.id, c.outline));
+  const stuckBefore = new Set(inDoorway());
   for (const [px, py, pz, , nv] of changes) world.set(px, py, pz, nv);
-  if (player.overlapsSomething()) {
-    // Don't close a door on yourself.
+  if (player.overlapsSomething() || (!opening && inDoorway().some(c => !stuckBefore.has(c)))) {
+    // Don't close a door on yourself (or on a car).
     for (const [px, py, pz, v] of changes) world.set(px, py, pz, v);
     return;
   }
@@ -1335,15 +1361,10 @@ function toggleDoor(x, y, z) {
   else sounds.door(opening);
 }
 
-// The two halves of one door.
-function doorPair(x, y, z) {
-  const by = blockMeta(world.get(x, y, z)) & DOOR_TOP ? y - 1 : y;
-  return [[x, by, z, world.get(x, by, z)], [x, by + 1, z, world.get(x, by + 1, z)]].filter(([, , , v]) => shapeOf(v) === 'door');
-}
-
-// What a click on this block affects: both halves of a door, a whole ladder, or just the block.
+// What a click on this block affects: a whole door (or one column of a garage door), a
+// whole ladder, or just the block.
 function blockGroup(x, y, z, v) {
-  if (shapeOf(v) === 'door') return doorPair(x, y, z);
+  if (shapeOf(v) === 'door') return world.doorColumnCells(x, y, z);
   if (shapeOf(v) === 'ladder') return world.ladderCells(x, y, z);
   return [[x, y, z, v]];
 }
@@ -1375,6 +1396,16 @@ function hitBlock() {
   }
   hitState.key = null;
   crack.visible = false;
+  if (floorOf(hit.value)) {
+    // A torch on a sidewalk (or among railings): knock off the part you hit, keep the rest.
+    const item = itemOf(hit.value), floor = floorOf(hit.value);
+    const railing = aimingAtRailing(hit);
+    const rest = !railing ? floor : shapeOf(floor) === 'rail' ? item : stack(item, blockId(floor));
+    setBlock(x, y, z, rest);
+    particles.burst(x, y, z, railing ? materials[RAILING] : blockMaterial(materials, item));
+    sounds.break();
+    return;
+  }
   if (shapeOf(hit.value) === 'flat' && railMask(hit.value)) {
     // A railing on a sidewalk (or carpet…): take the railing (and its paint) off and leave the floor.
     setBlock(x, y, z, blockId(hit.value));
@@ -1391,6 +1422,7 @@ function hitBlock() {
 
 function placeBlock(item) {
   if (BLOCKS[item].shape === 'rail') return placeRail();
+  if (BLOCKS[item].shape === 'model' && placeOnFloor(item)) return;
   let [x, y, z] = hit.value && isReplaceable(hit.value) ? hit.block : hit.place;
   if (!canBuildAt(x, z)) {
     notifyLand(x, z);
@@ -1408,6 +1440,13 @@ function placeBlock(item) {
     return;
   }
   if (shape === 'door') {
+    // A door on top of a garage door makes the whole garage door one row taller.
+    const below = world.get(x, y - 1, z);
+    if (shapeOf(below) === 'door' && world.doorRole(x, y - 1, z).kind === 'garage') {
+      growGarage(x, y - 1, z, 1);
+      sounds.place();
+      return;
+    }
     const above = world.get(x, y + 1, z);
     if (!inBounds(x, y + 1, z) || (above && !isReplaceable(above))) return;
     if (blockedByPlayer(x, y, z) || blockedByPlayer(x, y + 1, z)) return;
@@ -1422,8 +1461,14 @@ function placeBlock(item) {
     }
     setBlock(x, y, z, makeBlock(DOOR, facing));
     setBlock(x, y + 1, z, makeBlock(DOOR, facing | DOOR_TOP));
+    // Three in a row make a garage door: 3 blocks tall (so cars fit under it when it's
+    // rolled up), or as tall as the garage door it joins.
+    if (world.doorRole(x, y, z).kind === 'garage') growGarage(x, y, z, 0);
   } else {
     if (shape === 'cube' && blockedByPlayer(x, y, z)) return;
+    // Road and parking lines run the way you're facing.
+    const along = Math.abs(Math.sin(player.yaw)) > Math.abs(Math.cos(player.yaw)) ? 'x' : 'z';
+    if (BLOCKS[item].turns && BLOCKS[item].along !== along) item = BLOCKS[item].turns;
     if (!setBlock(x, y, z, item)) return;
   }
   sounds.place();
@@ -1431,6 +1476,28 @@ function placeBlock(item) {
     treeTipShown = true;
     hud.toast('🌱 A lone log on the grass grows into a tree! Give it a minute.');
   }
+}
+
+// Torches, lamps and other small things stand on a sidewalk, road or carpet (or in the
+// middle of railings) without replacing it.
+function placeOnFloor(item) {
+  const cell = canHoldItem(hit.value) ? hit.block : canHoldItem(world.get(...hit.place)) ? hit.place : null;
+  if (!cell) return false;
+  const [x, y, z] = cell;
+  if (!canBuildAt(x, z)) notifyLand(x, z);
+  else if (setBlock(x, y, z, stack(item, world.get(x, y, z)))) sounds.place();
+  return true;
+}
+
+// In a spot with railings and something in the middle: is the look ray on a railing first?
+function aimingAtRailing(h) {
+  const mask = railMask(h.value);
+  if (!mask) return false;
+  const [x, y, z] = h.block;
+  const at = b => rayBox(eye, lookDir, [x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
+  const middle = shapeOf(h.value) === 'model' ? at(BLOCKS[blockId(h.value)].box || [0.3, 0, 0.3, 0.7, 1, 0.7]) : null;
+  const rail = railBoxes(mask, 1).map(at).filter(Boolean).sort((a, b) => a.t - b.t)[0];
+  return !!rail && (!middle || rail.t < middle.t);
 }
 
 // Left click: use whatever you're holding.
@@ -1474,6 +1541,12 @@ function interact() {
   if (target?.pet) return petThePet(target);
   if (hit && !hit.ground) {
     if (shapeOf(hit.value) === 'door') return toggleDoor(...hit.block);
+    if (BLOCKS[blockId(hit.value)]?.turns && !floorOf(hit.value)) {
+      // Turn a road line (or parking line) to run the other way.
+      if (!canBuildAt(hit.block[0], hit.block[2])) return notifyLand(hit.block[0], hit.block[2]);
+      if (setBlock(...hit.block, turnLine(hit.value))) sounds.click();
+      return;
+    }
     const s = structures.at(...hit.block);
     if (s?.type === 'bed') return goToBed(s);
     if (s?.type === 'cannon') return fireCannon(s);
@@ -1537,7 +1610,7 @@ function railSpot() {
   };
   const edgeAt = (p, cx, cz) => nearestRailEdge(Math.min(1, Math.max(0, p.x - cx)), Math.min(1, Math.max(0, p.z - cz)));
   if (hit.ground) return { cell: [bx, 0, bz], edge: edgeAt(hit.point, bx, bz) };
-  if (shape === 'rail' || shape === 'flat' || shape === 'plant') return { cell: [bx, by, bz], edge: edgeAt(floorPoint(by), bx, bz) };
+  if (['rail', 'flat', 'plant', 'model'].includes(shape)) return { cell: [bx, by, bz], edge: edgeAt(floorPoint(by), bx, bz) };
   if (shape !== 'cube') return null;
   if (n[1] === 1) return { cell: [bx, by + 1, bz], edge: edgeAt(hit.point, bx, bz) };
   if (n[1] === 0) {
@@ -1555,7 +1628,10 @@ function withRail(spot) {
   if (!inBounds(x, y, z)) return null;
   const v = world.get(x, y, z), shape = shapeOf(v);
   if (!v || shape === 'plant') return makeBlock(RAILING, spot.edge);
-  if (shape === 'rail' || shape === 'flat') return railMask(v) & spot.edge ? null : v | (spot.edge << 8);
+  if (railMask(v) & spot.edge) return null;
+  if (shape === 'rail' || shape === 'flat') return v | (spot.edge << 8);
+  // A torch (or lamp) gets railings around it: they go in the floor part of the spot.
+  if (shape === 'model') return stack(itemOf(v), floorOf(v) ? floorOf(v) | (spot.edge << 8) : makeBlock(RAILING, spot.edge));
   return null;
 }
 
@@ -1611,8 +1687,14 @@ function paintBlock(paint) {
     notifyLand(x, z);
     return;
   }
-  if (!paint && !paintOf(hit.value)) {
+  // In a spot with railings and a torch, paint whichever you're pointing at.
+  const onRailing = floorOf(hit.value) && aimingAtRailing(hit);
+  if (!paint && !paintOf(onRailing ? floorOf(hit.value) : hit.value)) {
     hud.toast("🧽 That block isn't painted.");
+    return;
+  }
+  if (onRailing) {
+    if (setBlock(x, y, z, stack(itemOf(hit.value), withPaint(floorOf(hit.value), paint)))) sounds.paint();
     return;
   }
   // A garage door is painted all at once; double doors can have a different color on each side.
@@ -1823,6 +1905,7 @@ function frame(timestamp) {
       if (item === BRUSH && hit && !hit.ground) hint = `🎨 Click to paint it ${PAINT_NAMES[settings.paint]}`;
       else if (item === SCRAPER && hit && !hit.ground) hint = paintOf(hit.value) ? '🧽 Click to scrape off the paint' : '';
       else if (hit && shapeOf(hit.value) === 'door') hint = '🚪 Right-click to open / close';
+      else if (hit && BLOCKS[blockId(hit.value)]?.turns && !floorOf(hit.value) && item !== HAMMER) hint = '↻ Right-click to turn the line';
       else if (hit && shapeOf(hit.value) === 'ladder' && item !== HAMMER) hint = '🪜 Walk into it and hold W or Space to climb';
       else if (item === RAILING && hit) hint = railPreview && withRail(railPreview) ? '🚧 Click to add a railing here' : '🚧 Point near the edge of a floor, or at the side of a block';
       else if (s?.type === 'bed') hint = '🛏️ Right-click to sleep';
@@ -1948,7 +2031,7 @@ function frame(timestamp) {
   }
 
   // Loudest nearby siren, fire and helicopter.
-  let siren = 0, rotor = 0, rotorSpin = 0;
+  let siren = 0, rotor = 0, rotorSpin = 0, rotorEffort = 0.5;
   for (const car of cars.list.values()) {
     if (car.siren) siren = Math.max(siren, loudness(car.pos.x, car.pos.y, car.pos.z, 70));
     if (car.hp < FIRE_HP) fire = Math.max(fire, loudness(car.pos.x, car.pos.y, car.pos.z, 35));
@@ -1957,13 +2040,14 @@ function frame(timestamp) {
       if (level > rotor) {
         rotor = level;
         rotorSpin = car.rotorSpin;
+        rotorEffort = car === myCar ? car.collective : 0.5 + Math.max(-0.3, Math.min(0.4, (car.target.y - car.pos.y) * 0.5));
       }
     }
   }
   if (inGame) {
     sounds.siren(siren);
     sounds.fire(fire);
-    sounds.rotor(rotor * Math.min(1, rotorSpin * 3), rotorSpin);
+    sounds.rotor(rotor * Math.min(1, rotorSpin * 3), rotorSpin, rotorEffort);
   }
 
   sky.update(dt, camera, world, materials);
@@ -2026,7 +2110,7 @@ load();
 
 // Handy for poking at the game from the browser console.
 window.buildzone = {
-  scene, camera, sky, net, avatars, renderer, fireworks, effects, glow, reflections, view,
+  scene, camera, sky, net, avatars, renderer, fireworks, effects, glow, reflections, view, sounds,
   get world() { return world; },
   get player() { return player; },
   get cars() { return cars; },

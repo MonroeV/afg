@@ -127,7 +127,7 @@ export class Hud {
       h.className = 'inv-section';
       h.textContent = title;
       grid.append(h);
-      for (const item of ALL_ITEMS.filter(test)) {
+      for (const item of ALL_ITEMS.filter(i => test(i) && !BLOCKS[i]?.hidden)) {
         const el = document.createElement('div');
         el.className = 'inv-item';
         const label = document.createElement('div');

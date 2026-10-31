@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   BLOCKS, WORLD, PAINT_COLORS, blockKey, blockId, blockMeta, paintOf, withPaint, makeBlock, shapeOf, isSolidBlock, doorBox,
-  railBoxes, DOOR_OPEN, DOOR_TOP,
+  railBoxes, railMask, itemOf, floorOf, DOOR_OPEN, DOOR_TOP,
 } from './shared/blocks.js';
 import { modelGeometry, modelMaterials } from './models.js';
 
@@ -46,7 +46,7 @@ export function railGeometry(mask) {
 }
 
 // Does a ray hit a box? Returns the distance and the face it went in through.
-function rayBox(o, d, b) {
+export function rayBox(o, d, b) {
   let t0 = 0, t1 = Infinity, axis = -1;
   for (let a = 0; a < 3; a++) {
     const oa = a === 0 ? o.x : a === 1 ? o.y : o.z, da = a === 0 ? d.x : a === 1 ? d.y : d.z;
@@ -206,6 +206,11 @@ export class World {
     }
     const v = this.get(x, y, z);
     if (!v) return;
+    this.partBoxes(itemOf(v), x, y, z, out);
+    if (floorOf(v)) this.partBoxes(floorOf(v), x, y, z, out); // railings under a torch
+  }
+
+  partBoxes(v, x, y, z, out) {
     const shape = shapeOf(v);
     if (shape === 'cube') out.push([x, y, z, x + 1, y + 1, z + 1]);
     else if (shape === 'door') {
@@ -214,7 +219,7 @@ export class World {
       const b = doorBox(meta, role.hinge);
       if (role.kind === 'garage' && meta & DOOR_OPEN) {
         // A rolled-up garage door is just a roll at the very top (above your head).
-        if (meta & DOOR_TOP) {
+        if (role.top) {
           const c = doorBox(meta & ~DOOR_OPEN);
           out.push([x + c[0], y + 0.85, z + c[2], x + c[3], y + 1, z + c[5]]);
         }
@@ -271,22 +276,43 @@ export class World {
   }
 
   // ---------- Doors ----------
-  // Doors side by side (facing the same way) work together: two make double doors that
-  // swing open to either side, three or more make a roll-up garage door.
+  // A door is a column of door cells: two tall, or taller for a garage. Doors side by side
+  // (facing the same way) work together: two make double doors that swing open to either
+  // side, three or more make one big roll-up garage door, as tall as its columns.
 
-  // The row of doors (bottom halves) that the door at (x, y, z) belongs to.
+  // The stack of door cells facing the same way that (x, y, z) is part of.
+  doorColumn(x, y, z) {
+    const facing = blockMeta(this.get(x, y, z)) & 3;
+    const same = yy => {
+      const n = this.get(x, yy, z);
+      return shapeOf(n) === 'door' && (blockMeta(n) & 3) === facing;
+    };
+    let lo = y, hi = y;
+    while (lo > 0 && y - lo < 24 && same(lo - 1)) lo--;
+    while (hi < WORLD.maxY && hi - y < 24 && same(hi + 1)) hi++;
+    return { lo, hi };
+  }
+
+  doorColumnCells(x, y, z) {
+    const { lo, hi } = this.doorColumn(x, y, z), out = [];
+    for (let yy = lo; yy <= hi; yy++) out.push([x, yy, z, this.get(x, yy, z)]);
+    return out;
+  }
+
+  // The row of door columns (their bottom cells) that the door at (x, y, z) belongs to.
   doorRow(x, y, z) {
     const v = this.get(x, y, z);
-    const by = blockMeta(v) & DOOR_TOP ? y - 1 : y;
+    const by = this.doorColumn(x, y, z).lo;
     const facing = blockMeta(v) & 3;
     const [ax, az] = facing % 2 === 0 ? [1, 0] : [0, 1];
-    const sameRow = (cx, cz) => {
-      const n = this.get(cx, by, cz);
-      return shapeOf(n) === 'door' && !(blockMeta(n) & DOOR_TOP) && (blockMeta(n) & 3) % 2 === facing % 2;
+    const bottomAt = (cx, cz) => {
+      const n = this.get(cx, by, cz), below = this.get(cx, by - 1, cz);
+      if (shapeOf(n) !== 'door' || (blockMeta(n) & 3) % 2 !== facing % 2) return false;
+      return !(shapeOf(below) === 'door' && (blockMeta(below) & 3) === (blockMeta(n) & 3));
     };
     let start = 0, end = 0;
-    while (start > -16 && sameRow(x + ax * (start - 1), z + az * (start - 1))) start--;
-    while (end < 16 && sameRow(x + ax * (end + 1), z + az * (end + 1))) end++;
+    while (start > -16 && bottomAt(x + ax * (start - 1), z + az * (start - 1))) start--;
+    while (end < 16 && bottomAt(x + ax * (end + 1), z + az * (end + 1))) end++;
     const cells = [];
     for (let i = start; i <= end; i++) cells.push([x + ax * i, by, z + az * i]);
     return { cells, index: -start, ax, az };
@@ -295,7 +321,8 @@ export class World {
   doorRole(x, y, z) {
     const row = this.doorRow(x, y, z);
     const n = row.cells.length;
-    if (n >= 3) return { kind: 'garage', hinge: -1, size: n };
+    // In a garage door, the top cell of each column holds the roll when it's open.
+    if (n >= 3) return { kind: 'garage', hinge: -1, size: n, top: this.doorColumn(x, y, z).hi === y };
     if (n === 1) return { kind: 'single', hinge: -1, size: 1 };
     // Double doors: each swings toward its own outside edge.
     const facing = blockMeta(this.get(x, y, z)) & 3;
@@ -304,33 +331,38 @@ export class World {
     return { kind: 'double', hinge: (row.index === 0 ? -1 : 1) * localX, size: 2 };
   }
 
-  // Every door cell (both halves) in the rows next to (x, y, z).
+  // Redraws the doors around (x, y, z): a change can turn doors into double or garage
+  // doors (or back), or change which cell is the top of a garage.
   refreshDoorsNear(x, y, z) {
     const seen = new Set();
     for (const [dx, dy, dz] of [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, -1, 0], [0, 1, 0], [1, -1, 0], [-1, -1, 0], [0, -1, 1], [0, -1, -1]]) {
       const cx = x + dx, cy = y + dy, cz = z + dz;
-      if (shapeOf(this.get(cx, cy, cz)) !== 'door') continue;
-      for (const [rx, ry, rz] of this.doorRow(cx, cy, cz).cells) {
-        for (const yy of [ry, ry + 1]) {
-          const k = blockKey(rx, yy, rz);
-          if (seen.has(k) || shapeOf(this.get(rx, yy, rz)) !== 'door') continue;
-          seen.add(k);
-          this.rerender(rx, yy, rz);
-        }
+      if (shapeOf(this.get(cx, cy, cz)) !== 'door' || seen.has(blockKey(cx, cy, cz))) continue;
+      for (const [rx, ry, rz] of this.doorGroup(cx, cy, cz)) {
+        const k = blockKey(rx, ry, rz);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        this.rerender(rx, ry, rz);
       }
     }
   }
 
-  // Every door cell (both halves) that opens and closes together with this one.
+  // Every door cell that opens and closes together with this one.
   doorGroup(x, y, z) {
     const out = [];
-    for (const [rx, ry, rz] of this.doorRow(x, y, z).cells) {
-      for (const yy of [ry, ry + 1]) {
-        const v = this.get(rx, yy, rz);
-        if (shapeOf(v) === 'door') out.push([rx, yy, rz, v]);
-      }
-    }
+    for (const [rx, ry, rz] of this.doorRow(x, y, z).cells) out.push(...this.doorColumnCells(rx, ry, rz));
     return out;
+  }
+
+  // Can a vehicle drive through this spot? Open doors let it through, except for the roll at
+  // the top of a garage door; railings stop it.
+  vehicleSolid(x, y, z) {
+    const v = this.get(x, y, z);
+    if (shapeOf(v) === 'door' && v && blockMeta(v) & DOOR_OPEN) {
+      const role = this.doorRole(x, y, z);
+      return role.kind === 'garage' && role.top;
+    }
+    return this.isSolid(x, y, z) || railMask(v) > 0;
   }
 
   // ---------- Ladders ----------
@@ -409,8 +441,8 @@ export class World {
     if (!(meta & DOOR_OPEN)) return m;
     const role = this.doorRole(x, y, z);
     if (role.kind === 'garage') {
-      // Rolled up: the bottom half disappears, the top half becomes the roll.
-      if (!(meta & DOOR_TOP)) return m.multiply(this.tmp.makeScale(0.0001, 0.0001, 0.0001));
+      // Rolled up: the door disappears except for the roll in its top row.
+      if (!role.top) return m.multiply(this.tmp.makeScale(0.0001, 0.0001, 0.0001));
       return m.multiply(this.tmp.makeTranslation(0, 0.85, 0)).multiply(this.tmp.makeScale(1, 0.15, 1.5));
     }
     // Swing open on its hinge side.
@@ -418,6 +450,12 @@ export class World {
   }
 
   addInstance(v, k, x, y, z) {
+    // An item standing on a floor (a torch on a sidewalk): draw both.
+    if (floorOf(v)) this.addPart(floorOf(v), `${k}|floor`, x, y, z);
+    this.addPart(itemOf(v), k, x, y, z);
+  }
+
+  addPart(v, k, x, y, z) {
     const rails = shapeOf(v) === 'flat' ? blockMeta(v) : 0;
     if (!rails) return this.addOne(v, k, x, y, z);
     // A flat block with railings on it: the railings are a second instance, and they get the paint.
@@ -426,8 +464,7 @@ export class World {
   }
 
   removeInstance(k) {
-    this.removeOne(k);
-    if (this.cellLayer.has(`${k}|rail`)) this.removeOne(`${k}|rail`);
+    for (const part of [k, `${k}|rail`, `${k}|floor`, `${k}|floor|rail`]) if (this.cellLayer.has(part)) this.removeOne(part);
   }
 
   addOne(v, k, x, y, z) {

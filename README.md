@@ -5,6 +5,10 @@ customize your character, drive cars, build anything and play with friends.
 
 - **Towns to explore**: a main town around the spawn square plus four villages, joined by roads,
   with houses you can walk into, shops, parks, playgrounds, a beach and street lamps
+- **Skyscrapers and parking lots**: two glass towers (48 and 36 blocks tall) with a lobby, a floor
+  every 4 blocks, a ladder up to the roof and railings around the top (the tall one has a helipad
+  on the roof: try landing the helicopter up there!), and two parking lots with lined spaces,
+  lamps, a P sign and parked cars
 - **Make your own character**: 10 faces, 8 hairstyles, 9 hats, 7 shirts, 4 kinds of pants,
   capes, wings and backpacks, and a color for every piece
 - **Pets** that follow you, wander around and sniff things when you stand still, play fetch with
@@ -36,7 +40,9 @@ customize your character, drive cars, build anything and play with friends.
   silly commercials)
 - **Doors** that open and close with a right-click (even with the hammer in your hand). Put two
   doors side by side and they become double doors that swing outward; put three or more in a row
-  and they become a garage door that rolls up
+  and they become one big garage door that rolls up. A garage door starts 3 blocks tall (so cars
+  drive in under it when it's up); put another door on top and the whole garage door grows one
+  block taller (4 tall fits a monster truck). Doors won't close on a parked car
 - **Ladders**: point at a wall and click once, and the ladder runs from the ground all the way to
   the top of the wall. Walk into it and hold W or Space to climb (S to go down). Breaking any rung
   takes the whole ladder down
@@ -45,6 +51,11 @@ customize your character, drive cars, build anything and play with friends.
   Click the other edges of the same spot for corners. A railing stops you walking (or falling, or
   jumping) off that side, but you can still step on from the other sides. It stops cars too, and you
   can paint it any color
+- **Torches and lamps on anything**: lamps, lanterns and tiki torches stand on top of a sidewalk,
+  road or carpet (instead of replacing it), and in the middle of a railing spot, so a fence can
+  have lanterns on it. The hammer (or paint brush) works on whichever part you point at
+- **Road lines** run the way you're facing when you place them; right-click one to turn it. Parking
+  lines work the same way
 - **Paint anything**: pick one of 15 paint colors and use the Paint Brush on any block (carpets,
   doors, lamps and neon too; painted lamps glow in their new color). The Paint Scraper takes the
   paint off again
@@ -61,8 +72,11 @@ customize your character, drive cars, build anything and play with friends.
   Lamps cast a soft glow that spreads wide around them, and the towns use them all: street lamps,
   porch lanterns, ceiling lights and table lamps in houses, garden lights and tiki torches in parks.
   Any lamp with a roof over it counts as indoors, so it lights up the room day and night
-- **54 kinds of blocks** with realistic textures: brick, wood, glass, marble, roads, flowers,
-  rainbow, gold, mirrors, lamps, ladders, railings…
+- **57 kinds of blocks** with realistic textures: brick, wood, glass, tinted glass, marble, roads,
+  parking lines, flowers, rainbow, gold, mirrors, lamps, ladders, railings…
+- **Sounds that don't get old**: every sound is a little different each time, every vehicle has its
+  own engine and horn note, and a steady engine or helicopter hum slowly settles into the
+  background (it comes right back when you speed up, slow down or climb)
 - **Real-time multiplayer**: see each other, drive together, chat
 - **Single player works too**: with no server, the world runs and saves right in the browser
 - **Plays on phones and tablets** (held sideways): a joystick under your left thumb, drag to look,
@@ -176,8 +190,9 @@ The server keeps everything in the `data/` folder:
 **Updates never erase your world.** Everything players have built stays exactly where it is.
 When a new version of the game needs to upgrade an older save, the server first copies it to
 `data/world-backup-v<version>-<date>-<time>.json`, then only adds things: a helipad for the
-helicopter (only where there's empty ground), lamp heads on the town's street lamps, and the
-new kinds of blocks. If `world.json` can't be read, or was saved by a newer version of the game,
+helicopter (only where there's empty ground), lamp heads on the town's street lamps, road lines
+turned to run along their roads, and the skyscrapers and parking lots (built only on empty land
+that nobody has claimed, beside the roads out of town or along the ring road). If `world.json` can't be read, or was saved by a newer version of the game,
 the server stops with a message instead of touching it.
 
 ## The Character Gallery

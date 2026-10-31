@@ -3,11 +3,11 @@
 // the browser runs its own copy so single player works exactly the same way.
 import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, DOOR_OPEN, DAY_LENGTH, WORLD, isNightTime } from './blocks.js';
 import { sanitizeLook, cleanName } from './avatar.js';
-import { generateWorld, helipadBlocks, upgradeLamps } from './worldgen.js';
+import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, orientRoadLines } from './worldgen.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot } from './vehicles.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS } from './claims.js';
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 const TICK_RATE = 15;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LOG = 7, LEAVES = 8, GRASS = 1, DIRT = 2;
@@ -101,8 +101,9 @@ export class GameRoom {
       // Older saves had player-spawned cars; use the town's parking spots instead, and
       // add the helipad wherever the ground is still empty (it never replaces anything).
       for (const [x, y, z, v] of helipadBlocks()) if (!this.world.has(blockKey(x, y, z))) this.world.set(blockKey(x, y, z), v);
-      this.setHomes(generateWorld().cars);
+      this.setHomes(generateWorld().cars.filter(c => !c.landmark));
       this.upgradeLamps();
+      this.upgradeTo5();
       return true;
     }
     this.vehicles.clear();
@@ -116,7 +117,21 @@ export class GameRoom {
     this.saplings = data.saplings || [];
     this.expireClaims();
     if (data.version < 4) this.upgradeLamps();
+    if (data.version < 5) this.upgradeTo5();
     return true;
+  }
+
+  // Worlds saved before version 5: road lines turn to run along their roads, and parking
+  // lots and skyscrapers go up on empty land (never on anything built, claimed or parked on).
+  upgradeTo5() {
+    const get = (x, y, z) => this.get(x, y, z), set = (x, y, z, v) => this.world.set(blockKey(x, y, z), v);
+    orientRoadLines([...this.world].filter(([, v]) => blockId(v) === 23).map(([k]) => k), get, set);
+    // Keep clear of vehicles parked off the road (cars parked along a road are never in the way).
+    const onRoad = h => [22, 23, 24, 55].includes(blockId(this.get(Math.floor(h.x), 0, Math.floor(h.z))));
+    const parked = [...this.homes.values()].filter(h => !onRoad(h));
+    const canUse = (x, z) => !claimAt(this.claims, x, z) && parked.every(h => Math.hypot(h.x - x, h.z - z) > 5);
+    for (const c of buildLandmarks({ get, set, canUse }).cars) this.spawn(this.addHome(c));
+    this.onDirty();
   }
 
   // Worlds saved before version 4 get the new lamps (and are saved again soon after).

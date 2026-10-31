@@ -1,6 +1,6 @@
 // Builds the starting world: a main town around spawn, villages in each corner,
 // roads joining them, parks, playgrounds, trees, flowers and parked cars.
-import { WORLD, DOOR_TOP, makeBlock } from './blocks.js';
+import { WORLD, DOOR_TOP, makeBlock, blockId, turnLine } from './blocks.js';
 
 const B = {
   grass: 1, dirt: 2, stone: 3, cobble: 4, brick: 5, planks: 6, log: 7, leaves: 8, glass: 9,
@@ -10,7 +10,8 @@ const B = {
   green: 34, carpet: 35, water: 36, mirror: 37, gold: 38,
   tableLamp: 39, floorLamp: 40, ceilingLight: 41, chandelier: 42, candle: 43, lavaLamp: 44,
   lantern: 45, streetLamp: 46, gardenLight: 47, tikiTorch: 48, partyLights: 49,
-  neonPink: 50, neonBlue: 51, neonGreen: 52,
+  neonPink: 50, neonBlue: 51, neonGreen: 52, ladder: 53, railing: 54, lineX: 55, parkingLine: 56, parkingLineX: 57,
+  parkingSign: 58, tintedGlass: 59,
 };
 
 function rng(seed) {
@@ -114,7 +115,7 @@ export function generateWorld(seed = 2024) {
       for (let a = from; a <= to; a++) {
         const [x, z] = axis === 'x' ? [a, center] : [center, a];
         const k = `${x},${z}`;
-        if (crossings.get(k) === 1 && ((a % 4) + 4) % 4 < 2) ground.set(k, B.line);
+        if (crossings.get(k) === 1 && ((a % 4) + 4) % 4 < 2) ground.set(k, axis === 'x' ? B.lineX : B.line);
       }
     }
     for (const [k, v] of ground) {
@@ -420,6 +421,11 @@ export function generateWorld(seed = 2024) {
   markUsed(HELIPAD.x - 3, HELIPAD.z - 3, HELIPAD.x + 13, HELIPAD.z + 13);
   cars.push(HELIPAD.heli);
 
+  // Parking lots and skyscrapers along the roads out of the main town.
+  const landmarks = buildLandmarks({ get: (x, y, z) => map.get(`${x},${y},${z}`) || 0, set: put, canUse: (x, z) => !used.has(`${x},${z}`) });
+  for (const a of landmarks.areas) markUsed(...a);
+  cars.push(...landmarks.cars);
+
   // ---------- Countryside ----------
 
   const nearUsed = (x, z, r) => {
@@ -489,5 +495,198 @@ export function upgradeLamps(lampKeys, get, set) {
     } else if (y === 3 && [0, 1, 2].every(py => get(x, py, z) === B.black)) {
       set(x, y, z, B.streetLamp);
     }
+  }
+}
+
+// ---------- Landmarks: parking lots and skyscrapers ----------
+// They go on empty land beside the four roads leading out of the main town. New worlds get
+// them straight away; saved worlds get them added on upgrade, but only on land where nothing
+// has been built and that nobody has claimed (canUse), so nothing players made is touched.
+
+// The roads out of the main town and the ring road between the villages (the same ones
+// generateWorld lays out).
+function exitRoads() {
+  const W = 3 * PITCH + 2 * ROAD_HALF + 1, x0 = -Math.floor(W / 2);
+  const mx = x0 + ROAD_HALF + 2 * PITCH, mz = x0 + ROAD_HALF + PITCH, out = x0 + W + 2;
+  return {
+    east: { axis: 'x', c: mz, from: out, to: 80 },
+    west: { axis: 'x', c: mz, from: -80, to: x0 - 3 },
+    south: { axis: 'z', c: mx, from: out, to: 80 },
+    north: { axis: 'z', c: mx, from: -80, to: x0 - 3 },
+    ringN: { axis: 'x', c: -84, from: -56, to: 56 },
+    ringS: { axis: 'x', c: 84, from: -56, to: 56 },
+    ringW: { axis: 'z', c: -84, from: -56, to: 56 },
+    ringE: { axis: 'z', c: 84, from: -56, to: 56 },
+  };
+}
+
+// get(x, y, z) and set(x, y, z, v) read and write blocks; canUse(x, z) says whether a column
+// of land may be built on. Returns the parked cars to add and the areas used.
+export function buildLandmarks({ get, set, canUse }) {
+  const roads = exitRoads();
+  const cars = [], areas = [];
+  const wishes = [
+    { kind: 'tower', size: 11, height: 48, style: 0, roads: ['east', 'west', 'south', 'north', 'ringE', 'ringN'] },
+    { kind: 'tower', size: 9, height: 36, style: 1, roads: ['west', 'north', 'east', 'south', 'ringW', 'ringS'] },
+    { kind: 'lot', roads: ['south', 'north', 'east', 'west', 'ringS', 'ringE', 'ringN', 'ringW'] },
+    { kind: 'lot', roads: ['north', 'east', 'west', 'south', 'ringN', 'ringW', 'ringS', 'ringE'] },
+  ];
+  for (const wish of wishes) {
+    const L = wish.kind === 'lot' ? 19 : wish.size + 2, D = wish.kind === 'lot' ? 16 : wish.size + 2;
+    const tall = wish.kind === 'lot' ? 5 : wish.height + 4;
+    search: for (const name of wish.roads) {
+      const road = roads[name];
+      for (const side of [-1, 1]) {
+        for (let a = road.from + 2; a + L <= road.to - 1; a += 2) {
+          const site = makeSite(road, side, a);
+          if (!siteFree(site, L, D, tall, get, canUse)) continue;
+          if (wish.kind === 'lot') cars.push(...parkingLot(site, set));
+          else skyscraper(site, wish, set);
+          const [xa, za] = site.at(-1, -1), [xb, zb] = site.at(L, D);
+          areas.push([Math.min(xa, xb), Math.min(za, zb), Math.max(xa, xb), Math.max(za, zb)]);
+          break search;
+        }
+      }
+    }
+  }
+  return { cars, areas };
+}
+
+// A site beside a road: u runs along the road, v away from it (v = 0 touches the sidewalk).
+function makeSite(road, side, a) {
+  const near = road.c + side * (ROAD_HALF + 1); // first row past the sidewalk
+  const at = (u, v) => (road.axis === 'x' ? [a + u, near + side * v] : [near + side * v, a + u]);
+  // Exact positions inside the site (for parking cars), measured from its corner.
+  const pos = (u, v) => {
+    const edge = side > 0 ? near : near + 1;
+    return road.axis === 'x' ? [a + u, edge + side * v] : [edge + side * v, a + u];
+  };
+  const dirU = road.axis === 'x' ? [1, 0] : [0, 1];
+  const dirV = road.axis === 'x' ? [0, side] : [side, 0];
+  // Railing edge bits for a local direction (1 = -z, 2 = +x, 4 = +z, 8 = -x).
+  const edge = (du, dv) => {
+    const x = du * dirU[0] + dv * dirV[0], z = du * dirU[1] + dv * dirV[1];
+    return x > 0 ? 2 : x < 0 ? 8 : z > 0 ? 4 : 1;
+  };
+  return { road, side, at, pos, dirU, dirV, edge };
+}
+
+function siteFree(site, L, D, tall, get, canUse) {
+  for (let u = -1; u <= L; u++)
+    for (let v = 0; v <= D; v++) {
+      const [x, z] = site.at(u, v);
+      if (x < WORLD.min + 2 || x > WORLD.max - 2 || z < WORLD.min + 2 || z > WORLD.max - 2 || !canUse(x, z)) return false;
+      for (let y = 0; y < tall; y++) if (get(x, y, z)) return false;
+    }
+  return true;
+}
+
+// A parking lot: two rows of five spaces either side of a driving lane, a way in from the
+// road, street lamps, a P sign and a few parked cars.
+function parkingLot(site, set) {
+  const W = 19, D = 16;
+  const put = (u, y, v, b) => {
+    const [x, z] = site.at(u, v);
+    set(x, y, z, b);
+  };
+  for (let u = 0; u < W; u++)
+    for (let v = 0; v < D; v++) {
+      const border = u === 0 || u === W - 1 || v === D - 1 || (v === 0 && (u < 6 || u > 12));
+      put(u, 0, v, border ? B.sidewalk : B.road);
+    }
+  // Lines between the spaces (each space is 3 wide and 5 deep).
+  const line = site.road.axis === 'x' ? B.parkingLine : B.parkingLineX;
+  for (const u of [1, 4, 7, 10, 13, 16])
+    for (const v of [1, 2, 3, 4, 5, 10, 11, 12, 13, 14]) put(u, 0, v, line);
+  for (const [u, v] of [[0, 3], [0, 12], [W - 1, 3], [W - 1, 12]]) {
+    for (let y = 0; y < 3; y++) put(u, y, v, B.black);
+    put(u, 3, v, B.streetLamp);
+  }
+  put(5, 0, 0, B.black);
+  put(5, 1, 0, B.black);
+  put(5, 2, 0, B.parkingSign);
+  // Parked cars, nose in. The middle space in the front row is the way in.
+  const cars = [];
+  for (const [row, i] of [[0, 0], [0, 3], [1, 1], [1, 4]]) {
+    const [x, z] = site.pos(1 + 3 * i + 1.5, row === 0 ? 3.5 : 12.5);
+    const f = row === 0 ? [-site.dirV[0], -site.dirV[1]] : site.dirV;
+    cars.push({ kind: 'car', x, y: 0, z, h: Math.atan2(-f[0], -f[1]), landmark: true });
+  }
+  return cars;
+}
+
+// A glass skyscraper: a lobby with double doors, a floor every 4 blocks with ceiling lights,
+// a ladder up a shaft in the back corner to the roof, and railings around the roof (the
+// big one has a helipad on top).
+function skyscraper(site, { size: S, height: H, style }, set) {
+  const trim = style ? B.concrete : B.metal, band = style ? B.marble : B.concrete;
+  const put = (i, y, j, b) => {
+    const [x, z] = site.at(i + 1, j + 1);
+    set(x, y, z, b);
+  };
+  // The plaza around it (and the lobby floor).
+  for (let u = 0; u < S + 2; u++) for (let v = 0; v < S + 2; v++) put(u - 1, 0, v - 1, B.sidewalk);
+  const Q = [1, S - 2], P = [2, S - 2]; // the pillar the ladder leans on, and the ladder shaft
+  const ladderFacing = (() => {
+    const e = site.edge(P[0] - Q[0], P[1] - Q[1]); // from the pillar toward the ladder
+    return e === 4 ? 0 : e === 2 ? 1 : e === 1 ? 2 : 3;
+  })();
+  const doorFacing = site.road.axis === 'x' ? 0 : 1;
+  const mid = Math.floor(S / 2);
+  for (let y = 0; y < H; y++) {
+    const slab = y === H - 1 || (y > 0 && y % 4 === 0);
+    for (let i = 0; i < S; i++)
+      for (let j = 0; j < S; j++) {
+        const edgeI = i === 0 || i === S - 1, edgeJ = j === 0 || j === S - 1;
+        if (i === Q[0] && j === Q[1]) put(i, y, j, B.concrete);
+        else if (i === P[0] && j === P[1]) put(i, y, j, makeBlock(B.ladder, ladderFacing));
+        else if (edgeI && edgeJ) put(i, y, j, trim);
+        else if (edgeI || edgeJ) {
+          if (slab) put(i, y, j, band);
+          else if (j === 0 && y < 2 && (i === mid - 1 || i === mid)) put(i, y, j, makeBlock(B.door, doorFacing | (y ? DOOR_TOP : 0)));
+          else put(i, y, j, y < 4 ? B.glass : B.tintedGlass);
+        } else if (slab) put(i, y, j, B.marble);
+      }
+    // Lights hanging under each floor (a chandelier in the lobby).
+    if (slab && y < H - 1) {
+      if (y === 4) put(mid, 3, mid, B.chandelier);
+      else for (const [i, j] of [[mid - 2, mid], [mid + 2, mid]]) put(i, y - 1, j, B.ceilingLight);
+    }
+  }
+  // Up on the roof: railings all round, around the top of the ladder shaft, and corner lights.
+  const roof = H;
+  for (let i = 0; i < S; i++)
+    for (let j = 0; j < S; j++) {
+      let mask = 0;
+      if (i === 0) mask |= site.edge(-1, 0);
+      if (i === S - 1) mask |= site.edge(1, 0);
+      if (j === 0) mask |= site.edge(0, -1);
+      if (j === S - 1) mask |= site.edge(0, 1);
+      if (i === P[0] && j === P[1]) mask = site.edge(1, 0) | site.edge(0, -1) | site.edge(0, 1); // open toward the pillar
+      if (mask) put(i, roof, j, makeBlock(B.railing, mask));
+    }
+  for (const [i, j] of [[0, 0], [S - 1, 0], [0, S - 1], [S - 1, S - 1]]) put(i, roof - 1, j, style ? B.neonBlue : B.neonPink);
+  if (S >= 11) {
+    // A rooftop helipad: an "H" on the roof.
+    for (let i = 2; i <= S - 3; i++)
+      for (let j = 2; j <= S - 3; j++) {
+        const li = i - 2, lj = j - 2;
+        const h = (li === 1 || li === 5) && lj >= 1 && lj <= 5 || (lj === 3 && li >= 1 && li <= 5);
+        if (!(i === P[0] && j === P[1])) put(i, roof, j, h ? B.sidewalk : B.road);
+      }
+  }
+}
+
+// Saved worlds from before road lines could turn: a line whose neighbors run east-west is
+// turned to run east-west too. get/set read and write the world.
+export function orientRoadLines(keys, get, set) {
+  const isLine = v => blockId(v) === B.line || blockId(v) === B.lineX;
+  for (const key of keys) {
+    const [x, y, z] = key.split(',').map(Number);
+    const v = get(x, y, z);
+    if (blockId(v) !== B.line) continue;
+    const alongX = [-2, -1, 1, 2].some(d => isLine(get(x + d, y, z)));
+    const alongZ = [-2, -1, 1, 2].some(d => isLine(get(x, y, z + d)));
+    if (alongX && !alongZ) set(x, y, z, turnLine(v));
   }
 }

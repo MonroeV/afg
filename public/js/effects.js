@@ -474,10 +474,35 @@ export class Effects {
 // ---------- Sounds ----------
 // Everything is synthesized with the Web Audio API, so there are no audio files.
 
+// Every sound is a little different each time it plays (pitch, length, loudness), so the
+// same noises over and over don't wear on your ears. Steady engine and rotor drones also
+// fade back a little while nothing changes, the way your ears stop noticing a hum.
+const jitter = k => 1 + (Math.random() * 2 - 1) * k;
+
 export class Sounds {
   constructor() {
     this.ctx = null;
     this.volume = 0.4;
+    this.shared = null; // while set, a group of sounds (a melody, a horn) shares one pitch change
+    this.engCalm = 0;
+    this.rotCalm = 0;
+    this.voice = { pitch: 1, q: 1, sub: 0.35 };
+  }
+
+  // Plays a group of sounds that should stay in tune with each other.
+  together(fn) {
+    this.shared = jitter(0.025);
+    try {
+      fn();
+    } finally {
+      this.shared = null;
+    }
+  }
+
+  // How "settled" a steady sound is (0..1): it creeps up while nothing changes and drops
+  // quickly when something does. Returns the new value.
+  settle(calm, changing, dt) {
+    return changing ? Math.max(0, calm - dt * 2.5) : Math.min(1, calm + dt / 14);
   }
 
   ensure() {
@@ -502,12 +527,15 @@ export class Sounds {
   noiseHit(freq, duration, gain, type = 'bandpass', delay = 0) {
     const ctx = this.ensure();
     if (!ctx || gain <= 0.001) return;
+    freq *= this.shared ?? jitter(0.12);
+    duration *= jitter(0.1);
+    gain *= 0.8 + Math.random() * 0.2;
     const src = ctx.createBufferSource();
     src.buffer = this.noise;
     const filter = ctx.createBiquadFilter();
     filter.type = type;
     filter.frequency.value = freq;
-    filter.Q.value = 1.2;
+    filter.Q.value = 0.9 + Math.random() * 0.6;
     const g = ctx.createGain();
     const t = ctx.currentTime + delay;
     g.gain.setValueAtTime(gain, t);
@@ -520,6 +548,11 @@ export class Sounds {
   tone(from, to, duration, gain, type = 'sine', delay = 0) {
     const ctx = this.ensure();
     if (!ctx || gain <= 0.001) return;
+    const k = this.shared ?? jitter(0.05);
+    from *= k;
+    to *= k;
+    duration *= this.shared ? 1 : jitter(0.06);
+    gain *= 0.85 + Math.random() * 0.15;
     const osc = ctx.createOscillator();
     osc.type = type;
     const g = ctx.createGain();
@@ -545,23 +578,34 @@ export class Sounds {
     this.noiseHit(400, 0.08, 0.6, 'bandpass', 0.22);
   }
   bump() { this.noiseHit(160, 0.25, 1.4, 'lowpass'); }
-  horn(volume = 1) {
-    this.tone(330, 325, 0.38, 0.25 * volume, 'square');
-    this.tone(415, 410, 0.38, 0.22 * volume, 'square');
+  horn(volume = 1, pitch = 1) {
+    this.together(() => {
+      this.tone(330 * pitch, 325 * pitch, 0.38, 0.25 * volume, 'square');
+      this.tone(415 * pitch, 410 * pitch, 0.38, 0.22 * volume, 'square');
+    });
   }
   launch(volume = 1) { this.tone(500, 1800, 0.8, 0.12 * volume, 'sine'); this.noiseHit(3000, 0.6, 0.15 * volume, 'highpass'); }
   boom(volume = 1) {
     this.noiseHit(120, 1.2, 1.6 * volume, 'lowpass');
     for (let i = 0; i < 6; i++) this.noiseHit(3000 + Math.random() * 3000, 0.08, 0.2 * volume, 'bandpass', 0.3 + Math.random() * 0.6);
   }
-  spawnCar() { this.tone(300, 600, 0.15, 0.3, 'triangle'); this.tone(600, 900, 0.15, 0.3, 'triangle', 0.12); }
+  spawnCar() { this.together(() => { this.tone(300, 600, 0.15, 0.3, 'triangle'); this.tone(600, 900, 0.15, 0.3, 'triangle', 0.12); }); }
   tune() {
     // A short happy melody for dancing.
     const notes = [523, 659, 784, 659, 698, 880, 784, 0, 659, 784, 1047];
-    notes.forEach((f, i) => f && this.tone(f, f * 0.99, 0.18, 0.18, 'square', i * 0.16));
+    this.together(() => notes.forEach((f, i) => f && this.tone(f, f * 0.99, 0.18, 0.18, 'square', i * 0.16)));
   }
 
   // ---------- Vehicles ----------
+
+  // Each vehicle sounds a bit different: monster trucks rumble deeper, police cars are
+  // higher, and every other car gets its own slightly different engine.
+  setEngineVoice(seed, kind) {
+    const r = ((Math.sin(seed * 12.9898) * 43758.5453) % 1 + 1) % 1;
+    const pitch = kind === 'monster' ? 0.78 : kind === 'police' ? 1.08 : 0.92 + r * 0.16;
+    this.voice = { pitch, q: 0.7 + r * 0.8, sub: kind === 'monster' ? 0.55 : 0.25 + r * 0.2 };
+    this.engine(null);
+  }
 
   // Engine note: rpm 0..1 inside the current gear, load 0..1 (how hard you press the gas).
   engine(rpm, load = 0) {
@@ -571,35 +615,70 @@ export class Sounds {
       if (this.eng) {
         this.eng.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.1);
         const e = this.eng;
-        setTimeout(() => { e.osc.stop(); e.sub.stop(); }, 500);
+        setTimeout(() => e.nodes.forEach(n => n.stop()), 500);
         this.eng = null;
       }
       return;
     }
     if (!this.eng) {
+      // Two slightly detuned saws and a sub-octave, through a soft filter. A slow wobble on
+      // the pitch and a gentle flutter on the volume keep it from sounding like a test tone.
+      const v = this.voice;
       const osc = ctx.createOscillator();
       osc.type = 'sawtooth';
+      const osc2 = ctx.createOscillator();
+      osc2.type = 'sawtooth';
+      osc2.detune.value = 9;
+      const osc2Gain = ctx.createGain();
+      osc2Gain.gain.value = 0.45;
       const sub = ctx.createOscillator();
       sub.type = 'square';
       const subGain = ctx.createGain();
-      subGain.gain.value = 0.35;
+      subGain.gain.value = v.sub;
+      const wobble = ctx.createOscillator();
+      wobble.frequency.value = 0.31 + Math.random() * 0.2;
+      const wobbleGain = ctx.createGain();
+      wobbleGain.gain.value = 7; // cents
+      wobble.connect(wobbleGain);
+      wobbleGain.connect(osc.detune);
+      wobbleGain.connect(sub.detune);
+      const flutter = ctx.createOscillator();
+      flutter.frequency.value = 3.7 + Math.random();
+      const flutterGain = ctx.createGain();
+      flutterGain.gain.value = 0.06;
+      const body = ctx.createGain();
+      body.gain.value = 1;
+      flutter.connect(flutterGain).connect(body.gain);
       const filter = ctx.createBiquadFilter();
       filter.type = 'lowpass';
+      filter.Q.value = v.q;
       const gain = ctx.createGain();
       gain.gain.value = 0;
       osc.connect(filter);
+      osc2.connect(osc2Gain).connect(filter);
       sub.connect(subGain).connect(filter);
-      filter.connect(gain).connect(this.master);
-      osc.start();
-      sub.start();
-      this.eng = { osc, sub, gain, filter };
+      filter.connect(body).connect(gain).connect(this.master);
+      const nodes = [osc, osc2, sub, wobble, flutter];
+      nodes.forEach(n => n.start());
+      this.eng = { osc, osc2, sub, gain, filter, nodes, t: ctx.currentTime, rpm, load };
+      this.engCalm = 0;
     }
-    const t = ctx.currentTime;
-    const f = 38 + rpm * 125;
-    this.eng.osc.frequency.setTargetAtTime(f, t, 0.03);
-    this.eng.sub.frequency.setTargetAtTime(f / 2, t, 0.03);
-    this.eng.filter.frequency.setTargetAtTime(250 + rpm * 1100 + load * 500, t, 0.04);
-    this.eng.gain.gain.setTargetAtTime(0.05 + rpm * 0.05 + load * 0.05, t, 0.04);
+    const e = this.eng, t = ctx.currentTime;
+    const dt = Math.min(0.1, Math.max(0, t - e.t));
+    // Steady cruising (or idling) slowly gets quieter and a little softer; revving,
+    // shifting or touching the gas brings it straight back.
+    const changing = Math.abs(rpm - e.rpm) > dt * 0.15 || Math.abs(load - e.load) > 0.05;
+    this.engCalm = this.settle(this.engCalm, changing, dt);
+    e.t = t;
+    e.rpm = rpm;
+    e.load = load;
+    const calm = this.engCalm;
+    const f = (38 + rpm * 125) * this.voice.pitch;
+    e.osc.frequency.setTargetAtTime(f, t, 0.03);
+    e.osc2.frequency.setTargetAtTime(f, t, 0.03);
+    e.sub.frequency.setTargetAtTime(f / 2, t, 0.03);
+    e.filter.frequency.setTargetAtTime((250 + rpm * 1100 + load * 500) * (1 - calm * 0.25), t, 0.04);
+    e.gain.gain.setTargetAtTime((0.05 + rpm * 0.05 + load * 0.05) * (1 - calm * 0.4), t, 0.05);
   }
 
   shift() {
@@ -642,8 +721,9 @@ export class Sounds {
     this.fireNode.gain.gain.setTargetAtTime(level * (0.08 + Math.random() * 0.25), ctx.currentTime, 0.02);
   }
 
-  // Helicopter: "whop-whop" blades plus a turbine whine. level 0 silences it.
-  rotor(level, spin = 1) {
+  // Helicopter: "whop-whop" blades plus a soft turbine whine. level 0 silences it.
+  // effort 0..1 is how hard the rotor is working (climbing makes it louder and punchier).
+  rotor(level, spin = 1, effort = 0.5) {
     const ctx = this.ensure();
     if (!ctx) return;
     if (!this.rot) {
@@ -654,31 +734,46 @@ export class Sounds {
       const filter = ctx.createBiquadFilter();
       filter.type = 'lowpass';
       filter.frequency.value = 260;
+      // Each blade passing is a soft thump (a rounded pulse, not a hard on/off click).
       const chop = ctx.createGain();
-      const lfo = ctx.createOscillator();
-      lfo.type = 'square';
-      const lfoGain = ctx.createGain();
-      lfoGain.gain.value = 0.5;
       chop.gain.value = 0.5;
+      const lfo = ctx.createOscillator();
+      lfo.setPeriodicWave(ctx.createPeriodicWave(new Float32Array([0, 0, 0, 0, 0, 0]), new Float32Array([0, 1, 0.55, 0.3, 0.15, 0.07])));
+      const lfoGain = ctx.createGain();
+      lfoGain.gain.value = 0.42;
       lfo.connect(lfoGain).connect(chop.gain);
       const whine = ctx.createOscillator();
       whine.type = 'sine';
+      const whineFilter = ctx.createBiquadFilter();
+      whineFilter.type = 'lowpass';
+      whineFilter.frequency.value = 900;
       const whineGain = ctx.createGain();
-      whineGain.gain.value = 0.05;
+      whineGain.gain.value = 0.022;
       const gain = ctx.createGain();
       gain.gain.value = 0;
       src.connect(filter).connect(chop).connect(gain);
-      whine.connect(whineGain).connect(gain);
+      whine.connect(whineFilter).connect(whineGain).connect(gain);
       gain.connect(this.master);
       src.start();
       lfo.start();
       whine.start();
-      this.rot = { gain, lfo, whine };
+      this.rot = { gain, lfo, whine, filter, t: ctx.currentTime, drift: 0, effort, spin };
+      this.rotCalm = 0;
     }
-    const t = ctx.currentTime;
-    this.rot.lfo.frequency.setTargetAtTime(1 + spin * 5.5, t, 0.1);
-    this.rot.whine.frequency.setTargetAtTime(300 + spin * 500, t, 0.1);
-    this.rot.gain.gain.setTargetAtTime(level * (0.4 + spin * 0.9), t, 0.1);
+    const r = this.rot, t = ctx.currentTime;
+    const dt = Math.min(0.1, Math.max(0, t - r.t));
+    r.t = t;
+    // The blades never turn at exactly the same speed: a slow, random drift of a few percent.
+    r.drift = Math.max(-0.03, Math.min(0.03, r.drift + (Math.random() - 0.5) * dt * 0.05));
+    const changing = Math.abs(effort - r.effort) > dt * 0.3 || Math.abs(spin - r.spin) > dt * 0.05;
+    this.rotCalm = this.settle(this.rotCalm, changing, dt);
+    r.effort = effort;
+    r.spin = spin;
+    const calm = this.rotCalm;
+    r.lfo.frequency.setTargetAtTime((1 + spin * 5.5) * (1 + r.drift), t, 0.2);
+    r.whine.frequency.setTargetAtTime((300 + spin * 420) * (1 + r.drift * 0.5), t, 0.2);
+    r.filter.frequency.setTargetAtTime(200 + effort * 220, t, 0.15);
+    r.gain.gain.setTargetAtTime(level * (0.4 + spin * 0.9) * (0.75 + effort * 0.4) * (1 - calm * 0.35), t, 0.12);
   }
 
   // ---------- Fun things ----------
@@ -698,7 +793,7 @@ export class Sounds {
     for (let i = 0; i < 8; i++) this.noiseHit(300 + (i % 2) * 200, 0.08, 0.35, 'bandpass', i * 0.07);
     this.tone(open ? 90 : 120, open ? 130 : 80, 0.6, 0.12, 'sawtooth');
   }
-  claim() { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, f, 0.15, 0.15, 'triangle', i * 0.09)); }
+  claim() { this.together(() => [523, 659, 784, 1047].forEach((f, i) => this.tone(f, f, 0.15, 0.15, 'triangle', i * 0.09))); }
   party() {
     // Four bars of drum beat with the happy tune on top.
     for (let i = 0; i < 16; i++) this.noiseHit(90, 0.15, 1.2, 'lowpass', i * 0.25);

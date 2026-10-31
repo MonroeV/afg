@@ -1,7 +1,7 @@
 // Cars you can spawn, drive and share with other players.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { BLOCKS, blockId, railMask } from './shared/blocks.js';
+import { BLOCKS, blockId } from './shared/blocks.js';
 import { VEHICLES, MAX_HP, SMOKE_HP, FIRE_HP, PERSON_MASS, outlinePoints, rotorPoints, vehicleBlocked, toWorld } from './shared/vehicles.js';
 
 export const CAR_SPECS = VEHICLES;
@@ -210,7 +210,7 @@ export class Cars {
     this.world = world;
     this.effects = effects;
     this.list = new Map();
-    this.isSolid = (x, y, z) => world.isSolid(x, y, z) || railMask(world.get(x, y, z)) > 0; // railings stop cars
+    this.isSolid = (x, y, z) => world.vehicleSolid(x, y, z); // railings stop cars, open garages let them in
   }
 
   add(data) {
