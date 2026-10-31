@@ -14,7 +14,7 @@ import { Player, EYE_HEIGHT, CROUCH_DROP } from './player.js';
 import { Network } from './network.js';
 import { Avatar, Avatars, FLAG } from './avatars.js';
 import { Cars, SEAT_SCALE } from './cars.js';
-import { MAX_HP, FIRE_HP, PERSON_MASS } from './shared/vehicles.js';
+import { MAX_HP, FIRE_HP, SMOKE_HP, PERSON_MASS } from './shared/vehicles.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_MAX } from './shared/claims.js';
 import { Structures } from './structures.js';
 import { TVs, CHANNELS } from './tv.js';
@@ -28,7 +28,7 @@ import { Editor } from './editor.js';
 import { CharacterClient, Gallery } from './gallery.js';
 import { Hud, renderControls, CUSTOM_PAINT } from './hud.js';
 import {
-  HAMMER, FIREWORKS, BALL, CLAIM, BRUSH, SCRAPER, LADDER, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME,
+  HAMMER, FIREWORKS, BALL, CLAIM, BRUSH, SCRAPER, WRENCH, LADDER, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME,
   ALL_ITEMS, DEFAULT_HOTBAR, makeIcon, ViewModel,
 } from './items.js';
 import { MAX_MANY } from './shared/game.js';
@@ -442,9 +442,27 @@ net.on('car', ({ car }) => {
     effects.sparkle(car.x, car.y, car.z, 40);
   }
 });
-net.on('car_hp', ({ id, hp, impact }) => {
+net.on('car_color', ({ id, color }) => {
+  const car = cars.list.get(id);
+  if (car && car.color !== color) cars.setColor(car, color);
+});
+net.on('car_hp', ({ id, hp, impact, fixer }) => {
   const car = cars.list.get(id);
   if (!car) return;
+  if (fixer) {
+    // Someone's fixing it with the wrench.
+    const was = car.hp;
+    cars.applyHp(car, hp);
+    const near = loudness(car.pos.x, car.pos.y, car.pos.z, 30);
+    if (fixer !== myId && near > 0) sounds.wrench(near);
+    if (hp >= MAX_HP && was < MAX_HP) {
+      effects.sparkle(car.pos.x, car.pos.y + 0.3, car.pos.z, 30);
+      if (near > 0) sounds.magic();
+      if (fixer === myId) hud.toast('✨ Good as new!');
+    } else if (fixer === myId && was < SMOKE_HP && hp >= SMOKE_HP) hud.toast('🔧 No more smoke! Keep going to make it good as new.');
+    else if (fixer === myId && was < FIRE_HP && hp >= FIRE_HP) hud.toast('🧯 The fire is out!');
+    return;
+  }
   const hurt = hp < car.hp;
   if (hurt && car.hp >= FIRE_HP && hp < FIRE_HP && riding() === car) hud.addChat({ system: true, text: '🔥 Your vehicle is on fire! Get out (E) before it blows up!' });
   cars.applyHp(car, hp, impact);
@@ -812,9 +830,9 @@ const touch = IS_TOUCH ? new TouchControls({
   },
   // Holding a finger still keeps hammering.
   hold: () => {
-    if (locked && !riding() && hud.item === HAMMER && useCooldown <= 0) {
+    if (locked && !riding() && (hud.item === HAMMER || (hud.item === WRENCH && target?.car)) && useCooldown <= 0) {
       useItem();
-      useCooldown = 0.25;
+      useCooldown = hud.item === WRENCH ? 0.3 : 0.25;
     } else if (locked && !riding() && hud.item === BUBBLES) {
       blowBubbles(1 / 30);
     }
@@ -1175,6 +1193,31 @@ function hitVehicle(t) {
   sounds.crack();
   particles.burst(t.point.x - 0.5, t.point.y - 0.5, t.point.z - 0.5, t.car.model.paint, 4);
   reportDamage(t.car, 8, cars.toLocal(t.car, t.point));
+}
+
+// The Wrench: each turn fixes some of the damage (the server says how much).
+function fixVehicle(t) {
+  if (t.car.hp >= MAX_HP) {
+    sounds.click();
+    hud.toast('🔧 This one is good as new!');
+    return;
+  }
+  sounds.wrench();
+  effects.sparks(t.point.x, t.point.y, t.point.z);
+  net.send({ t: 'car_fix', id: t.car.id });
+}
+
+// The Paint Brush on a vehicle: a whole new color (it keeps it, even after it comes back).
+function paintVehicle(t) {
+  const color = paintHex();
+  if (t.car.color?.toLowerCase() === color.toLowerCase()) {
+    hud.toast(`🎨 It's already ${paintName()}! Pick another color in the 🎨 Paint tab.`);
+    return;
+  }
+  cars.setColor(t.car, color);
+  sounds.paint();
+  particles.burst(t.point.x - 0.5, t.point.y - 0.5, t.point.z - 0.5, t.car.model.paint, 10);
+  net.send({ t: 'car_paint', id: t.car.id, color });
 }
 
 // ---------- Helicopter downwash ----------
@@ -1856,7 +1899,15 @@ function useItem() {
   }
   if (target?.car) {
     if (item === HAMMER) hitVehicle(target);
+    else if (item === WRENCH) fixVehicle(target);
+    else if (item === BRUSH) paintVehicle(target);
+    else if (item === SCRAPER) hud.toast('🎨 To give it a new color, use the Paint Brush (pick the color in the 🎨 Paint tab)');
     else requestEnter(target.car);
+    return;
+  }
+  if (item === WRENCH) {
+    sounds.swing();
+    hud.toast('🔧 Point the wrench at a smoking car, boat or helicopter and click (or hold) to fix it.');
     return;
   }
   if (target?.pet) {
@@ -3019,7 +3070,12 @@ function frame(timestamp) {
     if (target?.car) {
       const what = target.car.spec.flying ? '🚁 Right-click or E to fly' : target.car.spec.boat ? '🚤 Right-click or E to drive the boat' : '🚗 Right-click or E to drive';
       const full = target.car.driver && target.car.passengers.length >= 2;
-      hint = full ? "🚗 It's full" : target.car.driver ? '🚗 Right-click or E to ride along' : what + (item === HAMMER ? ' · Click to whack it' : '');
+      const health = Math.max(0, Math.round((target.car.hp / MAX_HP) * 100));
+      const state = target.car.hp < FIRE_HP ? '🔥 On fire! ' : target.car.hp < SMOKE_HP ? '💨 Smoking! ' : '';
+      if (item === WRENCH) hint = health >= 100 ? '🔧 Good as new!' : `🔧 ${state}Click (or hold) to fix it · ${health}%`;
+      else if (item === BRUSH) hint = `🎨 Click to paint it ${paintName()}`;
+      else if (item === HAMMER && state) hint = `${state}Fix it with the 🔧 Wrench (Tools tab) · Click to whack it`;
+      else hint = full ? "🚗 It's full" : target.car.driver ? '🚗 Right-click or E to ride along' : what + (item === HAMMER ? ' · Click to whack it' : '');
     } else if (target?.pet) {
       hint = item === BALL && target.avatar === myBody ? '🎾 Click to throw the ball · Right-click to pet' : '🐾 Right-click to pet';
     } else if (target?.npc) {
@@ -3087,9 +3143,9 @@ function frame(timestamp) {
 
     // Holding the mouse button keeps hammering or building.
     useCooldown -= dt;
-    if (locked && !riding() && useCooldown <= 0 && mouse.has(0) && (item === HAMMER || typeof item === 'number')) {
+    if (locked && !riding() && useCooldown <= 0 && mouse.has(0) && (item === HAMMER || typeof item === 'number' || (item === WRENCH && target?.car))) {
       useItem();
-      useCooldown = item === HAMMER ? 0.25 : 0.2;
+      useCooldown = item === HAMMER ? 0.25 : item === WRENCH ? 0.3 : 0.2;
     }
     if (locked && !riding() && mouse.has(0) && item === BUBBLES) blowBubbles(dt);
 

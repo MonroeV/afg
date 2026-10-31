@@ -12,6 +12,7 @@ export const SAVE_VERSION = 7;
 const COIN_COUNT = 26; // gold coins lying around the world at once
 const DAILY_BONUS = 10;
 const RACE_PRIZE = 3;
+const FIX_AMOUNT = 8; // health a turn of the wrench puts back (out of 100)
 const TICK_RATE = 15; // how often the town's people's positions go out
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LOG = 7, LEAVES = 8, GRASS = 1, DIRT = 2, RACE_FINISH = 72;
@@ -429,6 +430,11 @@ export class GameRoom {
     this.onDirty();
   }
 
+  // Close enough to reach it (or in it).
+  nearVehicle(client, v) {
+    return client.car === v.id || Math.hypot(client.pos[0] - v.x, client.pos[1] - v.y, client.pos[2] - v.z) < 14;
+  }
+
   damageVehicle(v, amount, impact) {
     v.hp = Math.max(0, v.hp - amount);
     this.broadcast({ t: 'car_hp', id: v.id, hp: Math.round(v.hp), impact });
@@ -675,6 +681,28 @@ export class GameRoom {
       if (client.car !== v.id && !close) return;
       const impact = numbers(msg.impact, 3) || [0, 1, 0];
       this.damageVehicle(v, Math.max(0, Math.min(45, num(msg.amount))), impact);
+    },
+
+    // The Paint Brush on a vehicle: a new color, for good (it comes back that color, too).
+    car_paint(client, msg) {
+      const v = this.vehicles.get(msg.id);
+      const color = typeof msg.color === 'string' && /^#[0-9a-f]{6}$/i.test(msg.color) ? msg.color.toLowerCase() : null;
+      if (!v || !color || !this.allow(client, 'carPaint', 4, 6)) return;
+      if (!this.nearVehicle(client, v)) return client.send({ t: 'car_color', id: v.id, color: v.color });
+      v.color = color;
+      const home = this.homes.get(v.home);
+      if (home) home.color = color;
+      this.broadcast({ t: 'car_color', id: v.id, color });
+      this.onDirty();
+    },
+
+    // The Wrench: each turn of it fixes a bit of the damage (and can even save a burning one).
+    car_fix(client, msg) {
+      const v = this.vehicles.get(msg.id);
+      if (!v || v.hp >= MAX_HP || !this.allow(client, 'fix', 5, 6) || !this.nearVehicle(client, v)) return;
+      v.hp = Math.min(MAX_HP, v.hp + FIX_AMOUNT);
+      this.broadcast({ t: 'car_hp', id: v.id, hp: Math.round(v.hp), fixer: client.id });
+      this.onDirty();
     },
 
     // A parked car got knocked (by someone's car, or by someone pushing it): its new spot.

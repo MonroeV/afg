@@ -513,6 +513,14 @@ export class Effects {
     for (let i = 0; i < 40; i++) this.smoke.spawn({ x: x + (Math.random() - 0.5) * 2, y: y + Math.random(), z: z + (Math.random() - 0.5) * 2, vx: (Math.random() - 0.5) * 4, vy: 1 + Math.random() * 3, vz: (Math.random() - 0.5) * 4, life: 3 + Math.random() * 2, size: 1.2, grow: 1.6, color: [0.18, 0.18, 0.18], alpha: 0.9, drag: 1.2 });
   }
 
+  // Little sparks off a wrench.
+  sparks(x, y, z, count = 8) {
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 1.5 + Math.random() * 2.5;
+      this.glow.spawn({ x, y, z, vx: Math.cos(a) * sp, vy: 1.5 + Math.random() * 2.5, vz: Math.sin(a) * sp, life: 0.25 + Math.random() * 0.3, size: 0.14, grow: -0.3, color: [1, 0.82 + Math.random() * 0.15, 0.45], gravity: 9, drag: 1 });
+    }
+  }
+
   sparkle(x, y, z, count = 20) {
     for (let i = 0; i < count; i++) {
       const c = new THREE.Color().setHSL(Math.random(), 1, 0.65);
@@ -896,6 +904,13 @@ export class Sounds {
   // ---------- Fun things ----------
 
   crack() { this.noiseHit(2400, 0.06, 0.7); this.tone(300, 200, 0.05, 0.15, 'square'); }
+  // A wrench: the ratchet clicking round, then a clink of metal.
+  wrench(volume = 1) {
+    this.together(() => {
+      for (let i = 0; i < 4; i++) this.noiseHit(4200 + i * 150, 0.02, 0.45 * volume, 'highpass', i * 0.045);
+      this.tone(2100, 1900, 0.09, 0.07 * volume, 'triangle', 0.2);
+    });
+  }
   whoosh() { this.noiseHit(600, 0.5, 0.8, 'highpass'); this.tone(300, 1500, 0.45, 0.12, 'sine'); }
   boing() { this.tone(120, 700, 0.35, 0.45, 'sine'); }
   ballBounce(volume = 1) {

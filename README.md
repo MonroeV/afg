@@ -39,6 +39,12 @@ customize your character, drive cars, build anything and play with friends.
   its white reverse lights and backs up. Two friends can ride along as passengers, and everyone
   climbs out beside the car, not on the roof. Crash hard and they dent, smoke, catch fire and blow
   up, then a new one shows up near its parking spot 30 seconds later
+- **Fix it with the Wrench** (Tools tab): point it at a smoking car, boat or helicopter and click,
+  or hold the button, to keep turning it. Each turn fixes a bit, knocks some of the dents back out
+  and brings the shine back; it can even put out a fire if you're quick. The hint under the
+  crosshair shows how healthy it is
+- **Paint any vehicle**: click a car, truck, boat or helicopter with the Paint Brush and it turns
+  your paint color. It stays that color for everyone, and even comes back that color if it blows up
 - **Real bumps (Newton's laws)**: when things collide they trade momentum. Ram a parked car and it
   gets shoved (and spins if you hit it off-center) while you slow down; heavy monster trucks barely
   notice small cars; knocked cars can knock into other cars; cars bump people out of the way; you
@@ -166,6 +172,8 @@ customize your character, drive cars, build anything and play with friends.
 | Space | Jump |
 | Left click | Use the item in your hand (place a block, paint, throw the ball or a water balloon, launch fireworks, take a photo) |
 | Left click with the Hammer | Break a block: it takes 3 hits (glass and carpet break in 1), so you don't break things by accident |
+| Left click with the Wrench | Fix a damaged vehicle (hold to keep fixing) |
+| Left click a vehicle with the Paint Brush | Paint it your paint color |
 | Right click | Interact: open and close doors, switch lights on and off, turn road lines, get in vehicles, pet pets, sit on chairs and couches, sleep in beds, change pictures and music notes, hug teddy bears, fire cannons |
 | Middle click | Copy the block you're looking at |
 | 1–9 or mouse wheel | Choose hotbar slot. Slot 1 always holds the Hammer; anything you pick while slot 1 is selected goes in slot 2 |
@@ -227,7 +235,7 @@ When you press PLAY it goes full screen.
   under it. Push a little to walk slowly, all the way to run.
 - **Look around:** drag anywhere on the right side.
 - **Use your item:** tap the right side (place a block, hit with the hammer, paint, throw the
-  ball). Keep your finger still on the screen to keep hammering.
+  ball). Keep your finger still on the screen to keep hammering (or to keep fixing with the wrench).
 - **⬆** jumps (tap it twice quickly to start or stop flying; then **⬆** and **⬇** go up and down).
   Walking, **⬇** crouches.
 - **✋** opens doors, gets in cars, pets pets and sleeps in beds. In a vehicle it turns into **🚪**

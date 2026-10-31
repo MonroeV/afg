@@ -11,6 +11,7 @@ export const BALL = 'ball';
 export const CLAIM = 'claim';
 export const BRUSH = 'brush';
 export const SCRAPER = 'scraper';
+export const WRENCH = 'wrench';
 export const LADDER = 53;
 export const WATER_BALLOON = 'waterballoon';
 export const BUBBLES = 'bubbles';
@@ -22,7 +23,7 @@ export const CAMERA = 'camera';
 export const JETPACK = 'jetpack';
 export const TRAIL = 'trail';
 export const SHOWTIME = 'showtime';
-export const TOOLS = [HAMMER, BRUSH, SCRAPER, BALL, FIREWORKS, CLAIM, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME];
+export const TOOLS = [HAMMER, BRUSH, SCRAPER, WRENCH, BALL, FIREWORKS, CLAIM, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME];
 // Things you have to buy at the Luxe Store before you can use them.
 export const fromStore = item => (typeof item === 'number' ? !!BLOCKS[item]?.price : !!SHOP_TOOLS[item]);
 export const ALL_ITEMS = [...TOOLS, ...BLOCK_IDS];
@@ -34,7 +35,7 @@ const FUN = [JETPACK, TRAIL, SHOWTIME, 82, 83, 84, 85, BALL, FIREWORKS, WATER_BA
 const listed = new Set([...HOME, ...TOWN, ...FUN]);
 const visible = i => typeof i !== 'number' || !BLOCKS[i].hidden;
 export const TABS = [
-  { id: 'tools', icon: '🧰', name: 'Tools', items: [HAMMER, BRUSH, SCRAPER, CLAIM, FILL, COPY, CAMERA] },
+  { id: 'tools', icon: '🧰', name: 'Tools', items: [HAMMER, BRUSH, SCRAPER, WRENCH, CLAIM, FILL, COPY, CAMERA] },
   { id: 'fun', icon: '🎉', name: 'Fun', items: FUN },
   { id: 'blocks', icon: '🧱', name: 'Blocks', items: BLOCK_IDS.filter(i => !listed.has(i) && !BLOCKS[i].light && !BLOCKS[i].shape && visible(i)) },
   { id: 'home', icon: '🛋️', name: 'Home', items: HOME },
@@ -49,7 +50,8 @@ for (const i of BLOCK_IDS) if (visible(i) && !TABS.some(t => t.items?.includes(i
 // Extra words the search box understands.
 export const SEARCH_WORDS = {
   [WATER_BALLOON]: 'throw splash water fight', [BUBBLES]: 'bubble blow', [BALLOON]: 'float fly slow fall', [FILL]: 'fill wall floor big box builder',
-  [COPY]: 'copy paste clone duplicate builder', [CAMERA]: 'photo picture screenshot', [CLAIM]: 'land claim home', [BALL]: 'pet dog fetch throw',
+  [COPY]: 'copy paste clone duplicate builder', [WRENCH]: 'fix repair mechanic car truck boat helicopter smoke fire',
+  [BRUSH]: 'paint color car', [CAMERA]: 'photo picture screenshot', [CLAIM]: 'land claim home', [BALL]: 'pet dog fetch throw',
   61: 'sofa', 60: 'seat sit', 62: 'desk', 64: 'sleep', 65: 'picture art wall', 66: 'picture art wall cat dog rocket dinosaur', 67: 'plant flower',
   68: 'toy bear hug', 69: 'piano song note sound', 73: 'office table', 74: 'office seat sit', 75: 'pc screen office', 76: 'office drawers',
   77: 'office water drink', 78: 'office board chart', 79: 'music play keys', 80: 'aquarium fish', 81: 'gold', 82: 'gem shiny store',
@@ -69,6 +71,7 @@ export function itemName(item) {
   if (item === CLAIM) return 'Land Flag';
   if (item === BRUSH) return 'Paint Brush';
   if (item === SCRAPER) return 'Paint Scraper';
+  if (item === WRENCH) return 'Wrench';
   if (item === WATER_BALLOON) return 'Water Balloons';
   if (item === BUBBLES) return 'Bubble Wand';
   if (item === BALLOON) return 'Balloon';
@@ -111,6 +114,33 @@ export function makeIcon(item, textures, paint = 1) {
       ctx.fillStyle = '#9aa0a6';
       ctx.fillRect(-12, -26, 24, 3);
     }
+    return canvas;
+  }
+
+  if (item === WRENCH) {
+    ctx.translate(32, 32);
+    ctx.rotate(Math.PI / 4);
+    const g = ctx.createLinearGradient(-8, 0, 8, 0);
+    g.addColorStop(0, '#f1f4f7');
+    g.addColorStop(1, '#8a929b');
+    ctx.fillStyle = g;
+    ctx.fillRect(-4.5, -14, 9, 36);
+    // The open end, with its jaws...
+    ctx.beginPath();
+    ctx.arc(0, -17, 11, 0, Math.PI * 2);
+    ctx.fill();
+    // ...and the ring end.
+    ctx.beginPath();
+    ctx.arc(0, 22, 7.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillRect(-4.5, -32, 9, 15);
+    ctx.beginPath();
+    ctx.arc(0, 22, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#e53935'; // a red rubber grip
+    ctx.fillRect(-5.5, -1, 11, 14);
     return canvas;
   }
 
@@ -503,6 +533,18 @@ export class ViewModel {
         obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.01).translate(0, 0.16, 0), metal));
       }
       obj.rotation.set(0.4, 0.4, -0.3);
+    } else if (item === WRENCH) {
+      obj = new THREE.Group();
+      const steel = new THREE.MeshStandardMaterial({ color: 0xbfc6ce, metalness: 0.85, roughness: 0.28 });
+      obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.32, 0.022), steel));
+      obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.12, 0.032).translate(0, -0.06, 0), new THREE.MeshStandardMaterial({ color: 0xe53935, roughness: 0.6 })));
+      // Open jaws at the top (a ring with a gap), a closed ring at the bottom.
+      const gap = Math.PI * 0.55;
+      obj.add(new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.022, 6, 16, Math.PI * 2 - gap).rotateZ(Math.PI / 2 + gap / 2).translate(0, 0.19, 0), steel));
+      obj.add(new THREE.Mesh(new THREE.TorusGeometry(0.032, 0.014, 6, 14).translate(0, -0.17, 0), steel));
+      obj.scale.setScalar(0.9);
+      obj.position.set(0.04, -0.02, -0.05);
+      obj.rotation.set(0.35, 0.5, 0.25);
     } else if (item === WATER_BALLOON) {
       obj = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 12).scale(1, 1.15, 1), new THREE.MeshStandardMaterial({ color: 0x42a5f5, roughness: 0.15, transparent: true, opacity: 0.85 }));
       obj.position.y = 0.05;

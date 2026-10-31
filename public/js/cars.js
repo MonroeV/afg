@@ -367,19 +367,39 @@ export class Cars {
     }
   }
 
-  // Health changed: darken the paint, and dent the body where it was hit.
+  // Health changed: darken the paint, and dent the body where it was hit (or, fixed with the
+  // wrench, knock the dents back out: all of them by the time it's good as new).
   applyHp(car, hp, impact) {
-    const lost = car.hp - hp;
+    const before = car.hp;
+    const lost = before - hp;
     car.hp = hp;
     const k = 1 - hp / MAX_HP;
     car.model.paint.color.copy(car.model.baseColor).lerp(new THREE.Color(0x2a2522), k * 0.75);
     if (impact && lost > 0) this.dent(car, impact, Math.min(1, lost / 25));
+    if (lost < 0) this.undent(car, hp >= MAX_HP ? 1 : -lost / Math.max(1, MAX_HP - before));
+  }
+
+  // A fresh coat of paint (the Paint Brush).
+  setColor(car, color) {
+    car.color = color;
+    car.model.baseColor.set(color);
+    this.applyHp(car, car.hp);
+  }
+
+  undent(car, k) {
+    const geo = car.model.paintMesh?.geometry, smooth = car.model.undented;
+    if (!geo || !smooth) return;
+    const a = geo.attributes.position.array;
+    k = Math.min(1, k);
+    for (let i = 0; i < a.length; i++) a[i] += (smooth[i] - a[i]) * k;
+    geo.attributes.position.needsUpdate = true;
   }
 
   dent(car, [ix, iy, iz], strength) {
     const geo = car.model.paintMesh?.geometry;
     if (!geo) return;
     const pos = geo.attributes.position;
+    car.model.undented ??= pos.array.slice(); // how it looked before any dents
     const cy = car.spec.height / 2;
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
