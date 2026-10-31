@@ -72,7 +72,9 @@ export class Reflections {
   update(dt, camera, hide = []) {
     if (!this.size) return;
     this.timer -= dt;
-    const moved = camera.position.distanceTo(this.lastPos) > 8;
+    // Retake the picture every so often, or sooner after moving a good way (but not more
+    // than about once a second, even when driving fast: it's six extra pictures each time).
+    const moved = camera.position.distanceTo(this.lastPos) > 8 && this.timer < this.interval - 1;
     if (this.timer > 0 && !moved) return;
     this.timer = this.interval;
     this.lastPos.copy(camera.position);

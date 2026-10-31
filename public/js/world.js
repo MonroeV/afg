@@ -563,7 +563,8 @@ export class World {
     mesh.count = layer.keys.length;
     mesh.boundingSphere = new THREE.Sphere(layer.center, CHUNK_RADIUS + 2);
     const shape = layer.def.shape || 'cube';
-    mesh.castShadow = !layer.def.transparent && shape !== 'flat';
+    // (Little lamp models don't need shadows: you'd hardly see them, and they cost a lot.)
+    mesh.castShadow = !layer.def.transparent && shape !== 'flat' && shape !== 'model';
     mesh.receiveShadow = true;
     if (layer.def.transparent) mesh.renderOrder = 1;
     // Every instance has a color: white for normal blocks, the paint color for painted ones.

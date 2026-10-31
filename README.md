@@ -188,6 +188,22 @@ To play with someone else on the same Wi-Fi, they can open `http://YOUR-COMPUTER
 If the game feels slow, press Esc and set **Graphics** to Medium or Low. High has live
 reflections, glow and soft shadows; Medium has cheaper versions; Low turns them off.
 
+### Keeping your computer cool
+
+Drawing a 3D world is hard work for a computer, so the game tries not to do more than it needs:
+
+- **Frame rate** (in the Esc menu): 60 frames a second is smooth and the default. Choose
+  **30 (cooler, saves battery)** if your laptop gets hot or loud; the game still plays fine.
+  "As fast as possible" draws as many frames as your screen can show (only worth it on a
+  gaming computer with a fast screen).
+- While the game is paused, or a menu like the Build Book or the character editor is open,
+  it draws only a few frames a second, so leaving it paused keeps things cool.
+- Shadows and reflections are redrawn every few frames instead of every frame, there are
+  fewer real lamp lights at once, small lamp models don't cast shadows, and smoke and sparkles
+  only send the particles that are alive to the graphics card.
+- On laptops with two graphics chips, the browser picks the cooler, battery-friendly one.
+- Still hot? **Graphics: Medium** is much lighter than High, and **Low** is lightest of all.
+
 ## Putting it online so friends can join
 
 The game is a normal Node.js web app, so any host that runs Node works

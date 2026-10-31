@@ -5,9 +5,9 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const box = (w, h, d, x, y, z) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
-const cyl = (rt, rb, h, x, y, z, seg = 14) => new THREE.CylinderGeometry(rt, rb, h, seg).translate(x, y, z);
-const ball = (r, x, y, z) => new THREE.SphereGeometry(r, 10, 8).translate(x, y, z);
-const cone = (r, h, x, y, z, seg = 10) => new THREE.ConeGeometry(r, h, seg).rotateY(seg === 4 ? Math.PI / 4 : 0).translate(x, y, z);
+const cyl = (rt, rb, h, x, y, z, seg = 10) => new THREE.CylinderGeometry(rt, rb, h, seg).translate(x, y, z);
+const ball = (r, x, y, z) => new THREE.SphereGeometry(r, 8, 6).translate(x, y, z);
+const cone = (r, h, x, y, z, seg = 8) => new THREE.ConeGeometry(r, h, seg).rotateY(seg === 4 ? Math.PI / 4 : 0).translate(x, y, z);
 
 // For each model: the shapes in each part, and the colors of the parts.
 // glow is the color of the lit-up part; glowColors lets each glowing bulb be different.
@@ -30,7 +30,7 @@ export const MODELS = {
   chandelier: {
     body: [
       cyl(0.015, 0.015, 0.32, 0.5, 0.84, 0.5),
-      new THREE.TorusGeometry(0.3, 0.025, 6, 24).rotateX(Math.PI / 2).translate(0.5, 0.6, 0.5),
+      new THREE.TorusGeometry(0.3, 0.025, 4, 16).rotateX(Math.PI / 2).translate(0.5, 0.6, 0.5),
       box(0.62, 0.02, 0.02, 0.5, 0.65, 0.5), box(0.02, 0.02, 0.62, 0.5, 0.65, 0.5),
       ball(0.06, 0.5, 0.62, 0.5),
     ],
@@ -55,7 +55,7 @@ export const MODELS = {
       box(0.42, 0.05, 0.42, 0.5, 0.025, 0.5),
       cone(0.3, 0.16, 0.5, 0.6, 0.5, 4),
       ...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([x, z]) => box(0.04, 0.46, 0.04, 0.5 + x * 0.17, 0.27, 0.5 + z * 0.17)),
-      new THREE.TorusGeometry(0.06, 0.012, 6, 12).translate(0.5, 0.72, 0.5),
+      new THREE.TorusGeometry(0.06, 0.012, 4, 8).translate(0.5, 0.72, 0.5),
     ],
     glow: [box(0.3, 0.4, 0.3, 0.5, 0.27, 0.5)],
     colors: { body: 0x1f2124, glow: 0xffb35c, metal: 0.7 },

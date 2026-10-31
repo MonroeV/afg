@@ -38,7 +38,7 @@ const DOOR = 21;
 
 // ---------- Saved settings ----------
 
-const settings = { name: '', look: null, sensitivity: 1, volume: 0.4, quality: 'high', paint: 1, customColor: '#ff9ec7', hotbar: DEFAULT_HOTBAR.slice() };
+const settings = { name: '', look: null, sensitivity: 1, volume: 0.4, quality: 'high', fps: 60, paint: 1, customColor: '#ff9ec7', hotbar: DEFAULT_HOTBAR.slice() };
 let savedSettings = {};
 try {
   savedSettings = JSON.parse(localStorage.getItem('buildzone') || '{}') || {};
@@ -56,6 +56,7 @@ if (settings.hotbar[0] !== HAMMER) {
 }
 if (!PAINT_COLORS[settings.paint] && settings.paint !== CUSTOM_PAINT) settings.paint = 1;
 if (!/^#[0-9a-f]{6}$/i.test(settings.customColor)) settings.customColor = '#ff9ec7';
+if (![0, 30, 60].includes(settings.fps)) settings.fps = 60;
 // The brush's color: a palette color, or your own.
 const paintHex = () => (settings.paint === CUSTOM_PAINT ? settings.customColor : PAINT_COLORS[settings.paint]);
 const paintName = () => (settings.paint === CUSTOM_PAINT ? 'your color' : PAINT_NAMES[settings.paint]);
@@ -69,10 +70,12 @@ function saveSettings() {
 // ---------- Renderer, scene and sky ----------
 
 const canvas = $('game');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+// (The browser picks the graphics chip: on laptops that's usually the cooler, battery-friendly one.)
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.autoUpdate = false; // shadows are redrawn every few frames (see frame())
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.8;
 renderer.autoClear = false;
@@ -85,10 +88,11 @@ const reflections = new Reflections(renderer, scene);
 const glow = new Glow(renderer, scene, camera);
 
 // Graphics settings. Live reflections and glow look great but need a good graphics card.
+// shadowEvery: shadows are redrawn every this many frames (they barely change between two).
 const QUALITY = {
-  high: { pixelRatio: 2, shadowMap: 2048, shadowSoftness: 3, lamps: 12, bloom: true, reflections: 128, reflectEvery: 1.2 },
-  medium: { pixelRatio: 1, shadowMap: 1024, shadowSoftness: 2, lamps: 8, bloom: true, reflections: 64, reflectEvery: 4 },
-  low: { pixelRatio: 0.75, shadowMap: 0, shadowSoftness: 1, lamps: 4, bloom: false, reflections: 0 },
+  high: { pixelRatio: 1.5, shadowMap: 2048, shadowSoftness: 3, shadowEvery: 2, lamps: 8, bloom: true, reflections: 128, reflectEvery: 2 },
+  medium: { pixelRatio: 1, shadowMap: 1024, shadowSoftness: 2, shadowEvery: 3, lamps: 6, bloom: true, reflections: 64, reflectEvery: 4 },
+  low: { pixelRatio: 0.75, shadowMap: 0, shadowSoftness: 1, shadowEvery: 4, lamps: 3, bloom: false, reflections: 0 },
 };
 function applyQuality() {
   const q = QUALITY[settings.quality] || QUALITY.high;
@@ -249,6 +253,7 @@ async function load() {
   $('sensitivity').value = settings.sensitivity;
   $('volume').value = settings.volume;
   $('quality').value = settings.quality;
+  $('fps').value = String(settings.fps);
   $('loading').classList.add('hidden');
   $('join-form').classList.remove('hidden');
   if (!IS_TOUCH) $('name').focus();
@@ -488,6 +493,10 @@ $('quality').addEventListener('change', e => {
   settings.quality = e.target.value;
   saveSettings();
   applyQuality();
+});
+$('fps').addEventListener('change', e => {
+  settings.fps = Number(e.target.value);
+  saveSettings();
 });
 
 async function customize() {
@@ -1936,10 +1945,27 @@ function updateCamera(dt) {
 const timer = new THREE.Timer();
 timer.connect(document);
 let sendTimer = 0, hudTimer = 0, fpsFrames = 0, fpsTime = 0, fps = 0, landTimer = 0, vehicleHudTimer = 0;
-let menuSpin = 0;
+let menuSpin = 0, lastFrame = 0, frameCount = 0;
+
+// How many frames a second to draw. Fewer frames means a cooler, quieter computer: the
+// frame rate setting while playing, and much less while the game is paused or behind a
+// menu (nothing much is moving then).
+function frameRateNow() {
+  if (!inGame) return 30;
+  if (!locked || inventoryOpen || editorOpen || galleryOpen) return 12;
+  return settings.fps || 1000;
+}
 
 function frame(timestamp) {
   requestAnimationFrame(frame);
+  // Skip this screen refresh if it's too soon for the next frame. (A little slack, so a
+  // 60 Hz screen doesn't drop to 30 frames a second when it's a touch early.)
+  // The next frame is due one interval after the last one was, which keeps fast (120 Hz)
+  // screens at a steady 60, and never tries to catch up on frames that were skipped.
+  const interval = 1000 / frameRateNow();
+  if (timestamp - lastFrame < interval - 2) return;
+  lastFrame = Math.max(lastFrame + interval, timestamp - interval);
+  frameCount++;
   timer.update(timestamp);
   const dt = Math.min(timer.getDelta(), 0.05);
   const time = timer.getElapsed();
@@ -2236,6 +2262,8 @@ function frame(timestamp) {
     water.map.offset.x += dt * 0.006;
   }
 
+  // Shadows only need redrawing every couple of frames.
+  if (frameCount % (QUALITY[settings.quality] || QUALITY.high).shadowEvery === 0) renderer.shadowMap.needsUpdate = true;
   reflections.update(dt, camera, [highlight, crack]);
   reflections.refresh(sky.dayK);
   if (glow.enabled) {

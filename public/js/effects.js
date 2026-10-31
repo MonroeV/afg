@@ -408,7 +408,17 @@ export class Emitter {
     }
     const g = this.points.geometry;
     g.setDrawRange(0, this.count);
-    for (const name of ['position', 'pcolor', 'alpha', 'size']) g.attributes[name].needsUpdate = true;
+    // Only send the particles that are alive to the graphics card (nothing at all when
+    // there are none, which is most of the time).
+    if (this.count || this.wasCount) {
+      for (const name of ['position', 'pcolor', 'alpha', 'size']) {
+        const attr = g.attributes[name];
+        attr.clearUpdateRanges();
+        attr.addUpdateRange(0, Math.max(1, this.count) * attr.itemSize);
+        attr.needsUpdate = true;
+      }
+    }
+    this.wasCount = this.count;
   }
 }
 
