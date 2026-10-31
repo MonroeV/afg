@@ -373,14 +373,14 @@ net.on('set', ({ x, y, z, b }) => {
   if (world.set(x, y, z, b) && !b && old) particles.burst(x, y, z, blockMaterial(materials, old), 6);
 });
 net.on('paint', ({ x, y, z, floor, faces }) => world.setPaint(blockKey(x, y, z) + (floor ? '|f' : ''), faces));
-net.on('states', ({ list, cars: carStates, npcs: npcStates }) => {
-  avatars.applyStates(list, myId);
+net.on('states', ({ list, cars: carStates, npcs: npcStates, ts }) => {
+  avatars.applyStates(list || [], myId);
   cars.applyStates(carStates || [], myCar?.id);
   // The town's people: where they are and what they're doing.
   for (const [id, x, y, z, yaw, action] of npcStates || []) {
     const a = npcs.get(id);
     if (!a) continue;
-    a.setState(x, y, z, yaw, 0);
+    a.setState(x, y, z, yaw, 0, Number.isFinite(ts) ? ts : null);
     if (action === NPC_ACT.wave && a.wave <= 0) a.emote('wave');
     if (action === NPC_ACT.dance || action === NPC_ACT.cheer) a.dance = Math.max(a.dance, 0.6);
     a.crouching = action === NPC_ACT.pet;
@@ -1110,7 +1110,7 @@ function sendCarState() {
   if (!myCar) return;
   const r = v => Math.round(v * 100) / 100;
   net.send({
-    t: 'car_state', id: myCar.id, x: r(myCar.pos.x), y: r(myCar.pos.y), z: r(myCar.pos.z), h: r(myCar.h),
+    t: 'car_state', id: myCar.id, ts: Math.round(performance.now()), x: r(myCar.pos.x), y: r(myCar.pos.y), z: r(myCar.pos.z), h: r(myCar.h),
     speed: r(myCar.speed), steer: r(myCar.steer), siren: myCar.siren, p: r(myCar.pitch), r: r(myCar.roll), rs: r(myCar.rotorSpin),
     f: (myCar.braking ? 1 : 0) | (myCar.reversing ? 2 : 0),
   });
@@ -3110,7 +3110,8 @@ function frame(timestamp) {
 
     sendTimer -= dt;
     if (sendTimer <= 0) {
-      sendTimer = 1 / 15;
+      // 20 times a second, evenly, each stamped with the time so others can replay it smoothly.
+      sendTimer = Math.max(0, sendTimer + 1 / 20);
       const r = v => Math.round(v * 100) / 100;
       const rot = myCar ? [r(myCar.h), 0] : [r(player.yaw), r(player.pitch)];
       const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
@@ -3118,7 +3119,7 @@ function frame(timestamp) {
       const flags = (sleeping ? FLAG.sleeping : 0) | (seated ? FLAG.sitting : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
         (player.jetting && !riding() ? FLAG.jet : 0) | (hud.item === TRAIL && !riding() ? FLAG.trail : 0) |
         (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
-      net.send({ t: 'state', pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item });
+      net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item });
       sendCarState();
       // Parked cars we knocked (or pushed): tell everyone where they are.
       for (const car of cars.list.values()) {

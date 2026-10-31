@@ -150,7 +150,9 @@ customize your character, drive cars, build anything and play with friends.
 - **Sounds that don't get old**: every sound is a little different each time, every vehicle has its
   own engine and horn note, and a steady engine or helicopter hum slowly settles into the
   background (it comes right back when you speed up, slow down or climb)
-- **Real-time multiplayer**: see each other, drive together, chat
+- **Real-time multiplayer**: see each other, drive together, chat. Other players, their pets, their
+  cars and the town's people move smoothly: their moves are replayed a split second behind, at the
+  even pace they really moved, so a bumpy connection doesn't make them jitter or bounce
 - **Single player works too**: with no server, the world runs and saves right in the browser
 - **Plays on phones and tablets** (held sideways): a joystick under your left thumb, drag to look,
   tap to build
@@ -340,6 +342,7 @@ public/
     editor.js          The "customize my character" screen
     gallery.js         The Character Gallery screen and its little portraits
     avatars.js         Other players' characters and name tags
+    smooth.js          Replays other players' movement smoothly
     cars.js            Car and helicopter models, driving and flying physics, damage
     structures.js      Spots Build Book patterns (beds, teleporters…) in the world
     pets.js            What your pet does (follow, wander, fetch) and the ball

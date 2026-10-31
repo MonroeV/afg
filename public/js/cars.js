@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BLOCKS, blockId, blockMeta, itemOf, floorOf, isWaterBlock } from './shared/blocks.js';
+import { PlayClock, Track } from './smooth.js';
 import { VEHICLES, MAX_HP, SMOKE_HP, FIRE_HP, PERSON_MASS, outlinePoints, rotorPoints, vehicleBlocked, toWorld, afloat } from './shared/vehicles.js';
 
 export const CAR_SPECS = VEHICLES;
@@ -297,6 +298,8 @@ export class Cars {
       outline: outlinePoints(spec),
       rotorPts: spec.flying ? rotorPoints(spec) : null,
       fxTimer: 0, strikeTimer: 0,
+      // Someone else driving it: their driving, replayed smoothly a moment behind (smooth.js).
+      clock: new PlayClock(), track: new Track(6, { angles: [3], jump: 12 }), trackDriver: null,
     };
     this.list.set(car.id, car);
     this.scene.add(model.group);
@@ -339,9 +342,18 @@ export class Cars {
 
   // Positions from the server for vehicles other people are driving.
   applyStates(states, myCarId) {
-    for (const [id, x, y, z, h, speed, steer, siren, pitch, roll, rotor, flags] of states) {
+    for (const [id, x, y, z, h, speed, steer, siren, pitch, roll, rotor, flags, ts] of states) {
       const car = this.list.get(id);
       if (!car || id === myCarId || car.loose) continue;
+      if (Number.isFinite(ts) && car.driver) {
+        if (car.trackDriver !== car.driver) {
+          car.clock.reset();
+          car.track.clear();
+          car.trackDriver = car.driver;
+        }
+        car.clock.heard(ts);
+        car.track.push(ts, [x, y, z, h, pitch || 0, roll || 0]);
+      } else car.track.clear();
       car.braking = !!(flags & 1);
       car.reversing = !!(flags & 2);
       car.target.set(x, y, z);
@@ -1036,15 +1048,26 @@ export class Cars {
     const k = 1 - Math.exp(-10 * dt);
     this.events = [];
     for (const car of this.list.values()) {
+      if (car.loose || car.id === myCarId) car.track.clear();
       if (car.loose && !car.driver) {
         this.events.push(...this.simulateLoose(car, dt).map(e => ({ ...e, other: e.other || car })));
       } else if (car.id !== myCarId) {
-        car.pos.lerp(car.target, k);
-        let dh = car.targetH - car.h;
-        dh = Math.atan2(Math.sin(dh), Math.cos(dh));
-        car.h += dh * k;
-        car.pitch += (car.targetPitch - car.pitch) * k;
-        car.roll += (car.targetRoll - car.roll) * k;
+        const s = car.track.sample(car.clock.tick(dt));
+        if (s) {
+          car.pos.set(s[0], s[1], s[2]);
+          car.h = s[3];
+          car.pitch = s[4];
+          car.roll = s[5];
+          // They got out a while ago: we've shown everything, so let go.
+          if (car.clock.play - car.track.newest().ts > 1000) car.track.clear();
+        } else {
+          car.pos.lerp(car.target, k);
+          let dh = car.targetH - car.h;
+          dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+          car.h += dh * k;
+          car.pitch += (car.targetPitch - car.pitch) * k;
+          car.roll += (car.targetRoll - car.roll) * k;
+        }
         if (car.spec.flying && !car.driver) car.rotorSpin = Math.max(0, car.rotorSpin - dt / 6);
       }
       const s = car.spec;

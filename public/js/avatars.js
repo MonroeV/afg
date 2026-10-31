@@ -4,6 +4,7 @@ import { buildCharacter, animateCharacter, buildPet, animatePet } from './charac
 import { SEAT_SCALE } from './cars.js';
 import { PET_HAPPY, PET_CARRYING } from './pets.js';
 import { PetMover } from './petmove.js';
+import { PlayClock, Track } from './smooth.js';
 
 // Extra bits in a pet's action number (sent to other players): jumping or falling, climbing.
 const PET_AIR = 8, PET_CLIMB = 16;
@@ -84,6 +85,10 @@ export class Avatar {
     this.target = this.pos.clone();
     this.yaw = this.targetYaw = info.rot?.[0] || 0;
     this.pitch = this.targetPitch = info.rot?.[1] || 0;
+    // Their movements, replayed smoothly a moment behind (see smooth.js).
+    this.clock = new PlayClock();
+    this.track = new Track(5, { angles: [3], jump: 10 });
+    this.petTrack = new Track(4, { angles: [3], jump: 14 });
     this.walk = 0;
     this.speed = 0;
     this.dance = 0;
@@ -162,14 +167,19 @@ export class Avatar {
     return [r(p.pos.x), r(p.pos.y), r(p.pos.z), r(p.yaw), p.action | (p.air ? PET_AIR : 0) | (p.climb ? PET_CLIMB : 0)];
   }
 
-  // Another player's pet, as they sent it.
-  setPetState(state) {
+  // Another player's pet, as they sent it (ts: when, on their clock).
+  setPetState(state, ts = null) {
     if (!this.pet || !Array.isArray(state)) return;
     this.pet.target.set(state[0], state[1], state[2]);
     this.pet.targetYaw = state[3];
-    this.pet.action = state[4] & 7;
-    this.pet.air = !!(state[4] & PET_AIR);
-    this.pet.climb = !!(state[4] & PET_CLIMB);
+    if (ts !== null) this.petTrack.push(ts, state, state[4]);
+    else this.setPetAction(state[4]);
+  }
+
+  setPetAction(bits) {
+    this.pet.action = bits & 7;
+    this.pet.air = !!(bits & PET_AIR);
+    this.pet.climb = !!(bits & PET_CLIMB);
   }
 
   setName(name) {
@@ -239,13 +249,20 @@ export class Avatar {
       pet.windup = m.windup > 0 ? 1 - m.windup / 0.1 : 0;
       pet.sniff = plan.sniff;
     } else {
-      // Someone else's pet: glide to where their game says it is.
+      // Someone else's pet: replay where their game says it was, in step with its owner.
       const before = pet.pos.clone();
-      if (pet.pos.distanceTo(pet.target) > 14) pet.pos.copy(pet.target);
-      pet.pos.lerp(pet.target, Math.min(1, dt * 10));
-      let dy = pet.targetYaw - pet.yaw;
-      dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-      pet.yaw += dy * Math.min(1, dt * 10);
+      const s = this.petTrack.sample(this.clock.play);
+      if (s) {
+        pet.pos.set(s[0], s[1], s[2]);
+        pet.yaw = s[3];
+        this.setPetAction(this.petTrack.extra);
+      } else {
+        if (pet.pos.distanceTo(pet.target) > 14) pet.pos.copy(pet.target);
+        pet.pos.lerp(pet.target, Math.min(1, dt * 10));
+        let dy = pet.targetYaw - pet.yaw;
+        dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+        pet.yaw += dy * Math.min(1, dt * 10);
+      }
       moving = Math.min(1, Math.hypot(pet.pos.x - before.x, pet.pos.z - before.z) / Math.max(dt, 1e-3) / 3);
       pet.vy = (pet.pos.y - before.y) / Math.max(dt, 1e-3);
     }
@@ -290,10 +307,24 @@ export class Avatar {
     pet.body.scale.set(1 + 0.12 * sq, 1 - 0.22 * sq, 1 + 0.12 * sq);
   }
 
-  setState(x, y, z, yaw, pitch) {
+  // Where they are now (ts: when, on their clock; flags: what they're doing then).
+  setState(x, y, z, yaw, pitch, ts = null, flags = null) {
     this.target.set(x, y, z);
     this.targetYaw = yaw;
     this.targetPitch = pitch;
+    if (ts === null) return;
+    this.clock.heard(ts);
+    this.track.push(ts, [x, y, z, yaw, pitch], flags);
+  }
+
+  // Asleep, sitting, crouching, holding a balloon, jetpack, rainbow trail.
+  applyFlags(flags) {
+    this.lying = !!(flags & FLAG.sleeping);
+    this.sitting = !!(flags & FLAG.sitting);
+    this.crouching = !!(flags & FLAG.crouching);
+    this.balloon = flags & FLAG.balloon ? `#${((flags >>> 8) & 0xffffff).toString(16).padStart(6, '0')}` : null;
+    this.jet = !!(flags & FLAG.jet);
+    this.trail = !!(flags & FLAG.trail);
   }
 
   emote(kind) {
@@ -304,6 +335,12 @@ export class Avatar {
   update(dt, time) {
     const k = 1 - Math.exp(-12 * dt);
     const before = this.pos.clone();
+    const s = this.snap ? null : this.track.sample(this.clock.tick(dt));
+    if (s) {
+      // Replay what they did, at the pace they did it.
+      this.pitch = s[4];
+      if (this.track.extra !== null) this.applyFlags(this.track.extra);
+    } else this.pitch += (this.targetPitch - this.pitch) * k;
     if (this.seat) {
       this.pos.copy(this.seat.position);
       this.yaw = this.seat.yaw;
@@ -311,6 +348,9 @@ export class Avatar {
       // Our own body follows the camera exactly.
       this.pos.copy(this.target);
       this.yaw = this.targetYaw;
+    } else if (s) {
+      this.pos.set(s[0], s[1], s[2]);
+      this.yaw = s[3];
     } else {
       // Glide to where they are, but jump straight there after a teleport.
       if (this.pos.distanceToSquared(this.target) > 100) this.pos.copy(this.target);
@@ -319,7 +359,6 @@ export class Avatar {
       dy = Math.atan2(Math.sin(dy), Math.cos(dy));
       this.yaw += dy * k;
     }
-    this.pitch += (this.targetPitch - this.pitch) * k;
 
     const moved = Math.hypot(this.pos.x - before.x, this.pos.z - before.z) / Math.max(dt, 1e-4);
     this.speed += (Math.min(moved / 6, 1) - this.speed) * Math.min(1, dt * 10);
@@ -434,18 +473,14 @@ export class Avatars {
   }
 
   applyStates(list, myId) {
-    for (const [id, x, y, z, yaw, pitch, pet, ball, flags] of list) {
+    for (const [id, x, y, z, yaw, pitch, pet, ball, flags, ts] of list) {
       const a = this.list.get(id);
       if (id === myId || !a) continue;
-      a.setState(x, y, z, yaw, pitch);
-      a.setPetState(pet);
+      const when = Number.isFinite(ts) ? ts : null;
+      a.setState(x, y, z, yaw, pitch, when, flags);
+      a.setPetState(pet, when);
       a.remoteBall = ball;
-      a.lying = !!(flags & FLAG.sleeping);
-      a.sitting = !!(flags & FLAG.sitting);
-      a.crouching = !!(flags & FLAG.crouching);
-      a.balloon = flags & FLAG.balloon ? `#${((flags >>> 8) & 0xffffff).toString(16).padStart(6, '0')}` : null;
-      a.jet = !!(flags & FLAG.jet);
-      a.trail = !!(flags & FLAG.trail);
+      if (when === null) a.applyFlags(flags);
     }
   }
 

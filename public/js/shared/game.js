@@ -12,7 +12,7 @@ export const SAVE_VERSION = 7;
 const COIN_COUNT = 26; // gold coins lying around the world at once
 const DAILY_BONUS = 10;
 const RACE_PRIZE = 3;
-const TICK_RATE = 15;
+const TICK_RATE = 15; // how often the town's people's positions go out
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LOG = 7, LEAVES = 8, GRASS = 1, DIRT = 2, RACE_FINISH = 72;
 export const MAX_MANY = 4096; // the most blocks one Fill or Paste can change
@@ -444,6 +444,9 @@ export class GameRoom {
       client.pet = numbers(msg.pet, 5);
       client.ball = numbers(msg.ball, 3);
       client.flags = num(msg.flags) | 0;
+      // When they were there, on their own clock: other players replay their moves at that pace.
+      client.ts = Number.isFinite(msg.ts) ? msg.ts : null;
+      client.fresh = true;
       client.hold = typeof msg.hold === 'string' || typeof msg.hold === 'number' ? String(msg.hold).slice(0, 16) : '';
     },
 
@@ -660,6 +663,8 @@ export class GameRoom {
       v.roll = num(msg.r);
       v.rotor = num(msg.rs);
       v.flags = num(msg.f) & 3; // brake lights, reverse lights
+      v.ts = Number.isFinite(msg.ts) ? msg.ts : null;
+      v.fresh = true;
     },
 
     // Crashes (reported by the driver) and hammer hits (from anyone close by).
@@ -857,17 +862,29 @@ export class GameRoom {
     }
     if (this.clients.size) this.npcs.update(dt);
 
-    if (t.state > 0) return;
-    t.state = 1 / TICK_RATE;
-    const list = [];
-    for (const c of this.clients.values()) if (c.joined) list.push([c.id, ...c.pos, ...c.rot, c.pet, c.ball, c.flags]);
-    if (!list.length || (list.length < 2 && !this.npcs.list.length)) return;
-    const cars = [];
+    // Where everyone is. Players' and drivers' updates are passed on as soon as they come in
+    // (every tick), so none get skipped or bunched up; the town's people go out 15 times a second.
+    const slow = t.state <= 0;
+    if (slow) t.state = Math.max(0, t.state + 1 / TICK_RATE);
+    let joined = 0;
+    for (const c of this.clients.values()) if (c.joined) joined++;
+    const list = [], cars = [];
+    for (const c of this.clients.values()) {
+      if (c.joined && c.fresh && joined > 1) list.push([c.id, ...c.pos, ...c.rot, c.pet, c.ball, c.flags, c.ts]);
+      c.fresh = false;
+    }
     for (const v of this.vehicles.values()) {
       // Driven vehicles, plus parked ones that are rolling after being knocked.
-      if (v.driver || now - (v.nudgedAt || 0) < 1500) cars.push([v.id, v.x, v.y, v.z, v.h, v.speed, v.steer, v.siren, v.pitch, v.roll, v.rotor, v.driver ? v.flags : 0]);
+      if (joined > 1 && (v.driver ? v.fresh : slow && now - (v.nudgedAt || 0) < 1500)) {
+        cars.push([v.id, v.x, v.y, v.z, v.h, v.speed, v.steer, v.siren, v.pitch, v.roll, v.rotor, v.driver ? v.flags : 0, v.driver ? v.ts : null]);
+      }
+      v.fresh = false;
     }
-    this.broadcast({ t: 'states', list, cars, npcs: this.npcs.states() });
+    const people = slow && joined && this.npcs.list.length;
+    if (!list.length && !cars.length && !people) return;
+    const msg = { t: 'states', list, cars };
+    if (people) Object.assign(msg, { npcs: this.npcs.states(), ts: Math.round(performance.now()) });
+    this.broadcast(msg);
   }
 }
 
