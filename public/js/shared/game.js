@@ -1,7 +1,7 @@
 // The game "room": the world, players, vehicles, land claims, growing trees and the clock.
 // The Node server runs one of these for everybody. When there is no server,
 // the browser runs its own copy so single player works exactly the same way.
-import { blockKey, inBounds, isValidBlock, isSolidBlock, blockId, shapeOf, DOOR_OPEN, DAY_LENGTH, WORLD, isNightTime } from './blocks.js';
+import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, DOOR_OPEN, DAY_LENGTH, WORLD, isNightTime } from './blocks.js';
 import { sanitizeLook, cleanName } from './avatar.js';
 import { generateWorld, helipadBlocks, upgradeLamps } from './worldgen.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot } from './vehicles.js';
@@ -36,7 +36,7 @@ export class GameRoom {
     this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0 };
     this.isSolid = (x, y, z) =>
       y < 0 || x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max ||
-      isSolidBlock(this.world.get(blockKey(x, y, z)) || 0);
+      blocksVehicles(this.world.get(blockKey(x, y, z)) || 0);
   }
 
   // ---------- World data ----------

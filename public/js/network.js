@@ -46,7 +46,7 @@ export class Network {
       };
       ws.onclose = () => {
         clearTimeout(timer);
-        if (welcomed && this.ws === ws) {
+        if (welcomed && this.ws === ws && !this.leaving) {
           this.online = this.connected = false;
           this.handlers.disconnect?.();
         }
@@ -78,16 +78,14 @@ export class Network {
     this.ws = null;
     return new Promise(resolve => {
       let saveTimer = null;
-      const room = new GameRoom({
-        onDirty: () => {
-          saveTimer ??= setTimeout(() => {
-            saveTimer = null;
-            try {
-              localStorage.setItem(OFFLINE_SAVE, JSON.stringify(room.serialize()));
-            } catch { /* storage full or unavailable */ }
-          }, 3000);
-        },
-      });
+      const save = () => {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+        try {
+          localStorage.setItem(OFFLINE_SAVE, JSON.stringify(room.serialize()));
+        } catch { /* storage full or unavailable */ }
+      };
+      const room = new GameRoom({ onDirty: () => (saveTimer ??= setTimeout(save, 3000)) });
       let saved = null;
       try {
         saved = JSON.parse(localStorage.getItem(OFFLINE_SAVE));
@@ -106,7 +104,7 @@ export class Network {
         // Deliver asynchronously, like a real network would.
         queueMicrotask(() => (msg.t === 'welcome' ? resolve(msg) : this.dispatch(msg)));
       });
-      this.local = { room, client };
+      this.local = { room, client, save };
       this.connected = true;
       let last = performance.now();
       setInterval(() => {
@@ -116,6 +114,13 @@ export class Network {
       }, 1000 / 30);
       room.handle(client, { t: 'join', name, look });
     });
+  }
+
+  // Leaving the game: say goodbye to the server, or save the single-player world right away.
+  leave() {
+    this.leaving = true;
+    if (this.local) this.local.save();
+    else this.ws?.close();
   }
 
   send(msg) {

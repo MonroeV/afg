@@ -3,13 +3,15 @@
 //
 // A stored block value is `id + meta * 256 + paint * 4096`:
 //   id     (8 bits)  which block it is
-//   meta   (4 bits)  doors: which way they face, open, top half; ladders: which way they face
+//   meta   (4 bits)  doors: which way they face, open, top half; ladders: which way they face;
+//                    railings and flat blocks: which edges of the cell have a railing
 //   paint  (4 bits)  0 = original colors, 1-15 = painted (see PAINT_COLORS)
 // Old saves have paint 0 everywhere, so they load unchanged.
 //
 // shape: 'cube' (default), 'door' (two blocks tall, opens), 'flat' (a thin floor
 // layer you can walk over, like roads), 'plant' (crossed sprites, no collision) or
-// 'model' (a small 3D object such as a lamp; `box` is the part you bump into, if any).
+// 'model' (a small 3D object such as a lamp; `box` is the part you bump into, if any),
+// 'ladder' (flat against a wall) or 'rail' (railings along some edges of the cell).
 //
 // light: blocks that light up their surroundings. color, power (brightness), range
 // (how far the light reaches), always (indoor lamps stay on in the daytime),
@@ -74,6 +76,7 @@ export const BLOCKS = {
   51: { name: 'Neon Blue', tex: 'neon_blue', emissive: true, light: { color: 0x3fb4ff, power: 0.9, range: 22, always: true } },
   52: { name: 'Neon Green', tex: 'neon_green', emissive: true, light: { color: 0x5cff6a, power: 0.9, range: 22, always: true } },
   53: { name: 'Ladder', shape: 'ladder', tex: 'planks' },
+  54: { name: 'Railing', shape: 'rail', tex: 'railing' },
 };
 
 // Paint colors for the Paint Brush (index 1-15; 0 means "not painted").
@@ -99,7 +102,7 @@ export const shapeOf = v => BLOCKS[v & 255]?.shape || 'cube';
 export const isSolidBlock = v => {
   const shape = shapeOf(v);
   if (shape === 'model') return !!BLOCKS[v & 255].box;
-  return v !== 0 && shape !== 'flat' && shape !== 'plant' && shape !== 'ladder';
+  return v !== 0 && shape !== 'flat' && shape !== 'plant' && shape !== 'ladder' && shape !== 'rail';
 };
 export const isReplaceable = v => {
   const shape = shapeOf(v);
@@ -112,8 +115,42 @@ export function isValidBlock(v) {
   const def = BLOCKS[v & 255];
   if (!def) return false;
   const meta = blockMeta(v);
-  return def.shape === 'door' ? true : def.shape === 'ladder' ? meta < 4 : meta === 0;
+  if (def.shape === 'door' || def.shape === 'flat') return true;
+  if (def.shape === 'rail') return meta > 0;
+  return def.shape === 'ladder' ? meta < 4 : meta === 0;
 }
+
+// ---------- Railings ----------
+// A railing runs along one or more edges of a cell (meta bits: 1 = -z side, 2 = +x,
+// 4 = +z, 8 = -x). It stops you walking (or falling) off that side but not the others.
+// Railings can stand in their own cell, or on a flat block like a sidewalk or carpet.
+export const RAIL_EDGES = [1, 2, 4, 8];
+const RAIL_THICK = 0.12;
+export const RAIL_HEIGHT = 1.6; // taller than it looks, so you can't jump over it (jumps reach 1.45)
+
+export const railMask = v => {
+  const shape = shapeOf(v);
+  return shape === 'rail' || shape === 'flat' ? blockMeta(v) : 0;
+};
+
+// The railing pieces as boxes inside the cell: [x0, y0, z0, x1, y1, z1] from its corner.
+export function railBoxes(mask, height = RAIL_HEIGHT) {
+  const t = RAIL_THICK, out = [];
+  if (mask & 1) out.push([0, 0, 0, 1, height, t]);
+  if (mask & 2) out.push([1 - t, 0, 0, 1, height, 1]);
+  if (mask & 4) out.push([0, 0, 1 - t, 1, height, 1]);
+  if (mask & 8) out.push([0, 0, 0, t, height, 1]);
+  return out;
+}
+
+// Which edge of a cell is closest to a point (fx, fz from the cell's corner).
+export function nearestRailEdge(fx, fz) {
+  const d = [fz, 1 - fx, 1 - fz, fx];
+  return RAIL_EDGES[d.indexOf(Math.min(...d))];
+}
+
+// Railings stop cars too.
+export const blocksVehicles = v => isSolidBlock(v) || railMask(v) > 0;
 
 // ---------- Doors ----------
 // meta bits: 0-1 facing (quarter turns), 2 open, 3 top half.

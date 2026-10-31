@@ -8,7 +8,9 @@ customize your character, drive cars, build anything and play with friends.
 - **Make your own character**: 10 faces, 8 hairstyles, 9 hats, 7 shirts, 4 kinds of pants,
   capes, wings and backpacks, and a color for every piece
 - **Pets** that follow you, wander around and sniff things when you stand still, play fetch with
-  the Pet Ball, and jump for joy when you pet them (you can pet other people's pets too)
+  the Pet Ball, and jump for joy when you pet them (you can pet other people's pets too). The ball
+  flies in a big arc with a little trail and a shadow under it, and bounces off the ground, walls,
+  railings, cars and people (with a boing and a puff of dust) before rolling to a stop
 - **Character Gallery**: save your character (with your name) so anyone can pick it later.
   It holds 25 characters in a 5×5 grid; when it's full you choose one to replace, or replace the oldest
 - **Day and night**: the sun sets, the stars and moon come out and the street lamps light up
@@ -24,8 +26,9 @@ customize your character, drive cars, build anything and play with friends.
   gets shoved (and spins if you hit it off-center) while you slow down; heavy monster trucks barely
   notice small cars; knocked cars can knock into other cars; cars bump people out of the way; you
   can push a parked car by walking into it; and walking or driving into the Pet Ball kicks it
-- **A helicopter** on the helipad east of town. It banks into its turns like a real one. Easy to
-  learn, tricky to master. If it's destroyed, a new one arrives after 5 minutes
+- **A helicopter** on the helipad east of town. It turns to face wherever you look (steer with the
+  mouse), slides sideways with A and D, and banks into its turns like a real one. Easy to learn,
+  tricky to master. If it's destroyed, a new one arrives after 5 minutes
 - **Claim your own land** (up to 10 × 15 blocks) with the Land Flag so only you can build there
 - **Logs grow into trees**: put a lone log on the grass and watch it grow
 - **Build Book**: special things you can make out of blocks: beds, trampolines, campfires,
@@ -37,6 +40,11 @@ customize your character, drive cars, build anything and play with friends.
 - **Ladders**: point at a wall and click once, and the ladder runs from the ground all the way to
   the top of the wall. Walk into it and hold W or Space to climb (S to go down). Breaking any rung
   takes the whole ladder down
+- **Railings and fences**: click near the edge of a floor (a stair step, a balcony, the ground or a
+  sidewalk) to put a railing along that edge, or click the side of a wall to run one along its top.
+  Click the other edges of the same spot for corners. A railing stops you walking (or falling, or
+  jumping) off that side, but you can still step on from the other sides. It stops cars too, and you
+  can paint it any color
 - **Paint anything**: pick one of 15 paint colors and use the Paint Brush on any block (carpets,
   doors, lamps and neon too; painted lamps glow in their new color). The Paint Scraper takes the
   paint off again
@@ -53,10 +61,12 @@ customize your character, drive cars, build anything and play with friends.
   Lamps cast a soft glow that spreads wide around them, and the towns use them all: street lamps,
   porch lanterns, ceiling lights and table lamps in houses, garden lights and tiki torches in parks.
   Any lamp with a roof over it counts as indoors, so it lights up the room day and night
-- **53 kinds of blocks** with realistic textures: brick, wood, glass, marble, roads, flowers,
-  rainbow, gold, mirrors, lamps, ladders…
+- **54 kinds of blocks** with realistic textures: brick, wood, glass, marble, roads, flowers,
+  rainbow, gold, mirrors, lamps, ladders, railings…
 - **Real-time multiplayer**: see each other, drive together, chat
 - **Single player works too**: with no server, the world runs and saves right in the browser
+- **Plays on phones and tablets** (held sideways): a joystick under your left thumb, drag to look,
+  tap to build
 
 ## Controls
 
@@ -78,7 +88,7 @@ customize your character, drive cars, build anything and play with friends.
 | B | Wave |
 | T or Enter | Chat |
 | R | Go home: your bed, or your land if you have no bed, or else the town square |
-| Esc | Pause, settings and character customization |
+| Esc | Pause menu: settings, character, Go Home, and Exit to Menu |
 
 **Driving:** W to drive, S to brake (keep holding it once you've stopped to back up), A/D to
 steer, Space to brake, Shift for a boost, H (or click) for the horn, G for the police siren, V to
@@ -89,14 +99,40 @@ press E) to hop in as a passenger. Up to two passengers fit. Passengers can look
 change the camera with V, but only the driver can drive. Press E to get out.
 
 **Flying the helicopter:** wait for the rotor to spin up, then hold Space to climb and Shift to go
-down. W/S tilt forward and back (tilting moves you, and you keep sliding until you tilt the other
-way). A/D bank into a turn: the faster you fly, the wider and swoopier the turn. Land gently, or it
-gets damaged. Don't let the rotor hit anything!
+down. Steer with the mouse: the helicopter turns to face wherever you look, and leans into the
+turn (the faster you fly, the wider and swoopier the turn). W/S tilt forward and back (tilting
+moves you, and you keep sliding until you tilt the other way). A/D slide sideways. Land gently, or
+it gets damaged. Don't let the rotor hit anything!
+
+**Railings:** pick the Railing, then point near the edge of a floor and click: a white outline
+shows where it will go. Point at the side of a wall to put one along the top of the wall.
 
 **Claiming land:** pick the Land Flag (slot 9), click one corner, click the opposite corner, then
 click once more to claim it. Right-click cancels. With the flag in your hand, right-click twice to
 give your land up. Land belongs to a name: if nobody plays with that name for 30 days, the land
 becomes free again. Anyone can still walk in and use the doors.
+
+## Playing on a phone or tablet
+
+Open the game in the phone's browser (see below for the address) and turn the phone sideways.
+When you press PLAY it goes full screen.
+
+- **Walk:** put your left thumb anywhere on the left side of the screen and a joystick appears
+  under it. Push a little to walk slowly, all the way to run.
+- **Look around:** drag anywhere on the right side.
+- **Use your item:** tap the right side (place a block, hit with the hammer, paint, throw the
+  ball). Keep your finger still on the screen to keep hammering.
+- **⬆** jumps (tap it twice quickly to start or stop flying; then **⬆** and **⬇** go up and down).
+- **✋** opens doors, gets in cars, pets pets and sleeps in beds. In a vehicle it turns into **🚪**
+  to get out.
+- **Driving:** the joystick drives and steers (push it all the way up for a boost), **🛑** brakes.
+  In the helicopter the joystick tilts and slides, **⬆**/**⬇** climb and descend, and it turns to
+  face where you look.
+- Tap a hotbar slot to pick an item. The round buttons at the top are pause **⏸** (with Go Home
+  and Exit to Menu), items **🎒**, camera **🎥**, dance **💃** and chat **💬**.
+
+Phones start with the Low graphics setting so the game runs smoothly; you can change it in the
+pause menu.
 
 ## Running it on your computer
 
@@ -163,6 +199,7 @@ public/
   js/
     main.js            Starts everything and runs the game loop: input, building, driving, camera
     hud.js             Hotbar, item menu, chat and info panels
+    touch.js           Phone and tablet controls: joystick, look and tap, round pads
     textures.js        Generates all block textures in code
     world.js           Stores blocks, draws them in chunks, finds what you're looking at
     player.js          Walking, jumping, flying, collisions

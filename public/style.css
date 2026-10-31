@@ -518,3 +518,114 @@ button.secondary {
 .recipe-pic canvas { width: 26px; height: 26px; }
 
 .paint-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 0 8px; }
+
+/* ---------- Phone and tablet controls ---------- */
+
+body.touch, body.touch #game { touch-action: none; overscroll-behavior: none; -webkit-touch-callout: none; }
+body.touch .screen { touch-action: pan-y; }
+#touch { position: fixed; inset: 0; touch-action: none; -webkit-user-select: none; user-select: none; }
+.touch-zone { position: absolute; top: 0; bottom: 0; }
+.touch-zone.move { left: 0; width: 42%; }
+.touch-zone.look { right: 0; width: 58%; }
+.stick {
+  position: absolute;
+  left: 110px;
+  top: calc(100% - 110px);
+  width: 124px;
+  height: 124px;
+  margin: -62px 0 0 -62px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04) 70%);
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.stick.idle { opacity: 0.35; }
+.knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, rgba(255, 255, 255, 0.95), rgba(220, 226, 236, 0.75));
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
+}
+.stick.idle .knob { transition: transform 0.15s ease-out; }
+.pad {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  background: rgba(10, 14, 22, 0.35);
+  font-size: 26px;
+  color: #fff;
+  text-shadow: 0 1px 3px #000;
+  transition: transform 0.08s, background 0.08s;
+}
+.pad.pressed { background: rgba(255, 179, 33, 0.5); transform: scale(0.92); }
+.pad.jump { right: max(22px, env(safe-area-inset-right)); bottom: 92px; width: 80px; height: 80px; font-size: 32px; }
+.pad.use { right: calc(max(22px, env(safe-area-inset-right)) + 96px); bottom: 34px; }
+.pad.down { right: max(30px, env(safe-area-inset-right)); bottom: 188px; width: 58px; height: 58px; }
+.minis { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; }
+.mini {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  background: rgba(10, 14, 22, 0.4);
+  font-size: 18px;
+}
+.rotate-phone { display: none; }
+@media (orientation: portrait) {
+  body.touch .rotate-phone {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    background: #0d1016;
+    font-size: 20px;
+    font-weight: 800;
+    text-align: center;
+  }
+  .rotate-icon { font-size: 64px; animation: turn-phone 1.6s ease-in-out infinite; }
+}
+@keyframes turn-phone { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+
+/* The HUD on a small sideways screen: smaller, and out of the thumbs' way. */
+body.touch #hotbar { pointer-events: auto; bottom: 6px; padding: 3px; gap: 3px; }
+body.touch .slot { width: 42px; height: 42px; border-width: 2px; }
+body.touch .slot span { display: none; }
+body.touch #info, body.touch #players { top: 6px; padding: 5px 9px; font-size: 11px; }
+body.touch #players { display: none; }
+body.touch #chat { bottom: 60px; width: min(320px, 40vw); }
+body.touch #chat-log { font-size: 12px; }
+body.touch #item-name { bottom: 56px; font-size: 14px; }
+body.touch #car-help { display: none; }
+body.touch #vehicle-hud { bottom: 58px; font-size: 13px; }
+body.touch #target-hint { font-size: 12px; }
+body.touch #toast { top: 54px; font-size: 14px; }
+body.touch .panel { padding: 18px; }
+@media (max-height: 500px) {
+  body.touch h1 { font-size: 34px; margin: 0; }
+  body.touch .tagline { margin: 4px 0 8px; }
+}
+
+/* Short, wide screens (a phone held sideways): the pause menu in two columns, so
+   Resume, Go Home and Exit all fit without scrolling. */
+@media (max-height: 500px) {
+  #pause .panel.wide { width: min(760px, 100%); padding: 14px 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; align-content: start; }
+  #pause h2, #pause .controls { grid-column: 1 / -1; margin: 0; }
+  #pause button { margin: 0; padding: 11px; font-size: 15px; }
+  #pause label { margin: 0; }
+}

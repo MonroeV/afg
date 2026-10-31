@@ -29,6 +29,7 @@ export class Player {
     this.extraBoxes = () => []; // other solid things, like cars
     this.bouncePower = () => BOUNCE_SPEED; // how hard a bounce pad at (x, y, z) launches you
     this.keys = new Set();
+    this.stick = null; // { x, y } from a touch joystick, if there is one
   }
 
   respawn() {
@@ -46,14 +47,20 @@ export class Player {
   // keys: a Set of KeyboardEvent.code values currently held down
   update(dt, keys) {
     this.keys = keys;
-    const forward = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
-    const strafe = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
+    let forward = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
+    let strafe = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
+    // A touch joystick moves you smoothly: push it a little to walk slowly.
+    const analog = this.stick && (this.stick.x || this.stick.y);
+    if (analog) {
+      forward = this.stick.y;
+      strafe = this.stick.x;
+    }
     this.sprinting = keys.has('ShiftLeft') || keys.has('ShiftRight');
     this.moving = forward !== 0 || strafe !== 0;
 
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
     const wish = new THREE.Vector3(-sin * forward + cos * strafe, 0, -cos * forward - sin * strafe);
-    if (wish.lengthSq() > 0) wish.normalize();
+    if (wish.lengthSq() > (analog ? 1 : 0)) wish.normalize();
 
     this.climbing = !this.flying && this.onLadder();
     if (this.climbing) {
@@ -76,12 +83,15 @@ export class Player {
       const k = 1 - Math.exp(-accel * dt);
       this.vel.x += (wish.x * speed - this.vel.x) * k;
       this.vel.z += (wish.z * speed - this.vel.z) * k;
-      this.vel.y -= GRAVITY * dt;
       if (keys.has('Space') && this.onGround) {
         this.vel.y = JUMP_SPEED;
         this.onGround = false;
       }
     }
+    // Gravity is added half before and half after moving, so a jump is just as high at
+    // any frame rate (on a slow phone too).
+    const falling = !this.climbing && !this.flying;
+    if (falling) this.vel.y -= GRAVITY * dt / 2;
 
     this.unstick();
     const wasOnGround = this.onGround;
@@ -89,6 +99,7 @@ export class Player {
     this.moveAxis('x', this.vel.x * dt);
     this.moveAxis('z', this.vel.z * dt);
     this.moveAxis('y', this.vel.y * dt);
+    if (falling && !this.onGround) this.vel.y -= GRAVITY * dt / 2;
     if (this.onGround && this.flying && !wasOnGround) this.flying = false;
   }
 
@@ -111,7 +122,7 @@ export class Player {
   boxesNear(r) {
     const out = [];
     for (let x = Math.floor(r[0]); x <= Math.floor(r[3]); x++)
-      for (let y = Math.floor(r[1]); y <= Math.floor(r[4]); y++)
+      for (let y = Math.floor(r[1]) - 1; y <= Math.floor(r[4]); y++) // one lower: railings stick up out of their cell
         for (let z = Math.floor(r[2]); z <= Math.floor(r[5]); z++) this.world.cellBoxes(x, y, z, out);
     for (const b of this.extraBoxes()) {
       if (b[0] < r[3] && b[3] > r[0] && b[1] < r[4] && b[4] > r[1] && b[2] < r[5] && b[5] > r[2]) out.push(b);

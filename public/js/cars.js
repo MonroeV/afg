@@ -1,7 +1,7 @@
 // Cars you can spawn, drive and share with other players.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { BLOCKS, blockId } from './shared/blocks.js';
+import { BLOCKS, blockId, railMask } from './shared/blocks.js';
 import { VEHICLES, MAX_HP, SMOKE_HP, FIRE_HP, PERSON_MASS, outlinePoints, rotorPoints, vehicleBlocked, toWorld } from './shared/vehicles.js';
 
 export const CAR_SPECS = VEHICLES;
@@ -210,7 +210,7 @@ export class Cars {
     this.world = world;
     this.effects = effects;
     this.list = new Map();
-    this.isSolid = (x, y, z) => world.isSolid(x, y, z);
+    this.isSolid = (x, y, z) => world.isSolid(x, y, z) || railMask(world.get(x, y, z)) > 0; // railings stop cars
   }
 
   add(data) {
@@ -580,9 +580,10 @@ export class Cars {
 
   // Drives the vehicle the local player is in. Returns events for sounds and damage:
   // { type: 'shift' | 'bump' | 'land' | 'bounce' | 'damage', amount, impact, other }
-  drive(car, dt, keys) {
+  // aimYaw: for the helicopter, the direction the pilot is looking (it turns to face it).
+  drive(car, dt, keys, aimYaw = car.h) {
     this.myCarId = car.id;
-    return car.spec.flying ? this.fly(car, dt, keys) : this.driveCar(car, dt, keys);
+    return car.spec.flying ? this.fly(car, dt, keys, aimYaw) : this.driveCar(car, dt, keys);
   }
 
   driveCar(car, dt, keys) {
@@ -756,7 +757,7 @@ export class Cars {
 
   // Helicopter flight. Tilting moves you, but also steals lift, and you keep sliding
   // until you tilt the other way: easy to learn, tricky to master.
-  fly(car, dt, keys) {
+  fly(car, dt, keys, aimYaw = car.h) {
     const s = car.spec;
     const events = [];
     const health = 0.6 + 0.4 * (car.hp / MAX_HP);
@@ -767,13 +768,19 @@ export class Cars {
     car.collective += ((up ? 1 : down ? 0.2 : 0.5) - car.collective) * Math.min(1, 1.6 * dt);
     const pitchIn = (keys.has('KeyW') ? -0.45 : 0) + (keys.has('KeyS') ? 0.35 : 0);
     car.pitch += (pitchIn - car.pitch) * Math.min(1, 1.8 * dt);
-    // Turning: the helicopter banks (leans) into the turn like a bird, and the tilted
-    // rotor pulls it sideways into the curve. Faster flight means wider, swoopier turns.
-    const yawIn = (keys.has('KeyA') ? 1 : 0) - (keys.has('KeyD') ? 1 : 0);
+    // Steering follows the mouse: the nose turns smoothly toward where you're looking.
+    // While turning it banks (leans) into the turn like a bird, and the tilted rotor pulls
+    // it sideways into the curve, so faster flight means wider, swoopier turns.
     const flatSpeed = Math.hypot(car.vel.x, car.vel.z);
-    car.yawRate += (yawIn * (0.9 + Math.min(flatSpeed, 15) / 15 * 0.5) * lift - car.yawRate) * Math.min(1, 2.2 * dt);
+    const off = Math.atan2(Math.sin(aimYaw - car.h), Math.cos(aimYaw - car.h));
+    const maxRate = (car.onGround ? 0.6 : 1.5) * lift;
+    const wantRate = Math.max(-maxRate, Math.min(maxRate, off * 2.6));
+    car.yawRate += (wantRate - car.yawRate) * Math.min(1, 3 * dt);
     car.h += car.yawRate * dt;
-    const bank = car.onGround ? 0 : yawIn * (0.2 + Math.min(flatSpeed, 15) / 15 * 0.25) * lift;
+    const turnBank = car.yawRate * (0.06 + Math.min(flatSpeed, 15) / 15 * 0.2);
+    // A and D slide it sideways (strafe): it leans that way and the rotor pulls it over.
+    const strafeIn = (keys.has('KeyA') ? 1 : 0) - (keys.has('KeyD') ? 1 : 0);
+    const bank = car.onGround ? 0 : (strafeIn * 0.32 + turnBank) * lift;
     car.roll += (bank - car.roll) * Math.min(1, 2.5 * dt);
 
     // Forces: lift along the tilted rotor, gravity down, a bit of air drag.

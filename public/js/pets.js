@@ -4,58 +4,151 @@ import * as THREE from 'three';
 
 export const PET_IDLE = 0, PET_MOVING = 1, PET_HAPPY = 2, PET_CARRYING = 3;
 
-// A ball you throw for your pet. It bounces off blocks and rolls to a stop.
+// A ball you throw for your pet. It flies in an arc (with a little trail and a shadow
+// on the ground under it), bounces off anything solid and rolls to a stop.
+const BALL_R = 0.2;
+const BALL_GRAVITY = 18;
+const TRAIL = 12;
+const AXES = ['x', 'y', 'z'];
+const AXIS = { x: 0, y: 1, z: 2 };
+
 export class Ball {
   constructor(scene) {
-    this.mesh = new THREE.Mesh(new THREE.SphereGeometry(0.15, 18, 12), new THREE.MeshStandardMaterial({ color: 0xe53935, roughness: 0.4 }));
-    this.mesh.add(new THREE.Mesh(new THREE.TorusGeometry(0.151, 0.015, 6, 24), new THREE.MeshStandardMaterial({ color: 0xfdd835 })));
+    this.mesh = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 20, 14), new THREE.MeshStandardMaterial({ color: 0xe53935, emissive: 0x3a0000, roughness: 0.35 }));
+    this.mesh.add(new THREE.Mesh(new THREE.TorusGeometry(BALL_R + 0.002, 0.02, 6, 28), new THREE.MeshStandardMaterial({ color: 0xfdd835, roughness: 0.4 })));
     this.mesh.castShadow = true;
     this.mesh.visible = false;
     scene.add(this.mesh);
+    // A streak of fading dots behind it while it flies.
+    this.trail = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff4c4, transparent: true, opacity: 0.55, depthWrite: false }), TRAIL);
+    this.trail.frustumCulled = false;
+    this.trail.count = 0;
+    scene.add(this.trail);
+    this.trailPts = [];
+    // A soft dark spot on the ground under it, so you can see how high it is.
+    this.shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }));
+    this.shadow.renderOrder = 2;
+    this.shadow.visible = false;
+    scene.add(this.shadow);
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
     this.active = false;
     this.carried = false;
     this.restTime = 0;
+    this.squash = 0;
+    this.squashAxis = 1;
+    this.onBounce = null; // (position, how hard) after a good bounce
+    this.matrix = new THREE.Matrix4();
   }
 
   throw(from, dir) {
-    this.pos.copy(from).addScaledVector(dir, 0.6);
-    this.vel.copy(dir).multiplyScalar(15).add(new THREE.Vector3(0, 3, 0));
+    this.pos.copy(from).addScaledVector(dir, 0.7);
+    // A nice high arc that you can follow with your eyes.
+    this.vel.copy(dir).multiplyScalar(11.5);
+    this.vel.y += 4.5;
     this.active = true;
     this.carried = false;
     this.restTime = 0;
     this.age = 0;
+    this.trailPts.length = 0;
   }
 
-  update(dt, world) {
-    if (!this.active || this.carried) return;
-    this.age += dt;
-    this.vel.y -= 20 * dt;
-    const r = 0.15;
-    for (const axis of ['x', 'y', 'z']) {
-      const next = this.pos[axis] + this.vel[axis] * dt;
-      const p = this.pos.clone();
-      p[axis] = next + Math.sign(this.vel[axis]) * r;
-      if (world.isSolid(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z))) {
-        this.vel[axis] *= -0.55;
-        if (axis === 'y') {
-          this.vel.x *= 0.8;
-          this.vel.z *= 0.8;
-        }
-      } else {
-        this.pos[axis] = next;
-      }
+  // boxesNear(region) lists the solid boxes ([x0, y0, z0, x1, y1, z1]) around a region.
+  update(dt, boxesNear) {
+    const flying = this.active && !this.carried;
+    this.mesh.visible = flying;
+    if (!flying) {
+      this.trail.count = 0;
+      this.shadow.visible = false;
+      return;
     }
-    const still = this.vel.lengthSq() < 0.5;
+    this.age += dt;
+    this.onGround = false;
+    // Fast balls move in small steps so they can't pass through thin things.
+    const steps = Math.min(8, Math.max(1, Math.ceil((this.vel.length() * dt) / 0.12)));
+    const h = dt / steps;
+    for (let i = 0; i < steps; i++) {
+      this.vel.y -= BALL_GRAVITY * h;
+      for (const axis of AXES) this.move(axis, this.vel[axis] * h, boxesNear);
+    }
+    if (this.onGround) {
+      // Rolling slows down bit by bit.
+      const k = Math.exp(-1.4 * dt);
+      this.vel.x *= k;
+      this.vel.z *= k;
+    }
+    const still = this.onGround && this.vel.lengthSq() < 0.4;
     this.restTime = still ? this.restTime + dt : 0;
+
+    // Spin with the motion, and squash flat for a moment after a bounce.
     this.mesh.position.copy(this.pos);
-    this.mesh.rotation.x += this.vel.z * dt * 5;
-    this.mesh.rotation.z -= this.vel.x * dt * 5;
+    this.mesh.rotation.x += this.vel.z * dt / BALL_R * 0.5;
+    this.mesh.rotation.z -= this.vel.x * dt / BALL_R * 0.5;
+    this.squash = Math.max(0, this.squash - dt * 6);
+    const sq = 1 - this.squash * 0.35, wide = 1 + this.squash * 0.2;
+    this.mesh.scale.set(this.squashAxis === 0 ? sq : wide, this.squashAxis === 1 ? sq : wide, this.squashAxis === 2 ? sq : wide);
+
+    // Trail: remember where it has been, while it's going fast.
+    if (this.vel.lengthSq() > 9) this.trailPts.unshift(this.pos.clone());
+    else this.trailPts.pop();
+    if (this.trailPts.length > TRAIL) this.trailPts.length = TRAIL;
+    this.trail.count = this.trailPts.length;
+    this.trailPts.forEach((p, i) => {
+      const size = BALL_R * 0.85 * (1 - i / TRAIL);
+      this.trail.setMatrixAt(i, this.matrix.makeScale(size, size, size).setPosition(p));
+    });
+    this.trail.instanceMatrix.needsUpdate = true;
+
+    // Shadow: on whatever is below the ball.
+    const below = [this.pos.x - 0.01, this.pos.y - 20, this.pos.z - 0.01, this.pos.x + 0.01, this.pos.y, this.pos.z + 0.01];
+    let floor = -Infinity;
+    for (const b of boxesNear(below)) {
+      if (b[0] <= this.pos.x && b[3] >= this.pos.x && b[2] <= this.pos.z && b[5] >= this.pos.z && b[4] <= this.pos.y) floor = Math.max(floor, b[4]);
+    }
+    const height = this.pos.y - floor;
+    this.shadow.visible = floor > -Infinity && height < 15;
+    if (this.shadow.visible) {
+      this.shadow.position.set(this.pos.x, floor + 0.02, this.pos.z);
+      this.shadow.scale.setScalar(BALL_R * (1.1 + height * 0.08));
+      this.shadow.material.opacity = 0.35 / (1 + height * 0.25);
+    }
+  }
+
+  // Moves along one axis, bouncing off the first solid thing in the way.
+  move(axis, d, boxesNear) {
+    if (d === 0) return;
+    const a = AXIS[axis], r = BALL_R, p = this.pos;
+    const me = [p.x - r, p.y - r, p.z - r, p.x + r, p.y + r, p.z + r];
+    const region = me.slice();
+    if (d > 0) region[a + 3] += d;
+    else region[a] += d;
+    const o1 = (a + 1) % 3, o2 = (a + 2) % 3;
+    let allowed = d;
+    for (const b of boxesNear(region)) {
+      if (b[o1] >= me[o1 + 3] || b[o1 + 3] <= me[o1] || b[o2] >= me[o2 + 3] || b[o2 + 3] <= me[o2]) continue;
+      if (d > 0 && b[a] >= me[a + 3] - 1e-4) allowed = Math.min(allowed, b[a] - me[a + 3]);
+      else if (d < 0 && b[a + 3] <= me[a] + 1e-4) allowed = Math.max(allowed, b[a + 3] - me[a]);
+    }
+    p[axis] += allowed;
+    if (allowed === d) return;
+    // Bounce! Faster hits bounce back harder (but always lose some speed).
+    const speed = Math.abs(this.vel[axis]);
+    this.vel[axis] *= -0.62;
+    const rub = axis === 'y' ? 0.88 : 0.9;
+    for (const other of AXES) if (other !== axis) this.vel[other] *= rub;
+    if (axis === 'y' && d < 0) {
+      this.onGround = true;
+      if (Math.abs(this.vel.y) < 1.2) this.vel.y = 0; // too slow to bounce: start rolling
+    }
+    if (speed > 2) {
+      this.squash = Math.min(1, speed / 10);
+      this.squashAxis = a;
+      this.onBounce?.(p, Math.min(1, speed / 12), axis);
+    }
   }
 
   get resting() {
-    return this.restTime > 0.3 || this.age > 8;
+    return this.restTime > 0.3 || this.age > 10;
   }
 }
 

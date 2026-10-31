@@ -2,7 +2,10 @@
 // so tens of thousands of blocks render in a handful of draw calls.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { BLOCKS, WORLD, PAINT_COLORS, blockKey, blockId, blockMeta, paintOf, shapeOf, isSolidBlock, doorBox, DOOR_OPEN, DOOR_TOP } from './shared/blocks.js';
+import {
+  BLOCKS, WORLD, PAINT_COLORS, blockKey, blockId, blockMeta, paintOf, withPaint, makeBlock, shapeOf, isSolidBlock, doorBox,
+  railBoxes, DOOR_OPEN, DOOR_TOP,
+} from './shared/blocks.js';
 import { modelGeometry, modelMaterials } from './models.js';
 
 const GEOMETRY = {
@@ -20,6 +23,50 @@ const GEOMETRY = {
     ...[0.17, 0.5, 0.83].map(y => new THREE.BoxGeometry(0.72, 0.06, 0.04).translate(0, y, -0.45)),
   ]),
 };
+
+export const RAILING = 54;
+
+// A railing along each edge in `mask`: a post at each end, a handrail on top, a rail
+// near the bottom and thin bars in between. Built for the -z edge, then turned.
+const railGeometries = {};
+export function railGeometry(mask) {
+  if (railGeometries[mask]) return railGeometries[mask];
+  const parts = [];
+  for (let i = 0; i < 4; i++) {
+    if (!(mask & (1 << i))) continue;
+    const edge = [
+      ...[-0.44, 0.44].map(x => new THREE.BoxGeometry(0.12, 1, 0.12).translate(x, 0.5, -0.44)),
+      new THREE.BoxGeometry(1, 0.08, 0.13).translate(0, 0.96, -0.44),
+      new THREE.BoxGeometry(1, 0.06, 0.08).translate(0, 0.14, -0.44),
+      ...[-0.22, 0, 0.22].map(x => new THREE.BoxGeometry(0.05, 0.8, 0.05).translate(x, 0.54, -0.44)),
+    ];
+    for (const g of edge) parts.push(g.rotateY(-i * Math.PI / 2).translate(0.5, 0, 0.5));
+  }
+  return (railGeometries[mask] = mergeGeometries(parts));
+}
+
+// Does a ray hit a box? Returns the distance and the face it went in through.
+function rayBox(o, d, b) {
+  let t0 = 0, t1 = Infinity, axis = -1;
+  for (let a = 0; a < 3; a++) {
+    const oa = a === 0 ? o.x : a === 1 ? o.y : o.z, da = a === 0 ? d.x : a === 1 ? d.y : d.z;
+    if (Math.abs(da) < 1e-9) {
+      if (oa < b[a] || oa > b[a + 3]) return null;
+      continue;
+    }
+    let near = (b[a] - oa) / da, far = (b[a + 3] - oa) / da;
+    if (near > far) [near, far] = [far, near];
+    if (near > t0) {
+      t0 = near;
+      axis = a;
+    }
+    t1 = Math.min(t1, far);
+    if (t0 > t1) return null;
+  }
+  const normal = [0, 0, 0];
+  if (axis >= 0) normal[axis] = -Math.sign(axis === 0 ? d.x : axis === 1 ? d.y : d.z);
+  return { t: t0, normal };
+}
 
 // Painted blocks: instead of just tinting the texture (which can't make dark blocks
 // light), recolor it, keeping its light and dark details. White instance color = not painted.
@@ -177,6 +224,8 @@ export class World {
     } else if (shape === 'model') {
       const b = BLOCKS[blockId(v)].box;
       if (b) out.push([x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
+    } else if (shape === 'rail' || shape === 'flat') {
+      for (const b of railBoxes(blockMeta(v))) out.push([x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
     }
   }
 
@@ -309,6 +358,7 @@ export class World {
       if (x !== undefined && this.doorRole(x, y, z).kind === 'garage') return `${id}:garage`;
       return `${id}:${blockMeta(v) & DOOR_TOP ? 'top' : 'bottom'}`;
     }
+    if (shapeOf(v) === 'rail') return `${id}:${blockMeta(v)}`;
     return String(id);
   }
 
@@ -319,8 +369,8 @@ export class World {
       const cx = (Math.floor(x / CHUNK) + 0.5) * CHUNK, cz = (Math.floor(z / CHUNK) + 0.5) * CHUNK;
       layer = this.layers[key] = {
         mesh: null, keys: [], index: new Map(), def,
-        geometry: def.shape === 'model' ? modelGeometry(def.model) : GEOMETRY[def.shape || 'cube'],
-        material: this.materials[renderKey],
+        geometry: def.shape === 'model' ? modelGeometry(def.model) : def.shape === 'rail' ? railGeometry(blockMeta(v)) : GEOMETRY[def.shape || 'cube'],
+        material: this.materials[renderKey] ?? this.materials[blockId(v)],
         center: new THREE.Vector3(cx, 32, cz),
       };
       this.grow(layer, 64);
@@ -368,6 +418,19 @@ export class World {
   }
 
   addInstance(v, k, x, y, z) {
+    const rails = shapeOf(v) === 'flat' ? blockMeta(v) : 0;
+    if (!rails) return this.addOne(v, k, x, y, z);
+    // A flat block with railings on it: the railings are a second instance, and they get the paint.
+    this.addOne(v & 0x0fff, k, x, y, z);
+    this.addOne(withPaint(makeBlock(RAILING, rails), paintOf(v)), `${k}|rail`, x, y, z);
+  }
+
+  removeInstance(k) {
+    this.removeOne(k);
+    if (this.cellLayer.has(`${k}|rail`)) this.removeOne(`${k}|rail`);
+  }
+
+  addOne(v, k, x, y, z) {
     const renderKey = this.renderKey(v, x, y, z);
     const key = `${Math.floor(x / CHUNK)},${Math.floor(z / CHUNK)}|${renderKey}`;
     const layer = this.layer(key, renderKey, v, x, z);
@@ -384,7 +447,7 @@ export class World {
     layer.mesh.instanceColor.needsUpdate = true;
   }
 
-  removeInstance(k) {
+  removeOne(k) {
     const layer = this.layers[this.cellLayer.get(k)];
     this.cellLayer.delete(k);
     if (!layer) return;
@@ -440,12 +503,20 @@ export class World {
     while (t <= maxDist) {
       if (y < 0) {
         if (normal[1] !== 1) return null;
-        return { ground: true, block: [x, y, z], normal, place: [x, 0, z], distance: t };
+        return { ground: true, block: [x, y, z], normal, place: [x, 0, z], distance: t, point: origin.clone().addScaledVector(dir, t) };
       }
       if (x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max) return null;
       const v = this.get(x, y, z);
-      if (v) {
-        return { value: v, id: blockId(v), block: [x, y, z], normal, place: [x + normal[0], y + normal[1], z + normal[2]], distance: t };
+      if (v && shapeOf(v) === 'rail') {
+        // Railings only fill part of their cell: you can point (and click) past them.
+        let best = null;
+        for (const b of railBoxes(blockMeta(v), 1)) {
+          const h = rayBox(origin, dir, [x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
+          if (h && h.t <= maxDist && (!best || h.t < best.t)) best = h;
+        }
+        if (best) return this.hitResult(v, x, y, z, best.normal, best.t, origin, dir);
+      } else if (v) {
+        return this.hitResult(v, x, y, z, normal, t, origin, dir);
       }
       if (tMaxX < tMaxY && tMaxX < tMaxZ) {
         x += stepX; t = tMaxX; tMaxX += tDeltaX; normal = [-stepX, 0, 0];
@@ -456,5 +527,12 @@ export class World {
       }
     }
     return null;
+  }
+
+  hitResult(v, x, y, z, normal, t, origin, dir) {
+    return {
+      value: v, id: blockId(v), block: [x, y, z], normal, place: [x + normal[0], y + normal[1], z + normal[2]],
+      distance: t, point: origin.clone().addScaledVector(dir, t),
+    };
   }
 }

@@ -98,7 +98,7 @@ export class Avatar {
       return;
     }
     if (!this.ballMesh) {
-      this.ballMesh = new THREE.Mesh(new THREE.SphereGeometry(0.15, 14, 10), new THREE.MeshStandardMaterial({ color: 0xe53935, roughness: 0.4 }));
+      this.ballMesh = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10), new THREE.MeshStandardMaterial({ color: 0xe53935, emissive: 0x3a0000, roughness: 0.4 }));
       this.ballMesh.castShadow = true;
       this.scene.add(this.ballMesh);
       this.ballMesh.position.fromArray(b);

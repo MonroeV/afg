@@ -12,9 +12,28 @@ export const CONTROLS = [
   ['V', 'Camera view'], ['G', 'Dance!'], ['B', 'Wave'], ['T / Enter', 'Chat'], ['R', 'Go home (bed, your land, or town)'],
 ];
 
+export const TOUCH_CONTROLS = [
+  ['Left thumb', 'Joystick: walk (push it all the way to run)'], ['Right side', 'Drag to look around'],
+  ['Tap', 'Use item (keep your finger still to keep hammering)'], ['⬆', 'Jump (tap twice to fly)'],
+  ['✋', 'Doors, cars, pets, beds'], ['🚪', 'Get out of a vehicle'], ['Hotbar', 'Tap to pick an item'],
+  ['🎒', 'Items & Build Book'], ['🎥', 'Camera view'], ['💃', 'Dance!'], ['💬', 'Chat'], ['⏸', 'Pause, go home, settings'],
+];
+
+const isTouch = () => document.body.classList.contains('touch');
+
+// On phones, "click" and keyboard keys in messages become taps and the on-screen pads.
+const TOUCH_WORDS = [
+  [/Right-click or E/g, 'Tap ✋'], [/right-click or E/gi, 'tap ✋'], [/Right-click/g, 'Tap ✋'], [/right-click/g, 'tap ✋'],
+  [/Press E to get out/g, 'Tap 🚪 to get out'], [/\(E\)/g, '(🚪)'], [/Press E to see the Build Book/g, 'Tap 🎒 to see the Build Book'],
+  [/Press R to come back here/g, 'Pause ⏸ and tap Go Home to come back here'],
+  [/hold W or Space to climb/g, 'push the joystick up to climb'], [/W \/ Space: up · S: down/g, 'Joystick up / down'],
+  [/\bClick\b/g, 'Tap'], [/\bclick\b/g, 'tap'],
+];
+export const forTouch = text => (isTouch() && text ? TOUCH_WORDS.reduce((t, [a, b]) => t.replace(a, b), text) : text);
+
 export function renderControls(el) {
   el.textContent = '';
-  for (const [keys, what] of CONTROLS) {
+  for (const [keys, what] of isTouch() ? TOUCH_CONTROLS : CONTROLS) {
     const row = document.createElement('div');
     for (const k of keys.split(' / ')) {
       const kbd = document.createElement('kbd');
@@ -60,6 +79,12 @@ export class Hud {
       const num = document.createElement('span');
       num.textContent = i + 1;
       slot.append(this.iconCanvas(item), num);
+      // Tap a slot to pick it (on phones).
+      slot.addEventListener('pointerdown', e => {
+        if (e.pointerType === 'mouse') return;
+        e.preventDefault();
+        this.select(i);
+      });
       bar.append(slot);
     });
     this.onChange(this.item);
@@ -190,7 +215,7 @@ export class Hud {
       who.style.color = msg.color || '#fff';
       line.append(who);
     }
-    line.append(document.createTextNode(msg.text));
+    line.append(document.createTextNode(msg.system ? forTouch(msg.text) : msg.text));
     const log = $('chat-log');
     log.append(line);
     while (log.children.length > 40) log.firstChild.remove();
@@ -213,6 +238,7 @@ export class Hud {
   // ---------- Text panels ----------
 
   setHint(text) {
+    text = forTouch(text);
     if ($('target-hint').textContent !== text) $('target-hint').textContent = text;
   }
 
@@ -223,7 +249,7 @@ export class Hud {
     el.innerHTML = kind === 'passenger'
       ? '<kbd>Mouse</kbd> Look around <kbd>V</kbd> Camera <kbd>E</kbd> Get out'
       : kind === 'heli'
-      ? '<kbd>Space</kbd> Up <kbd>Shift</kbd> Down <kbd>W</kbd><kbd>S</kbd> Tilt <kbd>A</kbd><kbd>D</kbd> Turn <kbd>V</kbd> Camera <kbd>E</kbd> Get out'
+      ? '<kbd>Mouse</kbd> Steer <kbd>Space</kbd> Up <kbd>Shift</kbd> Down <kbd>W</kbd><kbd>S</kbd> Tilt <kbd>A</kbd><kbd>D</kbd> Slide <kbd>V</kbd> Camera <kbd>E</kbd> Get out'
       : '<kbd>W</kbd><kbd>S</kbd> Drive <kbd>A</kbd><kbd>D</kbd> Steer <kbd>Space</kbd> Brake ' +
         '<kbd>Shift</kbd> Boost <kbd>H</kbd> Horn ' + (kind === 'police' ? '<kbd>G</kbd> Siren ' : '') +
         '<kbd>V</kbd> Camera <kbd>E</kbd> Get out';
@@ -237,7 +263,7 @@ export class Hud {
 
   toast(text) {
     const el = $('toast');
-    el.textContent = text;
+    el.textContent = forTouch(text);
     el.classList.add('show');
     clearTimeout(this.toastTimer);
     this.toastTimer = setTimeout(() => el.classList.remove('show'), 3500);

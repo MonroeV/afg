@@ -398,6 +398,14 @@ function garage(u, v) {
   return { c, h: rib < 0.08 ? 0.1 : 0.6 + (rib < 0.16 ? 0.2 : 0) };
 }
 
+// Railings: smooth, light painted wood, so paint colors show up well on them.
+function railing(u, v) {
+  const n = fbm(u, v, 4, 4, 130, 6);
+  const grain = Math.sin((u * 24 + n * 5) * Math.PI) * 0.5 + 0.5;
+  const c = shade([0.9, 0.88, 0.84], 0.9 + grain * 0.07 + n * 0.06);
+  return { c, h: 0.5 + grain * 0.1 };
+}
+
 // Neon: a dark panel with a glowing tube bent into a frame and a zig-zag.
 function neon(color) {
   return (u, v) => {
@@ -455,6 +463,7 @@ const GENERATORS = {
   mirror,
   gold,
   garage,
+  railing,
   neon_pink: neon([1, 0.25, 0.65]),
   neon_blue: neon([0.25, 0.7, 1]),
   neon_green: neon([0.35, 1, 0.42]),

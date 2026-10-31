@@ -1,10 +1,13 @@
 // BuildZone: game setup, input and the main loop.
 import * as THREE from 'three';
-import { BLOCKS, WORLD, inBounds, blockId, blockMeta, shapeOf, isReplaceable, makeBlock, doorFacingFromYaw, paintOf, withPaint, PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP } from './shared/blocks.js';
+import {
+  BLOCKS, WORLD, inBounds, blockId, blockMeta, shapeOf, isReplaceable, makeBlock, doorFacingFromYaw, paintOf, withPaint,
+  railMask, railBoxes, nearestRailEdge, PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP,
+} from './shared/blocks.js';
 import { generateWorld } from './shared/worldgen.js';
 import { randomLook, sanitizeLook } from './shared/avatar.js';
 import { generateTextures } from './textures.js';
-import { World, createBlockMaterials, blockMaterial } from './world.js';
+import { World, createBlockMaterials, blockMaterial, RAILING } from './world.js';
 import { Player, EYE_HEIGHT } from './player.js';
 import { Network } from './network.js';
 import { Avatar, Avatars } from './avatars.js';
@@ -23,6 +26,7 @@ import { CharacterClient, Gallery } from './gallery.js';
 import { Hud, renderControls } from './hud.js';
 import { HAMMER, FIREWORKS, BALL, CLAIM, BRUSH, SCRAPER, LADDER, ALL_ITEMS, DEFAULT_HOTBAR, makeIcon, ViewModel } from './items.js';
 import { Particles, Fireworks, Sounds, Effects } from './effects.js';
+import { TouchControls, IS_TOUCH } from './touch.js';
 
 const $ = id => document.getElementById(id);
 const REACH = 7;
@@ -33,9 +37,12 @@ const DOOR = 21;
 // ---------- Saved settings ----------
 
 const settings = { name: '', look: null, sensitivity: 1, volume: 0.4, quality: 'high', paint: 1, hotbar: DEFAULT_HOTBAR.slice() };
+let savedSettings = {};
 try {
-  Object.assign(settings, JSON.parse(localStorage.getItem('buildzone') || '{}'));
+  savedSettings = JSON.parse(localStorage.getItem('buildzone') || '{}') || {};
 } catch { /* storage unavailable */ }
+Object.assign(settings, savedSettings);
+if (IS_TOUCH && !savedSettings.quality) settings.quality = 'low'; // phones start on the faster graphics
 if (!Array.isArray(settings.hotbar) || settings.hotbar.length !== 9 || !settings.hotbar.every(i => ALL_ITEMS.includes(i))) {
   settings.hotbar = DEFAULT_HOTBAR.slice();
 }
@@ -205,6 +212,10 @@ async function load() {
   player.onPushCar = pushCar;
   cars.people = () => [...avatars.list.values()].filter(a => !a.seat && !a.lying).map(a => ({ id: a.id, pos: a.pos }));
   ball = new Ball(scene);
+  ball.onBounce = (p, k, axis) => {
+    sounds.ballBounce(k * loudness(p.x, p.y, p.z, 30));
+    if (axis === 'y' && k > 0.3) for (let i = 0; i < 2; i++) effects.smokePuff(p.x, p.y - 0.15, p.z, 0);
+  };
   buildGround();
 
   // Show the town behind the main menu.
@@ -234,7 +245,7 @@ async function load() {
   $('quality').value = settings.quality;
   $('loading').classList.add('hidden');
   $('join-form').classList.remove('hidden');
-  $('name').focus();
+  if (!IS_TOUCH) $('name').focus();
   requestAnimationFrame(frame);
 }
 
@@ -242,6 +253,7 @@ async function load() {
 
 $('join-form').addEventListener('submit', async e => {
   e.preventDefault();
+  goFullscreen();
   settings.name = $('name').value.trim() || 'Builder';
   saveSettings();
   $('play').disabled = true;
@@ -268,7 +280,9 @@ $('join-form').addEventListener('submit', async e => {
   hud.addChat({ system: true, text: online
     ? `Welcome, ${settings.name}! ${welcome.players.length} other builder(s) online.`
     : 'Playing single player. Your world saves in this browser. Run "npm start" to play with friends!' });
-  hud.addChat({ system: true, text: 'Tip: right-click a car or the helicopter to drive it. Press E to see the Build Book!' });
+  hud.addChat({ system: true, text: touch
+    ? 'Tip: look at a car or the helicopter and tap ✋ to drive it. Tap 🎒 to see the Build Book!'
+    : 'Tip: right-click a car or the helicopter to drive it. Press E to see the Build Book!' });
 
   inGame = true;
   respawn(true);
@@ -386,8 +400,36 @@ let editorOpen = false;
 let galleryOpen = false;
 
 function lock() {
+  if (touch) {
+    // Phones have no mouse to lock: just start taking touches.
+    locked = true;
+    touch.show(true);
+    updateOverlays();
+    return;
+  }
   const req = canvas.requestPointerLock?.();
   if (req?.catch) req.catch(() => updateOverlays());
+}
+
+// Stop playing for a moment (the pause menu, the item menu…).
+function unlock() {
+  if (!touch) {
+    document.exitPointerLock();
+    return;
+  }
+  locked = false;
+  keys.clear();
+  mouse.clear();
+  touch.show(false);
+  updateOverlays();
+}
+
+// On phones: fill the whole screen, sideways.
+function goFullscreen() {
+  if (!touch || document.fullscreenElement || !document.documentElement.requestFullscreen) return;
+  document.documentElement.requestFullscreen({ navigationUI: 'hide' })
+    .then(() => screen.orientation?.lock?.('landscape'))
+    .catch(() => { /* not allowed here: that's fine */ });
 }
 
 function updateOverlays() {
@@ -406,7 +448,24 @@ document.addEventListener('pointerlockchange', () => {
 });
 document.addEventListener('pointerlockerror', updateOverlays);
 
-$('resume').addEventListener('click', lock);
+$('resume').addEventListener('click', () => {
+  goFullscreen();
+  lock();
+});
+$('go-home').addEventListener('click', () => {
+  respawn();
+  lock();
+});
+// Back to the main menu: get out of any vehicle, save, and start the page fresh.
+$('exit-menu').addEventListener('click', () => {
+  getOut();
+  wakeUp();
+  saveSettings();
+  setTimeout(() => {
+    net.leave();
+    location.reload();
+  }, 150); // a moment for "I got out of the car" to reach the server
+});
 canvas.addEventListener('click', () => inGame && !locked && !inventoryOpen && !editorOpen && !galleryOpen && lock());
 $('sensitivity').addEventListener('input', e => {
   settings.sensitivity = Number(e.target.value);
@@ -469,7 +528,7 @@ $('pause-gallery').addEventListener('click', openGallery);
 
 function toggleInventory(open) {
   inventoryOpen = open;
-  if (open) document.exitPointerLock();
+  if (open) unlock();
   else lock();
   updateOverlays();
 }
@@ -485,6 +544,9 @@ function closeChat() {
   updateOverlays();
 }
 
+$('chat-input').addEventListener('blur', () => {
+  if (touch && hud.chatOpen) closeChat();
+});
 $('chat-input').addEventListener('keydown', e => {
   e.stopPropagation();
   if (e.key === 'Enter') {
@@ -556,16 +618,67 @@ window.addEventListener('blur', () => {
   mouse.clear();
 });
 
-document.addEventListener('mousemove', e => {
-  if (!locked) return;
+// Turning your head (or the camera, in a vehicle) with the mouse or a finger.
+function lookBy(dx, dy) {
   const sens = 0.0022 * settings.sensitivity;
   if (riding()) {
-    carCam.yaw -= e.movementX * sens;
-    carCam.pitch = Math.max(-1.2, Math.min(0.5, carCam.pitch - e.movementY * sens));
+    carCam.yaw -= dx * sens;
+    carCam.pitch = Math.max(-1.2, Math.min(0.5, carCam.pitch - dy * sens));
   } else {
-    player.look(e.movementX, e.movementY, sens);
+    player.look(dx, dy, sens);
   }
+}
+document.addEventListener('mousemove', e => {
+  if (locked && !touch) lookBy(e.movementX, e.movementY);
 });
+
+// ---------- Phone controls ----------
+
+const touch = IS_TOUCH ? new TouchControls({
+  look: (dx, dy) => locked && lookBy(dx * 2.3, dy * 2.3),
+  tap: () => {
+    if (!locked || hud.chatOpen) return;
+    if (myCar) {
+      if (!myCar.spec.flying) honk();
+    } else if (!myRide) {
+      useItem();
+      useCooldown = hud.item === HAMMER ? 0.25 : 0.28;
+    }
+  },
+  // Holding a finger still keeps hammering.
+  hold: () => {
+    if (locked && !riding() && hud.item === HAMMER && useCooldown <= 0) {
+      useItem();
+      useCooldown = 0.25;
+    }
+  },
+  interact: () => {
+    if (!locked) return;
+    if (riding()) getOut();
+    else interact();
+  },
+  flyToggle: () => {
+    if (riding()) return;
+    player.flying = !player.flying;
+    player.vel.y = 0;
+  },
+  pause: () => unlock(),
+  items: () => toggleInventory(true),
+  camera: () => {
+    if (riding()) carView = (carView + 1) % 3;
+    else viewMode = (viewMode + 1) % 3;
+    danceView = 0;
+  },
+  chat: () => {
+    keys.clear();
+    hud.openChat();
+  },
+  dance: () => !riding() && emote('dance'),
+}) : null;
+if (touch) {
+  document.body.classList.add('touch');
+  $('sensitivity').parentElement.firstChild.textContent = 'Look sensitivity ';
+}
 canvas.addEventListener('mousedown', e => {
   if (!locked) return;
   if (myCar) {
@@ -643,6 +756,20 @@ function throwBall() {
   if (myBody.pet) setTimeout(() => sounds.pet(myBody.pet?.kind), 250);
 }
 
+// Everything the ball can bounce off: blocks, railings, cars and people (including you,
+// once it's out of your hand).
+function ballBoxes(r) {
+  const out = [];
+  for (let x = Math.floor(r[0]); x <= Math.floor(r[3]); x++)
+    for (let y = Math.floor(r[1]) - 1; y <= Math.floor(r[4]); y++)
+      for (let z = Math.floor(r[2]); z <= Math.floor(r[5]); z++) world.cellBoxes(x, y, z, out);
+  const people = [...avatars.list.values()].filter(a => !a.seat && !a.lying).map(a => a.pos);
+  if (ball.age > 0.4 && !riding()) people.push(player.pos);
+  for (const p of people) out.push([p.x - 0.3, p.y, p.z - 0.3, p.x + 0.3, p.y + 1.8, p.z + 0.3]);
+  for (const b of cars.boxes()) if (b[0] < r[3] && b[3] > r[0] && b[1] < r[4] && b[4] > r[1] && b[2] < r[5] && b[5] > r[2]) out.push(b);
+  return out;
+}
+
 // Rays against pets (yours and everyone else's).
 function petRaycast(origin, dir, max) {
   let best = null;
@@ -694,9 +821,11 @@ function enterCar(car) {
   hud.setCarHelp(car.kind);
   if (!car.spec.flying) sounds.engine(0.15, 0);
   sounds.spawnCar();
-  if (car.spec.flying && !settings.flownBefore) {
-    hud.addChat({ system: true, text: '🚁 Wait for the rotor to spin up, then hold Space to lift off. Tilt with W/S, turn with A/D, Shift to go down. Land gently!' });
-    settings.flownBefore = true;
+  if (car.spec.flying && settings.heliTip !== 2) { // shown again when the controls change
+    hud.addChat({ system: true, text: touch
+      ? '🚁 Wait for the rotor to spin up, then hold ⬆ to lift off and ⬇ to come down. It turns to face where you look (drag on the right side). The joystick tilts it forward and back and slides it sideways. Land gently!'
+      : '🚁 Wait for the rotor to spin up, then hold Space to lift off. Steer with the mouse (it turns to where you look), tilt with W/S, slide sideways with A/D, Shift to go down. Land gently!' });
+    settings.heliTip = 2;
     saveSettings();
   }
 }
@@ -1246,6 +1375,13 @@ function hitBlock() {
   }
   hitState.key = null;
   crack.visible = false;
+  if (shapeOf(hit.value) === 'flat' && railMask(hit.value)) {
+    // A railing on a sidewalk (or carpet…): take the railing (and its paint) off and leave the floor.
+    setBlock(x, y, z, blockId(hit.value));
+    particles.burst(x, y, z, materials[RAILING]);
+    sounds.break();
+    return;
+  }
   const parts = blockGroup(x, y, z, hit.value);
   for (const [px, py, pz, v] of parts) {
     if (setBlock(px, py, pz, 0)) particles.burst(px, py, pz, blockMaterial(materials, v));
@@ -1254,14 +1390,19 @@ function hitBlock() {
 }
 
 function placeBlock(item) {
+  if (BLOCKS[item].shape === 'rail') return placeRail();
   let [x, y, z] = hit.value && isReplaceable(hit.value) ? hit.block : hit.place;
   if (!canBuildAt(x, z)) {
     notifyLand(x, z);
     return;
   }
+  const shape = BLOCKS[item].shape || 'cube';
   const existing = world.get(x, y, z);
   if (!inBounds(x, y, z) || (existing && !isReplaceable(existing))) return;
-  const shape = BLOCKS[item].shape || 'cube';
+  if (railMask(existing)) {
+    hud.toast('🚧 There\'s a railing there. Take it off with the hammer first.');
+    return;
+  }
   if (shape === 'ladder') {
     placeLadder();
     return;
@@ -1380,6 +1521,68 @@ function placeLadder() {
   if (hi > lo) hud.toast(`🪜 ${hi - lo + 1} blocks tall! Walk into it and hold W or Space to climb.`);
 }
 
+// ---------- Railings ----------
+
+// Where a railing would go: click near an edge on top of a block (or the ground, or a
+// sidewalk) to put one along that edge, or click the side of a block to put one along
+// its top edge on that side. Clicking again adds more sides to the same spot.
+function railSpot() {
+  if (!hit) return null;
+  const [bx, by, bz] = hit.block;
+  const v = hit.value || 0, shape = shapeOf(v), n = hit.normal;
+  // Where the look ray meets the floor of a cell (or the hit point, if it doesn't).
+  const floorPoint = y => {
+    const t = lookDir.y < -0.01 ? (y - eye.y) / lookDir.y : -1;
+    return t > 0 && t < REACH + 2 ? eye.clone().addScaledVector(lookDir, t) : hit.point;
+  };
+  const edgeAt = (p, cx, cz) => nearestRailEdge(Math.min(1, Math.max(0, p.x - cx)), Math.min(1, Math.max(0, p.z - cz)));
+  if (hit.ground) return { cell: [bx, 0, bz], edge: edgeAt(hit.point, bx, bz) };
+  if (shape === 'rail' || shape === 'flat' || shape === 'plant') return { cell: [bx, by, bz], edge: edgeAt(floorPoint(by), bx, bz) };
+  if (shape !== 'cube') return null;
+  if (n[1] === 1) return { cell: [bx, by + 1, bz], edge: edgeAt(hit.point, bx, bz) };
+  if (n[1] === 0) {
+    // The side of a wall: the railing goes along the top of the wall, on this side.
+    let top = by;
+    while (top < by + 8 && shapeOf(world.get(bx, top + 1, bz)) === 'cube' && world.get(bx, top + 1, bz)) top++;
+    return { cell: [bx, top + 1, bz], edge: n[0] === 1 ? 2 : n[0] === -1 ? 8 : n[2] === 1 ? 4 : 1 };
+  }
+  return null;
+}
+
+// The block a railing spot would become (or null if a railing can't go there).
+function withRail(spot) {
+  const [x, y, z] = spot.cell;
+  if (!inBounds(x, y, z)) return null;
+  const v = world.get(x, y, z), shape = shapeOf(v);
+  if (!v || shape === 'plant') return makeBlock(RAILING, spot.edge);
+  if (shape === 'rail' || shape === 'flat') return railMask(v) & spot.edge ? null : v | (spot.edge << 8);
+  return null;
+}
+
+function placeRail() {
+  const spot = railSpot();
+  const b = spot && withRail(spot);
+  if (!b) {
+    const there = spot && railMask(world.get(...spot.cell)) & spot.edge;
+    hud.toast(there ? '🚧 There\'s already a railing there.' : spot ? '🚧 There\'s no room for a railing there.' : '🚧 Click near the edge of a floor, or the side of a block, to put a railing there.');
+    return;
+  }
+  const [x, y, z] = spot.cell;
+  if (!canBuildAt(x, z)) {
+    notifyLand(x, z);
+    return;
+  }
+  // Don't trap anyone inside the new railing.
+  const [r] = railBoxes(spot.edge, 1);
+  const box = [x + r[0], y + r[1], z + r[2], x + r[3], y + r[4], z + r[5]];
+  const people = [player.pos, ...[...avatars.list.values()].map(a => a.pos)];
+  if (people.some(p => box[0] < p.x + 0.3 && box[3] > p.x - 0.3 && box[1] < p.y + 1.8 && box[4] > p.y && box[2] < p.z + 0.3 && box[5] > p.z - 0.3)) {
+    hud.toast('🚧 Step back a little first: you\'re standing where the railing goes.');
+    return;
+  }
+  if (setBlock(x, y, z, b)) sounds.place();
+}
+
 // ---------- Paint ----------
 
 const paintMaterials = {};
@@ -1463,7 +1666,7 @@ function updateCamera(dt) {
       camera.position.copy(seat.position).y += EYE_HEIGHT * SEAT_SCALE;
       camera.rotation.set(carCam.pitch * 0.6 + car.pitch, car.h + carCam.yaw, 0);
     } else {
-      if (Math.abs(car.speed) > 2) carCam.yaw *= Math.exp(-1.5 * dt);
+      if (Math.abs(car.speed) > 2 && !(car === myCar && s.flying)) carCam.yaw *= Math.exp(-1.5 * dt);
       const yaw = car.h + carCam.yaw + (carView === 2 ? Math.PI : 0);
       const dist = s.flying ? 12 : s.length + 3.5;
       const focus = car.pos.clone().add(new THREE.Vector3(0, s.height * 0.8, 0));
@@ -1514,12 +1717,22 @@ function frame(timestamp) {
   const dt = Math.min(timer.getDelta(), 0.05);
   const time = timer.getElapsed();
   const active = locked && !hud.chatOpen;
+  // Keys held on the keyboard, plus the ones the touch joystick and pads are pressing.
+  const held = touch?.enabled ? new Set([...keys, ...touch.keys]) : keys;
+  if (touch) {
+    touch.setMode(myCar ? (myCar.spec.flying ? 'heli' : 'car') : myRide ? 'ride' : player?.flying ? 'fly' : 'walk');
+    touch.update();
+    if (sleeping && (touch.stick.x || touch.stick.y || touch.keys.has('Space'))) wakeUp();
+  }
   const nightK = 1 - sky.dayK;
   let fire = 0;
 
   if (inGame) {
     if (myCar) {
-      for (const ev of cars.drive(myCar, dt, active ? keys : noKeys)) vehicleEvent(ev, myCar);
+      // The helicopter turns to face where you're looking, so keep the camera pointing there.
+      const aim = myCar.h + carCam.yaw;
+      for (const ev of cars.drive(myCar, dt, active ? held : noKeys, aim)) vehicleEvent(ev, myCar);
+      if (myCar.spec.flying) carCam.yaw = Math.atan2(Math.sin(aim - myCar.h), Math.cos(aim - myCar.h));
       player.pos.copy(cars.seat(myCar).position);
       player.vel.set(0, 0, 0);
       if (myCar.spec.flying) sounds.engine(null);
@@ -1534,7 +1747,8 @@ function frame(timestamp) {
     } else if (!sleeping) {
       const wasOnGround = player.onGround;
       const vyBefore = player.vel.y;
-      player.update(dt, active ? keys : noKeys);
+      player.stick = touch?.enabled && active ? touch.stick : null;
+      player.update(dt, active ? held : noKeys);
       if (player.bounced) {
         player.bounced = false;
         if (lastBounceTramp) sounds.boing();
@@ -1566,9 +1780,15 @@ function frame(timestamp) {
       }
     }
     const item = hud.item;
-    const showHighlight = hit && !(hit.ground && (item === HAMMER || item === BALL || item === FIREWORKS));
+    const railPreview = item === RAILING && hit && railSpot();
+    const showHighlight = hit && !(hit.ground && (item === HAMMER || item === BALL || item === FIREWORKS)) && (item !== RAILING || railPreview);
     highlight.visible = !!showHighlight;
-    if (showHighlight) {
+    if (railPreview) {
+      // Outline the railing that a click would build.
+      const [r] = railBoxes(railPreview.edge, 1), [x, y, z] = railPreview.cell;
+      highlight.position.set(x + (r[0] + r[3]) / 2, y + 0.5, z + (r[2] + r[5]) / 2);
+      highlight.scale.set(r[3] - r[0], 1, r[5] - r[2]);
+    } else if (showHighlight) {
       if (hit.ground) {
         highlight.position.set(hit.place[0] + 0.5, 0.003, hit.place[2] + 0.5);
         highlight.scale.set(1, 0.001, 1);
@@ -1604,6 +1824,7 @@ function frame(timestamp) {
       else if (item === SCRAPER && hit && !hit.ground) hint = paintOf(hit.value) ? '🧽 Click to scrape off the paint' : '';
       else if (hit && shapeOf(hit.value) === 'door') hint = '🚪 Right-click to open / close';
       else if (hit && shapeOf(hit.value) === 'ladder' && item !== HAMMER) hint = '🪜 Walk into it and hold W or Space to climb';
+      else if (item === RAILING && hit) hint = railPreview && withRail(railPreview) ? '🚧 Click to add a railing here' : '🚧 Point near the edge of a floor, or at the side of a block';
       else if (s?.type === 'bed') hint = '🛏️ Right-click to sleep';
       else if (s?.type === 'cannon') hint = '💥 Right-click to launch yourself!';
       else if (s?.type === 'tv') hint = '📺 Right-click to change the channel';
@@ -1629,7 +1850,9 @@ function frame(timestamp) {
     }
 
     kickBall();
-    ball.update(dt, world);
+    ball.update(dt, ballBoxes);
+    // No pet to fetch it? It pops back into your hand after a while.
+    if (ball.active && !myBody.pet && ball.restTime > 4) ball.active = false;
     fire = updateStructures(dt, time);
 
     sendTimer -= dt;
@@ -1766,6 +1989,8 @@ function frame(timestamp) {
     scene.fog.color.lerp(fireworks.flashColor, f * 0.2);
   }
   const firstPerson = inGame && !riding() && viewMode === 0 && !sleeping;
+  // While the ball is off being thrown (or fetched), it isn't in your hand.
+  view.holder.visible = !(hud?.item === BALL && ball?.active);
   view.update(dt, player.moving && player.onGround, camera.aspect, scene.environment, sky.dayK);
 
   // Water ripples drift slowly.
@@ -1801,12 +2026,15 @@ load();
 
 // Handy for poking at the game from the browser console.
 window.buildzone = {
-  scene, camera, sky, net, avatars, renderer, fireworks, effects, glow, reflections,
+  scene, camera, sky, net, avatars, renderer, fireworks, effects, glow, reflections, view,
   get world() { return world; },
   get player() { return player; },
   get cars() { return cars; },
   get myCar() { return myCar; },
   get myRide() { return myRide; },
+  get hit() { return hit; },
+  get touch() { return touch; },
+  get target() { return target; },
   get hud() { return hud; },
   get structures() { return structures; },
   get myBody() { return myBody; },
@@ -1815,6 +2043,8 @@ window.buildzone = {
   get sleeping() { return sleeping; },
   useItem: () => useItem(),
   kickBall: () => kickBall(),
+  throwBall: () => throwBall(),
+  ballBoxes: r => ballBoxes(r),
   interact: () => interact(),
   setView: v => (viewMode = v),
 };

@@ -686,6 +686,11 @@ export class Sounds {
   crack() { this.noiseHit(2400, 0.06, 0.7); this.tone(300, 200, 0.05, 0.15, 'square'); }
   whoosh() { this.noiseHit(600, 0.5, 0.8, 'highpass'); this.tone(300, 1500, 0.45, 0.12, 'sine'); }
   boing() { this.tone(120, 700, 0.35, 0.45, 'sine'); }
+  ballBounce(volume = 1) {
+    if (volume <= 0.01) return;
+    this.tone(240 + Math.random() * 60, 120, 0.12, 0.35 * volume, 'sine');
+    this.noiseHit(600, 0.05, 0.4 * volume, 'lowpass');
+  }
   cannon() { this.noiseHit(90, 0.9, 2, 'lowpass'); this.whoosh(); }
   paint() { this.noiseHit(1200, 0.12, 0.6, 'lowpass'); this.noiseHit(3000, 0.06, 0.2, 'highpass', 0.04); }
   garage(open) {

@@ -1,7 +1,7 @@
 // Hotbar items: every block, the hammer, cars and fireworks.
 import * as THREE from 'three';
 import { BLOCKS, BLOCK_IDS, PAINT_COLORS } from './shared/blocks.js';
-import { blockMaterial } from './world.js';
+import { blockMaterial, railGeometry } from './world.js';
 import { modelGeometry, modelMaterials } from './models.js';
 
 export const HAMMER = 'hammer';
@@ -126,6 +126,19 @@ export function makeIcon(item, textures, paint = 1) {
   const shape = def.shape || 'cube';
   if (shape === 'model') {
     ctx.drawImage(modelIcon(def), 0, 0, size, size);
+    return canvas;
+  }
+  if (shape === 'rail') {
+    // A little stretch of fence: posts, a handrail, a bottom rail and bars.
+    ctx.fillStyle = '#6d6a64';
+    ctx.fillRect(4, 50, 56, 4);
+    ctx.fillStyle = '#ece8df';
+    for (const x of [6, 50]) ctx.fillRect(x, 12, 8, 40);
+    ctx.fillRect(4, 10, 56, 6);
+    ctx.fillRect(4, 42, 56, 4);
+    for (const x of [20, 29, 38]) ctx.fillRect(x, 16, 4, 26);
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.strokeRect(4.5, 10.5, 55, 5);
     return canvas;
   }
   if (shape === 'ladder') {
@@ -276,6 +289,16 @@ export class ViewModel {
         mesh.position.set(-0.2, -0.25, -0.2);
         obj.add(mesh);
         obj.rotation.set(0.15, 0.6, 0);
+        this.models[item] = obj;
+        return obj;
+      }
+      if (shape === 'rail') {
+        obj = new THREE.Group();
+        const mesh = new THREE.Mesh(railGeometry(1), blockMaterial(this.materials, item));
+        mesh.scale.setScalar(0.35);
+        mesh.position.set(-0.17, -0.2, 0);
+        obj.add(mesh);
+        obj.rotation.set(0.2, 0.5, 0);
         this.models[item] = obj;
         return obj;
       }
