@@ -687,6 +687,12 @@ export class Sounds {
   whoosh() { this.noiseHit(600, 0.5, 0.8, 'highpass'); this.tone(300, 1500, 0.45, 0.12, 'sine'); }
   boing() { this.tone(120, 700, 0.35, 0.45, 'sine'); }
   cannon() { this.noiseHit(90, 0.9, 2, 'lowpass'); this.whoosh(); }
+  paint() { this.noiseHit(1200, 0.12, 0.6, 'lowpass'); this.noiseHit(3000, 0.06, 0.2, 'highpass', 0.04); }
+  garage(open) {
+    // A rattling roll-up door.
+    for (let i = 0; i < 8; i++) this.noiseHit(300 + (i % 2) * 200, 0.08, 0.35, 'bandpass', i * 0.07);
+    this.tone(open ? 90 : 120, open ? 130 : 80, 0.6, 0.12, 'sawtooth');
+  }
   claim() { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, f, 0.15, 0.15, 'triangle', i * 0.09)); }
   party() {
     // Four bars of drum beat with the happy tune on top.

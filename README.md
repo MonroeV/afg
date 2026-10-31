@@ -15,8 +15,11 @@ customize your character, drive cars, build anything and play with friends.
 - **Cars parked around town**: regular cars, a police car with a siren and monster trucks that climb
   blocks. A 3-speed automatic you can hear: 1st revs up slowly from a stop, 2nd pulls to top speed,
   and 3rd is an overdrive that cruises at medium revs. If a car's corner gets caught on something it
-  gently slides itself free. Crash hard and they dent, smoke, catch fire and blow up, then a new one
-  shows up near its parking spot 30 seconds later
+  gently slides itself free. Brake lights come on when you brake (with a third light at the top of
+  the back window), and when you hold S to back up the car stops, waits a moment, then switches on
+  its white reverse lights and backs up. Two friends can ride along as passengers, and everyone
+  climbs out beside the car, not on the roof. Crash hard and they dent, smoke, catch fire and blow
+  up, then a new one shows up near its parking spot 30 seconds later
 - **Real bumps (Newton's laws)**: when things collide they trade momentum. Ram a parked car and it
   gets shoved (and spins if you hit it off-center) while you slow down; heavy monster trucks barely
   notice small cars; knocked cars can knock into other cars; cars bump people out of the way; you
@@ -28,7 +31,16 @@ customize your character, drive cars, build anything and play with friends.
 - **Build Book**: special things you can make out of blocks: beds, trampolines, campfires,
   teleporters, cannons, fountains, dance floors and TVs (with cartoons, news, weather and
   silly commercials)
-- **Doors** that open and close, **dancing** and **waving**
+- **Doors** that open and close with a right-click (even with the hammer in your hand). Put two
+  doors side by side and they become double doors that swing outward; put three or more in a row
+  and they become a garage door that rolls up
+- **Ladders**: point at a wall and click once, and the ladder runs from the ground all the way to
+  the top of the wall. Walk into it and hold W or Space to climb (S to go down). Breaking any rung
+  takes the whole ladder down
+- **Paint anything**: pick one of 15 paint colors and use the Paint Brush on any block (carpets,
+  doors, lamps and neon too; painted lamps glow in their new color). The Paint Scraper takes the
+  paint off again
+- **Dancing** and **waving**
 - **Fireworks** in 8 styles (including hearts and smiley faces) that light up the whole night sky
   and everything around them
 - **Fancy lighting** (Graphics: High or Medium): shiny things like cars, glass, water, metal, gold
@@ -39,9 +51,10 @@ customize your character, drive cars, build anything and play with friends.
   - Glowing neon blocks in pink, blue and green, plus the classic Lamp block
 
   Lamps cast a soft glow that spreads wide around them, and the towns use them all: street lamps,
-  porch lanterns, ceiling lights and table lamps in houses, garden lights and tiki torches in parks
-- **52 kinds of blocks** with realistic textures: brick, wood, glass, marble, roads, flowers,
-  rainbow, gold, mirrors, lamps…
+  porch lanterns, ceiling lights and table lamps in houses, garden lights and tiki torches in parks.
+  Any lamp with a roof over it counts as indoors, so it lights up the room day and night
+- **53 kinds of blocks** with realistic textures: brick, wood, glass, marble, roads, flowers,
+  rainbow, gold, mirrors, lamps, ladders…
 - **Real-time multiplayer**: see each other, drive together, chat
 - **Single player works too**: with no server, the world runs and saves right in the browser
 
@@ -52,11 +65,11 @@ customize your character, drive cars, build anything and play with friends.
 | Mouse | Look around |
 | W A S D | Move |
 | Space | Jump |
-| Left click | Use the item in your hand (place a block, throw the ball, launch fireworks, open doors) |
-| Left click with the Hammer | Break a block: it takes 3 hits, so you don't break things by accident |
-| Right click | Interact: open doors, get in vehicles, pet pets, sleep in beds, fire cannons |
+| Left click | Use the item in your hand (place a block, paint, throw the ball, launch fireworks) |
+| Left click with the Hammer | Break a block: it takes 3 hits (glass and carpet break in 1), so you don't break things by accident |
+| Right click | Interact: open and close doors, get in vehicles, pet pets, sleep in beds, fire cannons |
 | Middle click | Copy the block you're looking at |
-| 1–9 or mouse wheel | Choose hotbar slot |
+| 1–9 or mouse wheel | Choose hotbar slot. Slot 1 always holds the Hammer; anything you pick while slot 1 is selected goes in slot 2 |
 | E | Open the item menu and the Build Book, or get in/out of a vehicle you're looking at |
 | Shift | Sprint |
 | F | Toggle flying (Space = up, C = down) |
@@ -67,8 +80,13 @@ customize your character, drive cars, build anything and play with friends.
 | R | Go home: your bed, or your land if you have no bed, or else the town square |
 | Esc | Pause, settings and character customization |
 
-**Driving:** W/S to drive and reverse, A/D to steer, Space to brake, Shift for a boost,
-H (or click) for the horn, G for the police siren, V to change the camera, E to get out.
+**Driving:** W to drive, S to brake (keep holding it once you've stopped to back up), A/D to
+steer, Space to brake, Shift for a boost, H (or click) for the horn, G for the police siren, V to
+change the camera, E to get out.
+
+**Riding along:** look at a car or the helicopter someone else is driving and right-click (or
+press E) to hop in as a passenger. Up to two passengers fit. Passengers can look around and
+change the camera with V, but only the driver can drive. Press E to get out.
 
 **Flying the helicopter:** wait for the rotor to spin up, then hold Space to climb and Shift to go
 down. W/S tilt forward and back (tilting moves you, and you keep sliding until you tilt the other
@@ -115,14 +133,16 @@ Note: on free hosting the `data/` folder may be wiped on restart, which resets t
 
 The server keeps everything in the `data/` folder:
 
-- `data/world.json` is the world. To start over with a fresh town, stop the server, delete
-  that file and start it again. Worlds from older versions of the game are kept as
-  `data/world-old-*.json` and a new town is built automatically.
+- `data/world.json` is the world. To start over with a fresh town, stop the server, move or
+  delete that file and start it again.
 - `data/characters.json` is the Character Gallery. Delete it to empty the gallery.
 
-Worlds saved by older versions of the game are upgraded automatically: the old player-spawned
-cars are replaced by the town's parked cars, a helipad is built for the helicopter, street lamps
-get proper lamp heads, and the glowing blocks in house ceilings become ceiling lights.
+**Updates never erase your world.** Everything players have built stays exactly where it is.
+When a new version of the game needs to upgrade an older save, the server first copies it to
+`data/world-backup-v<version>-<date>-<time>.json`, then only adds things: a helipad for the
+helicopter (only where there's empty ground), lamp heads on the town's street lamps, and the
+new kinds of blocks. If `world.json` can't be read, or was saved by a newer version of the game,
+the server stops with a message instead of touching it.
 
 ## The Character Gallery
 

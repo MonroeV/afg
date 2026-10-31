@@ -1,6 +1,6 @@
 // BuildZone: game setup, input and the main loop.
 import * as THREE from 'three';
-import { BLOCKS, WORLD, inBounds, blockMeta, shapeOf, isReplaceable, makeBlock, doorFacingFromYaw, toggleDoorValue, DOOR_OPEN, DOOR_TOP } from './shared/blocks.js';
+import { BLOCKS, WORLD, inBounds, blockId, blockMeta, shapeOf, isReplaceable, makeBlock, doorFacingFromYaw, paintOf, withPaint, PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP } from './shared/blocks.js';
 import { generateWorld } from './shared/worldgen.js';
 import { randomLook, sanitizeLook } from './shared/avatar.js';
 import { generateTextures } from './textures.js';
@@ -21,7 +21,7 @@ import { DayNight } from './daynight.js';
 import { Editor } from './editor.js';
 import { CharacterClient, Gallery } from './gallery.js';
 import { Hud, renderControls } from './hud.js';
-import { HAMMER, FIREWORKS, BALL, CLAIM, ALL_ITEMS, DEFAULT_HOTBAR, makeIcon, ViewModel } from './items.js';
+import { HAMMER, FIREWORKS, BALL, CLAIM, BRUSH, SCRAPER, LADDER, ALL_ITEMS, DEFAULT_HOTBAR, makeIcon, ViewModel } from './items.js';
 import { Particles, Fireworks, Sounds, Effects } from './effects.js';
 
 const $ = id => document.getElementById(id);
@@ -32,13 +32,20 @@ const DOOR = 21;
 
 // ---------- Saved settings ----------
 
-const settings = { name: '', look: null, sensitivity: 1, volume: 0.4, quality: 'high', hotbar: DEFAULT_HOTBAR.slice() };
+const settings = { name: '', look: null, sensitivity: 1, volume: 0.4, quality: 'high', paint: 1, hotbar: DEFAULT_HOTBAR.slice() };
 try {
   Object.assign(settings, JSON.parse(localStorage.getItem('buildzone') || '{}'));
 } catch { /* storage unavailable */ }
 if (!Array.isArray(settings.hotbar) || settings.hotbar.length !== 9 || !settings.hotbar.every(i => ALL_ITEMS.includes(i))) {
   settings.hotbar = DEFAULT_HOTBAR.slice();
 }
+// The hammer always lives in slot 1.
+if (settings.hotbar[0] !== HAMMER) {
+  const at = settings.hotbar.indexOf(HAMMER);
+  if (at > 0) settings.hotbar[at] = settings.hotbar[0];
+  settings.hotbar[0] = HAMMER;
+}
+if (!PAINT_COLORS[settings.paint]) settings.paint = 1;
 settings.look = settings.look ? sanitizeLook(settings.look) : randomLook();
 function saveSettings() {
   try {
@@ -121,7 +128,11 @@ const avatars = new Avatars(scene);
 let myId = null;
 let online = false;
 let inGame = false;
-let myCar = null;
+let myCar = null; // the vehicle we're driving
+let myRide = null; // the vehicle we're riding in as a passenger
+const riding = () => myCar || myRide;
+// Seat 0 is the driver's; passengers sit in seats 1 and 2 in the order they got in.
+const mySeat = () => (myCar ? 0 : 1 + Math.max(0, myRide.passengers.indexOf(myId)));
 let viewMode = 0; // 0 first person, 1 behind, 2 in front
 let carView = 1;
 const carCam = { yaw: 0, pitch: -0.15 };
@@ -179,7 +190,8 @@ async function load() {
   // Lamp models' glowing parts get brighter at night (indoor ones stay on all day).
   sky.glowMaterials = Object.entries(BLOCKS).filter(([, d]) => d.shape === 'model').map(([id, d]) => ({ material: materials[id][1], always: !!d.light?.always }));
   view.materials = materials;
-  icons = Object.fromEntries(ALL_ITEMS.map(i => [i, makeIcon(i, textures)]));
+  icons = Object.fromEntries(ALL_ITEMS.map(i => [i, makeIcon(i, textures, settings.paint)]));
+  view.setPaint(PAINT_COLORS[settings.paint]);
   world = new World(scene, materials);
   structures = new Structures(world);
   world.onChange = (x, y, z) => structures.changed(x, y, z);
@@ -200,7 +212,7 @@ async function load() {
   world.load(preview.blocks.flat());
   preview.cars.forEach((c, i) => cars.add({ ...c, id: -1 - i, driver: 0, color: c.color || FIREWORK_COLORS[i % FIREWORK_COLORS.length] }));
 
-  hud = new Hud({ icons, settings, sounds, onChange: item => view.setItem(item) });
+  hud = new Hud({ icons, settings, sounds, onChange: item => view.setItem(item), onPaint: choosePaint });
   editor = new Editor();
   gallery = new Gallery(new CharacterClient(), sounds);
   myBody = new Avatar(scene, { id: 0, name: '', look: settings.look }, { tag: false });
@@ -301,9 +313,9 @@ net.on('car_hp', ({ id, hp, impact }) => {
   const car = cars.list.get(id);
   if (!car) return;
   const hurt = hp < car.hp;
-  if (hurt && car.hp >= FIRE_HP && hp < FIRE_HP && myCar === car) hud.addChat({ system: true, text: '🔥 Your vehicle is on fire! Get out (E) before it blows up!' });
+  if (hurt && car.hp >= FIRE_HP && hp < FIRE_HP && riding() === car) hud.addChat({ system: true, text: '🔥 Your vehicle is on fire! Get out (E) before it blows up!' });
   cars.applyHp(car, hp, impact);
-  if (hurt && impact && myCar !== car) sounds.crash(loudness(car.pos.x, car.pos.y, car.pos.z, 40) * 0.6);
+  if (hurt && impact && riding() !== car) sounds.crash(loudness(car.pos.x, car.pos.y, car.pos.z, 40) * 0.6);
 });
 net.on('car_destroy', ({ id, x, y, z }) => {
   const car = cars.list.get(id);
@@ -311,8 +323,9 @@ net.on('car_destroy', ({ id, x, y, z }) => {
   effects.explosion(p.x, p.y + 1, p.z);
   sounds.explode(loudness(p.x, p.y, p.z, 120));
   if (car) particles.burst(p.x - 0.5, p.y + 0.5, p.z - 0.5, car.model.paint, 20);
-  if (myCar?.id === id) {
-    leaveCar();
+  if (riding()?.id === id) {
+    if (myCar) leaveCar();
+    else leaveRide();
     player.vel.set(0, 12, 0); // blown clear!
     hud.addChat({ system: true, text: `💥 Boom! It'll be back in ${car?.spec.flying ? '5 minutes' : '30 seconds'}.` });
   }
@@ -328,7 +341,7 @@ net.on('car_impulse', ({ id, vx, vz, spin }) => {
 });
 // A vehicle bumped into us.
 net.on('push', ({ vx, vy, vz }) => {
-  if (myCar) return;
+  if (riding()) return;
   wakeUp();
   player.vel.add(new THREE.Vector3(vx, vy, vz));
   player.launched = true;
@@ -338,9 +351,15 @@ net.on('push', ({ vx, vy, vz }) => {
 });
 net.on('wake', () => wakeUp());
 net.on('car_driver', msg => {
-  if (myCar?.id === msg.id && msg.driver === myId) return; // that's us, we already know
+  const car = cars.list.get(msg.id);
+  if (myCar?.id === msg.id && msg.driver === myId) {
+    // That's us driving, we already know. Somebody may have hopped in with us, though.
+    if (car) car.passengers = msg.passengers || [];
+    return;
+  }
   cars.setDriver(msg);
-  if (msg.driver === myId) enterCar(cars.list.get(msg.id));
+  if (msg.driver === myId) enterCar(car);
+  else if (msg.passengers?.includes(myId) && myRide !== car) enterRide(car);
 });
 net.on('horn', ({ id }) => {
   const car = cars.list.get(id);
@@ -487,7 +506,7 @@ let useCooldown = 0;
 window.addEventListener('keydown', e => {
   if (!inGame || hud.chatOpen || editorOpen || galleryOpen) return;
   if (e.code === 'KeyE') {
-    if (myCar) leaveCar(true);
+    if (riding()) getOut();
     else if (target?.car && locked) requestEnter(target.car);
     else toggleInventory(!inventoryOpen);
     return;
@@ -509,25 +528,25 @@ window.addEventListener('keydown', e => {
     hud.select(Number(e.code.slice(5)) - 1);
     saveSettings();
   } else if (e.code === 'KeyV') {
-    if (myCar) carView = (carView + 1) % 3;
+    if (riding()) carView = (carView + 1) % 3;
     else viewMode = (viewMode + 1) % 3;
     danceView = 0;
-  } else if (e.code === 'KeyF' && !myCar) {
+  } else if (e.code === 'KeyF' && !riding()) {
     player.flying = !player.flying;
     player.vel.y = 0;
   } else if (e.code === 'KeyR') {
     respawn();
-  } else if (e.code === 'KeyX' && myCar) {
-    leaveCar(true);
+  } else if (e.code === 'KeyX' && riding()) {
+    getOut();
   } else if (e.code === 'KeyH' && myCar) {
     honk();
   } else if (e.code === 'KeyG') {
     if (myCar) {
       if (myCar.kind === 'police') myCar.siren = myCar.siren ? 0 : 1;
-    } else {
+    } else if (!myRide) {
       emote('dance');
     }
-  } else if (e.code === 'KeyB' && !myCar) {
+  } else if (e.code === 'KeyB' && !riding()) {
     emote('wave');
   }
 });
@@ -540,7 +559,7 @@ window.addEventListener('blur', () => {
 document.addEventListener('mousemove', e => {
   if (!locked) return;
   const sens = 0.0022 * settings.sensitivity;
-  if (myCar) {
+  if (riding()) {
     carCam.yaw -= e.movementX * sens;
     carCam.pitch = Math.max(-1.2, Math.min(0.5, carCam.pitch - e.movementY * sens));
   } else {
@@ -553,6 +572,7 @@ canvas.addEventListener('mousedown', e => {
     if (!myCar.spec.flying) honk();
     return;
   }
+  if (myRide) return;
   mouse.add(e.button);
   if (e.button === 1) {
     e.preventDefault();
@@ -567,7 +587,7 @@ canvas.addEventListener('mousedown', e => {
 window.addEventListener('mouseup', e => mouse.delete(e.button));
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 window.addEventListener('wheel', e => {
-  if (locked && !hud.chatOpen && !myCar) hud.select(hud.selected + Math.sign(e.deltaY));
+  if (locked && !hud.chatOpen && !riding()) hud.select(hud.selected + Math.sign(e.deltaY));
 }, { passive: true });
 
 // ---------- Emotes and fun ----------
@@ -651,9 +671,10 @@ function petThePet(t) {
 
 // ---------- Vehicles ----------
 
+// Climb in: you drive if the seat is free, otherwise you ride along (two passengers at most).
 function requestEnter(car) {
-  if (car.driver) {
-    hud.addChat({ system: true, text: 'Someone is already in there!' });
+  if (car.driver && car.passengers.length >= 2) {
+    hud.addChat({ system: true, text: "It's full! Every seat is taken." });
     return;
   }
   net.send({ t: 'car_enter', id: car.id });
@@ -680,6 +701,26 @@ function enterCar(car) {
   }
 }
 
+// Hop in as a passenger: someone else drives, you look around and enjoy the ride.
+function enterRide(car) {
+  if (!car) return;
+  wakeUp();
+  myRide = car;
+  player.flying = false;
+  carCam.yaw = 0;
+  carCam.pitch = car.spec.flying ? -0.25 : -0.15;
+  danceView = 0;
+  hud.setCarHelp('passenger');
+  sounds.spawnCar();
+  const driver = avatars.list.get(car.driver);
+  hud.toast(`🚗 Riding along${driver ? ` with ${driver.name}` : ''}! Press E to get out.`);
+}
+
+function getOut() {
+  if (myCar) leaveCar(true);
+  else if (myRide) leaveRide(true);
+}
+
 // Gets out of the vehicle. `tell` sends the news to the server.
 function leaveCar(tell = false) {
   const car = myCar;
@@ -692,17 +733,61 @@ function leaveCar(tell = false) {
   myCar = null;
   car.driver = 0;
   car.speed = car.steer = car.siren = 0;
-  const s = car.spec;
-  // Step out of the driver's door, or onto the roof if that's blocked.
-  const side = -(s.width / 2 + 0.6);
-  player.pos.set(car.pos.x + side * Math.cos(car.h), car.pos.y, car.pos.z - side * Math.sin(car.h));
-  if (player.overlapsSomething()) player.pos.set(car.pos.x, car.pos.y + s.height + 0.05, car.pos.z);
-  player.vel.set(0, 0, 0);
-  player.yaw = car.h;
-  player.pitch = 0;
+  car.braking = car.reversing = false;
+  stepOut(car, -1); // the driver's door is on the left
   hud.setCarHelp(null);
   hud.setVehicleInfo(null);
   sounds.engine(null);
+}
+
+function leaveRide(tell = false) {
+  const car = myRide;
+  if (!car) return;
+  const seat = mySeat();
+  if (tell) net.send({ t: 'car_exit', id: car.id });
+  myRide = null;
+  car.passengers = car.passengers.filter(id => id !== myId);
+  stepOut(car, seat === 1 ? 1 : Math.random() < 0.5 ? -1 : 1);
+  hud.setCarHelp(null);
+  hud.setVehicleInfo(null);
+}
+
+// Climb out beside the vehicle: your own door first, then the other side, then behind and
+// in front. Spots with ground to stand on win; the roof is only for when you're boxed in.
+function stepOut(car, side) {
+  const s = car.spec;
+  const right = new THREE.Vector3(Math.cos(car.h), 0, -Math.sin(car.h));
+  const forward = new THREE.Vector3(-Math.sin(car.h), 0, -Math.cos(car.h));
+  const w = s.width / 2 + 0.55, l = s.length / 2 + 0.55;
+  const spots = [];
+  for (const along of [0, -0.6, 0.6]) {
+    spots.push(right.clone().multiplyScalar(side * w).addScaledVector(forward, along));
+    spots.push(right.clone().multiplyScalar(-side * w).addScaledVector(forward, along));
+  }
+  spots.push(forward.clone().multiplyScalar(-l), forward.clone().multiplyScalar(l));
+  const grounded = p => p.y < 0.05 || world.isSolid(Math.floor(p.x), Math.floor(p.y - 0.05), Math.floor(p.z)) ||
+    world.isSolid(Math.floor(p.x), Math.floor(p.y - 1.05), Math.floor(p.z));
+  const fits = (off, dy) => {
+    player.pos.set(car.pos.x + off.x, Math.max(0, car.pos.y) + dy, car.pos.z + off.z);
+    return !player.overlapsSomething();
+  };
+  let found = false;
+  for (const needGround of [true, false]) {
+    for (const off of spots) {
+      for (const dy of [0, 0.5, 1]) {
+        if (fits(off, dy) && (!needGround || grounded(player.pos))) {
+          found = true;
+          break;
+        }
+      }
+      if (found) break;
+    }
+    if (found) break;
+  }
+  if (!found) player.pos.set(car.pos.x, car.pos.y + (s.flying ? 2.1 : s.height) + 0.05, car.pos.z);
+  player.vel.set(0, 0, 0);
+  player.yaw = car.h;
+  player.pitch = 0;
 }
 
 // Nobody's flying it any more: it falls to the ground (and gets hurt if it was high up).
@@ -720,6 +805,7 @@ function sendCarState() {
   net.send({
     t: 'car_state', id: myCar.id, x: r(myCar.pos.x), y: r(myCar.pos.y), z: r(myCar.pos.z), h: r(myCar.h),
     speed: r(myCar.speed), steer: r(myCar.steer), siren: myCar.siren, p: r(myCar.pitch), r: r(myCar.roll), rs: r(myCar.rotorSpin),
+    f: (myCar.braking ? 1 : 0) | (myCar.reversing ? 2 : 0),
   });
 }
 
@@ -910,7 +996,7 @@ function fireCannon(s) {
 }
 
 function goToBed(bed) {
-  if (myCar) return;
+  if (riding()) return;
   const px = bed.x + 0.5, pz = bed.z + 0.5, bx = bed.x + bed.dx + 0.5, bz = bed.z + bed.dz + 0.5;
   const dir = { x: px - bx, z: pz - bz };
   const top = bed.y + 1;
@@ -958,7 +1044,7 @@ function landSpawn() {
 // Back home: your bed if you have one, then your land, then the town square.
 function respawn(joining = false) {
   wakeUp();
-  if (myCar) leaveCar(true);
+  getOut();
   const b = settings.bed;
   const bed = b && structures.ofType('bed').find(s => s.x === b.x && s.y === b.y && s.z === b.z);
   const land = !bed && landSpawn();
@@ -1016,7 +1102,7 @@ function updateStructures(dt, time) {
   // Stand on a teleporter's lamp for a moment to zoom to the next one.
   teleCooldown -= dt;
   const p = player.pos;
-  const tp = !myCar && !sleeping && teleCooldown <= 0 &&
+  const tp = !riding() && !sleeping && teleCooldown <= 0 &&
     structures.ofType('teleporter').find(t => Math.floor(p.x) === t.x && Math.floor(p.z) === t.z && Math.abs(p.y - t.y - 1) < 0.2);
   if (tp) {
     teleCharge += dt;
@@ -1102,18 +1188,35 @@ function blockedByPlayer(x, y, z) {
   return false;
 }
 
+// Opens or closes a door, together with the doors next to it (double doors and garage doors).
 function toggleDoor(x, y, z) {
-  const parts = world.doorParts(x, y, z);
+  const parts = world.doorGroup(x, y, z);
   if (!parts.length) return;
-  const opening = !(blockMeta(parts[0][3]) & DOOR_OPEN);
-  for (const [px, py, pz, v] of parts) world.set(px, py, pz, toggleDoorValue(v));
+  const opening = !(blockMeta(world.get(x, y, z)) & DOOR_OPEN);
+  // Everything in the group ends up the same way (open or closed).
+  const changes = parts.map(([px, py, pz, v]) => [px, py, pz, v, opening ? v | (DOOR_OPEN << 8) : v & ~(DOOR_OPEN << 8)]).filter(c => c[3] !== c[4]);
+  for (const [px, py, pz, , nv] of changes) world.set(px, py, pz, nv);
   if (player.overlapsSomething()) {
     // Don't close a door on yourself.
-    for (const [px, py, pz, v] of parts) world.set(px, py, pz, v);
+    for (const [px, py, pz, v] of changes) world.set(px, py, pz, v);
     return;
   }
-  for (const [px, py, pz, v] of parts) net.send({ t: 'set', x: px, y: py, z: pz, b: toggleDoorValue(v) });
-  sounds.door(opening);
+  for (const [px, py, pz, , nv] of changes) net.send({ t: 'set', x: px, y: py, z: pz, b: nv });
+  if (world.doorRole(x, y, z).kind === 'garage') sounds.garage(opening);
+  else sounds.door(opening);
+}
+
+// The two halves of one door.
+function doorPair(x, y, z) {
+  const by = blockMeta(world.get(x, y, z)) & DOOR_TOP ? y - 1 : y;
+  return [[x, by, z, world.get(x, by, z)], [x, by + 1, z, world.get(x, by + 1, z)]].filter(([, , , v]) => shapeOf(v) === 'door');
+}
+
+// What a click on this block affects: both halves of a door, a whole ladder, or just the block.
+function blockGroup(x, y, z, v) {
+  if (shapeOf(v) === 'door') return doorPair(x, y, z);
+  if (shapeOf(v) === 'ladder') return world.ladderCells(x, y, z);
+  return [[x, y, z, v]];
 }
 
 // Hammer hits: blocks crack on the first two hits and break on the third.
@@ -1131,7 +1234,9 @@ function hitBlock() {
   if (hitState.key !== key) hitState = { key, count: 0, timer: 0 };
   hitState.count++;
   hitState.timer = 2.5;
-  if (hitState.count < 3) {
+  // Glass and carpet break with one hit; everything else takes three.
+  const hits = BLOCKS[blockId(hit.value)]?.fragile ? 1 : 3;
+  if (hitState.count < hits) {
     sounds.crack();
     particles.burst(x, y, z, blockMaterial(materials, hit.value), 3);
     crack.position.set(x + 0.5, y + 0.5, z + 0.5);
@@ -1141,7 +1246,7 @@ function hitBlock() {
   }
   hitState.key = null;
   crack.visible = false;
-  const parts = shapeOf(hit.value) === 'door' ? world.doorParts(x, y, z) : [[x, y, z, hit.value]];
+  const parts = blockGroup(x, y, z, hit.value);
   for (const [px, py, pz, v] of parts) {
     if (setBlock(px, py, pz, 0)) particles.burst(px, py, pz, blockMaterial(materials, v));
   }
@@ -1157,11 +1262,23 @@ function placeBlock(item) {
   const existing = world.get(x, y, z);
   if (!inBounds(x, y, z) || (existing && !isReplaceable(existing))) return;
   const shape = BLOCKS[item].shape || 'cube';
+  if (shape === 'ladder') {
+    placeLadder();
+    return;
+  }
   if (shape === 'door') {
     const above = world.get(x, y + 1, z);
     if (!inBounds(x, y + 1, z) || (above && !isReplaceable(above))) return;
     if (blockedByPlayer(x, y, z) || blockedByPlayer(x, y + 1, z)) return;
-    const facing = doorFacingFromYaw(player.yaw);
+    // Next to another door? Line up with it so they work as double (or garage) doors.
+    let facing = doorFacingFromYaw(player.yaw);
+    for (const [dx, dz, parity] of [[1, 0, 0], [-1, 0, 0], [0, 1, 1], [0, -1, 1]]) {
+      const n = world.get(x + dx, y, z + dz);
+      if (shapeOf(n) === 'door' && (blockMeta(n) & 3) % 2 === parity) {
+        facing = blockMeta(n) & 3;
+        break;
+      }
+    }
     setBlock(x, y, z, makeBlock(DOOR, facing));
     setBlock(x, y + 1, z, makeBlock(DOOR, facing | DOOR_TOP));
   } else {
@@ -1194,8 +1311,8 @@ function useItem() {
     hitBlock();
     return;
   }
-  if (hit && shapeOf(hit.value) === 'door') {
-    toggleDoor(...hit.block);
+  if (item === BRUSH || item === SCRAPER) {
+    paintBlock(item === BRUSH ? settings.paint : 0);
     return;
   }
   if (item === FIREWORKS) launchFirework();
@@ -1231,6 +1348,81 @@ function interact() {
   if (hud.item === CLAIM) unclaimClick();
 }
 
+// ---------- Ladders ----------
+
+// A ladder goes on the side of a wall and reaches from the bottom of the wall to the top.
+function placeLadder() {
+  if (!hit || hit.ground || hit.normal[1] !== 0 || shapeOf(hit.value) !== 'cube') {
+    hud.toast('🪜 Ladders go on the side of a wall. Point at a wall and click!');
+    return;
+  }
+  const [bx, by, bz] = hit.block, [nx, , nz] = hit.normal;
+  const lx = bx + nx, lz = bz + nz;
+  if (!canBuildAt(lx, lz)) {
+    notifyLand(lx, lz);
+    return;
+  }
+  const facing = nz === 1 ? 0 : nx === 1 ? 1 : nz === -1 ? 2 : 3; // the ladder leans on the wall behind it
+  const free = y => {
+    const v = world.get(lx, y, lz);
+    return inBounds(lx, y, lz) && (!v || isReplaceable(v));
+  };
+  const wall = y => {
+    const v = world.get(bx, y, bz);
+    return y >= 0 && v !== 0 && shapeOf(v) === 'cube';
+  };
+  if (!free(by)) return;
+  let lo = by, hi = by;
+  while (lo > 0 && wall(lo - 1) && free(lo - 1)) lo--;
+  while (wall(hi + 1) && free(hi + 1)) hi++;
+  for (let y = lo; y <= hi; y++) setBlock(lx, y, lz, makeBlock(LADDER, facing));
+  sounds.place();
+  if (hi > lo) hud.toast(`🪜 ${hi - lo + 1} blocks tall! Walk into it and hold W or Space to climb.`);
+}
+
+// ---------- Paint ----------
+
+const paintMaterials = {};
+function choosePaint(i) {
+  settings.paint = i;
+  icons[BRUSH] = makeIcon(BRUSH, textures, i);
+  view.setPaint(PAINT_COLORS[i]);
+  const at = settings.hotbar.indexOf(BRUSH);
+  if (at >= 0) {
+    hud.buildHotbar();
+    hud.select(at);
+  } else {
+    hud.setSlot(BRUSH);
+  }
+  saveSettings();
+}
+
+// Paints the block you're looking at (paint 0 = scrape it back to its original colors).
+function paintBlock(paint) {
+  if (!hit || hit.ground) {
+    sounds.swing();
+    return;
+  }
+  const [x, y, z] = hit.block;
+  if (!canBuildAt(x, z)) {
+    notifyLand(x, z);
+    return;
+  }
+  if (!paint && !paintOf(hit.value)) {
+    hud.toast("🧽 That block isn't painted.");
+    return;
+  }
+  // A garage door is painted all at once; double doors can have a different color on each side.
+  const garage = shapeOf(hit.value) === 'door' && world.doorRole(x, y, z).kind === 'garage';
+  let changed = false;
+  for (const [px, py, pz, v] of garage ? world.doorGroup(x, y, z) : blockGroup(x, y, z, hit.value)) changed = setBlock(px, py, pz, withPaint(v, paint)) || changed;
+  if (!changed) return;
+  const color = paint ? PAINT_COLORS[paint] : '#dddddd';
+  paintMaterials[color] ??= new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
+  particles.burst(x, y, z, paintMaterials[color], 8);
+  sounds.paint();
+}
+
 function pickBlock() {
   if (!hit?.id) return;
   const existing = settings.hotbar.indexOf(hit.id);
@@ -1263,17 +1455,18 @@ function avoidWalls(focus, desired) {
 }
 
 function updateCamera(dt) {
-  if (myCar) {
-    const s = myCar.spec;
+  const car = riding();
+  if (car) {
+    const s = car.spec;
     if (carView === 0) {
-      const seat = cars.seat(myCar);
+      const seat = cars.seat(car, mySeat());
       camera.position.copy(seat.position).y += EYE_HEIGHT * SEAT_SCALE;
-      camera.rotation.set(carCam.pitch * 0.6 + myCar.pitch, myCar.h + carCam.yaw, 0);
+      camera.rotation.set(carCam.pitch * 0.6 + car.pitch, car.h + carCam.yaw, 0);
     } else {
-      if (myCar.speed > 2) carCam.yaw *= Math.exp(-1.5 * dt);
-      const yaw = myCar.h + carCam.yaw + (carView === 2 ? Math.PI : 0);
+      if (Math.abs(car.speed) > 2) carCam.yaw *= Math.exp(-1.5 * dt);
+      const yaw = car.h + carCam.yaw + (carView === 2 ? Math.PI : 0);
       const dist = s.flying ? 12 : s.length + 3.5;
-      const focus = myCar.pos.clone().add(new THREE.Vector3(0, s.height * 0.8, 0));
+      const focus = car.pos.clone().add(new THREE.Vector3(0, s.height * 0.8, 0));
       const lift = (s.flying ? 3 : s.height + 1.2) - carCam.pitch * 4;
       const desired = focus.clone().add(new THREE.Vector3(Math.sin(yaw) * dist, lift, Math.cos(yaw) * dist));
       camera.position.copy(avoidWalls(focus, desired));
@@ -1335,6 +1528,9 @@ function frame(timestamp) {
         myCar.rpmShown = (myCar.rpmShown ?? myCar.rpm) + (myCar.rpm - (myCar.rpmShown ?? myCar.rpm)) * Math.min(1, dt * 9);
         sounds.engine(myCar.rpmShown, myCar.load);
       }
+    } else if (myRide) {
+      player.pos.copy(cars.seat(myRide, mySeat()).position);
+      player.vel.set(0, 0, 0);
     } else if (!sleeping) {
       const wasOnGround = player.onGround;
       const vyBefore = player.vel.y;
@@ -1359,7 +1555,7 @@ function frame(timestamp) {
     // What are we looking at? Vehicles and pets count if they're closer than the nearest block.
     hit = null;
     target = null;
-    if (locked && !myCar && !sleeping) {
+    if (locked && !riding() && !sleeping) {
       hit = world.raycast(eye, lookDir, REACH);
       const carHit = cars.raycast(eye, lookDir, REACH);
       const petHit = petRaycast(eye, lookDir, REACH);
@@ -1392,16 +1588,22 @@ function frame(timestamp) {
     let hint = '';
     if (target?.car) {
       const what = target.car.spec.flying ? '🚁 Right-click or E to fly' : '🚗 Right-click or E to drive';
-      hint = target.car.driver ? '🚗 Someone is in there' : what + (item === HAMMER ? ' · Click to whack it' : '');
+      const full = target.car.driver && target.car.passengers.length >= 2;
+      hint = full ? "🚗 It's full" : target.car.driver ? '🚗 Right-click or E to ride along' : what + (item === HAMMER ? ' · Click to whack it' : '');
     } else if (target?.pet) {
       hint = item === BALL && target.avatar === myBody ? '🎾 Click to throw the ball · Right-click to pet' : '🐾 Right-click to pet';
     } else if (hitState.key) {
       hint = `🔨 Hit ${hitState.count} of 3`;
+    } else if (player.climbing) {
+      hint = '🪜 W / Space: up · S: down';
     } else if (item === CLAIM && claimTool.a) {
       hint = claimTool.confirm ? '🚩 Click to claim · Right-click to cancel' : '🚩 Click the opposite corner';
     } else {
       const s = hit && !hit.ground ? structures.at(...hit.block) : null;
-      if (hit && shapeOf(hit.value) === 'door' && item !== HAMMER) hint = '🚪 Click to open / close';
+      if (item === BRUSH && hit && !hit.ground) hint = `🎨 Click to paint it ${PAINT_NAMES[settings.paint]}`;
+      else if (item === SCRAPER && hit && !hit.ground) hint = paintOf(hit.value) ? '🧽 Click to scrape off the paint' : '';
+      else if (hit && shapeOf(hit.value) === 'door') hint = '🚪 Right-click to open / close';
+      else if (hit && shapeOf(hit.value) === 'ladder' && item !== HAMMER) hint = '🪜 Walk into it and hold W or Space to climb';
       else if (s?.type === 'bed') hint = '🛏️ Right-click to sleep';
       else if (s?.type === 'cannon') hint = '💥 Right-click to launch yourself!';
       else if (s?.type === 'tv') hint = '📺 Right-click to change the channel';
@@ -1421,7 +1623,7 @@ function frame(timestamp) {
 
     // Holding the mouse button keeps hammering or building.
     useCooldown -= dt;
-    if (locked && !myCar && useCooldown <= 0 && mouse.has(0) && (item === HAMMER || typeof item === 'number')) {
+    if (locked && !riding() && useCooldown <= 0 && mouse.has(0) && (item === HAMMER || typeof item === 'number')) {
       useItem();
       useCooldown = item === HAMMER ? 0.25 : 0.2;
     }
@@ -1457,8 +1659,8 @@ function frame(timestamp) {
     }
 
     // Our own body, seen in the third-person views.
-    myBody.root.visible = myCar ? carView !== 0 : viewMode !== 0 || !!sleeping;
-    myBody.seat = myCar ? cars.seat(myCar) : null;
+    myBody.root.visible = riding() ? carView !== 0 : viewMode !== 0 || !!sleeping;
+    myBody.seat = riding() ? cars.seat(riding(), mySeat()) : null;
     myBody.target.copy(player.pos);
     myBody.targetYaw = player.yaw;
     myBody.targetPitch = player.pitch;
@@ -1489,6 +1691,9 @@ function frame(timestamp) {
         hud.setVehicleInfo(myCar.spec.flying
           ? `⬆️ ${Math.max(0, Math.round(myCar.pos.y - ground))} m · ${kmh} km/h · Rotor ${Math.round(myCar.rotorSpin * 100)}% · ${health}`
           : `Gear ${myCar.gear === 0 ? 'R' : myCar.gear === 3 ? '3 (overdrive)' : myCar.gear} · ${kmh} km/h · ${health}`);
+      } else if (myRide) {
+        const driver = avatars.list.get(myRide.driver);
+        hud.setVehicleInfo(`🧍 Passenger${driver ? ` · ${driver.name} is driving` : ' · Waiting for a driver'} · ${Math.round(Math.abs(myRide.speed) * 3.6)} km/h`);
       }
     }
 
@@ -1510,13 +1715,13 @@ function frame(timestamp) {
     camera.lookAt(0, 2, 0);
   }
 
-  // Other players sit in the vehicles they drive.
+  // Other players sit in the vehicles they drive or ride in.
   for (const a of avatars.list.values()) a.seat = null;
   for (const car of cars.list.values()) {
-    if (car.driver && car.driver !== myId) {
-      const a = avatars.list.get(car.driver);
-      if (a) a.seat = cars.seat(car);
-    }
+    [car.driver, ...car.passengers].forEach((id, seat) => {
+      const a = id && id !== myId && avatars.list.get(id);
+      if (a) a.seat = cars.seat(car, seat);
+    });
   }
 
   // Loudest nearby siren, fire and helicopter.
@@ -1525,7 +1730,7 @@ function frame(timestamp) {
     if (car.siren) siren = Math.max(siren, loudness(car.pos.x, car.pos.y, car.pos.z, 70));
     if (car.hp < FIRE_HP) fire = Math.max(fire, loudness(car.pos.x, car.pos.y, car.pos.z, 35));
     if (car.spec.flying && car.rotorSpin > 0.02) {
-      const level = car === myCar ? 1 : loudness(car.pos.x, car.pos.y, car.pos.z, 120);
+      const level = car === riding() ? 1 : loudness(car.pos.x, car.pos.y, car.pos.z, 120);
       if (level > rotor) {
         rotor = level;
         rotorSpin = car.rotorSpin;
@@ -1560,7 +1765,7 @@ function frame(timestamp) {
     sky.hemi.color.lerp(fireworks.flashColor, f * 0.5);
     scene.fog.color.lerp(fireworks.flashColor, f * 0.2);
   }
-  const firstPerson = inGame && !myCar && viewMode === 0 && !sleeping;
+  const firstPerson = inGame && !riding() && viewMode === 0 && !sleeping;
   view.update(dt, player.moving && player.onGround, camera.aspect, scene.environment, sky.dayK);
 
   // Water ripples drift slowly.
@@ -1601,6 +1806,7 @@ window.buildzone = {
   get player() { return player; },
   get cars() { return cars; },
   get myCar() { return myCar; },
+  get myRide() { return myRide; },
   get hud() { return hud; },
   get structures() { return structures; },
   get myBody() { return myBody; },

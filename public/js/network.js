@@ -1,6 +1,6 @@
 // Talks to the game room: over a WebSocket when there's a server,
 // or to a copy of the room running right here in the browser for offline play.
-import { GameRoom } from './shared/game.js';
+import { GameRoom, SAVE_VERSION } from './shared/game.js';
 
 const OFFLINE_SAVE = 'buildzone-offline-world';
 
@@ -92,7 +92,15 @@ export class Network {
       try {
         saved = JSON.parse(localStorage.getItem(OFFLINE_SAVE));
       } catch { /* no saved world */ }
-      if (!room.load(saved)) room.generate();
+      // Keep a copy of a saved world before upgrading it (or if it can't be loaded at all).
+      const version = Array.isArray(saved) ? 1 : saved?.version;
+      const loaded = saved && version <= SAVE_VERSION && room.load(saved);
+      if (saved && (!loaded || version < SAVE_VERSION)) {
+        try {
+          localStorage.setItem(`${OFFLINE_SAVE}-backup-v${version ?? 0}`, JSON.stringify(saved));
+        } catch { /* storage full or unavailable */ }
+      }
+      if (!loaded) room.generate();
 
       const client = room.connect(msg => {
         // Deliver asynchronously, like a real network would.

@@ -1,7 +1,7 @@
 // First-person movement and collision.
 // Collision works with boxes, so thin doors and car roofs feel solid in the right places.
 import * as THREE from 'three';
-import { BLOCKS, SPAWN, blockId } from './shared/blocks.js';
+import { BLOCKS, SPAWN, blockId, shapeOf } from './shared/blocks.js';
 
 const HALF_WIDTH = 0.3;
 export const HEIGHT = 1.8;
@@ -55,7 +55,16 @@ export class Player {
     const wish = new THREE.Vector3(-sin * forward + cos * strafe, 0, -cos * forward - sin * strafe);
     if (wish.lengthSq() > 0) wish.normalize();
 
-    if (this.flying) {
+    this.climbing = !this.flying && this.onLadder();
+    if (this.climbing) {
+      // On a ladder: W or Space climbs, S or C climbs down, otherwise you hold on.
+      const up = keys.has('KeyW') || keys.has('Space');
+      const down = keys.has('KeyS') || keys.has('KeyC');
+      this.vel.y = up ? 3.6 : down ? -3.6 : 0;
+      const k = 1 - Math.exp(-14 * dt);
+      this.vel.x += (wish.x * WALK_SPEED * 0.6 - this.vel.x) * k;
+      this.vel.z += (wish.z * WALK_SPEED * 0.6 - this.vel.z) * k;
+    } else if (this.flying) {
       const speed = this.sprinting ? FLY_SPEED * 1.8 : FLY_SPEED;
       const up = (keys.has('Space') ? 1 : 0) - (keys.has('KeyC') || keys.has('ControlLeft') ? 1 : 0);
       const target = new THREE.Vector3(wish.x * speed, up * speed, wish.z * speed);
@@ -81,6 +90,16 @@ export class Player {
     this.moveAxis('z', this.vel.z * dt);
     this.moveAxis('y', this.vel.y * dt);
     if (this.onGround && this.flying && !wasOnGround) this.flying = false;
+  }
+
+  // Are we touching a ladder (at our feet or chest)? Checking a little below our feet
+  // lets you climb just past the top rung, high enough to step off onto the wall.
+  onLadder() {
+    const p = this.pos;
+    for (let x = Math.floor(p.x - HALF_WIDTH); x <= Math.floor(p.x + HALF_WIDTH - 1e-6); x++)
+      for (let z = Math.floor(p.z - HALF_WIDTH); z <= Math.floor(p.z + HALF_WIDTH - 1e-6); z++)
+        for (const y of [Math.floor(p.y - 0.12), Math.floor(p.y + 0.9)]) if (shapeOf(this.world.get(x, y, z)) === 'ladder') return true;
+    return false;
   }
 
   box() {

@@ -3,7 +3,7 @@
 // the browser runs its own copy so single player works exactly the same way.
 import { blockKey, inBounds, isValidBlock, isSolidBlock, blockId, shapeOf, DOOR_OPEN, DAY_LENGTH, WORLD, isNightTime } from './blocks.js';
 import { sanitizeLook, cleanName } from './avatar.js';
-import { generateWorld, helipadBlocks, upgradeLamps, HELIPAD } from './worldgen.js';
+import { generateWorld, helipadBlocks, upgradeLamps } from './worldgen.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot } from './vehicles.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS } from './claims.js';
 
@@ -82,26 +82,24 @@ export class GameRoom {
       id: this.nextVehicleId++, kind, color, home,
       x: clampWorld(x), y: Math.max(0, num(y)), z: clampWorld(z), h: num(h),
       hp: Math.max(1, Math.min(MAX_HP, Number.isFinite(hp) ? hp : MAX_HP)),
-      speed: 0, steer: 0, siren: 0, pitch: 0, roll: 0, rotor: 0, driver: 0,
+      speed: 0, steer: 0, siren: 0, pitch: 0, roll: 0, rotor: 0, flags: 0, driver: 0, passengers: [],
     };
     this.vehicles.set(v.id, v);
     return v;
   }
 
+  // Loads a saved world. Older saves are upgraded by *adding* things (never by removing
+  // what players built). Returns false only if there's nothing usable in `data`.
   load(data) {
-    if (!data || ![2, 3, SAVE_VERSION].includes(data.version)) return false;
+    if (Array.isArray(data)) data = { version: 1, blocks: data.flat() }; // the very first save format
+    if (!data || !Array.isArray(data.blocks) || !(data.version >= 1 && data.version <= SAVE_VERSION)) return false;
     this.world.clear();
     const b = data.blocks;
     for (let i = 0; i + 3 < b.length; i += 4) this.world.set(blockKey(b[i], b[i + 1], b[i + 2]), b[i + 3]);
     if (Number.isFinite(data.time)) this.time = data.time % DAY_LENGTH;
-    if (data.version === 2) {
-      // Older saves had player-spawned cars; use the town's parking spots instead,
-      // and clear any trees off the spot where the new helipad goes.
-      const pad = HELIPAD, near = (x, z) => x >= pad.x - 4 && x <= pad.x + pad.size + 3 && z >= pad.z - 4 && z <= pad.z + pad.size + 3;
-      for (const k of [...this.world.keys()]) {
-        const [x, , z] = k.split(',').map(Number);
-        if (near(x, z) && [LOG, LEAVES].includes(blockId(this.world.get(k)))) this.world.delete(k);
-      }
+    if (data.version <= 2) {
+      // Older saves had player-spawned cars; use the town's parking spots instead, and
+      // add the helipad wherever the ground is still empty (it never replaces anything).
       for (const [x, y, z, v] of helipadBlocks()) if (!this.world.has(blockKey(x, y, z))) this.world.set(blockKey(x, y, z), v);
       this.setHomes(generateWorld().cars);
       this.upgradeLamps();
@@ -244,7 +242,13 @@ export class GameRoom {
   leaveVehicle(client) {
     const v = this.vehicles.get(client.car);
     client.car = 0;
-    if (!v || v.driver !== client.id) return;
+    if (!v) return;
+    if (v.passengers.includes(client.id)) {
+      v.passengers = v.passengers.filter(id => id !== client.id);
+      this.broadcast({ t: 'car_driver', ...publicVehicle(v) });
+      return;
+    }
+    if (v.driver !== client.id) return;
     v.driver = 0;
     v.speed = v.steer = v.siren = v.pitch = v.roll = v.rotor = 0;
     // Nobody flying it any more? It drops to the ground.
@@ -263,8 +267,10 @@ export class GameRoom {
 
   destroyVehicle(v) {
     this.vehicles.delete(v.id);
-    const driver = this.clients.get(v.driver);
-    if (driver) driver.car = 0;
+    for (const id of [v.driver, ...v.passengers]) {
+      const c = this.clients.get(id);
+      if (c) c.car = 0;
+    }
     this.broadcast({ t: 'car_destroy', id: v.id, x: v.x, y: v.y, z: v.z });
     if (this.homes.has(v.home)) this.respawns.push({ home: v.home, at: Date.now() + VEHICLES[v.kind].respawn * 1000 });
     this.onDirty();
@@ -289,8 +295,12 @@ export class GameRoom {
 
     set(client, { x, y, z, b }) {
       if (!inBounds(x, y, z) || !isValidBlock(b)) return;
-      if (!this.allow(client, 'set', 25, 50)) return;
       const old = this.get(x, y, z);
+      // Room for a whole ladder or garage door at once. Too fast? Undo it for that player.
+      if (!this.allow(client, 'set', 40, 160)) {
+        client.send({ t: 'set', x, y, z, b: old });
+        return;
+      }
       if (!canBuild(this.claims, client.name, x, z) && !isDoorToggle(old, b)) {
         // Not your land: put the block back the way it was for this player.
         client.send({ t: 'set', x, y, z, b: old });
@@ -335,10 +345,13 @@ export class GameRoom {
       this.broadcast({ t: 'fx', kind: msg.kind, x: num(msg.x), y: num(msg.y), z: num(msg.z), color, seed: num(msg.seed) }, client);
     },
 
+    // The first one in drives; up to two more can ride along as passengers.
     car_enter(client, { id }) {
       const v = this.vehicles.get(id);
-      if (!v || v.driver || client.car) return;
-      v.driver = client.id;
+      if (!v || client.car) return;
+      if (!v.driver) v.driver = client.id;
+      else if (v.passengers.length < 2) v.passengers.push(client.id);
+      else return;
       client.car = id;
       this.broadcast({ t: 'car_driver', ...publicVehicle(v) });
     },
@@ -360,6 +373,7 @@ export class GameRoom {
       v.pitch = num(msg.p);
       v.roll = num(msg.r);
       v.rotor = num(msg.rs);
+      v.flags = num(msg.f) & 3; // brake lights, reverse lights
     },
 
     // Crashes (reported by the driver) and hammer hits (from anyone close by).
@@ -404,7 +418,7 @@ export class GameRoom {
     },
 
     horn(client) {
-      if (!client.car || !this.allow(client, 'horn', 3, 4)) return;
+      if (this.vehicles.get(client.car)?.driver !== client.id || !this.allow(client, 'horn', 3, 4)) return;
       this.broadcast({ t: 'horn', id: client.car }, client);
     },
 
@@ -559,7 +573,7 @@ export class GameRoom {
     const cars = [];
     for (const v of this.vehicles.values()) {
       // Driven vehicles, plus parked ones that are rolling after being knocked.
-      if (v.driver || now - (v.nudgedAt || 0) < 1500) cars.push([v.id, v.x, v.y, v.z, v.h, v.speed, v.steer, v.siren, v.pitch, v.roll, v.rotor]);
+      if (v.driver || now - (v.nudgedAt || 0) < 1500) cars.push([v.id, v.x, v.y, v.z, v.h, v.speed, v.steer, v.siren, v.pitch, v.roll, v.rotor, v.driver ? v.flags : 0]);
     }
     this.broadcast({ t: 'states', list, cars });
   }
@@ -571,4 +585,4 @@ function isDoorToggle(old, b) {
 }
 
 const publicPlayer = c => ({ id: c.id, name: c.name, look: c.look, pos: c.pos, rot: c.rot });
-const publicVehicle = ({ id, kind, color, x, y, z, h, driver, hp }) => ({ id, kind, color, x, y, z, h, driver, hp: Math.round(hp) });
+const publicVehicle = ({ id, kind, color, x, y, z, h, driver, passengers, hp }) => ({ id, kind, color, x, y, z, h, driver, passengers, hp: Math.round(hp) });

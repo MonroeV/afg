@@ -38,7 +38,9 @@ export function buildCarModel(kind, color) {
     glass: new THREE.MeshPhysicalMaterial({ color: 0x223344, metalness: 0.2, roughness: 0.02, transparent: true, opacity: 0.5, envMapIntensity: 2 }),
     chrome: new THREE.MeshStandardMaterial({ color: 0xdfe4ea, metalness: 0.95, roughness: 0.2 }),
     head: new THREE.MeshStandardMaterial({ color: 0xfff6d8, emissive: 0xfff2c0, emissiveIntensity: 0.3 }),
-    tail: new THREE.MeshStandardMaterial({ color: 0xaa1111, emissive: 0xff2020, emissiveIntensity: 0.3 }),
+    tail: new THREE.MeshStandardMaterial({ color: 0x8a0a0a, emissive: 0xff0000, emissiveIntensity: 0.3 }),
+    brake: new THREE.MeshStandardMaterial({ color: 0x5a0808, emissive: 0xff0000, emissiveIntensity: 0.04 }),
+    reverse: new THREE.MeshStandardMaterial({ color: 0xdddddd, emissive: 0xffffff, emissiveIntensity: 0.05 }),
     red: new THREE.MeshStandardMaterial({ color: 0x661111, emissive: 0xff1a1a, emissiveIntensity: 0.2 }),
     blue: new THREE.MeshStandardMaterial({ color: 0x112266, emissive: 0x1a5cff, emissiveIntensity: 0.2 }),
     label: kind === 'police' ? new THREE.MeshStandardMaterial({ map: textTexture('POLICE', '#111111', '#ffffff'), roughness: 0.4 }) : null,
@@ -66,9 +68,12 @@ export function buildCarModel(kind, color) {
   add(B(W * 0.4, 0.16, 0.03), 'dark', 0, bodyY + 0.05, -L / 2 - 0.01);
   for (const x of [-1, 1]) {
     add(B(0.34, 0.14, 0.04), 'head', x * (W / 2 - 0.3), bodyY + 0.08, -L / 2 - 0.01);
-    add(B(0.3, 0.12, 0.04), 'tail', x * (W / 2 - 0.28), bodyY + 0.08, L / 2 + 0.01);
+    add(B(0.36, 0.16, 0.04), 'tail', x * (W / 2 - 0.3), bodyY + 0.08, L / 2 + 0.01);
+    add(B(0.14, 0.08, 0.04), 'reverse', x * (W / 2 - 0.55), bodyY + 0.08, L / 2 + 0.01);
     add(B(0.08, 0.06, 0.16), 'paint', x * (W / 2 + 0.04), ride + bodyH + 0.02, -0.55);
   }
+  // A third brake light along the top of the back window.
+  add(B(cabinW * 0.4, 0.05, 0.03), 'brake', 0, ride + bodyH + cabinH - 0.09, 0.15 + cabinL / 2 + 0.03);
   const wz = L / 2 - wheelR - (kind === 'monster' ? 0.05 : 0.3);
   if (kind === 'monster') {
     for (const z of [-1, 1]) add(B(W - 0.2, 0.12, 0.12), 'chrome', 0, wheelR, z * wz);
@@ -102,7 +107,7 @@ export function buildCarModel(kind, color) {
 
   return {
     group: g, wheels, steerers, paint: mats.paint, paintMesh: meshes.paint, baseColor: new THREE.Color(color),
-    headMat: mats.head, tailMat: mats.tail, siren: kind === 'police' ? { red: mats.red, blue: mats.blue } : null,
+    headMat: mats.head, tailMat: mats.tail, brakeMat: mats.brake, reverseMat: mats.reverse, siren: kind === 'police' ? { red: mats.red, blue: mats.blue } : null,
   };
 }
 
@@ -214,6 +219,7 @@ export class Cars {
     const model = buildCarModel(data.kind, data.color);
     const car = {
       ...data,
+      passengers: data.passengers || [],
       spec,
       model,
       pos: new THREE.Vector3(data.x, data.y, data.z),
@@ -258,10 +264,11 @@ export class Cars {
     for (const id of [...this.list.keys()]) this.remove(id);
   }
 
-  setDriver({ id, driver, x, y, z, h }) {
+  setDriver({ id, driver, passengers, x, y, z, h }) {
     const car = this.list.get(id);
     if (!car) return;
     car.driver = driver;
+    car.passengers = passengers || [];
     car.loose = false;
     car.push.set(0, 0, 0);
     car.target.set(x, y, z);
@@ -271,9 +278,11 @@ export class Cars {
 
   // Positions from the server for vehicles other people are driving.
   applyStates(states, myCarId) {
-    for (const [id, x, y, z, h, speed, steer, siren, pitch, roll, rotor] of states) {
+    for (const [id, x, y, z, h, speed, steer, siren, pitch, roll, rotor, flags] of states) {
       const car = this.list.get(id);
       if (!car || id === myCarId || car.loose) continue;
+      car.braking = !!(flags & 1);
+      car.reversing = !!(flags & 2);
       car.target.set(x, y, z);
       car.targetH = h;
       car.speed = speed;
@@ -320,11 +329,12 @@ export class Cars {
 
   // Where the driver sits, in world space. Drivers are drawn a little smaller (SEAT_SCALE)
   // so they fit under the roof.
-  seat(car) {
+  // Seat 0 is the driver (front left), 1 is front right, 2 is in the back.
+  seat(car, index = 0) {
     const s = car.spec;
-    const local = s.flying
-      ? new THREE.Vector3(-0.4, 0.62 - 0.72 * SEAT_SCALE, -0.75)
-      : new THREE.Vector3(-s.width * 0.22, s.ride + 0.12 - 0.72 * SEAT_SCALE, 0.25);
+    const front = s.flying ? -0.75 : 0.25, back = s.flying ? 0.35 : 0.95;
+    const sx = [-1, 1, 0][index] * (s.flying ? 0.4 : s.width * 0.22);
+    const local = new THREE.Vector3(sx, (s.flying ? 0.62 : s.ride + 0.12) - 0.72 * SEAT_SCALE, index === 2 ? back : front);
     local.applyEuler(new THREE.Euler(car.pitch, car.h, car.roll, 'YXZ'));
     return { position: local.add(car.pos), yaw: car.h };
   }
@@ -339,12 +349,18 @@ export class Cars {
     const out = [];
     for (const car of this.list.values()) {
       if (car.id === exceptId) continue;
+      // Three boxes along the car fit a turned car much better than one big box.
       const s = car.spec, c = Math.abs(Math.cos(car.h)), n = Math.abs(Math.sin(car.h));
-      const ex = c * s.width / 2 + n * s.length / 2, ez = n * s.width / 2 + c * s.length / 2;
-      const bottom = s.flying ? 0.3 : s.ride * 0.6;
-      const box = [car.pos.x - ex, car.pos.y + bottom, car.pos.z - ez, car.pos.x + ex, car.pos.y + (s.flying ? 2.0 : s.height), car.pos.z + ez];
-      box.car = car; // so a player walking into it can push it
-      out.push(box);
+      const piece = s.length / 3;
+      const ex = c * s.width / 2 + n * piece / 2, ez = n * s.width / 2 + c * piece / 2;
+      const bottom = s.flying ? 0.3 : s.ride * 0.6, top = s.flying ? 2.0 : s.height;
+      const fx = -Math.sin(car.h), fz = -Math.cos(car.h);
+      for (const k of [-1, 0, 1]) {
+        const px = car.pos.x + fx * piece * k, pz = car.pos.z + fz * piece * k;
+        const box = [px - ex, car.pos.y + bottom, pz - ez, px + ex, car.pos.y + top, pz + ez];
+        box.car = car; // so a player walking into it can push it
+        out.push(box);
+      }
     }
     return out;
   }
@@ -579,11 +595,11 @@ export class Cars {
     const health = 0.55 + 0.45 * (car.hp / MAX_HP); // wrecked cars are sluggish
 
     // Automatic gearbox: 1st revs up slowly from a stop, shifts to 2nd at high revs,
-    // and drops into overdrive (3rd) once you're near top speed.
+    // and drops into overdrive (3rd) once you're near top speed. Gear 0 is reverse.
     car.shiftT = Math.max(0, car.shiftT - dt);
+    car.stopTimer = Math.max(0, (car.stopTimer || 0) - dt);
+    car.braking = false;
     const fwd = Math.max(0, car.speed);
-    if (car.speed < -0.5) car.gear = 0; // reverse
-    else if (car.gear === 0) car.gear = 1;
     if (car.gear > 0) {
       const upshift = car.gear === 1 ? rpmIn(s, 1, fwd) > 0.93 : car.gear === 2 && fwd > s.maxSpeed * 0.93;
       if (upshift && throttle > 0 && !car.shiftT) {
@@ -603,13 +619,57 @@ export class Cars {
     const gearPull = car.gear === 1 ? 0.15 + 0.45 * firstFrac : car.gear === 2 ? 0.8 : car.gear === 3 ? 0.35 : 0.7;
     const pull = s.accel * gearPull * health * (car.shiftT > 0 ? 0.1 : 1) * (boost ? 1.35 : 1);
 
-    if (throttle > 0) car.speed += (car.speed < 0 ? s.accel * 2.5 : pull) * dt;
-    else if (throttle < 0) car.speed -= (car.speed > 0 ? s.accel * 2.5 : s.accel * 0.7) * dt;
-    else car.speed -= car.speed * Math.min(1, 1.2 * dt);
-    if (keys.has('Space')) car.speed -= car.speed * Math.min(1, 5 * dt);
+    // Changing direction: brake to a stop, wait a moment (shifting), then go the other way.
+    const brakeTo0 = rate => {
+      const before = car.speed;
+      car.speed -= Math.sign(car.speed) * rate * dt;
+      if (Math.sign(car.speed) !== Math.sign(before)) car.speed = 0;
+      car.braking = true;
+    };
+    if (throttle < 0 && car.gear !== 0) {
+      if (car.speed > 0.2) {
+        brakeTo0(s.accel * 2.5);
+        car.stopTimer = 0.6;
+      } else {
+        car.speed = 0;
+        car.braking = true;
+        if (!car.waiting) car.stopTimer = Math.max(car.stopTimer, 0.35);
+        car.waiting = true;
+        if (car.stopTimer <= 0) {
+          car.gear = 0; // into reverse: the reverse lights come on
+          car.waiting = false;
+          events.push({ type: 'shift' });
+        }
+      }
+    } else if (throttle > 0 && car.gear === 0) {
+      if (car.speed < -0.2) {
+        brakeTo0(s.accel * 2.5);
+        car.stopTimer = 0.4;
+      } else {
+        car.speed = 0;
+        car.braking = true;
+        if (!car.waiting) car.stopTimer = Math.max(car.stopTimer, 0.25);
+        car.waiting = true;
+        if (car.stopTimer <= 0) {
+          car.gear = 1;
+          car.waiting = false;
+          events.push({ type: 'shift' });
+        }
+      }
+    } else {
+      car.waiting = false;
+      if (throttle > 0) car.speed += pull * dt;
+      else if (throttle < 0) car.speed -= s.accel * 0.7 * dt; // reversing
+      else car.speed -= car.speed * Math.min(1, 1.2 * dt);
+    }
+    if (keys.has('Space') && Math.abs(car.speed) > 0.05) {
+      car.speed -= car.speed * Math.min(1, 5 * dt);
+      car.braking = true;
+    }
     car.speed = Math.max(-7, Math.min(max, car.speed));
     if (Math.abs(car.speed) < 0.05 && !throttle) car.speed = 0;
-    car.load = throttle > 0 ? 1 : 0;
+    car.load = throttle !== 0 && !car.braking ? 1 : 0;
+    car.reversing = car.gear === 0;
 
     car.steer += (steerIn * 0.6 - car.steer) * Math.min(1, 6 * dt);
     const steer = car.steer * (1 - 0.45 * Math.min(1, Math.abs(car.speed) / s.maxSpeed));
@@ -834,7 +894,10 @@ export class Cars {
       // Headlights glow at night or while someone is driving.
       const lit = car.driver ? 0.6 + nightK * 2.5 : 0.15;
       car.model.headMat.emissiveIntensity = lit;
-      car.model.tailMat.emissiveIntensity = car.driver ? 0.6 + nightK * 1.5 : 0.15;
+      // Brake lights burn bright red; reverse lights come on in reverse.
+      car.model.tailMat.emissiveIntensity = car.braking ? 2 : car.driver ? 0.45 + nightK * 0.6 : 0.12;
+      car.model.brakeMat.emissiveIntensity = car.braking ? 2 : 0.04;
+      car.model.reverseMat.emissiveIntensity = car.driver && (car.reversing || car.gear === 0 && car.id === myCarId) ? 3 : 0.05;
       if (car.model.siren) {
         const flash = Math.floor(time * 6) % 2;
         car.model.siren.red.emissiveIntensity = car.siren && flash === 0 ? 5 : 0.2;

@@ -516,3 +516,5 @@ button.secondary {
 .recipe-pic { display: grid; gap: 1px; flex: none; }
 .recipe-pic > div { width: 26px; height: 26px; border-radius: 3px; background: rgba(255, 255, 255, 0.06); }
 .recipe-pic canvas { width: 26px; height: 26px; }
+
+.paint-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 0 8px; }

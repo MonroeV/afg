@@ -1,6 +1,6 @@
 // Builds the starting world: a main town around spawn, villages in each corner,
 // roads joining them, parks, playgrounds, trees, flowers and parked cars.
-import { WORLD, DOOR_TOP, makeBlock, isSolidBlock } from './blocks.js';
+import { WORLD, DOOR_TOP, makeBlock } from './blocks.js';
 
 const B = {
   grass: 1, dirt: 2, stone: 3, cobble: 4, brick: 5, planks: 6, log: 7, leaves: 8, glass: 9,
@@ -476,9 +476,9 @@ export function generateWorld(seed = 2024) {
   return { blocks, cars: placed };
 }
 
-// Saved worlds from before the new lamps: put proper lamp heads on street lamps, and swap
-// the glowing blocks in house ceilings for ceiling lights. get(x, y, z) and set(x, y, z, v)
-// read and write the world.
+// Saved worlds from before the new lamps: put proper lamp heads on the town's street lamps
+// and helipad corners. Every other lamp is left exactly as it was built (lamps in ceilings
+// light up the room by themselves). get(x, y, z) and set(x, y, z, v) read and write the world.
 export function upgradeLamps(lampKeys, get, set) {
   const corners = new Set([[0, 0], [10, 0], [0, 10], [10, 10]].map(([x, z]) => `${HELIPAD.x + x},0,${HELIPAD.z + z}`));
   for (const key of lampKeys) {
@@ -488,15 +488,6 @@ export function upgradeLamps(lampKeys, get, set) {
       set(x, y, z, B.gardenLight);
     } else if (y === 3 && [0, 1, 2].every(py => get(x, py, z) === B.black)) {
       set(x, y, z, B.streetLamp);
-    } else if (y > 0 && !get(x, y - 1, z)) {
-      const sides = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => get(x + dx, y, z + dz));
-      if (sides.every(v => isSolidBlock(v) && v !== B.lamp)) {
-        // Set into the ceiling: patch the ceiling and hang a light underneath.
-        set(x, y, z, sides[0]);
-        set(x, y - 1, z, B.ceilingLight);
-      } else if (isSolidBlock(get(x, y + 1, z))) {
-        set(x, y, z, B.ceilingLight); // hanging under a roof (like in shops)
-      }
     }
   }
 }

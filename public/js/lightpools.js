@@ -2,7 +2,7 @@
 // so only the closest lamps get one; these glowing pools are nearly free, so every lamp
 // you can see spreads a wide, gentle glow around it.
 import * as THREE from 'three';
-import { BLOCKS, blockId } from './shared/blocks.js';
+import { BLOCKS, PAINT_COLORS, blockId, paintOf } from './shared/blocks.js';
 
 function poolTexture() {
   const c = document.createElement('canvas');
@@ -47,10 +47,14 @@ export class LightPools {
     const lists = { outdoor: [], indoor: [] };
     for (const k of world.lamps) {
       const [x, y, z] = k.split(',').map(Number);
-      const block = BLOCKS[blockId(world.get(x, y, z))];
+      const v = world.get(x, y, z);
+      const block = BLOCKS[blockId(v)];
       const light = block?.light;
       if (!light) continue;
-      lists[light.always ? 'indoor' : 'outdoor'].push({ x, z, floor: this.floorFor(world, x, y, z, block), light });
+      // Lamps under a roof are indoor lamps: their glow stays on in the daytime too.
+      const indoor = light.always || world.isCovered(x, y, z);
+      const color = paintOf(v) ? PAINT_COLORS[paintOf(v)] : light.color;
+      lists[indoor ? 'indoor' : 'outdoor'].push({ x, z, floor: this.floorFor(world, x, y, z, block), light, color, power: light.power * (indoor ? 1.3 : 1) });
     }
     const m = new THREE.Matrix4(), q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)), color = new THREE.Color();
     for (const [kind, list] of Object.entries(lists)) {
@@ -69,7 +73,7 @@ export class LightPools {
         m.compose(new THREE.Vector3(p.x + 0.5, p.floor + 0.05, p.z + 0.5), q, new THREE.Vector3(r * 2, r * 2, 1));
         mesh.setMatrixAt(i, m);
         // A gentle tint of the lamp's color (mixed with white so it isn't too orange).
-        mesh.setColorAt(i, color.set(p.light.color).lerp(new THREE.Color(1, 1, 1), 0.35).multiplyScalar(0.15 * p.light.power));
+        mesh.setColorAt(i, color.set(p.color).lerp(new THREE.Color(1, 1, 1), 0.35).multiplyScalar(0.15 * p.power));
       });
       mesh.frustumCulled = false;
       mesh.renderOrder = 2;

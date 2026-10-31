@@ -1,8 +1,11 @@
 // Block definitions shared by the server and the browser.
 // IDs are saved in the world file, so never reorder or reuse them.
 //
-// A stored block value is `id + meta * 256`. Most blocks have meta 0; doors use
-// the meta bits to remember which way they face and whether they are open.
+// A stored block value is `id + meta * 256 + paint * 4096`:
+//   id     (8 bits)  which block it is
+//   meta   (4 bits)  doors: which way they face, open, top half; ladders: which way they face
+//   paint  (4 bits)  0 = original colors, 1-15 = painted (see PAINT_COLORS)
+// Old saves have paint 0 everywhere, so they load unchanged.
 //
 // shape: 'cube' (default), 'door' (two blocks tall, opens), 'flat' (a thin floor
 // layer you can walk over, like roads), 'plant' (crossed sprites, no collision) or
@@ -23,7 +26,7 @@ export const BLOCKS = {
   6: { name: 'Planks', tex: 'planks' },
   7: { name: 'Log', tex: { top: 'log_top', side: 'log_side', bottom: 'log_top' } },
   8: { name: 'Leaves', tex: 'leaves', cutout: true },
-  9: { name: 'Glass', tex: 'glass', transparent: true },
+  9: { name: 'Glass', tex: 'glass', transparent: true, fragile: true },
   10: { name: 'Sand', tex: 'sand' },
   11: { name: 'Metal Plate', tex: 'metal', metal: true },
   12: { name: 'Marble', tex: 'marble', glossy: true },
@@ -49,7 +52,7 @@ export const BLOCKS = {
   32: { name: 'Orange Paint', tex: 'paint_orange' },
   33: { name: 'Purple Paint', tex: 'paint_purple' },
   34: { name: 'Green Paint', tex: 'paint_green' },
-  35: { name: 'Red Carpet', shape: 'flat', tex: 'paint_red' },
+  35: { name: 'Red Carpet', shape: 'flat', tex: 'paint_red', fragile: true },
   36: { name: 'Water', shape: 'flat', tex: 'water', glossy: true, water: true },
   37: { name: 'Mirror', tex: 'mirror', mirror: true },
   38: { name: 'Gold', tex: 'gold', gold: true },
@@ -70,12 +73,25 @@ export const BLOCKS = {
   50: { name: 'Neon Pink', tex: 'neon_pink', emissive: true, light: { color: 0xff3fa4, power: 0.9, range: 22, always: true } },
   51: { name: 'Neon Blue', tex: 'neon_blue', emissive: true, light: { color: 0x3fb4ff, power: 0.9, range: 22, always: true } },
   52: { name: 'Neon Green', tex: 'neon_green', emissive: true, light: { color: 0x5cff6a, power: 0.9, range: 22, always: true } },
+  53: { name: 'Ladder', shape: 'ladder', tex: 'planks' },
 };
+
+// Paint colors for the Paint Brush (index 1-15; 0 means "not painted").
+export const PAINT_COLORS = [
+  null, '#e53935', '#ff7a1a', '#fdd835', '#9ccc3c', '#2e9e4f', '#1fb5a0', '#26c6da', '#5aa9f0',
+  '#2f5ec4', '#7e4dd2', '#d23fbf', '#f48fb1', '#f5f5f5', '#8a8f98', '#1d1f24',
+];
+export const PAINT_NAMES = [
+  'Original', 'Red', 'Orange', 'Yellow', 'Lime', 'Green', 'Teal', 'Cyan', 'Sky Blue',
+  'Blue', 'Purple', 'Magenta', 'Pink', 'White', 'Gray', 'Black',
+];
 
 export const BLOCK_IDS = Object.keys(BLOCKS).map(Number);
 
 export const blockId = v => v & 255;
-export const blockMeta = v => v >> 8;
+export const blockMeta = v => (v >> 8) & 15;
+export const paintOf = v => (v >> 12) & 15;
+export const withPaint = (v, paint) => (v & 0x0fff) | (paint << 12);
 export const makeBlock = (id, meta = 0) => id | (meta << 8);
 export const shapeOf = v => BLOCKS[v & 255]?.shape || 'cube';
 
@@ -83,7 +99,7 @@ export const shapeOf = v => BLOCKS[v & 255]?.shape || 'cube';
 export const isSolidBlock = v => {
   const shape = shapeOf(v);
   if (shape === 'model') return !!BLOCKS[v & 255].box;
-  return v !== 0 && shape !== 'flat' && shape !== 'plant';
+  return v !== 0 && shape !== 'flat' && shape !== 'plant' && shape !== 'ladder';
 };
 export const isReplaceable = v => {
   const shape = shapeOf(v);
@@ -91,11 +107,12 @@ export const isReplaceable = v => {
 };
 
 export function isValidBlock(v) {
-  if (!Number.isInteger(v) || v < 0) return false;
+  if (!Number.isInteger(v) || v < 0 || v > 0xffff) return false;
   if (v === 0) return true;
   const def = BLOCKS[v & 255];
   if (!def) return false;
-  return def.shape === 'door' ? v >> 8 < 16 : v >> 8 === 0;
+  const meta = blockMeta(v);
+  return def.shape === 'door' ? true : def.shape === 'ladder' ? meta < 4 : meta === 0;
 }
 
 // ---------- Doors ----------
@@ -106,10 +123,11 @@ export const toggleDoorValue = v => v ^ (DOOR_OPEN << 8);
 export const doorFacingFromYaw = yaw => ((Math.round(yaw / (Math.PI / 2)) % 4) + 4) % 4;
 
 // The door panel as a box inside its cell, relative to the cell's corner.
-export function doorBox(meta) {
+// hinge: which side (-1 left, +1 right) an open door swings to.
+export function doorBox(meta, hinge = -1) {
   const open = meta & DOOR_OPEN;
   // Panel in local space, centred on the cell (x/z from -0.5 to 0.5).
-  const [x0, z0, x1, z1] = open ? [-0.5, -0.5, -0.32, 0.5] : [-0.5, -0.09, 0.5, 0.09];
+  const [x0, z0, x1, z1] = !open ? [-0.5, -0.09, 0.5, 0.09] : hinge < 0 ? [-0.5, -0.5, -0.32, 0.5] : [0.32, -0.5, 0.5, 0.5];
   const a = (meta & 3) * Math.PI / 2;
   const c = Math.round(Math.cos(a)), s = Math.round(Math.sin(a));
   const xs = [], zs = [];

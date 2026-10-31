@@ -1,6 +1,6 @@
 // Hotbar items: every block, the hammer, cars and fireworks.
 import * as THREE from 'three';
-import { BLOCKS, BLOCK_IDS } from './shared/blocks.js';
+import { BLOCKS, BLOCK_IDS, PAINT_COLORS } from './shared/blocks.js';
 import { blockMaterial } from './world.js';
 import { modelGeometry, modelMaterials } from './models.js';
 
@@ -8,9 +8,13 @@ export const HAMMER = 'hammer';
 export const FIREWORKS = 'fireworks';
 export const BALL = 'ball';
 export const CLAIM = 'claim';
-export const TOOLS = [HAMMER, BALL, FIREWORKS, CLAIM];
+export const BRUSH = 'brush';
+export const SCRAPER = 'scraper';
+export const LADDER = 53;
+export const TOOLS = [HAMMER, BRUSH, SCRAPER, BALL, FIREWORKS, CLAIM];
 export const ALL_ITEMS = [...TOOLS, ...BLOCK_IDS];
-export const DEFAULT_HOTBAR = [HAMMER, 5, 6, 9, 21, 18, BALL, FIREWORKS, CLAIM];
+// The hammer always lives in slot 1.
+export const DEFAULT_HOTBAR = [HAMMER, 5, 6, 9, 21, LADDER, BRUSH, FIREWORKS, CLAIM];
 
 export const isBlockItem = item => typeof item === 'number';
 
@@ -19,15 +23,38 @@ export function itemName(item) {
   if (item === FIREWORKS) return 'Fireworks';
   if (item === BALL) return 'Pet Ball';
   if (item === CLAIM) return 'Land Flag';
+  if (item === BRUSH) return 'Paint Brush';
+  if (item === SCRAPER) return 'Paint Scraper';
   return BLOCKS[item].name;
 }
 
-// Draws a small icon for the hotbar and the item menu.
-export function makeIcon(item, textures) {
+// Draws a small icon for the hotbar and the item menu. `paint` is the brush's color.
+export function makeIcon(item, textures, paint = 1) {
   const size = 64;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d');
+
+  if (item === BRUSH || item === SCRAPER) {
+    ctx.translate(32, 32);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = '#a0522d';
+    ctx.fillRect(-4, 2, 8, 26);
+    ctx.fillStyle = '#c0c4c8';
+    ctx.fillRect(-7, -6, 14, 9);
+    if (item === BRUSH) {
+      ctx.fillStyle = PAINT_COLORS[paint] || '#e53935';
+      ctx.beginPath();
+      ctx.moveTo(-8, -6); ctx.lineTo(8, -6); ctx.lineTo(6, -24); ctx.lineTo(0, -28); ctx.lineTo(-6, -24);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = '#dfe3e6';
+      ctx.fillRect(-12, -26, 24, 20);
+      ctx.fillStyle = '#9aa0a6';
+      ctx.fillRect(-12, -26, 24, 3);
+    }
+    return canvas;
+  }
 
   if (item === HAMMER) {
     ctx.translate(32, 32);
@@ -99,6 +126,13 @@ export function makeIcon(item, textures) {
   const shape = def.shape || 'cube';
   if (shape === 'model') {
     ctx.drawImage(modelIcon(def), 0, 0, size, size);
+    return canvas;
+  }
+  if (shape === 'ladder') {
+    ctx.fillStyle = '#9c6b3f';
+    ctx.fillRect(16, 4, 6, 56);
+    ctx.fillRect(42, 4, 6, 56);
+    for (let y = 12; y < 60; y += 12) ctx.fillRect(16, y, 32, 5);
     return canvas;
   }
   if (shape === 'door' || shape === 'plant') {
@@ -213,6 +247,19 @@ export class ViewModel {
       obj = new THREE.Mesh(new THREE.SphereGeometry(0.11, 20, 14), new THREE.MeshStandardMaterial({ color: 0xe53935, roughness: 0.4 }));
       obj.add(new THREE.Mesh(new THREE.TorusGeometry(0.111, 0.012, 6, 24), new THREE.MeshStandardMaterial({ color: 0xfdd835 })));
       obj.position.y = 0.05;
+    } else if (item === BRUSH || item === SCRAPER) {
+      obj = new THREE.Group();
+      const wood = new THREE.MeshStandardMaterial({ color: 0xa0522d, roughness: 0.7 });
+      const metal = new THREE.MeshStandardMaterial({ color: 0xc0c4c8, metalness: 0.8, roughness: 0.3 });
+      obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.26, 0.04).translate(0, -0.08, 0), wood));
+      obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.06, 0.05).translate(0, 0.07, 0), metal));
+      if (item === BRUSH) {
+        this.bristles = new THREE.MeshStandardMaterial({ color: 0xe53935, roughness: 0.8 });
+        obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.1, 0.045).translate(0, 0.15, 0), this.bristles));
+      } else {
+        obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.01).translate(0, 0.16, 0), metal));
+      }
+      obj.rotation.set(0.4, 0.4, -0.3);
     } else if (item === CLAIM) {
       obj = new THREE.Group();
       obj.add(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.55, 8), new THREE.MeshStandardMaterial({ color: 0x8d6e63 })));
@@ -240,7 +287,14 @@ export class ViewModel {
       obj.rotation.set(shape === 'flat' ? 0.5 : 0, Math.PI / 4, 0);
     }
     this.models[item] = obj;
+    if (item === BRUSH && this.paintColor) this.bristles.color.set(this.paintColor);
     return obj;
+  }
+
+  // The color on the end of the paint brush.
+  setPaint(color) {
+    this.paintColor = color;
+    this.bristles?.color.set(color);
   }
 
   setItem(item) {

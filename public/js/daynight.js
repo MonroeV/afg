@@ -1,7 +1,7 @@
 // Sky, sun, moon, stars and the lights that change from day to night.
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
-import { DAY_LENGTH, DAY_FRACTION, BLOCKS, blockId } from './shared/blocks.js';
+import { DAY_LENGTH, DAY_FRACTION, BLOCKS, PAINT_COLORS, blockId, paintOf } from './shared/blocks.js';
 
 // How bright lamps are. Light fades gently with distance (decay 1) so it spreads wide
 // instead of making a harsh bright spot right next to the lamp.
@@ -184,7 +184,7 @@ export class DayNight {
     // With the glow effect on, lamps already shine brighter, so they need less of a boost.
     if (lamp) lamp.emissiveIntensity = 2 + (this.glowOn ? 0.6 : 1.5) * lampK;
     for (const g of this.glowMaterials || []) {
-      const k = g.always ? 1.4 + 0.4 * lampK : 0.35 + 1.65 * lampK;
+      const k = g.always ? 1.4 + 0.4 * lampK : 0.7 + 1.3 * lampK;
       g.material.color.copy(g.material.userData.baseColor).multiplyScalar(k);
     }
 
@@ -195,12 +195,24 @@ export class DayNight {
       this.lampTimer = 0.5;
       const near = [];
       const dist = (x, y, z) => (x - camera.position.x) ** 2 + (y - camera.position.y) ** 2 + (z - camera.position.z) ** 2;
+      // Lamps with a roof over them count as indoors: they're on day and night, a bit brighter.
+      if (this.coverRevision !== world.revision) {
+        this.coverRevision = world.revision;
+        this.covered = new Map();
+      }
       for (const k of world.lamps) {
         const [x, y, z] = k.split(',').map(Number);
-        const def = BLOCKS[blockId(world.get(x, y, z))]?.light;
-        if (!def || !(def.always || lampK > 0.02)) continue;
+        const v = world.get(x, y, z);
+        const light = BLOCKS[blockId(v)]?.light;
+        if (!light) continue;
+        if (!this.covered.has(k)) this.covered.set(k, world.isCovered(x, y, z));
+        const indoor = light.always || this.covered.get(k);
+        if (!(indoor || lampK > 0.02)) continue;
         const d = dist(x, y, z);
-        if (d < 70 * 70) near.push({ key: k, d, x: x + 0.5, y: y + (def.y ?? 0.5), z: z + 0.5, def });
+        if (d >= 70 * 70) continue;
+        const paint = paintOf(v);
+        const def = { ...light, always: indoor, power: light.power * (indoor ? 1.4 : 1), color: paint ? PAINT_COLORS[paint] : light.color };
+        near.push({ key: `${k}:${v}`, d, x: x + 0.5, y: y + (light.y ?? 0.5), z: z + 0.5, def });
       }
       // Campfires, dance floors and TVs glow too (dance floors even in the daytime).
       for (const e of this.extraLights?.() || []) {

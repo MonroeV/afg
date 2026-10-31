@@ -388,6 +388,16 @@ function gold(u, v) {
   return { c, h: border < 0.04 ? 0.3 : 0.6 + n * 0.1 };
 }
 
+// Garage door: horizontal ribbed panels with a little handle row.
+function garage(u, v) {
+  const rib = (v * 5) % 1;
+  const n = fbm(u, v, 16, 3, 250, 2);
+  let c = mixc([0.62, 0.64, 0.67], [0.74, 0.75, 0.77], n);
+  if (rib < 0.08) c = shade(c, 0.5);
+  else if (rib < 0.16) c = shade(c, 1.08);
+  return { c, h: rib < 0.08 ? 0.1 : 0.6 + (rib < 0.16 ? 0.2 : 0) };
+}
+
 // Neon: a dark panel with a glowing tube bent into a frame and a zig-zag.
 function neon(color) {
   return (u, v) => {
@@ -444,6 +454,7 @@ const GENERATORS = {
   paint_green: concrete([0.25, 0.62, 0.25], 0.1),
   mirror,
   gold,
+  garage,
   neon_pink: neon([1, 0.25, 0.65]),
   neon_blue: neon([0.25, 0.7, 1]),
   neon_green: neon([0.35, 1, 0.42]),
@@ -452,7 +463,7 @@ const GENERATORS = {
 const NORMAL_STRENGTH = {
   grass_top: 2, dirt: 3, stone: 3, cobble: 5, brick: 4, planks: 3, log_side: 4, log_top: 2,
   sand: 2, metal: 4, tiles: 3, lamp: 2, bounce: 2, leaves: 2,
-  door_bottom: 3, door_top: 3, asphalt: 2, sidewalk: 3, roof: 4, rainbow: 2, water: 1,
+  door_bottom: 3, door_top: 3, garage: 3, asphalt: 2, sidewalk: 3, roof: 4, rainbow: 2, water: 1,
 };
 
 // ---------- Building THREE textures ----------

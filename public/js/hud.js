@@ -1,13 +1,13 @@
 // The on-screen parts of the game: hotbar, item menu, chat and info panels.
-import { ALL_ITEMS, TOOLS, itemName } from './items.js';
-import { BLOCKS } from './shared/blocks.js';
+import { ALL_ITEMS, TOOLS, HAMMER, itemName } from './items.js';
+import { BLOCKS, PAINT_COLORS, PAINT_NAMES } from './shared/blocks.js';
 import { RECIPES } from './structures.js';
 
 const $ = id => document.getElementById(id);
 
 export const CONTROLS = [
   ['W A S D', 'Move'], ['Mouse', 'Look'], ['Space', 'Jump'], ['Click', 'Use item'],
-  ['Right click', 'Interact (doors, cars, pets, beds)'], ['Hammer', '3 hits to break'], ['Middle click', 'Copy block'],
+  ['Right click', 'Doors, cars, pets, beds'], ['Hammer', '3 hits to break'], ['Middle click', 'Copy block'],
   ['1–9 / Wheel', 'Pick item'], ['E', 'Items & Build Book'], ['Shift', 'Sprint'], ['F', 'Fly (Space/C)'],
   ['V', 'Camera view'], ['G', 'Dance!'], ['B', 'Wave'], ['T / Enter', 'Chat'], ['R', 'Go home (bed, your land, or town)'],
 ];
@@ -27,10 +27,11 @@ export function renderControls(el) {
 }
 
 export class Hud {
-  constructor({ icons, settings, sounds, onChange }) {
+  constructor({ icons, settings, sounds, onChange, onPaint }) {
     this.icons = icons;
     this.settings = settings;
     this.sounds = sounds;
+    this.onPaint = onPaint; // called with a paint color number when one is picked
     this.onChange = onChange; // called when the selected item changes
     this.selected = 0;
     this.itemNameTimer = 0;
@@ -73,7 +74,14 @@ export class Hud {
     this.itemNameTimer = 1.5;
   }
 
+  // Puts an item in the selected slot. The hammer always stays in slot 1, so new
+  // things go in slot 2 when slot 1 is selected.
   setSlot(item) {
+    if (item === HAMMER) {
+      this.select(0);
+      return;
+    }
+    if (this.selected === 0) this.selected = 1;
     this.settings.hotbar[this.selected] = item;
     this.buildHotbar();
     this.select(this.selected);
@@ -89,6 +97,7 @@ export class Hud {
       ['🏡 Town Stuff', i => typeof i === 'number' && !!BLOCKS[i].shape && !BLOCKS[i].light],
     ];
     for (const [title, test] of sections) {
+      if (title.startsWith('🧱')) this.buildPaints(grid);
       const h = document.createElement('div');
       h.className = 'inv-section';
       h.textContent = title;
@@ -107,6 +116,31 @@ export class Hud {
       }
     }
     this.buildBook(grid);
+  }
+
+  // Paint colors: picking one also puts the Paint Brush in your hand.
+  buildPaints(grid) {
+    const h = document.createElement('div');
+    h.className = 'inv-section';
+    h.textContent = '🎨 Paint colors: pick one, then click blocks with the Paint Brush';
+    grid.append(h);
+    const row = document.createElement('div');
+    row.className = 'paint-row';
+    PAINT_COLORS.forEach((color, i) => {
+      if (!color) return;
+      const b = document.createElement('button');
+      b.className = 'swatch' + (this.settings.paint === i ? ' selected' : '');
+      b.style.background = color;
+      b.title = PAINT_NAMES[i];
+      b.addEventListener('click', () => {
+        this.settings.paint = i;
+        [...row.children].forEach(c => c.classList.toggle('selected', c === b));
+        this.onPaint?.(i);
+        this.sounds.click();
+      });
+      row.append(b);
+    });
+    grid.append(row);
   }
 
   // The Build Book: special things you can make out of blocks.
@@ -186,7 +220,9 @@ export class Hud {
     const el = $('car-help');
     el.classList.toggle('hidden', !kind);
     if (!kind) return;
-    el.innerHTML = kind === 'heli'
+    el.innerHTML = kind === 'passenger'
+      ? '<kbd>Mouse</kbd> Look around <kbd>V</kbd> Camera <kbd>E</kbd> Get out'
+      : kind === 'heli'
       ? '<kbd>Space</kbd> Up <kbd>Shift</kbd> Down <kbd>W</kbd><kbd>S</kbd> Tilt <kbd>A</kbd><kbd>D</kbd> Turn <kbd>V</kbd> Camera <kbd>E</kbd> Get out'
       : '<kbd>W</kbd><kbd>S</kbd> Drive <kbd>A</kbd><kbd>D</kbd> Steer <kbd>Space</kbd> Brake ' +
         '<kbd>Shift</kbd> Boost <kbd>H</kbd> Horn ' + (kind === 'police' ? '<kbd>G</kbd> Siren ' : '') +

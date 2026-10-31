@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
-import { GameRoom } from './public/js/shared/game.js';
+import { GameRoom, SAVE_VERSION } from './public/js/shared/game.js';
 import { CharacterStore } from './public/js/shared/characters.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -73,25 +73,44 @@ function saveWorld() {
 }
 
 function loadWorld() {
-  let data = null;
+  let text = null;
   try {
-    data = JSON.parse(fs.readFileSync(WORLD_FILE, 'utf8'));
+    text = fs.readFileSync(WORLD_FILE, 'utf8');
   } catch {
     // no saved world yet
   }
-  if (room.load(data)) {
-    console.log(`Loaded saved world (${room.world.size} blocks, ${room.vehicles.size} vehicles)`);
+  if (text === null) {
+    room.generate();
+    saveWorld();
+    console.log(`Generated a new world (${room.world.size} blocks, ${room.vehicles.size} vehicles)`);
     return;
   }
-  if (data) {
-    // A world from an older version of the game: keep a copy, then build a fresh one.
-    const backup = path.join(DATA_DIR, `world-old-${Date.now()}.json`);
-    fs.renameSync(WORLD_FILE, backup);
-    console.log(`Old world saved as ${backup}`);
+
+  // There is a saved world. Whatever happens, never replace it with a new one.
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    console.error(`${WORLD_FILE} could not be read, so the server won't start (to keep your world safe).`);
+    console.error('Restore it from one of the backups in the data folder, or move it away to start a new world.');
+    process.exit(1);
   }
-  room.generate();
-  saveWorld();
-  console.log(`Generated a new world (${room.world.size} blocks, ${room.vehicles.size} vehicles)`);
+  const version = Array.isArray(data) ? 1 : data.version;
+  if (version > SAVE_VERSION) {
+    console.error(`${WORLD_FILE} was saved by a newer version of BuildZone. Update the game (git pull) to load it.`);
+    process.exit(1);
+  }
+  if (version < SAVE_VERSION) {
+    // Keep a copy of the world exactly as it was before upgrading it.
+    const backup = path.join(DATA_DIR, `world-backup-v${version}-${new Date().toISOString().slice(0, 10)}-${Date.now()}.json`);
+    fs.copyFileSync(WORLD_FILE, backup);
+    console.log(`Upgrading your world. A copy of the old one is saved as ${backup}`);
+  }
+  if (!room.load(data)) {
+    console.error(`${WORLD_FILE} doesn't look like a BuildZone world, so the server won't start (to keep it safe).`);
+    process.exit(1);
+  }
+  console.log(`Loaded saved world (${room.world.size} blocks, ${room.vehicles.size} vehicles)`);
 }
 
 // ---------- Character gallery ----------
