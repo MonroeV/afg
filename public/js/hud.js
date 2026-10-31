@@ -269,7 +269,9 @@ export class Hud {
     if (!kind) return;
     el.innerHTML = kind === 'passenger'
       ? '<kbd>Mouse</kbd> Look around <kbd>V</kbd> Camera <kbd>E</kbd> Get out'
-      : kind === 'heli'
+      : kind === 'boat'
+        ? '<kbd>W</kbd> Go <kbd>S</kbd> Slow down / back up <kbd>A</kbd><kbd>D</kbd> Steer <kbd>Shift</kbd> Boost <kbd>H</kbd> Horn <kbd>V</kbd> Camera <kbd>E</kbd> Get out'
+        : kind === 'heli'
       ? '<kbd>Mouse</kbd> Steer <kbd>Space</kbd> Up <kbd>Shift</kbd> Down <kbd>W</kbd><kbd>S</kbd> Tilt <kbd>A</kbd><kbd>D</kbd> Slide <kbd>V</kbd> Camera <kbd>E</kbd> Get out'
       : '<kbd>W</kbd><kbd>S</kbd> Drive <kbd>A</kbd><kbd>D</kbd> Steer <kbd>Space</kbd> Brake ' +
         '<kbd>Shift</kbd> Boost <kbd>H</kbd> Horn ' + (kind === 'police' ? '<kbd>G</kbd> Siren ' : '') +

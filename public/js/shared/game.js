@@ -1,13 +1,13 @@
 // The game "room": the world, players, vehicles, land claims, growing trees and the clock.
 // The Node server runs one of these for everybody. When there is no server,
 // the browser runs its own copy so single player works exactly the same way.
-import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, floorOf, validFaces, carryPaint, DOOR_OPEN, DAY_LENGTH, WORLD, isNightTime } from './blocks.js';
+import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, floorOf, validFaces, carryPaint, isWaterBlock, DOOR_OPEN, DAY_LENGTH, WORLD, isNightTime } from './blocks.js';
 import { sanitizeLook, cleanName } from './avatar.js';
-import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, orientRoadLines } from './worldgen.js';
+import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines } from './worldgen.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot } from './vehicles.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS } from './claims.js';
 
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 const TICK_RATE = 15;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LOG = 7, LEAVES = 8, GRASS = 1, DIRT = 2;
@@ -38,6 +38,7 @@ export class GameRoom {
     this.isSolid = (x, y, z) =>
       y < 0 || x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max ||
       blocksVehicles(this.world.get(blockKey(x, y, z)) || 0);
+    this.isWater = (x, y, z) => isWaterBlock(this.world.get(blockKey(x, y, z)) || 0);
   }
 
   // ---------- World data ----------
@@ -73,7 +74,7 @@ export class GameRoom {
 
   // Puts a home's vehicle back in the world (somewhere nearby if its spot is built on).
   spawn(home) {
-    const spot = findVehicleSpot(this.isSolid, VEHICLES[home.kind], home, [...this.vehicles.values()]);
+    const spot = findVehicleSpot(this.isSolid, VEHICLES[home.kind], home, [...this.vehicles.values()], this.isWater);
     if (!spot) return null;
     return this.addVehicle({ ...home, ...spot, home: home.id, hp: MAX_HP });
   }
@@ -105,6 +106,7 @@ export class GameRoom {
       this.setHomes(generateWorld().cars.filter(c => !c.landmark));
       this.upgradeLamps();
       this.upgradeTo5();
+      this.upgradeTo6();
       return true;
     }
     this.vehicles.clear();
@@ -120,7 +122,23 @@ export class GameRoom {
     this.expireClaims();
     if (data.version < 4) this.upgradeLamps();
     if (data.version < 5) this.upgradeTo5();
+    if (data.version < 6) this.upgradeTo6();
     return true;
+  }
+
+  // Land a new landmark may be built on: nobody has claimed it, and no vehicle is parked
+  // there off the road (cars parked along a road are never in the way).
+  freeLand() {
+    const onRoad = h => [22, 23, 24, 55].includes(blockId(this.get(Math.floor(h.x), 0, Math.floor(h.z))));
+    const parked = [...this.homes.values()].filter(h => !onRoad(h));
+    return (x, z) => !claimAt(this.claims, x, z) && parked.every(h => Math.hypot(h.x - x, h.z - z) > 5);
+  }
+
+  // Worlds saved before version 6: a lake with a dock and boats, on empty land.
+  upgradeTo6() {
+    const lake = buildLake({ get: (x, y, z) => this.get(x, y, z), set: (x, y, z, v) => this.world.set(blockKey(x, y, z), v), canUse: this.freeLand() });
+    if (lake) for (const c of lake.cars) this.spawn(this.addHome(c));
+    this.onDirty();
   }
 
   // Worlds saved before version 5: road lines turn to run along their roads, and parking
@@ -128,11 +146,7 @@ export class GameRoom {
   upgradeTo5() {
     const get = (x, y, z) => this.get(x, y, z), set = (x, y, z, v) => this.world.set(blockKey(x, y, z), v);
     orientRoadLines([...this.world].filter(([, v]) => blockId(v) === 23).map(([k]) => k), get, set);
-    // Keep clear of vehicles parked off the road (cars parked along a road are never in the way).
-    const onRoad = h => [22, 23, 24, 55].includes(blockId(this.get(Math.floor(h.x), 0, Math.floor(h.z))));
-    const parked = [...this.homes.values()].filter(h => !onRoad(h));
-    const canUse = (x, z) => !claimAt(this.claims, x, z) && parked.every(h => Math.hypot(h.x - x, h.z - z) > 5);
-    for (const c of buildLandmarks({ get, set, canUse }).cars) this.spawn(this.addHome(c));
+    for (const c of buildLandmarks({ get, set, canUse: this.freeLand() }).cars) this.spawn(this.addHome(c));
     this.onDirty();
   }
 

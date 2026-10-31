@@ -73,7 +73,7 @@ export class LightPools {
         m.compose(new THREE.Vector3(p.x + 0.5, p.floor + 0.05, p.z + 0.5), q, new THREE.Vector3(r * 2, r * 2, 1));
         mesh.setMatrixAt(i, m);
         // A gentle tint of the lamp's color (mixed with white so it isn't too orange).
-        mesh.setColorAt(i, color.set(p.color).lerp(new THREE.Color(1, 1, 1), 0.35).multiplyScalar(0.15 * p.power));
+        mesh.setColorAt(i, color.set(p.color).lerp(new THREE.Color(1, 1, 1), 0.35).multiplyScalar(0.11 * p.power));
       });
       mesh.frustumCulled = false;
       mesh.renderOrder = 2;
@@ -89,7 +89,7 @@ export class LightPools {
       this.rebuild(world);
     }
     this.meshes.outdoor.material.opacity = lampK;
-    this.meshes.indoor.material.opacity = 0.4 + 0.4 * lampK;
+    this.meshes.indoor.material.opacity = 0.3 + 0.3 * lampK;
     if (this.meshes.outdoor.mesh) this.meshes.outdoor.mesh.visible = lampK > 0.01;
   }
 }

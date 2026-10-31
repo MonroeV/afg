@@ -193,7 +193,8 @@ export function createBlockMaterials(textures) {
   const make = (texName, def, extra = {}) => {
     const t = textures[texName];
     // How shiny each kind of block is. Shiny blocks reflect the world around them.
-    const roughness = def.mirror ? 0.02 : def.gold ? 0.2 : def.metal ? 0.22 : def.water ? 0.03 : def.glossy ? 0.14 : 0.88;
+    // (Not too mirror-like, so lamps make soft highlights on them instead of glaring spots.)
+    const roughness = def.mirror ? 0.02 : def.gold ? 0.24 : def.metal ? 0.28 : def.water ? 0.1 : def.glossy ? 0.3 : 0.88;
     const m = new THREE.MeshStandardMaterial({
       map: t.map,
       normalMap: t.normalMap,
@@ -215,7 +216,7 @@ export function createBlockMaterials(textures) {
     if (t.emissiveMap) {
       m.emissive = new THREE.Color(0xffffff);
       m.emissiveMap = t.emissiveMap;
-      m.emissiveIntensity = def.emissive ? 2.2 : 1;
+      m.emissiveIntensity = def.emissive ? 1.5 : 1;
     }
     return m;
   };

@@ -5,7 +5,7 @@ import { DAY_LENGTH, DAY_FRACTION, BLOCKS, blockId, lightOff } from './shared/bl
 
 // How bright lamps are. Light fades gently with distance (decay 1) so it spreads wide
 // instead of making a harsh bright spot right next to the lamp.
-const LAMP_BRIGHTNESS = 4;
+const LAMP_BRIGHTNESS = 3; // soft enough not to glare
 const LAMP_DECAY = 1;
 const smooth = (e0, e1, x) => {
   const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
@@ -182,9 +182,9 @@ export class DayNight {
     this.lampK = lampK;
     const lamp = materials?.[18];
     // With the glow effect on, lamps already shine brighter, so they need less of a boost.
-    if (lamp) lamp.emissiveIntensity = 2 + (this.glowOn ? 0.6 : 1.5) * lampK;
+    if (lamp) lamp.emissiveIntensity = 1.3 + (this.glowOn ? 0.4 : 1) * lampK;
     for (const g of this.glowMaterials || []) {
-      const k = g.always ? 1.4 + 0.4 * lampK : 0.7 + 1.3 * lampK;
+      const k = g.always ? 1.05 + 0.2 * lampK : 0.6 + 0.75 * lampK;
       g.material.color.copy(g.material.userData.baseColor).multiplyScalar(k);
     }
 

@@ -1,8 +1,8 @@
 // Cars you can spawn, drive and share with other players.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { BLOCKS, blockId } from './shared/blocks.js';
-import { VEHICLES, MAX_HP, SMOKE_HP, FIRE_HP, PERSON_MASS, outlinePoints, rotorPoints, vehicleBlocked, toWorld } from './shared/vehicles.js';
+import { BLOCKS, blockId, isWaterBlock } from './shared/blocks.js';
+import { VEHICLES, MAX_HP, SMOKE_HP, FIRE_HP, PERSON_MASS, outlinePoints, rotorPoints, vehicleBlocked, toWorld, afloat } from './shared/vehicles.js';
 
 export const CAR_SPECS = VEHICLES;
 
@@ -29,6 +29,7 @@ function textTexture(text, bg, fg) {
 
 export function buildCarModel(kind, color) {
   if (kind === 'heli') return buildHeliModel(color);
+  if (kind === 'boat') return buildBoatModel(color);
   const s = CAR_SPECS[kind];
   const g = new THREE.Group();
   const mats = {
@@ -177,6 +178,64 @@ function buildHeliModel(color) {
   };
 }
 
+// A little motorboat: a pointed hull, a wooden deck with two benches, a windshield and an
+// outboard motor at the back that turns when you steer. The hull sits a little way down in
+// the water.
+function buildBoatModel(color) {
+  const { length: L, width: W } = VEHICLES.boat;
+  const g = new THREE.Group();
+  const mats = {
+    paint: new THREE.MeshPhysicalMaterial({ color, metalness: 0.15, roughness: 0.35, clearcoat: 1, clearcoatRoughness: 0.08 }),
+    white: new THREE.MeshPhysicalMaterial({ color: 0xf3f3f0, roughness: 0.4, clearcoat: 0.6 }),
+    deck: new THREE.MeshStandardMaterial({ color: 0x9c6b3f, roughness: 0.85 }),
+    dark: new THREE.MeshStandardMaterial({ color: 0x22252b, roughness: 0.55, metalness: 0.3 }),
+    glass: new THREE.MeshPhysicalMaterial({ color: 0x223344, roughness: 0.05, transparent: true, opacity: 0.4 }),
+    head: new THREE.MeshStandardMaterial({ color: 0xfff6d8, emissive: 0xfff2c0, emissiveIntensity: 0.3 }),
+    tail: new THREE.MeshStandardMaterial({ color: 0x8a0a0a, emissive: 0xff0000, emissiveIntensity: 0.3 }),
+    green: new THREE.MeshStandardMaterial({ color: 0x0a5a14, emissive: 0x20ff50, emissiveIntensity: 0.6 }),
+  };
+  // The outline of the hull from above: square at the back, pointed at the front. (The shape
+  // is drawn with +y as forward, then laid flat.)
+  const outline = (w, l) => {
+    const sh = new THREE.Shape();
+    sh.moveTo(-w / 2, -l / 2);
+    sh.lineTo(w / 2, -l / 2);
+    sh.lineTo(w / 2, l * 0.1);
+    sh.quadraticCurveTo(w / 2, l * 0.38, 0, l / 2);
+    sh.quadraticCurveTo(-w / 2, l * 0.38, -w / 2, l * 0.1);
+    sh.closePath();
+    return sh;
+  };
+  const solid = (shape, from, to) => new THREE.ExtrudeGeometry(shape, { depth: to - from, bevelEnabled: false, curveSegments: 10 }).rotateX(-Math.PI / 2).translate(0, from, 0);
+  const parts = {};
+  const add = (geo, mat) => (parts[mat] ??= []).push(geo.index ? geo.toNonIndexed() : geo);
+  const B = (w, h, d, x, y, z) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
+  const inner = outline(W - 0.2, L - 0.3);
+  add(solid(outline(W, L), -0.14, 0.32), 'paint');
+  const rim = outline(W, L);
+  rim.holes.push(inner);
+  add(solid(rim, 0.32, 0.55), 'white');
+  add(solid(inner, 0.32, 0.34), 'deck');
+  for (const z of [0.8, -0.3]) add(B(W * 0.72, 0.08, 0.36, 0, 0.44, z), 'white');
+  add(B(0.5, 0.4, 0.3, 0.25, 0.54, -0.75), 'dark'); // the steering console
+  add(B(W * 0.62, 0.32, 0.04, 0, 0.84, -0.82).rotateX(0), 'glass');
+  add(B(0.12, 0.06, 0.08, 0, 0.6, -L / 2 + 0.35), 'head');
+  add(B(0.06, 0.05, 0.12, -W / 2 + 0.06, 0.58, -0.6), 'tail');
+  add(B(0.06, 0.05, 0.12, W / 2 - 0.06, 0.58, -0.6), 'green');
+  const meshes = mergeParts(g, parts, mats);
+  // The outboard motor swings when you steer.
+  const motor = new THREE.Group();
+  motor.position.set(0, 0, L / 2);
+  motor.add(new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.42, 0.34).translate(0, 0.62, 0.12), mats.dark));
+  motor.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.1).translate(0, 0.15, 0.14), mats.dark));
+  motor.children.forEach(m => (m.castShadow = true));
+  g.add(motor);
+  return {
+    group: g, wheels: [], steerers: [motor], paint: mats.paint, paintMesh: meshes.paint, baseColor: new THREE.Color(color),
+    headMat: mats.head, tailMat: mats.tail, brakeMat: new THREE.MeshStandardMaterial(), reverseMat: new THREE.MeshStandardMaterial(), siren: null,
+  };
+}
+
 // Is the point (x, y, z) inside something solid?
 const solidAt = (world, x, y, z) => world.isSolid(Math.floor(x), Math.floor(y), Math.floor(z));
 const UP = new THREE.Vector3(0, 1, 0);
@@ -211,6 +270,7 @@ export class Cars {
     this.effects = effects;
     this.list = new Map();
     this.isSolid = (x, y, z) => world.vehicleSolid(x, y, z); // railings stop cars, open garages let them in
+    this.isWater = (x, y, z) => isWaterBlock(world.get(x, y, z));
   }
 
   add(data) {
@@ -332,6 +392,12 @@ export class Cars {
   // Seat 0 is the driver (front left), 1 is front right, 2 is in the back.
   seat(car, index = 0) {
     const s = car.spec;
+    if (s.boat) {
+      // The driver sits at the back by the motor; a friend beside them and one up front.
+      const [sx, sz] = [[-0.35, 0.8], [0.35, 0.8], [0, -0.3]][index];
+      const local = new THREE.Vector3(sx, 0.46 - 0.72 * SEAT_SCALE, sz).applyEuler(new THREE.Euler(car.pitch, car.h, car.roll, 'YXZ'));
+      return { position: local.add(car.pos), yaw: car.h };
+    }
     const front = s.flying ? -0.75 : 0.25, back = s.flying ? 0.35 : 0.95;
     const sx = [-1, 1, 0][index] * (s.flying ? 0.4 : s.width * 0.22);
     const local = new THREE.Vector3(sx, (s.flying ? 0.62 : s.ride + 0.12) - 0.72 * SEAT_SCALE, index === 2 ? back : front);
@@ -413,13 +479,13 @@ export class Cars {
   }
 
   velocityOf(car) {
-    if (car.spec.flying) return car.vel.clone();
+    if (car.spec.flying || car.spec.boat) return car.vel.clone();
     return this.fwd(car).multiplyScalar(car.speed).add(car.push);
   }
 
   // Splits a new velocity into "rolling forward/back" (speed) and "skidding" (push).
   setVelocity(car, v) {
-    if (car.spec.flying) {
+    if (car.spec.flying || car.spec.boat) {
       car.vel.copy(v);
       return;
     }
@@ -544,6 +610,7 @@ export class Cars {
   // A car nobody is driving that got knocked: it rolls easily forward and back,
   // skids to a stop sideways, spins a little, and can knock into other cars.
   simulateLoose(car, dt) {
+    if (car.spec.boat) return this.driftBoat(car, dt);
     const s = car.spec;
     const events = [];
     const f = this.fwd(car);
@@ -583,7 +650,92 @@ export class Cars {
   // aimYaw: for the helicopter, the direction the pilot is looking (it turns to face it).
   drive(car, dt, keys, aimYaw = car.h) {
     this.myCarId = car.id;
+    if (car.spec.boat) return this.sail(car, dt, keys);
     return car.spec.flying ? this.fly(car, dt, keys, aimYaw) : this.driveCar(car, dt, keys);
+  }
+
+  // Boats: the throttle pushes you along and the water slows you down (there are no brakes,
+  // just throttle back or reverse). You slide a little sideways in turns, and the rudder
+  // works better the faster you go. The shore stops you: you can't drive out of the water.
+  sail(car, dt, keys) {
+    const s = car.spec, events = [];
+    const throttle = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
+    const steerIn = (keys.has('KeyA') ? 1 : 0) - (keys.has('KeyD') ? 1 : 0);
+    const boost = keys.has('ShiftLeft') || keys.has('ShiftRight');
+    const health = 0.55 + 0.45 * (car.hp / MAX_HP);
+    const wet = afloat(this.isWater, s, car.pos.x, car.pos.y, car.pos.z, car.h);
+    const f = this.fwd(car), side = new THREE.Vector3(-f.z, 0, f.x);
+    let along = car.vel.dot(f), across = car.vel.dot(side);
+    const max = (wet ? s.maxSpeed * (boost ? 1.25 : 1) : 1.5) * health;
+    if (throttle > 0 && along < max) along += s.accel * (boost ? 1.3 : 1) * health * dt;
+    else if (throttle < 0 && along > -4) along -= s.accel * 0.6 * dt;
+    along *= Math.exp(-(throttle ? 0.15 : 0.55) * dt); // water drag
+    across *= Math.exp(-2.2 * dt); // the hull resists sliding sideways, but not completely
+    if (!wet) along = Math.max(-1.5, Math.min(1.5, along)); // stranded on land: just scraping along
+    car.steer += (steerIn * 0.5 - car.steer) * Math.min(1, 4 * dt);
+    const rudder = 0.35 + Math.min(1, Math.abs(along) / 6) * 0.85;
+    car.yawRate += (car.steer * rudder * 1.6 * (along < -0.3 ? -1 : 1) - car.yawRate) * Math.min(1, 2.5 * dt);
+    const newH = car.h + car.yawRate * dt;
+    // The velocity keeps pointing where it was going while the bow turns: that's the drift.
+    car.vel.copy(f).multiplyScalar(along).addScaledVector(side, across);
+    car.speed = along;
+    car.rpm = 0.18 + 0.82 * Math.min(1, Math.abs(along) / s.maxSpeed);
+    car.load = throttle ? 1 : 0;
+    car.braking = car.reversing = false;
+
+    const nx = car.pos.x + car.vel.x * dt, nz = car.pos.z + car.vel.z * dt;
+    const stillWet = !wet || afloat(this.isWater, s, nx, car.pos.y, nz, newH);
+    if (stillWet && !this.blocked(s, nx, car.pos.y, nz, newH, car.id, car.outline)) {
+      car.pos.x = nx;
+      car.pos.z = nz;
+      car.h = newH;
+    } else if (stillWet && this.lastHit) {
+      events.push(...this.collide(car, this.lastHit));
+    } else {
+      // Ran into the shore (or a dock): bump, and bounce back a little.
+      const impact = car.vel.length();
+      if (impact > 2.5) events.push({ type: 'bump', power: Math.min(1, impact / 15) });
+      if (impact > 8) events.push({ type: 'damage', amount: (impact - 8) * 3, impact: [0, 0.3, -s.length / 2] });
+      car.vel.multiplyScalar(-0.25);
+      car.yawRate *= 0.5;
+      if (!this.blocked(s, car.pos.x, car.pos.y, car.pos.z, newH, car.id, car.outline) && (!wet || afloat(this.isWater, s, car.pos.x, car.pos.y, car.pos.z, newH))) car.h = newH;
+    }
+    // Riding on the water: the bow lifts with speed, it leans a little into turns, and the
+    // waves rock it gently.
+    const t = performance.now() / 1000, speedK = Math.min(1, Math.abs(along) / s.maxSpeed);
+    car.pitch = speedK * 0.09 + Math.sin(t * 1.9 + car.id) * 0.015 * (1 - speedK * 0.5);
+    car.roll = -car.yawRate * 0.12 + Math.sin(t * 1.3 + car.id * 2) * 0.02;
+    this.hitPeople(car, events);
+    car.target.copy(car.pos);
+    car.targetH = car.h;
+    car.targetPitch = car.pitch;
+    car.targetRoll = car.roll;
+    return events;
+  }
+
+  // A boat nobody's driving that got knocked: it drifts and slowly stops (and can't leave the water).
+  driftBoat(car, dt) {
+    const s = car.spec;
+    car.vel.add(car.push);
+    car.push.set(0, 0, 0);
+    car.vel.multiplyScalar(Math.exp(-0.8 * dt));
+    car.yawRate = (car.yawRate || 0) * Math.exp(-1.5 * dt);
+    const nx = car.pos.x + car.vel.x * dt, nz = car.pos.z + car.vel.z * dt, nh = car.h + car.yawRate * dt;
+    if (afloat(this.isWater, s, nx, car.pos.y, nz, nh) && !this.blocked(s, nx, car.pos.y, nz, nh, car.id, car.outline)) {
+      car.pos.x = nx;
+      car.pos.z = nz;
+      car.h = nh;
+    } else {
+      car.vel.multiplyScalar(-0.3);
+    }
+    if (car.vel.lengthSq() < 0.01) {
+      car.vel.set(0, 0, 0);
+      car.loose = false;
+      car.settled = true;
+    }
+    car.target.copy(car.pos);
+    car.targetH = car.h;
+    return [];
   }
 
   driveCar(car, dt, keys) {
@@ -873,8 +1025,17 @@ export class Cars {
         car.roll += (car.targetRoll - car.roll) * k;
         if (car.spec.flying && !car.driver) car.rotorSpin = Math.max(0, car.rotorSpin - dt / 6);
       }
-      this.place(car);
       const s = car.spec;
+      if (s.boat && !car.driver && !car.loose) {
+        // A boat tied up at the dock rocks gently on the water.
+        car.pitch = Math.sin(time * 1.4 + car.id) * 0.02;
+        car.roll = Math.sin(time * 1.1 + car.id * 2) * 0.035;
+      }
+      this.place(car);
+      if (s.boat) {
+        car.model.group.position.y += Math.sin(time * 1.6 + car.id) * 0.035;
+        this.wake(car, dt);
+      }
 
       // Smoke when badly damaged, fire when it's about to blow.
       car.fxTimer -= dt;
@@ -899,7 +1060,7 @@ export class Cars {
       for (const w of car.model.wheels) w.rotation.x = car.spin;
       for (const p of car.model.steerers) p.rotation.y = car.steer;
       // Headlights glow at night or while someone is driving.
-      const lit = car.driver ? 0.6 + nightK * 2.5 : 0.15;
+      const lit = car.driver ? 0.5 + nightK * 1.5 : 0.15;
       car.model.headMat.emissiveIntensity = lit;
       // Brake lights burn bright red; reverse lights come on in reverse.
       car.model.tailMat.emissiveIntensity = car.braking ? 2 : car.driver ? 0.45 + nightK * 0.6 : 0.12;
@@ -909,6 +1070,29 @@ export class Cars {
         const flash = Math.floor(time * 6) % 2;
         car.model.siren.red.emissiveIntensity = car.siren && flash === 0 ? 5 : 0.2;
         car.model.siren.blue.emissiveIntensity = car.siren && flash === 1 ? 5 : 0.2;
+      }
+    }
+  }
+
+  // White water behind a moving boat (and spray off the bow when it's going fast).
+  wake(car, dt) {
+    const speed = Math.abs(car.speed || 0);
+    if (!this.effects || speed < 1.2 || (this.viewer && car.pos.distanceToSquared(this.viewer) > 60 * 60)) return;
+    const s = car.spec, f = this.fwd(car), side = new THREE.Vector3(-f.z, 0, f.x);
+    car.wakeT = (car.wakeT || 0) + dt * speed * 4;
+    for (; car.wakeT >= 1; car.wakeT--) {
+      const off = (Math.random() - 0.5) * s.width * 0.8;
+      const [x, , z] = toWorld([off, 0, s.length / 2], car.pos.x, car.pos.y, car.pos.z, car.h);
+      const out = off >= 0 ? 1 : -1;
+      this.effects.smoke.spawn({
+        x, y: car.pos.y + 0.08, z, vx: side.x * out * (0.6 + Math.random()) - f.x * 0.5, vy: 0.15, vz: side.z * out * (0.6 + Math.random()) - f.z * 0.5,
+        life: 1.4 + Math.random() * 0.6, size: 0.45, grow: 1.4, color: [0.94, 0.97, 1], alpha: 0.6, drag: 1.8,
+      });
+    }
+    if (speed > 6 && Math.random() < dt * speed * 1.5) {
+      for (const out of [-1, 1]) {
+        const [x, , z] = toWorld([out * s.width * 0.35, 0.1, -s.length * 0.3], car.pos.x, car.pos.y, car.pos.z, car.h);
+        this.effects.smoke.spawn({ x, y: car.pos.y + 0.2, z, vx: side.x * out * 2.5, vy: 1.6, vz: side.z * out * 2.5, life: 0.6, size: 0.28, grow: 0.6, color: [0.92, 0.96, 1], alpha: 0.75, gravity: 6, drag: 0.5 });
       }
     }
   }

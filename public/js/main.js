@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import {
   BLOCKS, WORLD, inBounds, blockId, blockMeta, shapeOf, isReplaceable, makeBlock, doorFacingFromYaw, paintOf, withPaint,
   railMask, railBoxes, nearestRailEdge, canHoldItem, stack, itemOf, floorOf, turnLine, blockKey, faceIndex, hexToRgb,
-  switchable, lightOff, toggleLight, setDoorOpen,
+  switchable, lightOff, toggleLight, setDoorOpen, isWaterBlock,
   PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP,
 } from './shared/blocks.js';
 import { generateWorld } from './shared/worldgen.js';
@@ -119,7 +119,7 @@ highlight.visible = false;
 scene.add(highlight);
 
 // Headlights for the car you're driving (always in the scene so shaders don't recompile).
-const headlight = new THREE.SpotLight(0xfff2d0, 0, 50, 0.55, 0.6, 1.2);
+const headlight = new THREE.SpotLight(0xfff2d0, 0, 50, 0.62, 0.85, 1.2); // a wide, soft-edged beam
 scene.add(headlight, headlight.target);
 
 const view = new ViewModel();
@@ -734,7 +734,7 @@ function emote(kind) {
 
 // Every vehicle's horn has its own note.
 function hornPitch(car) {
-  return car.kind === 'police' ? 1.06 : car.kind === 'monster' ? 0.82 : 0.92 + ((car.id * 0.618) % 1) * 0.14;
+  return car.kind === 'police' ? 1.06 : car.kind === 'monster' ? 0.82 : car.kind === 'boat' ? 0.68 : 0.92 + ((car.id * 0.618) % 1) * 0.14;
 }
 
 function honk() {
@@ -908,8 +908,10 @@ function stepOut(car, side) {
     spots.push(right.clone().multiplyScalar(-side * w).addScaledVector(forward, along));
   }
   spots.push(forward.clone().multiplyScalar(-l), forward.clone().multiplyScalar(l));
-  const grounded = p => p.y < 0.05 || world.isSolid(Math.floor(p.x), Math.floor(p.y - 0.05), Math.floor(p.z)) ||
-    world.isSolid(Math.floor(p.x), Math.floor(p.y - 1.05), Math.floor(p.z));
+  // (Out of a boat, dry land beats stepping onto the water.)
+  const dry = p => !car.spec.boat || !isWaterBlock(world.get(Math.floor(p.x), Math.floor(p.y + 0.05), Math.floor(p.z)));
+  const grounded = p => dry(p) && (p.y < 0.05 || world.isSolid(Math.floor(p.x), Math.floor(p.y - 0.05), Math.floor(p.z)) ||
+    world.isSolid(Math.floor(p.x), Math.floor(p.y - 1.05), Math.floor(p.z)));
   const fits = (off, dy) => {
     player.pos.set(car.pos.x + off.x, Math.max(0, car.pos.y) + dy, car.pos.z + off.z);
     return !player.overlapsSomething();
@@ -2034,7 +2036,7 @@ function frame(timestamp) {
     // A hint under the crosshair about what you can do.
     let hint = '';
     if (target?.car) {
-      const what = target.car.spec.flying ? '🚁 Right-click or E to fly' : '🚗 Right-click or E to drive';
+      const what = target.car.spec.flying ? '🚁 Right-click or E to fly' : target.car.spec.boat ? '🚤 Right-click or E to drive the boat' : '🚗 Right-click or E to drive';
       const full = target.car.driver && target.car.passengers.length >= 2;
       hint = full ? "🚗 It's full" : target.car.driver ? '🚗 Right-click or E to ride along' : what + (item === HAMMER ? ' · Click to whack it' : '');
     } else if (target?.pet) {
@@ -2107,7 +2109,7 @@ function frame(timestamp) {
       const s = myCar.spec, f = new THREE.Vector3(-Math.sin(myCar.h), 0, -Math.cos(myCar.h));
       headlight.position.copy(myCar.pos).addScaledVector(f, s.length / 2).y += s.ride + s.bodyH * 0.6;
       headlight.target.position.copy(headlight.position).addScaledVector(f, 12).y -= 2;
-      headlight.intensity = 120 * nightK;
+      headlight.intensity = 70 * nightK;
     } else {
       headlight.intensity = 0;
     }
@@ -2144,7 +2146,8 @@ function frame(timestamp) {
         while (ground > 0 && !world.isSolid(Math.floor(myCar.pos.x), ground - 1, Math.floor(myCar.pos.z))) ground--;
         hud.setVehicleInfo(myCar.spec.flying
           ? `⬆️ ${Math.max(0, Math.round(myCar.pos.y - ground))} m · ${kmh} km/h · Rotor ${Math.round(myCar.rotorSpin * 100)}% · ${health}`
-          : `Gear ${myCar.gear === 0 ? 'R' : myCar.gear === 3 ? '3 (overdrive)' : myCar.gear} · ${kmh} km/h · ${health}`);
+          : myCar.spec.boat ? `🚤 ${kmh} km/h · ${health}`
+            : `Gear ${myCar.gear === 0 ? 'R' : myCar.gear === 3 ? '3 (overdrive)' : myCar.gear} · ${kmh} km/h · ${health}`);
       } else if (myRide) {
         const driver = avatars.list.get(myRide.driver);
         hud.setVehicleInfo(`🧍 Passenger${driver ? ` · ${driver.name} is driving` : ' · Waiting for a driver'} · ${Math.round(Math.abs(myRide.speed) * 3.6)} km/h`);

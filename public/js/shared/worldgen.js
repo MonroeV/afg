@@ -1,6 +1,6 @@
 // Builds the starting world: a main town around spawn, villages in each corner,
 // roads joining them, parks, playgrounds, trees, flowers and parked cars.
-import { WORLD, DOOR_TOP, makeBlock, blockId, turnLine } from './blocks.js';
+import { WORLD, DOOR_TOP, makeBlock, blockId, turnLine, stack } from './blocks.js';
 
 const B = {
   grass: 1, dirt: 2, stone: 3, cobble: 4, brick: 5, planks: 6, log: 7, leaves: 8, glass: 9,
@@ -425,6 +425,12 @@ export function generateWorld(seed = 2024) {
   const landmarks = buildLandmarks({ get: (x, y, z) => map.get(`${x},${y},${z}`) || 0, set: put, canUse: (x, z) => !used.has(`${x},${z}`) });
   for (const a of landmarks.areas) markUsed(...a);
   cars.push(...landmarks.cars);
+  // A lake with a dock and boats.
+  const lake = buildLake({ get: (x, y, z) => map.get(`${x},${y},${z}`) || 0, set: put, canUse: (x, z) => !used.has(`${x},${z}`) });
+  if (lake) {
+    markUsed(...lake.area);
+    cars.push(...lake.cars);
+  }
 
   // ---------- Countryside ----------
 
@@ -689,4 +695,56 @@ export function orientRoadLines(keys, get, set) {
     const alongZ = [-2, -1, 1, 2].some(d => isLine(get(x, y, z + d)));
     if (alongX && !alongZ) set(x, y, z, turnLine(v));
   }
+}
+
+// ---------- The lake ----------
+// An oval lake with a wooden dock (railings, lanterns at the end) and three boats tied up
+// beside it. It goes on the first patch of empty land big enough, starting near the beach
+// (smaller if there's no room for a big one). Returns the boats and the area used, or null
+// if there's no room anywhere.
+export function buildLake({ get, set, canUse }) {
+  for (const [W, D] of [[30, 22], [26, 20], [22, 18]]) {
+    const lake = tryLake(W, D, get, set, canUse);
+    if (lake) return lake;
+  }
+  return null;
+}
+
+function tryLake(W, D, get, set, canUse) {
+  const margin = 2;
+  const inside = (cx, cz, x, z) => ((x + 0.5 - cx) / (W / 2 - 0.5)) ** 2 + ((z + 0.5 - cz) / (D / 2 - 0.5)) ** 2 <= 1;
+  const free = (cx, cz) => {
+    for (let x = cx - W / 2 - margin; x <= cx + W / 2 + margin; x++)
+      for (let z = cz - D / 2 - margin; z <= cz + D / 2 + margin + 2; z++) {
+        if (x < WORLD.min + 2 || x > WORLD.max - 2 || z < WORLD.min + 2 || z > WORLD.max - 2 || !canUse(x, z)) return false;
+        for (let y = 0; y < 5; y++) if (get(x, y, z)) return false;
+      }
+    return true;
+  };
+  const spots = [];
+  for (let cx = -104; cx <= 104; cx += 2) for (let cz = -104; cz <= 104; cz += 2) spots.push([cx, cz]);
+  spots.sort((a, b) => Math.hypot(a[0] - 62, a[1] - 104) - Math.hypot(b[0] - 62, b[1] - 104));
+  const spot = spots.find(([cx, cz]) => free(cx, cz));
+  if (!spot) return null;
+  const [cx, cz] = spot;
+  for (let x = cx - W / 2; x <= cx + W / 2; x++)
+    for (let z = cz - D / 2; z <= cz + D / 2; z++) {
+      if (inside(cx, cz, x, z)) set(x, 0, z, B.water);
+      else if (inside(cx, cz, x - Math.sign(x + 0.5 - cx) * 1.5, z - Math.sign(z + 0.5 - cz) * 1.5) && (x * 7 + z * 3) % 5 === 0) set(x, 0, z, B.flowers);
+    }
+  // The dock: two planks wide, from the south shore out into the water, with railings
+  // along its sides and end, and lanterns on the end posts.
+  const shore = cz + D / 2, end = shore - 9;
+  for (let z = end; z <= shore + 1; z++)
+    for (const x of [cx, cx + 1]) {
+      set(x, 0, z, B.planks);
+      let edges = x === cx ? 8 : 2;
+      if (z === end) edges |= 1;
+      if (z <= shore - 1) set(x, 1, z, z === end ? stack(B.lantern, makeBlock(B.railing, edges)) : makeBlock(B.railing, edges));
+    }
+  for (const x of [cx - 1, cx + 2]) set(x, 0, shore + 2, B.tikiTorch);
+  // Boats: one each side of the dock and one off its end (far enough apart to all fit).
+  const colors = ['#f5f5f5', '#e53935', '#fdd835'];
+  const boats = [[cx - 1.45, end + 2.4], [cx + 3.6, end + 2.4], [cx + 1, end - 3.2]].map(([x, z], i) => ({ kind: 'boat', color: colors[i], x, y: 0, z, h: 0, landmark: true }));
+  return { cars: boats, area: [cx - W / 2 - 1, cz - D / 2 - 1, cx + W / 2 + 1, shore + 3] };
 }

@@ -602,8 +602,9 @@ export class Sounds {
   // higher, and every other car gets its own slightly different engine.
   setEngineVoice(seed, kind) {
     const r = ((Math.sin(seed * 12.9898) * 43758.5453) % 1 + 1) % 1;
-    const pitch = kind === 'monster' ? 0.78 : kind === 'police' ? 1.08 : 0.92 + r * 0.16;
-    this.voice = { pitch, q: 0.7 + r * 0.8, sub: kind === 'monster' ? 0.55 : 0.25 + r * 0.2 };
+    // (A boat's outboard motor is a higher, buzzier engine.)
+    const pitch = kind === 'monster' ? 0.78 : kind === 'police' ? 1.08 : kind === 'boat' ? 1.4 : 0.92 + r * 0.16;
+    this.voice = { pitch, q: kind === 'boat' ? 1.8 : 0.7 + r * 0.8, sub: kind === 'monster' ? 0.55 : kind === 'boat' ? 0.12 : 0.25 + r * 0.2 };
     this.engine(null);
   }
 

@@ -5,6 +5,11 @@ customize your character, drive cars, build anything and play with friends.
 
 - **Towns to explore**: a main town around the spawn square plus four villages, joined by roads,
   with houses you can walk into, shops, parks, playgrounds, a beach and street lamps
+- **Boats on a lake**: a lake with a wooden dock (railings, lanterns at the end) and three
+  motorboats tied up beside it. Boats float on any water, even water you place yourself, so you
+  can build your own pond or canal. They drift a little in turns, lift their bow at speed, leave a
+  white wake, rock gently when they're parked, and the shore stops them (you can't drive out of
+  the water). Getting out puts you on the dock or the shore, not in the water
 - **Skyscrapers and parking lots**: two glass towers (48 and 36 blocks tall) with a lobby, a floor
   every 4 blocks, a ladder up to the roof and railings around the top (the tall one has a helipad
   on the roof: try landing the helicopter up there!), and two parking lots with lined spaces,
@@ -73,7 +78,8 @@ customize your character, drive cars, build anything and play with friends.
 - **Fireworks** in 8 styles (including hearts and smiley faces) that light up the whole night sky
   and everything around them
 - **Fancy lighting** (Graphics: High or Medium): shiny things like cars, glass, water, metal, gold
-  and mirrors reflect the world around them, lamps and fireworks glow, and shadows are soft
+  and mirrors reflect the world around them, lamps and fireworks glow softly (no harsh glare),
+  and shadows are soft
 - **15 kinds of lights**, each with its own shape and color of light:
   - Indoor (on day and night): table lamp, floor lamp, ceiling light, chandelier, candle, lava lamp
   - Outdoor (switch on at dusk): lantern, street lamp, garden light, tiki torch, party lights
@@ -118,6 +124,9 @@ customize your character, drive cars, build anything and play with friends.
 **Driving:** W to drive, S to brake (keep holding it once you've stopped to back up), A/D to
 steer, Space to brake, Shift for a boost, H (or click) for the horn, G for the police siren, V to
 change the camera, E to get out.
+
+**Boats:** W to go, S to slow down and back up (boats have no brakes), A/D to steer (it turns
+better the faster you go), Shift for a boost, H for the horn, E to get out.
 
 **Riding along:** look at a car or the helicopter someone else is driving and right-click (or
 press E) to hop in as a passenger. Up to two passengers fit. Passengers can look around and
@@ -202,8 +211,9 @@ The server keeps everything in the `data/` folder:
 When a new version of the game needs to upgrade an older save, the server first copies it to
 `data/world-backup-v<version>-<date>-<time>.json`, then only adds things: a helipad for the
 helicopter (only where there's empty ground), lamp heads on the town's street lamps, road lines
-turned to run along their roads, and the skyscrapers and parking lots (built only on empty land
-that nobody has claimed, beside the roads out of town or along the ring road). If `world.json` can't be read, or was saved by a newer version of the game,
+turned to run along their roads, the skyscrapers and parking lots, and the lake with its boats
+(built only on empty land that nobody has claimed: the landmarks beside the roads out of town or
+along the ring road, the lake wherever there's room, smaller if it has to be). If `world.json` can't be read, or was saved by a newer version of the game,
 the server stops with a message instead of touching it.
 
 ## The Character Gallery

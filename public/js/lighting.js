@@ -125,8 +125,8 @@ export class Glow {
   render(dayK) {
     // In daylight only really bright things (like the sun) glow; at night lamps,
     // headlights, TVs and fireworks do too.
-    this.bloom.threshold = 2.5 + 7.5 * dayK;
-    this.bloom.strength = 0.4 - 0.2 * dayK;
+    this.bloom.threshold = 3.2 + 7 * dayK; // only really bright things glow, and gently
+    this.bloom.strength = 0.22 - 0.12 * dayK;
     this.composer.render();
   }
 }

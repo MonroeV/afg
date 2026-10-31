@@ -4,6 +4,7 @@ export const VEHICLES = {
   car: { name: 'Car', mass: 1200, length: 3.6, width: 1.8, ride: 0.32, bodyH: 0.55, cabinH: 0.72, wheelR: 0.34, maxSpeed: 17, accel: 9, gears: 3, respawn: 30 },
   police: { name: 'Police Car', mass: 1400, length: 3.8, width: 1.85, ride: 0.32, bodyH: 0.55, cabinH: 0.72, wheelR: 0.35, maxSpeed: 21, accel: 11, gears: 3, respawn: 30 },
   monster: { name: 'Monster Truck', mass: 3000, length: 4.0, width: 2.5, ride: 1.05, bodyH: 0.7, cabinH: 0.85, wheelR: 0.8, maxSpeed: 14, accel: 8, gears: 3, climb: true, respawn: 30 },
+  boat: { name: 'Boat', mass: 700, length: 3.8, width: 1.7, ride: 0, bodyH: 0.55, cabinH: 0.4, wheelR: 0.3, height: 0.95, maxSpeed: 13, accel: 5.5, boat: true, respawn: 30 },
   heli: { name: 'Helicopter', mass: 1800, length: 3.4, width: 2.0, tail: 3.0, height: 2.4, rotor: 3.6, flying: true, respawn: 300 },
 };
 for (const s of Object.values(VEHICLES)) s.height ??= s.ride + s.bodyH + s.cabinH;
@@ -75,16 +76,31 @@ function supported(isSolid, spec, x, y, z, h) {
   return false;
 }
 
+// Where a boat's hull touches the water (in its own space), to check it's afloat.
+export function hullPoints(spec) {
+  const hw = spec.width / 2 - 0.15, hl = spec.length / 2 - 0.2;
+  return [[-hw, 0, -hl * 0.5], [hw, 0, -hl * 0.5], [-hw, 0, hl], [hw, 0, hl], [0, 0, -hl], [0, 0, 0]];
+}
+
+// Is every part of a boat's hull over water? isWater(x, y, z) takes whole-block coordinates.
+export function afloat(isWater, spec, x, y, z, h) {
+  for (const p of hullPoints(spec)) {
+    const [wx, , wz] = toWorld(p, x, y, z, h);
+    if (!isWater(Math.floor(wx), Math.floor(y + 0.05), Math.floor(wz))) return false;
+  }
+  return true;
+}
+
 // Finds somewhere for a vehicle to (re)appear near its home spot, even if players
-// have built on it since.
-export function findVehicleSpot(isSolid, spec, home, others = []) {
+// have built on it since. Boats need water under them (isWater).
+export function findVehicleSpot(isSolid, spec, home, others = [], isWater = null) {
   const dense = densePoints(spec);
   const free = (x, y, z) =>
     !vehicleBlocked(isSolid, spec, x, y, z, home.h, dense) &&
-    supported(isSolid, spec, x, y, z, home.h) &&
+    (spec.boat ? !!isWater && afloat(isWater, spec, x, y, z, home.h) : supported(isSolid, spec, x, y, z, home.h)) &&
     others.every(o => Math.hypot(o.x - x, o.z - z) > 4 || Math.abs(o.y - y) > 2.5);
   // Prefer the ground near home; failing that, anywhere (even on top of buildings).
-  for (const [maxR, maxY] of [[8, home.y], [14, 20]]) {
+  for (const [maxR, maxY] of spec.boat ? [[12, home.y]] : [[8, home.y], [14, 20]]) {
     for (let r = 0; r <= maxR; r++) {
       for (let dx = -r; dx <= r; dx++)
         for (let dz = -r; dz <= r; dz++) {

@@ -147,6 +147,9 @@ export const turnLine = v => {
   return other ? v - blockId(v) + other : v;
 };
 
+// Water (boats float on it), even with something standing in it.
+export const isWaterBlock = v => blockId(itemOf(v)) === 36 || blockId(floorOf(v)) === 36;
+
 // ---------- Light switches ----------
 // Lamps can be switched off and on with a right-click (meta bit 1). Street lamps can't:
 // they come on by themselves when it gets dark.
