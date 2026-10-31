@@ -3,11 +3,11 @@
 // the browser runs its own copy so single player works exactly the same way.
 import { blockKey, inBounds, isValidBlock, isSolidBlock, blockId, shapeOf, DOOR_OPEN, DAY_LENGTH, WORLD, isNightTime } from './blocks.js';
 import { sanitizeLook, cleanName } from './avatar.js';
-import { generateWorld, helipadBlocks, HELIPAD } from './worldgen.js';
+import { generateWorld, helipadBlocks, upgradeLamps, HELIPAD } from './worldgen.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot } from './vehicles.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS } from './claims.js';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 const TICK_RATE = 15;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LOG = 7, LEAVES = 8, GRASS = 1, DIRT = 2;
@@ -89,7 +89,7 @@ export class GameRoom {
   }
 
   load(data) {
-    if (!data || (data.version !== SAVE_VERSION && data.version !== 2)) return false;
+    if (!data || ![2, 3, SAVE_VERSION].includes(data.version)) return false;
     this.world.clear();
     const b = data.blocks;
     for (let i = 0; i + 3 < b.length; i += 4) this.world.set(blockKey(b[i], b[i + 1], b[i + 2]), b[i + 3]);
@@ -104,6 +104,7 @@ export class GameRoom {
       }
       for (const [x, y, z, v] of helipadBlocks()) if (!this.world.has(blockKey(x, y, z))) this.world.set(blockKey(x, y, z), v);
       this.setHomes(generateWorld().cars);
+      this.upgradeLamps();
       return true;
     }
     this.vehicles.clear();
@@ -116,7 +117,15 @@ export class GameRoom {
     this.names = data.names || {};
     this.saplings = data.saplings || [];
     this.expireClaims();
+    if (data.version < 4) this.upgradeLamps();
     return true;
+  }
+
+  // Worlds saved before version 4 get the new lamps (and are saved again soon after).
+  upgradeLamps() {
+    const lamps = [...this.world].filter(([, v]) => v === 18).map(([k]) => k);
+    upgradeLamps(lamps, (x, y, z) => this.get(x, y, z), (x, y, z, v) => this.world.set(blockKey(x, y, z), v));
+    this.onDirty();
   }
 
   serialize() {

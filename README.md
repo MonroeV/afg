@@ -33,8 +33,15 @@ customize your character, drive cars, build anything and play with friends.
   and everything around them
 - **Fancy lighting** (Graphics: High or Medium): shiny things like cars, glass, water, metal, gold
   and mirrors reflect the world around them, lamps and fireworks glow, and shadows are soft
-- **38 kinds of blocks** with realistic textures: brick, wood, glass, marble, roads, flowers,
-  rainbow, gold, mirrors…
+- **15 kinds of lights**, each with its own shape and color of light:
+  - Indoor (on day and night): table lamp, floor lamp, ceiling light, chandelier, candle, lava lamp
+  - Outdoor (switch on at dusk): lantern, street lamp, garden light, tiki torch, party lights
+  - Glowing neon blocks in pink, blue and green, plus the classic Lamp block
+
+  Lamps cast a soft glow that spreads wide around them, and the towns use them all: street lamps,
+  porch lanterns, ceiling lights and table lamps in houses, garden lights and tiki torches in parks
+- **52 kinds of blocks** with realistic textures: brick, wood, glass, marble, roads, flowers,
+  rainbow, gold, mirrors, lamps…
 - **Real-time multiplayer**: see each other, drive together, chat
 - **Single player works too**: with no server, the world runs and saves right in the browser
 
@@ -114,7 +121,8 @@ The server keeps everything in the `data/` folder:
 - `data/characters.json` is the Character Gallery. Delete it to empty the gallery.
 
 Worlds saved by older versions of the game are upgraded automatically: the old player-spawned
-cars are replaced by the town's parked cars, and a helipad is built for the helicopter.
+cars are replaced by the town's parked cars, a helipad is built for the helicopter, street lamps
+get proper lamp heads, and the glowing blocks in house ceilings become ceiling lights.
 
 ## The Character Gallery
 
@@ -147,6 +155,8 @@ public/
     pets.js            What your pet does (follow, wander, fetch) and the ball
     landview.js        Draws land claim borders
     lighting.js        Live reflections and the glow effect
+    lightpools.js      Soft pools of light on the ground under every lamp
+    models.js          3D models for the lamps
     tv.js              The TV shows
     daynight.js        Sky, sun, moon, stars and night lighting
     items.js           Hotbar items, icons, the item in your hand

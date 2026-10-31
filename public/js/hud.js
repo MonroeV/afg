@@ -84,8 +84,9 @@ export class Hud {
     grid.textContent = '';
     const sections = [
       ['🧰 Tools & Toys', i => TOOLS.includes(i)],
-      ['🧱 Building Blocks', i => typeof i === 'number' && !BLOCKS[i].shape],
-      ['🏡 Town Stuff', i => typeof i === 'number' && !!BLOCKS[i].shape],
+      ['🧱 Building Blocks', i => typeof i === 'number' && !BLOCKS[i].shape && !BLOCKS[i].light],
+      ['💡 Lights', i => typeof i === 'number' && !!BLOCKS[i].light],
+      ['🏡 Town Stuff', i => typeof i === 'number' && !!BLOCKS[i].shape && !BLOCKS[i].light],
     ];
     for (const [title, test] of sections) {
       const h = document.createElement('div');

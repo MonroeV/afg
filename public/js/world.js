@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BLOCKS, WORLD, blockKey, blockId, blockMeta, shapeOf, isSolidBlock, doorBox, DOOR_OPEN, DOOR_TOP } from './shared/blocks.js';
+import { modelGeometry, modelMaterials } from './models.js';
 
 const GEOMETRY = {
   cube: new THREE.BoxGeometry(1, 1, 1).translate(0.5, 0.5, 0.5),
@@ -47,7 +48,9 @@ export function createBlockMaterials(textures) {
   const materials = {};
   for (const [id, def] of Object.entries(BLOCKS)) {
     const shape = def.shape || 'cube';
-    if (shape === 'door') {
+    if (shape === 'model') {
+      materials[id] = modelMaterials(def.model);
+    } else if (shape === 'door') {
       const edge = make(def.tex.edge, def);
       for (const part of ['bottom', 'top']) {
         const face = make(def.tex[part], def, { alphaTest: 0.5 });
@@ -112,6 +115,9 @@ export class World {
     else if (shape === 'door') {
       const b = doorBox(blockMeta(v));
       out.push([x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
+    } else if (shape === 'model') {
+      const b = BLOCKS[blockId(v)].box;
+      if (b) out.push([x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
     }
   }
 
@@ -161,7 +167,7 @@ export class World {
       const def = BLOCKS[blockId(v)];
       const cx = (Math.floor(x / CHUNK) + 0.5) * CHUNK, cz = (Math.floor(z / CHUNK) + 0.5) * CHUNK;
       layer = this.layers[key] = {
-        mesh: null, keys: [], index: new Map(), geometry: GEOMETRY[def.shape || 'cube'], def,
+        mesh: null, keys: [], index: new Map(), geometry: def.shape === 'model' ? modelGeometry(def.model) : GEOMETRY[def.shape || 'cube'], def,
         material: this.materials[this.renderKey(v)],
         center: new THREE.Vector3(cx, 32, cz),
       };

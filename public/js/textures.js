@@ -388,6 +388,22 @@ function gold(u, v) {
   return { c, h: border < 0.04 ? 0.3 : 0.6 + n * 0.1 };
 }
 
+// Neon: a dark panel with a glowing tube bent into a frame and a zig-zag.
+function neon(color) {
+  return (u, v) => {
+    const n = fbm(u, v, 8, 3, 240);
+    const frame = Math.abs(Math.min(u, v, 1 - u, 1 - v) - 0.12);
+    const zig = Math.abs(v - (0.5 + (Math.abs(((u * 4) % 1) - 0.5) - 0.25) * 0.5));
+    const d = Math.min(frame, u > 0.2 && u < 0.8 ? zig : 1);
+    if (d < 0.025) return { c: mixc(color, [1, 1, 1], 0.55), h: 1, e: 1 };
+    if (d < 0.07) {
+      const k = 1 - (d - 0.025) / 0.045;
+      return { c: shade(color, 0.35 + k * 0.5), h: 0.6, e: k * 0.6 };
+    }
+    return { c: [0.07 + n * 0.03, 0.06 + n * 0.03, 0.09 + n * 0.03], h: 0.4, e: 0 };
+  };
+}
+
 const GENERATORS = {
   grass_top: grassTop,
   grass_side: grassSide,
@@ -428,6 +444,9 @@ const GENERATORS = {
   paint_green: concrete([0.25, 0.62, 0.25], 0.1),
   mirror,
   gold,
+  neon_pink: neon([1, 0.25, 0.65]),
+  neon_blue: neon([0.25, 0.7, 1]),
+  neon_green: neon([0.35, 1, 0.42]),
 };
 
 const NORMAL_STRENGTH = {

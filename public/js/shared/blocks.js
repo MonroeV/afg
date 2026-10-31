@@ -5,7 +5,14 @@
 // the meta bits to remember which way they face and whether they are open.
 //
 // shape: 'cube' (default), 'door' (two blocks tall, opens), 'flat' (a thin floor
-// layer you can walk over, like roads) or 'plant' (crossed sprites, no collision).
+// layer you can walk over, like roads), 'plant' (crossed sprites, no collision) or
+// 'model' (a small 3D object such as a lamp; `box` is the part you bump into, if any).
+//
+// light: blocks that light up their surroundings. color, power (brightness), range
+// (how far the light reaches), always (indoor lamps stay on in the daytime),
+// flicker (for flames), y (height of the light inside the block).
+
+const warm = 0xffc98a;
 
 export const BLOCKS = {
   1: { name: 'Grass', tex: { top: 'grass_top', side: 'grass_side', bottom: 'dirt' } },
@@ -25,7 +32,7 @@ export const BLOCKS = {
   15: { name: 'Blue Paint', tex: 'paint_blue' },
   16: { name: 'Yellow Paint', tex: 'paint_yellow' },
   17: { name: 'Black Paint', tex: 'paint_black' },
-  18: { name: 'Lamp', tex: 'lamp', emissive: true, light: true },
+  18: { name: 'Lamp', tex: 'lamp', emissive: true, light: { color: warm, power: 1, range: 30 } },
   19: { name: 'Bounce Pad', tex: 'bounce', bounce: true },
   20: { name: 'Floor Tiles', tex: 'tiles', glossy: true },
   21: { name: 'Door', shape: 'door', tex: { bottom: 'door_bottom', top: 'door_top', edge: 'planks' } },
@@ -46,6 +53,23 @@ export const BLOCKS = {
   36: { name: 'Water', shape: 'flat', tex: 'water', glossy: true, water: true },
   37: { name: 'Mirror', tex: 'mirror', mirror: true },
   38: { name: 'Gold', tex: 'gold', gold: true },
+  // Indoor lights
+  39: { name: 'Table Lamp', shape: 'model', model: 'tableLamp', box: [0.25, 0, 0.25, 0.75, 0.7, 0.75], light: { color: 0xffd6a0, power: 0.7, range: 18, always: true, y: 0.6 } },
+  40: { name: 'Floor Lamp', shape: 'model', model: 'floorLamp', box: [0.3, 0, 0.3, 0.7, 1, 0.7], light: { color: 0xffd6a0, power: 0.8, range: 22, always: true, y: 0.85 } },
+  41: { name: 'Ceiling Light', shape: 'model', model: 'ceilingLight', light: { color: 0xfff1dc, power: 1, range: 24, always: true, y: 0.75 } },
+  42: { name: 'Chandelier', shape: 'model', model: 'chandelier', light: { color: 0xffd08a, power: 1.2, range: 28, always: true, flicker: 0.05, y: 0.6 } },
+  43: { name: 'Candle', shape: 'model', model: 'candle', box: [0.38, 0, 0.38, 0.62, 0.3, 0.62], light: { color: 0xffa040, power: 0.45, range: 12, always: true, flicker: 0.25, y: 0.35, flame: 0.3 } },
+  44: { name: 'Lava Lamp', shape: 'model', model: 'lavaLamp', box: [0.35, 0, 0.35, 0.65, 0.7, 0.65], light: { color: 0xff4fd8, power: 0.5, range: 14, always: true, y: 0.4 } },
+  // Outdoor lights (they switch on at dusk)
+  45: { name: 'Lantern', shape: 'model', model: 'lantern', box: [0.3, 0, 0.3, 0.7, 0.7, 0.7], light: { color: 0xffb060, power: 0.8, range: 22, flicker: 0.08, y: 0.3 } },
+  46: { name: 'Street Lamp', shape: 'model', model: 'streetLamp', box: [0.25, 0, 0.25, 0.75, 1, 0.75], light: { color: 0xffd2a0, power: 1.1, range: 34, y: 0.35 } },
+  47: { name: 'Garden Light', shape: 'model', model: 'gardenLight', box: [0.38, 0, 0.38, 0.62, 0.65, 0.62], light: { color: 0xfff0d0, power: 0.5, range: 14, y: 0.55 } },
+  48: { name: 'Tiki Torch', shape: 'model', model: 'tikiTorch', box: [0.42, 0, 0.42, 0.58, 1, 0.58], light: { color: 0xff9040, power: 0.8, range: 22, flicker: 0.3, y: 1.05, flame: 0.7 } },
+  49: { name: 'Party Lights', shape: 'model', model: 'partyLights', light: { color: 0xffe0f0, power: 0.6, range: 18, y: 0.8 } },
+  // Glowing neon blocks
+  50: { name: 'Neon Pink', tex: 'neon_pink', emissive: true, light: { color: 0xff3fa4, power: 0.9, range: 22, always: true } },
+  51: { name: 'Neon Blue', tex: 'neon_blue', emissive: true, light: { color: 0x3fb4ff, power: 0.9, range: 22, always: true } },
+  52: { name: 'Neon Green', tex: 'neon_green', emissive: true, light: { color: 0x5cff6a, power: 0.9, range: 22, always: true } },
 };
 
 export const BLOCK_IDS = Object.keys(BLOCKS).map(Number);
@@ -55,9 +79,10 @@ export const blockMeta = v => v >> 8;
 export const makeBlock = (id, meta = 0) => id | (meta << 8);
 export const shapeOf = v => BLOCKS[v & 255]?.shape || 'cube';
 
-// Solid blocks stop players and cars. Roads, carpets and flowers don't.
+// Solid blocks stop players and cars. Roads, carpets, flowers and hanging lights don't.
 export const isSolidBlock = v => {
   const shape = shapeOf(v);
+  if (shape === 'model') return !!BLOCKS[v & 255].box;
   return v !== 0 && shape !== 'flat' && shape !== 'plant';
 };
 export const isReplaceable = v => {

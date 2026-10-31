@@ -14,6 +14,7 @@ import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey } 
 import { Structures } from './structures.js';
 import { TVs, CHANNELS } from './tv.js';
 import { Reflections, Glow } from './lighting.js';
+import { LightPools } from './lightpools.js';
 import { LandView, describeSize } from './landview.js';
 import { Ball, PetBrain } from './pets.js';
 import { DayNight } from './daynight.js';
@@ -65,9 +66,9 @@ const glow = new Glow(renderer, scene, camera);
 
 // Graphics settings. Live reflections and glow look great but need a good graphics card.
 const QUALITY = {
-  high: { pixelRatio: 2, shadowMap: 2048, shadowSoftness: 3, lamps: 8, bloom: true, reflections: 128, reflectEvery: 1.2 },
-  medium: { pixelRatio: 1, shadowMap: 1024, shadowSoftness: 2, lamps: 6, bloom: true, reflections: 64, reflectEvery: 4 },
-  low: { pixelRatio: 0.75, shadowMap: 0, shadowSoftness: 1, lamps: 3, bloom: false, reflections: 0 },
+  high: { pixelRatio: 2, shadowMap: 2048, shadowSoftness: 3, lamps: 12, bloom: true, reflections: 128, reflectEvery: 1.2 },
+  medium: { pixelRatio: 1, shadowMap: 1024, shadowSoftness: 2, lamps: 8, bloom: true, reflections: 64, reflectEvery: 4 },
+  low: { pixelRatio: 0.75, shadowMap: 0, shadowSoftness: 1, lamps: 4, bloom: false, reflections: 0 },
 };
 function applyQuality() {
   const q = QUALITY[settings.quality] || QUALITY.high;
@@ -106,6 +107,7 @@ const particles = new Particles(scene);
 const effects = new Effects(scene);
 const fireworks = new Fireworks(scene, effects);
 const tvs = new TVs(scene);
+const lightPools = new LightPools(scene);
 const landView = new LandView(scene);
 const sounds = new Sounds();
 sounds.volume = settings.volume;
@@ -174,6 +176,8 @@ async function load() {
   textures = await generateTextures(anisotropy, p => ($('loading-fill').style.width = `${p * 100}%`));
   materials = createBlockMaterials(textures);
   for (const m of new Set(Object.values(materials).flat())) if (m.userData.shine) reflections.addShiny(m, m.userData.shine);
+  // Lamp models' glowing parts get brighter at night (indoor ones stay on all day).
+  sky.glowMaterials = Object.entries(BLOCKS).filter(([, d]) => d.shape === 'model').map(([id, d]) => ({ material: materials[id][1], always: !!d.light?.always }));
   view.materials = materials;
   icons = Object.fromEntries(ALL_ITEMS.map(i => [i, makeIcon(i, textures)]));
   world = new World(scene, materials);
@@ -970,12 +974,27 @@ function respawn(joining = false) {
   }
 }
 
+// Lamps with real flames (tiki torches and candles), refreshed when the world changes.
+let flameLamps = [], flameVersion = -1;
+
 // Effects for structures near you, and teleporting. Returns how loud nearby fires are.
 function updateStructures(dt, time) {
   fxTimer -= dt;
   const emit = fxTimer <= 0;
   if (emit) fxTimer = 0.06;
   let fire = 0;
+  if (flameVersion !== structures.version) {
+    flameVersion = structures.version;
+    flameLamps = [...world.lamps].map(k => k.split(',').map(Number)).filter(([x, y, z]) => BLOCKS[world.get(x, y, z) & 255]?.light?.flame);
+  }
+  if (emit) {
+    for (const [x, y, z] of flameLamps) {
+      const flame = BLOCKS[world.get(x, y, z) & 255]?.light;
+      if (!flame || (x - camera.position.x) ** 2 + (z - camera.position.z) ** 2 > 30 * 30) continue;
+      effects.flame(x + 0.5, y + flame.y + 0.05, z + 0.5, flame.flame);
+      if (flame.flame > 0.5) fire = Math.max(fire, loudness(x, y, z, 8) * 0.4);
+    }
+  }
   for (const s of structures.near(camera.position, 45)) {
     const cx = s.x + 0.5, cz = s.z + 0.5;
     if (s.type === 'campfire') {
@@ -1521,6 +1540,7 @@ function frame(timestamp) {
 
   sky.update(dt, camera, world, materials);
   if (structures) {
+    lightPools.update(world, structures.version, sky.lampK || 0);
     tvs.sync(structures);
     const phase = sky.phase;
     tvs.update(dt, time, camera.position, { players: avatars.list.size + 1, clock: sky.clockText(), night: sky.isNight, dayPhase: phase < 0.62 ? phase / 0.62 : 0 });

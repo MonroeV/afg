@@ -1,13 +1,16 @@
 // Builds the starting world: a main town around spawn, villages in each corner,
 // roads joining them, parks, playgrounds, trees, flowers and parked cars.
-import { WORLD, DOOR_TOP, makeBlock } from './blocks.js';
+import { WORLD, DOOR_TOP, makeBlock, isSolidBlock } from './blocks.js';
 
 const B = {
   grass: 1, dirt: 2, stone: 3, cobble: 4, brick: 5, planks: 6, log: 7, leaves: 8, glass: 9,
   sand: 10, metal: 11, marble: 12, concrete: 13, red: 14, blue: 15, yellow: 16, black: 17,
   lamp: 18, bounce: 19, tiles: 20, door: 21, road: 22, line: 23, sidewalk: 24, floor: 25,
   roof: 26, flowers: 27, rainbow: 28, pink: 29, mint: 30, sky: 31, orange: 32, purple: 33,
-  green: 34, carpet: 35, water: 36,
+  green: 34, carpet: 35, water: 36, mirror: 37, gold: 38,
+  tableLamp: 39, floorLamp: 40, ceilingLight: 41, chandelier: 42, candle: 43, lavaLamp: 44,
+  lantern: 45, streetLamp: 46, gardenLight: 47, tikiTorch: 48, partyLights: 49,
+  neonPink: 50, neonBlue: 51, neonGreen: 52,
 };
 
 function rng(seed) {
@@ -36,7 +39,7 @@ export function helipadBlocks() {
       const h = (x === 2 || x === 3 || x === 7 || x === 8) && z >= 2 && z <= 8 || (z === 5 && x >= 4 && x <= 6);
       const edge = x === 0 || z === 0 || x === 10 || z === 10;
       const corner = (x === 0 || x === 10) && (z === 0 || z === 10);
-      out.push([HELIPAD.x + x, 0, HELIPAD.z + z, corner ? B.lamp : h || edge ? B.sidewalk : B.road]);
+      out.push([HELIPAD.x + x, 0, HELIPAD.z + z, corner ? B.gardenLight : h || edge ? B.sidewalk : B.road]);
     }
   return out;
 }
@@ -72,7 +75,7 @@ export function generateWorld(seed = 2024) {
   };
   const streetLamp = (x, z) => {
     fill(x, 0, z, x, 2, z, B.black);
-    put(x, 3, z, B.lamp);
+    put(x, 3, z, B.streetLamp);
   };
   const tree = (x, z, h = 4 + Math.floor(rand() * 3), base = 0) => {
     for (let dx = -2; dx <= 2; dx++)
@@ -190,7 +193,12 @@ export function generateWorld(seed = 2024) {
     del(dx, 1, dz);
     door(dx, 0, dz, 0);
     for (let v = 1; v <= yard + 1; v++) put(dx, 0, dz + out * v, B.sidewalk);
-    for (let u = 0; u < w; u++) if (u !== du && chance(0.7)) P(u, 0, -1, B.flowers);
+    // Flowers along the front, and lanterns on either side of the door.
+    const lanterns = chance(0.6);
+    for (let u = 0; u < w; u++) {
+      if (lanterns && Math.abs(u - du) === 1) P(u, 0, -1, B.lantern);
+      else if (u !== du && chance(0.7)) P(u, 0, -1, B.flowers);
+    }
 
     // Stairs up to the second floor.
     if (twoStory) {
@@ -212,8 +220,10 @@ export function generateWorld(seed = 2024) {
       // Close the gable ends.
       if (k > 0) for (let v = v0 + 1; v < v1; v++) { P(0, H + k, v, wall); P(w - 1, H + k, v, wall); }
     }
-    P(Math.floor(w / 2), H, Math.floor(d / 2), B.lamp);
-    if (twoStory) P(1, H, 1, B.lamp);
+    // A light hanging from each ceiling (a chandelier in fancy houses).
+    const ceiling = chance(0.15) ? B.chandelier : B.ceilingLight;
+    P(Math.floor(w / 2), twoStory ? 2 : H - 1, Math.floor(d / 2), ceiling);
+    if (twoStory) P(Math.floor(w / 2), H - 1, Math.floor(d / 2), B.ceilingLight);
 
     // A little furniture: a bed, a table with flowers and a rug.
     if (twoStory) {
@@ -222,8 +232,10 @@ export function generateWorld(seed = 2024) {
     } else {
       P(w - 2, 0, d - 2, B.red);
       P(w - 2, 0, d - 3, B.concrete);
+      // A table with a lamp (or flowers, or a candle) and sometimes a floor lamp.
       P(1, 0, d - 2, B.planks);
-      P(1, 1, d - 2, B.flowers);
+      P(1, 1, d - 2, pick([B.tableLamp, B.tableLamp, B.flowers, B.candle, B.lavaLamp]));
+      if (d >= 6 && w - 2 !== du && chance(0.5)) P(w - 2, 0, d - 4, B.floorLamp);
     }
     P(du, 0, 1, B.carpet);
 
@@ -257,8 +269,12 @@ export function generateWorld(seed = 2024) {
     // Striped awning and a flat roof with a sign.
     for (let u = 0; u < w; u++) P(u, 3, -1, stripe[u % 2]);
     fill(x0, 4, Math.min(frontZ, frontZ + (facesSouth ? -(d - 1) : d - 1)), x0 + w - 1, 4, Math.max(frontZ, frontZ + (facesSouth ? -(d - 1) : d - 1)), B.concrete);
-    for (let u = 1; u < w - 1; u++) P(u, 5, 0, u % 2 ? stripe[0] : B.lamp);
-    P(1, 3, 2, B.lamp); P(w - 2, 3, 2, B.lamp);
+    // A sign on the roof (some shops have neon), party lights under the awning,
+    // and ceiling lights inside.
+    const sign = chance(0.4) ? pick([B.neonPink, B.neonBlue, B.neonGreen]) : B.lamp;
+    for (let u = 1; u < w - 1; u++) P(u, 5, 0, u % 2 ? stripe[0] : sign);
+    if (chance(0.6)) for (let u = 0; u < w; u++) P(u, 2, -1, B.partyLights);
+    P(1, 3, 2, B.ceilingLight); P(w - 2, 3, 2, B.ceilingLight);
     // Shelves.
     for (let v = 2; v < d - 1; v++) { P(1, 0, v, B.planks); P(w - 2, 0, v, B.planks); }
     P(1, 1, 2, B.red); P(w - 2, 1, 3, B.yellow); P(1, 1, 3, B.blue);
@@ -282,9 +298,15 @@ export function generateWorld(seed = 2024) {
       const edge = x === 1 || x === 5 || z === 1 || z === 5;
       put(x0 + x, 0, z0 + z, edge ? B.stone : B.water);
     }
-    // Playground
+    // Garden lights along the paths
+    for (let i = 2; i < size - 1; i += 4) {
+      if (!has(x0 + mid + 1, 0, z0 + i)) put(x0 + mid + 1, 0, z0 + i, B.gardenLight);
+      if (!has(x0 + i, 0, z0 + mid - 1)) put(x0 + i, 0, z0 + mid - 1, B.gardenLight);
+    }
+    // Playground, with tiki torches at the corners
     const px = x0 + mid + 2, pz = z0 + mid + 2;
     fill(px, 0, pz, px + 5, 0, pz + 5, B.sand);
+    for (const [tx, tz] of [[px, pz], [px + 5, pz], [px, pz + 5], [px + 5, pz + 5]]) put(tx, 1, tz, B.tikiTorch);
     put(px + 1, 1, pz + 1, B.bounce); put(px + 4, 1, pz + 1, B.bounce);
     put(px + 1, 1, pz + 4, B.bounce); put(px + 4, 1, pz + 4, B.bounce);
     // Rainbow climbing tower
@@ -318,6 +340,8 @@ export function generateWorld(seed = 2024) {
     for (const [x, z] of [[x0 + 2, c - 1], [x0 + size - 3, c - 1]]) {
       put(x, 0, z, B.leaves); put(x, 0, z + 1, B.flowers); put(x, 0, z - 1, B.flowers);
     }
+    // Garden lights around the fountain
+    for (const [x, z] of [[c - 5, c - 5], [c + 4, c - 5], [c - 5, c + 4], [c + 4, c + 4]]) put(x, 0, z, B.gardenLight);
     // Bounce pads for fun, away from the spawn point.
     put(c - 6, 1, c - 6, B.bounce);
     put(c + 5, 1, c - 6, B.bounce);
@@ -428,6 +452,7 @@ export function generateWorld(seed = 2024) {
   put(37, 13, 109, B.lamp);
   put(33, 1, 105, B.bounce);
   put(42, 1, 114, B.bounce);
+  for (const [x, z] of [[31, 103], [44, 103], [31, 116], [44, 116]]) if (has(x, 0, z)) put(x, 1, z, B.tikiTorch);
   for (let r = 6; r >= 1; r--) {
     const y = 6 - r;
     for (let x = -r; x <= r; x++) for (let z = -r; z <= r; z++) {
@@ -449,4 +474,29 @@ export function generateWorld(seed = 2024) {
     blocks.push([x, y, z, v]);
   }
   return { blocks, cars: placed };
+}
+
+// Saved worlds from before the new lamps: put proper lamp heads on street lamps, and swap
+// the glowing blocks in house ceilings for ceiling lights. get(x, y, z) and set(x, y, z, v)
+// read and write the world.
+export function upgradeLamps(lampKeys, get, set) {
+  const corners = new Set([[0, 0], [10, 0], [0, 10], [10, 10]].map(([x, z]) => `${HELIPAD.x + x},0,${HELIPAD.z + z}`));
+  for (const key of lampKeys) {
+    const [x, y, z] = key.split(',').map(Number);
+    if (get(x, y, z) !== B.lamp) continue;
+    if (corners.has(key)) {
+      set(x, y, z, B.gardenLight);
+    } else if (y === 3 && [0, 1, 2].every(py => get(x, py, z) === B.black)) {
+      set(x, y, z, B.streetLamp);
+    } else if (y > 0 && !get(x, y - 1, z)) {
+      const sides = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dz]) => get(x + dx, y, z + dz));
+      if (sides.every(v => isSolidBlock(v) && v !== B.lamp)) {
+        // Set into the ceiling: patch the ceiling and hang a light underneath.
+        set(x, y, z, sides[0]);
+        set(x, y - 1, z, B.ceilingLight);
+      } else if (isSolidBlock(get(x, y + 1, z))) {
+        set(x, y, z, B.ceilingLight); // hanging under a roof (like in shops)
+      }
+    }
+  }
 }

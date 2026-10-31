@@ -1,7 +1,12 @@
 // Sky, sun, moon, stars and the lights that change from day to night.
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
-import { DAY_LENGTH, DAY_FRACTION } from './shared/blocks.js';
+import { DAY_LENGTH, DAY_FRACTION, BLOCKS, blockId } from './shared/blocks.js';
+
+// How bright lamps are. Light fades gently with distance (decay 1) so it spreads wide
+// instead of making a harsh bright spot right next to the lamp.
+const LAMP_BRIGHTNESS = 4;
+const LAMP_DECAY = 1;
 const smooth = (e0, e1, x) => {
   const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
   return t * t * (3 - 2 * t);
@@ -102,7 +107,8 @@ export class DayNight {
     for (const l of this.lampLights) this.scene.remove(l);
     this.lampLights = [];
     for (let i = 0; i < n; i++) {
-      const l = new THREE.PointLight(0xffc477, 0, 22, 1.6);
+      const l = new THREE.PointLight(0xffc477, 0, 30, LAMP_DECAY);
+      l.userData.phase = i * 1.7;
       this.scene.add(l);
       this.lampLights.push(l);
     }
@@ -171,42 +177,72 @@ export class DayNight {
     this.moon.position.copy(camera.position).addScaledVector(this.moonDir, 700);
     this.moon.material.opacity = smooth(-0.1, 0.05, this.moonDir.y);
 
-    // Lamps glow brighter at night and light up their surroundings.
+    // Lamps glow at night (indoor ones all the time) and light up their surroundings.
     const lampK = smooth(0.25, 0.85, nightK);
+    this.lampK = lampK;
     const lamp = materials?.[18];
     // With the glow effect on, lamps already shine brighter, so they need less of a boost.
-    if (lamp) lamp.emissiveIntensity = 2.2 + (this.glowOn ? 1.2 : 3) * lampK;
+    if (lamp) lamp.emissiveIntensity = 2 + (this.glowOn ? 0.6 : 1.5) * lampK;
+    for (const g of this.glowMaterials || []) {
+      const k = g.always ? 1.4 + 0.4 * lampK : 0.35 + 1.65 * lampK;
+      g.material.color.copy(g.material.userData.baseColor).multiplyScalar(k);
+    }
+
+    // A handful of real lights move to the lamps nearest to you. Lights already on a lamp
+    // that's still close stay put, and newly placed ones fade in, so nothing pops.
     this.lampTimer -= dt;
     if (this.lampTimer <= 0 && world) {
       this.lampTimer = 0.5;
       const near = [];
       const dist = (x, y, z) => (x - camera.position.x) ** 2 + (y - camera.position.y) ** 2 + (z - camera.position.z) ** 2;
-      if (lampK > 0) {
-        for (const k of world.lamps) {
-          const [x, y, z] = k.split(',').map(Number);
-          const d = dist(x, y, z);
-          if (d < 60 * 60) near.push([d, x, y, z]);
-        }
+      for (const k of world.lamps) {
+        const [x, y, z] = k.split(',').map(Number);
+        const def = BLOCKS[blockId(world.get(x, y, z))]?.light;
+        if (!def || !(def.always || lampK > 0.02)) continue;
+        const d = dist(x, y, z);
+        if (d < 70 * 70) near.push({ key: k, d, x: x + 0.5, y: y + (def.y ?? 0.5), z: z + 0.5, def });
       }
-      // Campfires and dance floors glow too (dance floors even in the daytime).
+      // Campfires, dance floors and TVs glow too (dance floors even in the daytime).
       for (const e of this.extraLights?.() || []) {
         const d = dist(e.x, e.y, e.z);
-        if (d < 60 * 60 && (lampK > 0 || e.always)) near.push([d - 400, e.x, e.y, e.z, e]);
+        if (d < 60 * 60 && (lampK > 0 || e.always)) {
+          near.push({ key: `extra:${e.x},${e.y},${e.z}`, d: d - 400, x: e.x + 0.5, y: e.y + 0.3, z: e.z + 0.5, def: { color: e.color, power: (e.intensity || 14) / 14 * 1.4, range: 30, always: e.always }, extra: true });
+        }
       }
-      near.sort((a, b) => a[0] - b[0]);
-      // Lights are never hidden (that would make every material recompile); unused ones just go dark.
-      this.lampLights.forEach((l, i) => {
-        const n = near[i];
-        l.userData.on = !!n;
-        l.userData.extra = n?.[4];
-        if (n) l.position.set(n[1] + 0.5, n[2] + 0.3, n[3] + 0.5);
-        if (!n?.[4]) l.color.setHex(0xffc477);
-      });
+      // Brighter, farther-reaching lamps (like street lamps) win the real lights first.
+      near.sort((a, b) => a.d / a.def.power ** 2 - b.d / b.def.power ** 2);
+      const chosen = new Map(near.slice(0, this.lampLights.length).map(n => [n.key, n]));
+      const free = [];
+      for (const l of this.lampLights) {
+        const n = chosen.get(l.userData.key);
+        if (n) {
+          l.userData.lamp = n; // still close: keep it (extras may have moved or changed color)
+          chosen.delete(n.key);
+        } else free.push(l);
+      }
+      for (const l of free) {
+        const n = chosen.values().next().value;
+        l.userData.lamp = n || null;
+        l.userData.key = n?.key;
+        if (n) {
+          chosen.delete(n.key);
+          l.intensity = 0; // fade in from dark
+        }
+      }
     }
+    const t = performance.now() / 1000;
     for (const l of this.lampLights) {
-      const e = l.userData.extra;
-      if (e?.color) l.color.copy(e.color);
-      l.intensity = !l.userData.on ? 0 : e ? (e.intensity || 14) * Math.max(lampK, e.always ? 0.7 : 0) : 14 * lampK;
+      const n = l.userData.lamp;
+      let target = 0;
+      if (n) {
+        const def = n.def;
+        l.position.set(n.x, n.y, n.z);
+        l.color.set(def.color);
+        l.distance = def.range;
+        const flicker = def.flicker ? 1 - def.flicker * (0.5 + 0.5 * Math.sin(t * 13 + l.userData.phase) * Math.sin(t * 7.3 + l.userData.phase * 2)) : 1;
+        target = LAMP_BRIGHTNESS * def.power * (def.always ? 1 : lampK) * flicker;
+      }
+      l.intensity += (target - l.intensity) * Math.min(1, dt * (n?.def.flicker ? 20 : 4));
     }
   }
 }

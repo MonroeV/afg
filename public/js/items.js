@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { BLOCKS, BLOCK_IDS } from './shared/blocks.js';
 import { blockMaterial } from './world.js';
+import { modelGeometry, modelMaterials } from './models.js';
 
 export const HAMMER = 'hammer';
 export const FIREWORKS = 'fireworks';
@@ -96,6 +97,10 @@ export function makeIcon(item, textures) {
 
   const def = BLOCKS[item];
   const shape = def.shape || 'cube';
+  if (shape === 'model') {
+    ctx.drawImage(modelIcon(def), 0, 0, size, size);
+    return canvas;
+  }
   if (shape === 'door' || shape === 'plant') {
     // Doors and flowers are drawn flat, straight on.
     const img = textures[shape === 'door' ? def.tex.bottom : def.tex].canvas;
@@ -128,6 +133,34 @@ export function makeIcon(item, textures) {
   face(side, s, s / 2, 0, depth, cx - s, cy, 0.25);
   face(side, s, -s / 2, 0, depth, cx, cy + s / 2, 0.45);
   return canvas;
+}
+
+// Lamp models get a tiny 3D picture as their icon.
+let iconKit = null;
+function modelIcon(def) {
+  if (!iconKit) {
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(1);
+    renderer.setSize(64, 64);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    const scene = new THREE.Scene();
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x667788, 2));
+    const sun = new THREE.DirectionalLight(0xffffff, 2);
+    sun.position.set(2, 3, 2);
+    scene.add(sun);
+    const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 20);
+    camera.position.set(1.9, 1.5, 2.4);
+    camera.lookAt(0.5, 0.5, 0.5);
+    iconKit = { renderer, scene, camera };
+  }
+  const { renderer, scene, camera } = iconKit;
+  const mats = modelMaterials(def.model);
+  mats[1].color.multiplyScalar(1.6);
+  const mesh = new THREE.Mesh(modelGeometry(def.model), mats);
+  scene.add(mesh);
+  renderer.render(scene, camera);
+  scene.remove(mesh);
+  return renderer.domElement;
 }
 
 // The item held in the bottom-right of the screen.
@@ -189,6 +222,16 @@ export class ViewModel {
       obj.rotation.set(0.2, 0.4, -0.2);
     } else {
       const shape = BLOCKS[item].shape || 'cube';
+      if (shape === 'model') {
+        obj = new THREE.Group();
+        const mesh = new THREE.Mesh(modelGeometry(BLOCKS[item].model), this.materials[item]);
+        mesh.scale.setScalar(0.4);
+        mesh.position.set(-0.2, -0.25, -0.2);
+        obj.add(mesh);
+        obj.rotation.set(0.15, 0.6, 0);
+        this.models[item] = obj;
+        return obj;
+      }
       const mat = blockMaterial(this.materials, item);
       const geo = shape === 'flat' ? new THREE.BoxGeometry(0.32, 0.03, 0.32)
         : shape === 'door' ? new THREE.BoxGeometry(0.2, 0.4, 0.04)
