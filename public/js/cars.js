@@ -1,7 +1,7 @@
 // Cars you can spawn, drive and share with other players.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { BLOCKS, blockId, isWaterBlock } from './shared/blocks.js';
+import { BLOCKS, blockId, blockMeta, itemOf, floorOf, isWaterBlock } from './shared/blocks.js';
 import { VEHICLES, MAX_HP, SMOKE_HP, FIRE_HP, PERSON_MASS, outlinePoints, rotorPoints, vehicleBlocked, toWorld, afloat } from './shared/vehicles.js';
 
 export const CAR_SPECS = VEHICLES;
@@ -819,7 +819,28 @@ export class Cars {
       car.speed -= car.speed * Math.min(1, 5 * dt);
       car.braking = true;
     }
-    car.speed = Math.max(-7, Math.min(max, car.speed));
+    // Speed pads: driving over one the way its arrows point gives you a big boost.
+    const pad = this.world.get(Math.floor(car.pos.x), Math.floor(car.pos.y + 0.05), Math.floor(car.pos.z));
+    const padDef = BLOCKS[blockId(itemOf(pad))]?.speedPad ? itemOf(pad) : BLOCKS[blockId(floorOf(pad))]?.speedPad ? floorOf(pad) : 0;
+    if (padDef) {
+      const a = (blockMeta(padDef) & 3) * Math.PI / 2;
+      const along = -Math.sin(car.h) * Math.sin(a) - Math.cos(car.h) * Math.cos(a);
+      if (along > 0.5 && car.speed > -1) {
+        if (!car.boostT) events.push({ type: 'boost' });
+        car.boostT = 1.2;
+      }
+    }
+    car.boostT = Math.max(0, (car.boostT || 0) - dt);
+    let limit = max;
+    if (car.boostT > 0) {
+      limit = Math.max(max, s.maxSpeed * 1.8);
+      if (car.speed < limit) car.speed = Math.min(limit, car.speed + s.accel * 3 * dt);
+    } else if (car.speed > max) {
+      // After a boost, slow back down to normal top speed gently.
+      car.speed = Math.max(max, car.speed - s.accel * 1.5 * dt);
+      limit = car.speed;
+    }
+    car.speed = Math.max(-7, Math.min(limit, car.speed));
     if (Math.abs(car.speed) < 0.05 && !throttle) car.speed = 0;
     car.load = throttle !== 0 && !car.braking ? 1 : 0;
     car.reversing = car.gear === 0;

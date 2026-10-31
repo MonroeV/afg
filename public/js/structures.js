@@ -1,8 +1,8 @@
 // Special things you can make by arranging blocks in a pattern (see the Build Book).
 // Every player's game spots these patterns by itself, so no server work is needed.
-import { blockId, blockKey } from './shared/blocks.js';
+import { blockId, blockKey, blockMeta, BED_FOOT } from './shared/blocks.js';
 
-const B = { concrete: 13, log: 7, cobble: 4, lamp: 18, rainbow: 28, metal: 11, black: 17, water: 36, marble: 12, tiles: 20, bounce: 19, glass: 9 };
+const B = { concrete: 13, log: 7, cobble: 4, lamp: 18, rainbow: 28, metal: 11, black: 17, water: 36, marble: 12, tiles: 20, bounce: 19, glass: 9, bed: 64 };
 const PAINTS = new Set([14, 15, 16, 17, 29, 30, 31, 32, 33, 34]);
 const SIDES = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const AROUND = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
@@ -45,6 +45,15 @@ export class Structures {
           }
         }
         return null;
+      case B.bed: {
+        // A Bed block: the head end, with its foot end in front of it.
+        const v = this.world.get(x, y, z), q = blockMeta(v) & 3;
+        if (blockMeta(v) & BED_FOOT) return null;
+        const dx = Math.round(Math.sin(q * Math.PI / 2)), dz = Math.round(Math.cos(q * Math.PI / 2));
+        const foot = this.world.get(x + dx, y, z + dz);
+        if (blockId(foot) !== B.bed || !(blockMeta(foot) & BED_FOOT) || (blockMeta(foot) & 3) !== q) return null;
+        return { type: 'bed', x, y, z, dx, dz, top: y + 0.56, lieY: y + 0.58 };
+      }
       case B.bounce: {
         for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) if (this.id(x + i, y, z + j) !== B.bounce) return null;
         return { type: 'trampoline', x, y, z };
@@ -95,7 +104,7 @@ export class Structures {
   scan() {
     this.version = (this.version || 0) + 1;
     this.list.clear();
-    const anchors = new Set([B.concrete, B.bounce, B.log, B.lamp, B.metal, B.water, B.glass]);
+    const anchors = new Set([B.concrete, B.bounce, B.log, B.lamp, B.metal, B.water, B.glass, B.bed]);
     for (const [k, v] of this.world.blocks) {
       if (!anchors.has(blockId(v))) continue;
       const [x, y, z] = k.split(',').map(Number);

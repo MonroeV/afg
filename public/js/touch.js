@@ -51,7 +51,7 @@ export class TouchControls {
 
     this.pads = {
       jump: div('pad jump', this.root, '⬆'),
-      down: div('pad down hidden', this.root, '⬇'),
+      down: div('pad down', this.root, '⬇'),
       use: div('pad use', this.root, '✋'),
     };
     const minis = div('minis', this.root);
@@ -139,7 +139,7 @@ export class TouchControls {
     this.mode = mode;
     this.pads.jump.textContent = mode === 'car' ? '🛑' : '⬆';
     this.pads.jump.classList.toggle('hidden', mode === 'ride');
-    this.pads.down.classList.toggle('hidden', mode !== 'fly' && mode !== 'heli');
+    this.pads.down.classList.toggle('hidden', mode === 'car' || mode === 'ride'); // walking, it's crouch
     this.pads.use.textContent = mode === 'car' || mode === 'heli' || mode === 'ride' ? '🚪' : '✋';
     this.stickKeys();
   }

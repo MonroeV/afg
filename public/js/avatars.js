@@ -29,6 +29,10 @@ function nameTag(name, color) {
   return sprite;
 }
 
+// What a player is doing, sent with their position: bits of `flags`. The top 24 bits are
+// the color of the balloon they're holding.
+export const FLAG = { sleeping: 1, sitting: 2, crouching: 4, balloon: 8 };
+
 // A character in the world that can walk, dance, wave and sit in cars.
 export class Avatar {
   constructor(scene, info, { tag = true } = {}) {
@@ -46,6 +50,9 @@ export class Avatar {
     this.wave = 0;
     this.swing = 1;
     this.seat = null; // { position, yaw } while sitting in a car
+    this.sitting = false; // on a chair or couch
+    this.crouching = false;
+    this.balloon = null; // the color of the balloon they're holding, if they are
     if (tag) {
       this.tag = nameTag(info.name, info.look?.shirtColor || '#fff');
       this.tag.position.y = 2.35;
@@ -250,14 +257,43 @@ export class Avatar {
     this.root.rotation.y = this.yaw;
     this.root.rotation.x = this.lying ? Math.PI / 2 : 0; // asleep in bed, on our back
     this.root.scale.setScalar(this.seat ? SEAT_SCALE : 1);
-    if (this.tag) this.tag.visible = !this.lying;
+    if (this.tag) {
+      this.tag.visible = !this.lying;
+      this.tag.position.y = this.crouching ? 2.05 : 2.35;
+    }
     this.updateRemoteBall(dt);
+    this.updateBalloon(time);
+    const sitting = !!this.seat || this.sitting;
     animateCharacter(this.character, {
-      walk: this.walk, speed: this.seat || this.lying ? 0 : this.speed, pitch: this.lying ? 0 : this.pitch, time,
-      dance: this.dance, wave: this.wave, swing: this.swing, sitting: !!this.seat,
-      flying: this.flying,
+      walk: this.walk, speed: sitting || this.lying ? 0 : this.speed, pitch: this.lying ? 0 : this.pitch, time,
+      dance: this.dance, wave: this.wave, swing: this.swing, sitting,
+      flying: this.flying, crouch: this.crouching && !sitting,
     });
     this.updatePet(dt, time);
+  }
+
+  // A balloon on a string, held up in the right hand.
+  updateBalloon(time) {
+    if (!this.balloon) {
+      if (this.balloonGroup) this.balloonGroup.visible = false;
+      return;
+    }
+    if (!this.balloonGroup) {
+      const g = new THREE.Group();
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 12).scale(1, 1.2, 1), new THREE.MeshStandardMaterial({ roughness: 0.25 }));
+      ball.position.y = 1.7;
+      ball.castShadow = true;
+      const string = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 1.4, 4).translate(0, 0.7, 0), new THREE.MeshBasicMaterial({ color: 0xeeeeee }));
+      g.add(ball, string);
+      g.position.set(0.38, 1.05, -0.1);
+      this.root.add(g);
+      this.balloonGroup = g;
+      this.balloonBall = ball;
+    }
+    this.balloonGroup.visible = true;
+    this.balloonBall.material.color.set(this.balloon);
+    this.balloonGroup.rotation.z = Math.sin(time * 1.3 + this.id) * 0.08;
+    this.balloonGroup.rotation.x = Math.sin(time * 0.9 + this.id * 2) * 0.06 + this.speed * 0.25;
   }
 
   dispose() {
@@ -299,7 +335,10 @@ export class Avatars {
       a.setState(x, y, z, yaw, pitch);
       a.setPetState(pet);
       a.remoteBall = ball;
-      a.lying = !!(flags & 1);
+      a.lying = !!(flags & FLAG.sleeping);
+      a.sitting = !!(flags & FLAG.sitting);
+      a.crouching = !!(flags & FLAG.crouching);
+      a.balloon = flags & FLAG.balloon ? `#${((flags >>> 8) & 0xffffff).toString(16).padStart(6, '0')}` : null;
     }
   }
 

@@ -458,6 +458,68 @@ function neon(color) {
   };
 }
 
+// ---------- Furniture and fun blocks ----------
+
+// Two shelves of colorful books in a wooden frame.
+function bookshelf(u, v) {
+  const wood = planks(u, v);
+  const frame = u < 0.07 || u > 0.93 || v < 0.06 || v > 0.94 || Math.abs(v - 0.5) < 0.035;
+  if (frame) return { c: shade(wood.c, 0.85), h: 0.8 };
+  const shelf = v < 0.5 ? 0 : 1;
+  const top = shelf ? 0.535 : 0.06, bottom = shelf ? 0.94 : 0.465;
+  // Books: each column of the shelf is a book with its own color and height.
+  const n = 9, col = Math.floor((u - 0.07) / 0.86 * n), fu = ((u - 0.07) / 0.86 * n) % 1;
+  const r = hash(col, shelf, 801), tall = 0.55 + hash(col, shelf, 802) * 0.4;
+  const bookTop = bottom - (bottom - top) * tall;
+  if (v < bookTop || fu < 0.07) return { c: shade(wood.c, 0.35), h: 0.2 };
+  const colors = [[0.75, 0.2, 0.2], [0.2, 0.45, 0.75], [0.25, 0.6, 0.3], [0.9, 0.7, 0.2], [0.55, 0.3, 0.7], [0.9, 0.5, 0.2], [0.2, 0.6, 0.6]];
+  let c = colors[Math.floor(r * colors.length)];
+  const band = Math.abs((v - bookTop) / (bottom - bookTop) - 0.25) < 0.04 || Math.abs((v - bookTop) / (bottom - bookTop) - 0.8) < 0.04;
+  if (band) c = mixc(c, [0.95, 0.85, 0.5], 0.7);
+  return { c: shade(c, 0.8 + Math.sin(fu * Math.PI) * 0.25), h: 0.6 + Math.sin(fu * Math.PI) * 0.3 };
+}
+
+// A glossy black box with a big glowing music note on top…
+function musicTop(u, v) {
+  const n = fbm(u, v, 6, 3, 810);
+  const border = Math.min(u, v, 1 - u, 1 - v) < 0.06;
+  const head = Math.hypot((u - 0.38) / 1.25, v - 0.7) < 0.11;
+  const stem = u > 0.44 && u < 0.5 && v > 0.22 && v < 0.7;
+  const flag = u > 0.47 && u < 0.7 && v > 0.22 && v < 0.42 && v - 0.22 < (0.7 - u) * 0.6 + 0.06 && v - 0.22 > (u - 0.47) * 0.5;
+  if (head || stem || flag) return { c: [1, 0.85, 0.35], h: 1, e: 0.9 };
+  if (border) return { c: [0.85, 0.6, 0.2], h: 0.8 };
+  return { c: [0.1 + n * 0.05, 0.08 + n * 0.04, 0.16 + n * 0.06], h: 0.5 };
+}
+// …and piano keys around the sides.
+function musicSide(u, v) {
+  if (v < 0.08 || v > 0.92) return { c: [0.1, 0.08, 0.14], h: 0.8 };
+  const key = (u * 7) % 1;
+  if (key < 0.06) return { c: [0.25, 0.25, 0.28], h: 0.3 };
+  const black = v < 0.58 && [1, 2, 4, 5, 6].includes(Math.round(u * 7)) && Math.abs(u * 7 - Math.round(u * 7)) < 0.28;
+  if (black) return { c: [0.06, 0.06, 0.08], h: 1 };
+  return { c: shade([0.97, 0.96, 0.92], 0.92 + (1 - v) * 0.08), h: 0.6 };
+}
+
+// Speed pad: bright arrows pointing the way it pushes you (towards +v, the block's front).
+function speedPad(u, v) {
+  const n = fbm(u, v, 8, 3, 820);
+  const border = Math.min(u, v, 1 - u, 1 - v) < 0.06;
+  if (border) return { c: [0.15, 0.15, 0.17], h: 0.8 };
+  const k = ((v - Math.abs(u - 0.5) * 0.9) * 3) % 1;
+  const arrow = k > 0.55 && k < 0.85 && Math.abs(u - 0.5) < 0.38;
+  if (arrow) return { c: [1, 0.85, 0.15], h: 1, e: 0.7 };
+  return { c: [0.95 - n * 0.1, 0.35, 0.1], h: 0.5 };
+}
+
+// Race lines: green and white squares for the start, black and white for the finish.
+function checkers(dark, cells) {
+  return (u, v) => {
+    const n = fbm(u, v, 8, 3, 830);
+    const on = (Math.floor(u * cells) + Math.floor(v * cells)) % 2 === 0;
+    return { c: shade(on ? dark : [0.95, 0.95, 0.93], 0.93 + n * 0.1), h: on ? 0.4 : 0.6 };
+  };
+}
+
 const GENERATORS = {
   grass_top: grassTop,
   grass_side: grassSide,
@@ -508,6 +570,12 @@ const GENERATORS = {
   neon_pink: neon([1, 0.25, 0.65]),
   neon_blue: neon([0.25, 0.7, 1]),
   neon_green: neon([0.35, 1, 0.42]),
+  bookshelf,
+  music_top: musicTop,
+  music_side: musicSide,
+  speed_pad: speedPad,
+  race_start: checkers([0.15, 0.65, 0.25], 4),
+  race_finish: checkers([0.08, 0.08, 0.1], 6),
 };
 
 const NORMAL_STRENGTH = {

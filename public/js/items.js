@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { BLOCKS, BLOCK_IDS, PAINT_COLORS } from './shared/blocks.js';
 import { blockMaterial, railGeometry } from './world.js';
 import { modelGeometry, modelMaterials } from './models.js';
+import { pictureCanvas } from './pictures.js';
 
 export const HAMMER = 'hammer';
 export const FIREWORKS = 'fireworks';
@@ -11,8 +12,42 @@ export const CLAIM = 'claim';
 export const BRUSH = 'brush';
 export const SCRAPER = 'scraper';
 export const LADDER = 53;
-export const TOOLS = [HAMMER, BRUSH, SCRAPER, BALL, FIREWORKS, CLAIM];
+export const WATER_BALLOON = 'waterballoon';
+export const BUBBLES = 'bubbles';
+export const BALLOON = 'balloon';
+export const FILL = 'fill';
+export const COPY = 'copy';
+export const CAMERA = 'camera';
+export const TOOLS = [HAMMER, BRUSH, SCRAPER, BALL, FIREWORKS, CLAIM, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA];
 export const ALL_ITEMS = [...TOOLS, ...BLOCK_IDS];
+
+// The tabs of the item menu. Blocks not listed anywhere go under Blocks (or Lights).
+const HOME = [60, 61, 62, 64, 63, 65, 66, 67, 68, 21, 53, 54, 25, 35, 20];
+const TOWN = [22, 23, 56, 24, 58, 27, 36, 1, 7, 8];
+const FUN = [BALL, FIREWORKS, WATER_BALLOON, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28];
+const listed = new Set([...HOME, ...TOWN, ...FUN]);
+const visible = i => typeof i !== 'number' || !BLOCKS[i].hidden;
+export const TABS = [
+  { id: 'tools', icon: '🧰', name: 'Tools', items: [HAMMER, BRUSH, SCRAPER, CLAIM, FILL, COPY, CAMERA] },
+  { id: 'fun', icon: '🎉', name: 'Fun', items: FUN },
+  { id: 'blocks', icon: '🧱', name: 'Blocks', items: BLOCK_IDS.filter(i => !listed.has(i) && !BLOCKS[i].light && !BLOCKS[i].shape && visible(i)) },
+  { id: 'home', icon: '🛋️', name: 'Home', items: HOME },
+  { id: 'lights', icon: '💡', name: 'Lights', items: BLOCK_IDS.filter(i => BLOCKS[i].light) },
+  { id: 'town', icon: '🌳', name: 'Town', items: TOWN },
+  { id: 'paint', icon: '🎨', name: 'Paint' },
+  { id: 'book', icon: '📖', name: 'Build Book' },
+];
+// Anything left over (so nothing is ever missing from the menu).
+for (const i of BLOCK_IDS) if (visible(i) && !TABS.some(t => t.items?.includes(i))) TABS[2].items.push(i);
+
+// Extra words the search box understands.
+export const SEARCH_WORDS = {
+  [WATER_BALLOON]: 'throw splash water fight', [BUBBLES]: 'bubble blow', [BALLOON]: 'float fly slow fall', [FILL]: 'fill wall floor big box builder',
+  [COPY]: 'copy paste clone duplicate builder', [CAMERA]: 'photo picture screenshot', [CLAIM]: 'land claim home', [BALL]: 'pet dog fetch throw',
+  61: 'sofa', 60: 'seat sit', 62: 'desk', 64: 'sleep', 65: 'picture art wall', 66: 'picture art wall cat dog rocket dinosaur', 67: 'plant flower',
+  68: 'toy bear hug', 69: 'piano song note sound', 70: 'boost fast arrow run', 71: 'race timer go', 72: 'race timer end', 19: 'trampoline jump',
+  36: 'pool lake', 48: 'torch', 45: 'torch', 21: 'garage', 54: 'fence rail',
+};
 // The hammer always lives in slot 1.
 export const DEFAULT_HOTBAR = [HAMMER, 5, 6, 9, 21, LADDER, BRUSH, FIREWORKS, CLAIM];
 
@@ -25,8 +60,20 @@ export function itemName(item) {
   if (item === CLAIM) return 'Land Flag';
   if (item === BRUSH) return 'Paint Brush';
   if (item === SCRAPER) return 'Paint Scraper';
+  if (item === WATER_BALLOON) return 'Water Balloons';
+  if (item === BUBBLES) return 'Bubble Wand';
+  if (item === BALLOON) return 'Balloon';
+  if (item === FILL) return 'Fill Wand';
+  if (item === COPY) return 'Copy Wand';
+  if (item === CAMERA) return 'Camera';
   return BLOCKS[item].name;
 }
+
+const roundRect = (ctx, x, y, w, h, r) => {
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+  ctx.fill();
+};
 
 // Draws a small icon for the hotbar and the item menu. `paint` is the brush's color (a
 // palette number or a '#rrggbb' color).
@@ -109,6 +156,105 @@ export function makeIcon(item, textures, paint = 1) {
     ctx.stroke();
     return canvas;
   }
+  if (item === WATER_BALLOON || item === BALLOON) {
+    const water = item === WATER_BALLOON;
+    ctx.strokeStyle = '#ddd';
+    ctx.lineWidth = 1.5;
+    if (!water) {
+      ctx.beginPath();
+      ctx.moveTo(30, 44);
+      ctx.quadraticCurveTo(24, 54, 32, 62);
+      ctx.stroke();
+    }
+    const g = ctx.createRadialGradient(24, 20, 2, 30, 28, 22);
+    g.addColorStop(0, water ? '#bfe9ff' : '#ff9a9a');
+    g.addColorStop(1, water ? '#1e88e5' : '#d32f2f');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(31, water ? 34 : 26, 18, water ? 18 : 20, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = water ? '#1565c0' : '#b71c1c';
+    ctx.beginPath();
+    ctx.moveTo(27, water ? 52 : 47); ctx.lineTo(35, water ? 52 : 47); ctx.lineTo(31, water ? 46 : 42); ctx.fill();
+    if (water) {
+      ctx.fillStyle = '#4fc3f7';
+      for (const [x, y] of [[52, 18], [56, 30], [12, 50]]) {
+        ctx.beginPath();
+        ctx.moveTo(x, y - 6); ctx.quadraticCurveTo(x + 5, y + 2, x, y + 3); ctx.quadraticCurveTo(x - 5, y + 2, x, y - 6);
+        ctx.fill();
+      }
+    }
+    return canvas;
+  }
+  if (item === BUBBLES) {
+    ctx.strokeStyle = '#ab47bc';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(14, 58); ctx.lineTo(30, 36);
+    ctx.stroke();
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.arc(35, 28, 9, 0, Math.PI * 2);
+    ctx.stroke();
+    for (const [x, y, r] of [[50, 16, 8], [54, 36, 5], [42, 8, 4]]) {
+      const g = ctx.createRadialGradient(x - r / 3, y - r / 3, 1, x, y, r);
+      g.addColorStop(0, 'rgba(255,255,255,0.9)');
+      g.addColorStop(0.6, 'rgba(160,220,255,0.25)');
+      g.addColorStop(1, 'rgba(200,140,255,0.8)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return canvas;
+  }
+  if (item === FILL || item === COPY) {
+    ctx.save();
+    ctx.translate(32, 32);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = '#3e2a5c';
+    ctx.fillRect(-3, -6, 6, 34);
+    ctx.fillStyle = item === FILL ? '#ffca28' : '#4dd0e1';
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 - Math.PI / 2, r = i % 2 ? 6 : 13;
+      ctx.lineTo(Math.cos(a) * r, -16 + Math.sin(a) * r);
+    }
+    ctx.fill();
+    ctx.restore();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = item === FILL ? '#ffca28' : '#4dd0e1';
+    if (item === FILL) {
+      ctx.fillStyle = 'rgba(255,202,40,0.45)';
+      ctx.fillRect(38, 38, 20, 20);
+      ctx.strokeRect(38, 38, 20, 20);
+    } else {
+      ctx.strokeRect(34, 34, 16, 16);
+      ctx.strokeRect(42, 42, 16, 16);
+    }
+    return canvas;
+  }
+  if (item === CAMERA) {
+    ctx.fillStyle = '#37474f';
+    roundRect(ctx, 6, 18, 52, 34, 6);
+    ctx.fillStyle = '#546e7a';
+    roundRect(ctx, 18, 12, 16, 8, 2);
+    ctx.fillStyle = '#90a4ae';
+    ctx.beginPath();
+    ctx.arc(32, 35, 13, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#1a237e';
+    ctx.beginPath();
+    ctx.arc(32, 35, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.beginPath();
+    ctx.arc(29, 32, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffeb3b';
+    ctx.fillRect(46, 22, 7, 4);
+    return canvas;
+  }
   if (item === CLAIM) {
     ctx.fillStyle = '#8d6e63';
     ctx.fillRect(18, 8, 5, 50);
@@ -127,6 +273,10 @@ export function makeIcon(item, textures, paint = 1) {
   const shape = def.shape || 'cube';
   if (shape === 'model') {
     ctx.drawImage(modelIcon(def), 0, 0, size, size);
+    return canvas;
+  }
+  if (shape === 'picture') {
+    ctx.drawImage(pictureCanvas(def.art, def.art === 'poster' ? 0 : 1), 2, 10, 60, 45);
     return canvas;
   }
   if (shape === 'rail') {
@@ -204,7 +354,14 @@ function modelIcon(def) {
   const { renderer, scene, camera } = iconKit;
   const mats = modelMaterials(def.model);
   mats[1].color.multiplyScalar(1.6);
-  const mesh = new THREE.Mesh(modelGeometry(def.model), mats);
+  const geo = modelGeometry(def.model);
+  // Zoom in on small things (a candle, a teddy bear) so they fill the icon.
+  geo.computeBoundingBox();
+  const box = geo.boundingBox, center = box.getCenter(new THREE.Vector3());
+  const size = Math.max(0.45, box.getSize(new THREE.Vector3()).length() / Math.sqrt(3));
+  camera.position.copy(center).add(new THREE.Vector3(1.4, 1.0, 1.9).multiplyScalar(size * 1.05));
+  camera.lookAt(center);
+  const mesh = new THREE.Mesh(geo, mats);
   scene.add(mesh);
   renderer.render(scene, camera);
   scene.remove(mesh);
@@ -274,6 +431,40 @@ export class ViewModel {
         obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.01).translate(0, 0.16, 0), metal));
       }
       obj.rotation.set(0.4, 0.4, -0.3);
+    } else if (item === WATER_BALLOON) {
+      obj = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 12).scale(1, 1.15, 1), new THREE.MeshStandardMaterial({ color: 0x42a5f5, roughness: 0.15, transparent: true, opacity: 0.85 }));
+      obj.position.y = 0.05;
+    } else if (item === BALLOON) {
+      obj = new THREE.Group();
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 12).scale(1, 1.2, 1), new THREE.MeshStandardMaterial({ color: 0xe53935, roughness: 0.25 }));
+      b.position.y = 0.3;
+      const string = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.002, 0.24, 4), new THREE.MeshBasicMaterial({ color: 0xeeeeee }));
+      string.position.y = 0.12;
+      obj.add(b, string);
+      obj.position.set(0.04, 0, 0);
+      obj.rotation.z = -0.2;
+      this.balloonMesh = b;
+    } else if (item === BUBBLES) {
+      obj = new THREE.Group();
+      obj.add(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.35, 6), new THREE.MeshStandardMaterial({ color: 0xab47bc })));
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.01, 6, 20), new THREE.MeshStandardMaterial({ color: 0xab47bc }));
+      ring.position.y = 0.23;
+      obj.add(ring);
+      obj.rotation.set(0.3, 0.3, -0.3);
+    } else if (item === FILL || item === COPY) {
+      obj = new THREE.Group();
+      obj.add(new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.018, 0.38, 6), new THREE.MeshStandardMaterial({ color: 0x3e2a5c, roughness: 0.5 })));
+      const tip = new THREE.Mesh(new THREE.OctahedronGeometry(0.05), new THREE.MeshBasicMaterial({ color: item === FILL ? 0xffca28 : 0x4dd0e1 }));
+      tip.position.y = 0.23;
+      obj.add(tip);
+      obj.rotation.set(0.35, 0.4, -0.25);
+    } else if (item === CAMERA) {
+      obj = new THREE.Group();
+      obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.08), new THREE.MeshStandardMaterial({ color: 0x37474f, roughness: 0.5 })));
+      const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.06, 16).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x1a237e, roughness: 0.1, metalness: 0.5 }));
+      lens.position.z = -0.06;
+      obj.add(lens);
+      obj.rotation.set(0.1, 0.2, 0);
     } else if (item === CLAIM) {
       obj = new THREE.Group();
       obj.add(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.55, 8), new THREE.MeshStandardMaterial({ color: 0x8d6e63 })));
@@ -304,7 +495,8 @@ export class ViewModel {
         return obj;
       }
       const mat = blockMaterial(this.materials, item);
-      const geo = shape === 'flat' ? new THREE.BoxGeometry(0.32, 0.03, 0.32)
+      const geo = shape === 'picture' ? new THREE.BoxGeometry(0.32, 0.24, 0.02)
+        : shape === 'flat' ? new THREE.BoxGeometry(0.32, 0.03, 0.32)
         : shape === 'door' ? new THREE.BoxGeometry(0.2, 0.4, 0.04)
           : shape === 'plant' ? new THREE.PlaneGeometry(0.35, 0.35) : new THREE.BoxGeometry(0.32, 0.32, 0.32);
       obj = new THREE.Mesh(geo, mat);
@@ -312,13 +504,16 @@ export class ViewModel {
     }
     this.models[item] = obj;
     if (item === BRUSH && this.paintColor) this.bristles.color.set(this.paintColor);
+    if (item === BALLOON && this.paintColor) this.balloonMesh.material.color.set(this.paintColor);
     return obj;
   }
 
   // The color on the end of the paint brush.
+  // (The balloon is the brush's color too.)
   setPaint(color) {
     this.paintColor = color;
     this.bristles?.color.set(color);
+    this.balloonMesh?.material.color.set(color);
   }
 
   setItem(item) {

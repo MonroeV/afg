@@ -1,7 +1,7 @@
 // The game "room": the world, players, vehicles, land claims, growing trees and the clock.
 // The Node server runs one of these for everybody. When there is no server,
 // the browser runs its own copy so single player works exactly the same way.
-import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, floorOf, validFaces, carryPaint, isWaterBlock, DOOR_OPEN, DAY_LENGTH, WORLD, isNightTime } from './blocks.js';
+import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, DOOR_OPEN, DAY_LENGTH, WORLD, isNightTime } from './blocks.js';
 import { sanitizeLook, cleanName } from './avatar.js';
 import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines } from './worldgen.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot } from './vehicles.js';
@@ -10,7 +10,8 @@ import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, C
 export const SAVE_VERSION = 6;
 const TICK_RATE = 15;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const LOG = 7, LEAVES = 8, GRASS = 1, DIRT = 2;
+const LOG = 7, LEAVES = 8, GRASS = 1, DIRT = 2, RACE_FINISH = 72;
+export const MAX_MANY = 4096; // the most blocks one Fill or Paste can change
 
 const num = v => (Number.isFinite(v) ? v : 0);
 const clampWorld = v => Math.max(WORLD.min, Math.min(WORLD.max + 1, num(v)));
@@ -30,6 +31,7 @@ export class GameRoom {
     this.claims = []; // { owner, key, x0, z0, x1, z1, createdAt }
     this.names = {}; // lowercase name -> last time someone played with it
     this.saplings = []; // logs growing into trees
+    this.races = {}; // finish line "x,y,z" -> best times [{ name, key, time }]
     this.nextId = 1;
     this.nextVehicleId = 1;
     this.nextHomeId = 1;
@@ -119,6 +121,10 @@ export class GameRoom {
     this.paints = new Map((data.paints || []).filter(([k, f]) => typeof k === 'string' && this.world.has(k.split('|')[0]) && validFaces(f)));
     this.names = data.names || {};
     this.saplings = data.saplings || [];
+    this.races = {};
+    for (const [k, list] of Object.entries(data.races && typeof data.races === 'object' ? data.races : {})) {
+      if (Array.isArray(list)) this.races[k] = list.filter(r => r && typeof r.name === 'string' && Number.isFinite(r.time)).slice(0, 5);
+    }
     this.expireClaims();
     if (data.version < 4) this.upgradeLamps();
     if (data.version < 5) this.upgradeTo5();
@@ -168,7 +174,14 @@ export class GameRoom {
       names: this.names,
       saplings: this.saplings,
       paints: [...this.paints],
+      // Best race times, for finish lines that are still there.
+      races: Object.fromEntries(Object.entries(this.races).filter(([k]) => this.isFinish(k))),
     };
+  }
+
+  isFinish(key) {
+    const v = this.world.get(key) || 0;
+    return blockId(itemOf(v)) === RACE_FINISH || blockId(floorOf(v)) === RACE_FINISH;
   }
 
   flatBlocks() {
@@ -391,9 +404,79 @@ export class GameRoom {
     },
 
     fx(client, msg) {
-      if (!['firework', 'hearts', 'sparkle'].includes(msg.kind) || !this.allow(client, 'fx', 3, 6)) return;
+      if (!['firework', 'hearts', 'sparkle', 'bubbles', 'balloon'].includes(msg.kind) || !this.allow(client, 'fx', 5, 10)) return;
       const color = /^#[0-9a-f]{6}$/i.test(msg.color) ? msg.color : '#ffffff';
-      this.broadcast({ t: 'fx', kind: msg.kind, x: num(msg.x), y: num(msg.y), z: num(msg.z), color, seed: num(msg.seed) }, client);
+      this.broadcast({ t: 'fx', kind: msg.kind, x: num(msg.x), y: num(msg.y), z: num(msg.z), color, seed: num(msg.seed), dir: numbers(msg.dir, 3) || undefined }, client);
+    },
+
+    // Lots of blocks at once: the Fill Wand, the Copy Wand's paste, and undoing them.
+    // cells: [x, y, z, block, x, y, z, block, …]
+    many(client, { cells }) {
+      if (!Array.isArray(cells) || cells.length % 4 || cells.length > MAX_MANY * 4) return;
+      const back = [];
+      const tooFast = !this.allow(client, 'many', 0.7, 3);
+      const applied = [];
+      let blocked = null;
+      for (let i = 0; i < cells.length; i += 4) {
+        const [x, y, z, b] = cells.slice(i, i + 4);
+        if (!inBounds(x, y, z) || !isValidBlock(b)) continue;
+        const old = this.get(x, y, z);
+        if (tooFast || !canBuild(this.claims, client.name, x, z)) {
+          // Not allowed: put it back the way it was for this player.
+          back.push(x, y, z, old);
+          if (!tooFast) blocked ??= claimAt(this.claims, x, z);
+          continue;
+        }
+        if (old === b) continue;
+        const k = blockKey(x, y, z);
+        if (b === 0) this.world.delete(k);
+        else this.world.set(k, b);
+        carryPaint(this.paints, k, old, b);
+        applied.push(x, y, z, b);
+      }
+      if (applied.length) {
+        this.broadcast({ t: 'many', cells: applied }, client);
+        this.onDirty();
+      }
+      if (back.length) client.send({ t: 'many', cells: back });
+      if (blocked && this.allow(client, 'claimMsg', 0.2, 1)) client.send({ t: 'chat', system: true, text: `🚧 Some of that is ${blocked.owner}'s land, so it was left alone.` });
+      if (tooFast) client.send({ t: 'chat', system: true, text: '🐢 Whoa, slow down! Wait a moment between big builds.' });
+    },
+
+    // Water balloons: everyone's game shows the balloon flying (and works out who it hits).
+    throw(client, msg) {
+      if (!this.allow(client, 'throw', 4, 8)) return;
+      const p = numbers(msg.p, 3), v = numbers(msg.v, 3);
+      if (!p || !v) return;
+      const color = /^#[0-9a-f]{6}$/i.test(msg.color) ? msg.color : '#42a5f5';
+      this.broadcast({ t: 'throw', id: client.id, p, v: v.map(n => Math.max(-40, Math.min(40, n))), color }, client);
+    },
+
+    // Someone got splashed: tell whoever threw it.
+    splashed(client, { by }) {
+      const thrower = this.clients.get(by);
+      if (!thrower || thrower === client || !this.allow(client, 'splashed', 3, 5)) return;
+      thrower.send({ t: 'splash_hit', name: client.name });
+    },
+
+    // Crossing a finish line: the time since crossing a start line (timed by the racer).
+    race(client, { x, y, z, time }) {
+      time = Math.round(num(time) * 100) / 100;
+      if (!inBounds(x, y, z) || time < 1 || time > 3600 || !this.allow(client, 'race', 0.5, 2)) return;
+      const key = blockKey(x, y, z);
+      if (!this.isFinish(key)) return;
+      const list = (this.races[key] ||= []);
+      const me = nameKey(client.name);
+      const record = !list.length || time < list[0].time;
+      const mine = list.find(r => r.key === me);
+      if (!mine || time < mine.time) {
+        this.races[key] = list.filter(r => r.key !== me).concat({ name: client.name, key: me, time }).sort((a, b) => a.time - b.time).slice(0, 5);
+        this.onDirty();
+      }
+      const place = this.races[key].findIndex(r => r.key === me && r.time === time);
+      const medal = ['🥇', '🥈', '🥉', '4th', '5th'][place] || '';
+      this.broadcast({ t: 'chat', system: true, text: `🏁 ${client.name} finished in ${time.toFixed(2)} s!${record ? ' 🥇 NEW RECORD!' : place >= 0 ? ` ${medal} on the leaderboard` : ''}` });
+      client.send({ t: 'race_board', board: this.races[key].map(r => [r.name, r.time]) });
     },
 
     // The first one in drives; up to two more can ride along as passengers.

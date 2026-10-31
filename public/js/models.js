@@ -1,6 +1,7 @@
-// Little 3D models for the lamp blocks. Each model is built from simple shapes in
-// three parts: the body, the part that glows, and an accent. Positions are inside a
-// 1 x 1 x 1 block whose corner is at (0, 0, 0).
+// Little 3D models for lamps and furniture. Each model is built from simple shapes in
+// up to four parts: the body, the part that glows, an accent and a trim (each part has its
+// own color). Positions are inside a 1 x 1 x 1 block whose corner is at (0, 0, 0).
+// Furniture's front is the +z side (it's turned to face you when you put it down).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -88,16 +89,97 @@ export const MODELS = {
     glowColors: [0xff4d4d, 0xffd84a, 0x4dd2ff, 0x7dff6a, 0xff7af0],
     colors: { body: 0x222222, glow: 0xffffff, metal: 0.2 },
   },
+  // ---------- Furniture ----------
+  chair: {
+    body: [
+      ...[[0.22, 0.24], [0.78, 0.24], [0.22, 0.8], [0.78, 0.8]].map(([x, z]) => box(0.06, 0.48, 0.06, x, 0.24, z)),
+      box(0.64, 0.05, 0.64, 0.5, 0.48, 0.52),
+      box(0.06, 0.62, 0.06, 0.22, 0.79, 0.21), box(0.06, 0.62, 0.06, 0.78, 0.79, 0.21),
+      box(0.62, 0.08, 0.05, 0.5, 1.06, 0.21),
+    ],
+    accent: [box(0.58, 0.06, 0.58, 0.5, 0.535, 0.53), box(0.5, 0.36, 0.04, 0.5, 0.82, 0.24)],
+    colors: { body: 0x8d5a34, accent: 0xd84f4f, metal: 0 },
+  },
+  table: {
+    body: [
+      box(1, 0.07, 1, 0.5, 0.965, 0.5),
+      ...[[0.1, 0.1], [0.9, 0.1], [0.1, 0.9], [0.9, 0.9]].map(([x, z]) => box(0.08, 0.93, 0.08, x, 0.465, z)),
+      box(0.84, 0.08, 0.04, 0.5, 0.88, 0.1), box(0.84, 0.08, 0.04, 0.5, 0.88, 0.9),
+    ],
+    colors: { body: 0xa0703c, metal: 0 },
+  },
+  flowerPot: {
+    body: [cyl(0.15, 0.11, 0.26, 0.5, 0.13, 0.5), cyl(0.17, 0.17, 0.04, 0.5, 0.26, 0.5)],
+    accent: [
+      cyl(0.012, 0.012, 0.28, 0.5, 0.4, 0.5), cyl(0.012, 0.012, 0.22, 0.42, 0.36, 0.46), cyl(0.012, 0.012, 0.24, 0.58, 0.37, 0.55),
+      box(0.12, 0.02, 0.05, 0.44, 0.34, 0.5), box(0.12, 0.02, 0.05, 0.57, 0.31, 0.47),
+    ],
+    trim: [ball(0.06, 0.5, 0.56, 0.5), ball(0.05, 0.42, 0.48, 0.46), ball(0.05, 0.58, 0.5, 0.55)],
+    colors: { body: 0xc8693c, accent: 0x3f9a3a, trim: 0xff6fa8, metal: 0 },
+  },
+  teddy: {
+    body: [
+      ball(0.15, 0.5, 0.22, 0.5).scale(1, 1.1, 0.9).translate(0, -0.02, 0.05), // body
+      ball(0.12, 0.5, 0.48, 0.52), // head
+      ball(0.045, 0.41, 0.57, 0.52), ball(0.045, 0.59, 0.57, 0.52), // ears
+      box(0.08, 0.2, 0.08, 0.34, 0.26, 0.55), box(0.08, 0.2, 0.08, 0.66, 0.26, 0.55), // arms
+      box(0.09, 0.09, 0.18, 0.42, 0.05, 0.6), box(0.09, 0.09, 0.18, 0.58, 0.05, 0.6), // legs
+    ],
+    accent: [ball(0.09, 0.5, 0.2, 0.6).scale(1, 1, 0.5).translate(0, 0, 0.32), ball(0.05, 0.5, 0.45, 0.63).scale(1, 0.8, 0.8).translate(0, 0.09, 0.13)],
+    trim: [ball(0.018, 0.455, 0.51, 0.63), ball(0.018, 0.545, 0.51, 0.63), ball(0.02, 0.5, 0.465, 0.66)],
+    colors: { body: 0xa8703f, accent: 0xe8c9a0, trim: 0x1d1410, metal: 0 },
+  },
 };
+
+// A couch piece. Side by side, couches join up into one long couch: the arms only go on
+// the ends. `arms` says which ends get one: 'a' (the -x side) and/or 'b' (the +x side).
+function couch(arms) {
+  const x0 = arms.includes('a') ? 0.14 : 0, x1 = arms.includes('b') ? 0.86 : 1;
+  const w = x1 - x0, cx = (x0 + x1) / 2;
+  const out = {
+    body: [[0.06, 0.15], [0.94, 0.15], [0.06, 0.9], [0.94, 0.9]].map(([x, z]) => box(0.06, 0.08, 0.06, x, 0.04, z)),
+    accent: [box(1, 0.28, 0.82, 0.5, 0.22, 0.54), box(1, 0.56, 0.2, 0.5, 0.62, 0.2)],
+    trim: [box(w - 0.02, 0.1, 0.6, cx, 0.41, 0.6), box(w - 0.02, 0.3, 0.08, cx, 0.6, 0.34)],
+    colors: { body: 0x3e2a22, accent: 0x4f6fae, trim: 0x6d8cc8, metal: 0 },
+  };
+  for (const [side, x] of [['a', 0.07], ['b', 0.93]]) if (arms.includes(side)) out.accent.push(box(0.14, 0.5, 0.82, x, 0.4, 0.54));
+  return out;
+}
+for (const arms of ['ab', 'a', 'b', '']) MODELS[`couch${arms}`] = couch(arms);
+
+// A bed, two cells long: the head end (headboard and pillow) and the foot end.
+function bed(foot) {
+  return {
+    body: [
+      box(1, 0.2, 1, 0.5, 0.17, 0.5),
+      ...[0.04, 0.96].map(x => box(0.07, 0.07, 0.07, x, 0.035, foot ? 0.96 : 0.04)),
+      foot ? box(1, 0.5, 0.06, 0.5, 0.25, 0.97) : box(1, 0.95, 0.07, 0.5, 0.475, 0.035),
+    ],
+    accent: [box(0.98, 0.13, foot ? 0.93 : 0.58, 0.5, 0.39, foot ? 0.465 : 0.69)],
+    trim: foot ? [box(0.94, 0.1, 0.96, 0.5, 0.33, 0.5)] : [box(0.94, 0.1, 0.94, 0.5, 0.33, 0.53), box(0.62, 0.12, 0.26, 0.5, 0.44, 0.22)],
+    colors: { body: 0x7b4b2a, accent: 0x4fa3e0, trim: 0xf4f1ea, metal: 0 },
+  };
+}
+MODELS.bed = bed(false);
+MODELS.bedFoot = bed(true);
 
 const cache = {};
 
-// One geometry per model, with a group for each part: 0 body, 1 glow, 2 accent.
+// A part with nothing in it: its group draws nothing (and costs no draw call).
+function emptyPart() {
+  const g = new THREE.BufferGeometry();
+  for (const [name, size] of [['position', 3], ['normal', 3], ['uv', 2], ['color', 3]]) g.setAttribute(name, new THREE.BufferAttribute(new Float32Array(0), size));
+  return g;
+}
+
+export const PARTS = ['body', 'glow', 'accent', 'trim'];
+
+// One geometry per model, with a group for each part: 0 body, 1 glow, 2 accent, 3 trim.
 export function modelGeometry(name) {
   if (cache[name]) return cache[name];
   const m = MODELS[name];
   const parts = [];
-  for (const key of ['body', 'glow', 'accent']) {
+  for (const key of PARTS) {
     const geos = (m[key] || []).map(g => g.index ? g.toNonIndexed() : g);
     if (key === 'glow' && m.glowColors) {
       // Give each bulb its own color.
@@ -113,20 +195,22 @@ export function modelGeometry(name) {
         g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
       }
     }
-    // An empty part still needs a (tiny, invisible) group so material slots line up.
-    parts.push(geos.length ? mergeGeometries(geos) : new THREE.BoxGeometry(0, 0, 0).toNonIndexed().setAttribute('color', new THREE.BufferAttribute(new Float32Array(108), 3)));
+    // An empty part still needs a group so the material slots line up.
+    parts.push(geos.length ? mergeGeometries(geos) : emptyPart());
   }
   cache[name] = mergeGeometries(parts, true);
   return cache[name];
 }
 
-// Materials for the three parts. The glowing part ignores lighting so it always shines;
-// `brightness` is how bright it glows (above 1 makes the glow effect pick it up).
+// Materials for the four parts. The glowing part ignores lighting so it always shines.
+// Furniture (no metal) is soft and matte, like wood and fabric.
 export function modelMaterials(name) {
   const c = MODELS[name].colors;
-  const body = new THREE.MeshStandardMaterial({ color: c.body, roughness: 0.45, metalness: c.metal ?? 0.3 });
-  const glow = new THREE.MeshBasicMaterial({ color: c.glow, vertexColors: true, toneMapped: true });
-  glow.userData.baseColor = new THREE.Color(c.glow);
-  const accent = new THREE.MeshStandardMaterial({ color: c.accent ?? c.body, roughness: 0.6, metalness: 0.1 });
-  return [body, glow, accent];
+  const soft = c.metal === 0;
+  const body = new THREE.MeshStandardMaterial({ color: c.body, roughness: soft ? 0.75 : 0.45, metalness: c.metal ?? 0.3 });
+  const glow = new THREE.MeshBasicMaterial({ color: c.glow ?? 0xffffff, vertexColors: true, toneMapped: true });
+  glow.userData.baseColor = new THREE.Color(c.glow ?? 0xffffff);
+  const accent = new THREE.MeshStandardMaterial({ color: c.accent ?? c.body, roughness: soft ? 0.9 : 0.6, metalness: soft ? 0 : 0.1 });
+  const trim = new THREE.MeshStandardMaterial({ color: c.trim ?? c.accent ?? c.body, roughness: soft ? 0.85 : 0.6, metalness: 0 });
+  return [body, glow, accent, trim];
 }

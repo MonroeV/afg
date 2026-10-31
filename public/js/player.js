@@ -1,11 +1,12 @@
 // First-person movement and collision.
 // Collision works with boxes, so thin doors and car roofs feel solid in the right places.
 import * as THREE from 'three';
-import { BLOCKS, SPAWN, blockId, shapeOf } from './shared/blocks.js';
+import { BLOCKS, SPAWN, blockId, blockMeta, shapeOf, itemOf, floorOf } from './shared/blocks.js';
 
 const HALF_WIDTH = 0.3;
 export const HEIGHT = 1.8;
 export const EYE_HEIGHT = 1.62;
+export const CROUCH_DROP = 0.32; // how much lower your eyes are when you crouch
 
 const WALK_SPEED = 6;
 const SPRINT_SPEED = 9.5;
@@ -13,6 +14,10 @@ const FLY_SPEED = 14;
 const GRAVITY = 28;
 const JUMP_SPEED = 9;
 const BOUNCE_SPEED = 19;
+const CROUCH_SPEED = 2.4;
+const BOOST_SPEED = 22; // speed pads
+const BOOST_TIME = 0.7;
+const BALLOON_FALL = 2.4; // holding a balloon, you float down this fast
 const AXES = { x: 0, y: 1, z: 2 };
 
 export class Player {
@@ -30,6 +35,10 @@ export class Player {
     this.bouncePower = () => BOUNCE_SPEED; // how hard a bounce pad at (x, y, z) launches you
     this.keys = new Set();
     this.stick = null; // { x, y } from a touch joystick, if there is one
+    this.crouching = false;
+    this.balloon = false; // holding a balloon: you float down gently
+    this.boost = new THREE.Vector3(); // a speed pad's push
+    this.boostT = 0;
   }
 
   respawn() {
@@ -63,6 +72,10 @@ export class Player {
     if (wish.lengthSq() > (analog ? 1 : 0)) wish.normalize();
 
     this.climbing = !this.flying && this.onLadder();
+    // Ctrl or C to crouch (C is "down" while flying).
+    this.crouching = !this.flying && !this.climbing && (keys.has('ControlLeft') || keys.has('ControlRight') || keys.has('KeyC'));
+    if (this.crouching) this.sprinting = false;
+    this.speedPad(dt);
     if (this.climbing) {
       // On a ladder: W or Space climbs, S or C climbs down, otherwise you hold on.
       const up = keys.has('KeyW') || keys.has('Space');
@@ -77,12 +90,14 @@ export class Player {
       const target = new THREE.Vector3(wish.x * speed, up * speed, wish.z * speed);
       this.vel.lerp(target, 1 - Math.exp(-10 * dt));
     } else {
-      const speed = this.sprinting ? SPRINT_SPEED : WALK_SPEED;
+      const speed = this.crouching ? CROUCH_SPEED : this.sprinting ? SPRINT_SPEED : WALK_SPEED;
       // Less control in the air, and almost none while flying out of a cannon.
       const accel = this.onGround ? 14 : this.launched ? 0.4 : 3;
       const k = 1 - Math.exp(-accel * dt);
-      this.vel.x += (wish.x * speed - this.vel.x) * k;
-      this.vel.z += (wish.z * speed - this.vel.z) * k;
+      // A speed pad's push fades away over a moment.
+      const push = this.boostT > 0 ? this.boostT / BOOST_TIME : 0;
+      this.vel.x += (wish.x * speed + this.boost.x * push - this.vel.x) * k;
+      this.vel.z += (wish.z * speed + this.boost.z * push - this.vel.z) * k;
       if (keys.has('Space') && this.onGround) {
         this.vel.y = JUMP_SPEED;
         this.onGround = false;
@@ -91,16 +106,48 @@ export class Player {
     // Gravity is added half before and half after moving, so a jump is just as high at
     // any frame rate (on a slow phone too).
     const falling = !this.climbing && !this.flying;
-    if (falling) this.vel.y -= GRAVITY * dt / 2;
+    // Holding a balloon, you drift down slowly (jumps go just as high, though).
+    const gravity = this.balloon && this.vel.y < 0 ? GRAVITY * 0.35 : GRAVITY;
+    if (falling) this.vel.y -= gravity * dt / 2;
 
     this.unstick();
     const wasOnGround = this.onGround;
     this.onGround = false;
-    this.moveAxis('x', this.vel.x * dt);
-    this.moveAxis('z', this.vel.z * dt);
+    // Crouching, you don't walk off edges: a step that would leave nothing under your
+    // feet is taken back (like holding on with your toes).
+    const guard = this.crouching && wasOnGround && falling;
+    for (const axis of ['x', 'z']) {
+      const before = this.pos[axis];
+      this.moveAxis(axis, this.vel[axis] * dt);
+      if (guard && !this.supported()) {
+        this.pos[axis] = before;
+        this.vel[axis] = 0;
+      }
+    }
     this.moveAxis('y', this.vel.y * dt);
-    if (falling && !this.onGround) this.vel.y -= GRAVITY * dt / 2;
+    if (falling && !this.onGround) this.vel.y -= gravity * dt / 2;
+    if (this.balloon && falling && this.vel.y < -BALLOON_FALL) this.vel.y += (-BALLOON_FALL - this.vel.y) * (1 - Math.exp(-5 * dt));
     if (this.onGround && this.flying && !wasOnGround) this.flying = false;
+  }
+
+  // Is there something to stand on under our feet (no more than a small step down)?
+  supported() {
+    const p = this.pos, e = 0.001;
+    const r = [p.x - HALF_WIDTH + e, p.y - 0.6, p.z - HALF_WIDTH + e, p.x + HALF_WIDTH - e, p.y + 0.01, p.z + HALF_WIDTH - e];
+    return this.boxesNear(r).some(b => b[0] < r[3] && b[3] > r[0] && b[2] < r[5] && b[5] > r[2] && b[4] > r[1] && b[1] < r[4]);
+  }
+
+  // Standing on a speed pad shoots you off the way its arrows point.
+  speedPad(dt) {
+    this.boostT = Math.max(0, this.boostT - dt);
+    if (!this.onGround || this.flying) return;
+    const cell = this.world.get(Math.floor(this.pos.x), Math.floor(this.pos.y + 0.02), Math.floor(this.pos.z));
+    const pad = [itemOf(cell), floorOf(cell)].find(v => BLOCKS[blockId(v)]?.speedPad);
+    if (pad === undefined) return;
+    const a = (blockMeta(pad) & 3) * Math.PI / 2;
+    if (this.boostT < BOOST_TIME - 0.15) this.onBoost?.();
+    this.boost.set(Math.sin(a) * BOOST_SPEED, 0, Math.cos(a) * BOOST_SPEED);
+    this.boostT = BOOST_TIME;
   }
 
   // Are we touching a ladder (at our feet or chest)? Checking a little below our feet
@@ -156,12 +203,13 @@ export class Player {
     if (allowed !== d) {
       // Walking into a car pushes on it (and it pushes back: we stop).
       if (stopper?.car && axis !== 'y') this.onPushCar?.(stopper.car, axis, this.vel[axis]);
+      const impact = this.vel[axis];
       this.vel[axis] = 0;
-      if (axis === 'y' && d < 0) this.landed();
+      if (axis === 'y' && d < 0) this.landed(impact);
     }
   }
 
-  landed() {
+  landed(impact = 0) {
     this.onGround = true;
     this.launched = false;
     // Bounce pads launch you upward.
@@ -174,6 +222,15 @@ export class Player {
           this.vel.y = this.bouncePower(x, y, z, this.keys);
           this.onGround = false;
           this.bounced = true;
+          return;
+        }
+    // Beds are a little bouncy (everyone jumps on beds).
+    for (let x = x0; x <= x1; x++)
+      for (let z = z0; z <= z1; z++)
+        if (impact < -4 && BLOCKS[blockId(itemOf(this.world.get(x, y, z)))]?.springy) {
+          this.vel.y = Math.min(10, -impact * 0.6);
+          this.onGround = false;
+          this.springed = true;
           return;
         }
   }

@@ -3,16 +3,16 @@ import * as THREE from 'three';
 import {
   BLOCKS, WORLD, inBounds, blockId, blockMeta, shapeOf, isReplaceable, makeBlock, doorFacingFromYaw, paintOf, withPaint,
   railMask, railBoxes, nearestRailEdge, canHoldItem, stack, itemOf, floorOf, turnLine, blockKey, faceIndex, hexToRgb,
-  switchable, lightOff, toggleLight, setDoorOpen, isWaterBlock,
-  PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP,
+  switchable, lightOff, toggleLight, setDoorOpen, isWaterBlock, facingTowards,
+  PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP, BED_FOOT, NOTE_NAMES, NOTE_FREQS, PICTURES,
 } from './shared/blocks.js';
 import { generateWorld } from './shared/worldgen.js';
 import { randomLook, sanitizeLook } from './shared/avatar.js';
 import { generateTextures } from './textures.js';
 import { World, createBlockMaterials, blockMaterial, RAILING, WIND } from './world.js';
-import { Player, EYE_HEIGHT } from './player.js';
+import { Player, EYE_HEIGHT, CROUCH_DROP } from './player.js';
 import { Network } from './network.js';
-import { Avatar, Avatars } from './avatars.js';
+import { Avatar, Avatars, FLAG } from './avatars.js';
 import { Cars, SEAT_SCALE } from './cars.js';
 import { MAX_HP, FIRE_HP, PERSON_MASS } from './shared/vehicles.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey } from './shared/claims.js';
@@ -26,7 +26,11 @@ import { DayNight } from './daynight.js';
 import { Editor } from './editor.js';
 import { CharacterClient, Gallery } from './gallery.js';
 import { Hud, renderControls, CUSTOM_PAINT } from './hud.js';
-import { HAMMER, FIREWORKS, BALL, CLAIM, BRUSH, SCRAPER, LADDER, ALL_ITEMS, DEFAULT_HOTBAR, makeIcon, ViewModel } from './items.js';
+import {
+  HAMMER, FIREWORKS, BALL, CLAIM, BRUSH, SCRAPER, LADDER, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA,
+  ALL_ITEMS, DEFAULT_HOTBAR, makeIcon, ViewModel,
+} from './items.js';
+import { MAX_MANY } from './shared/game.js';
 import { Particles, Fireworks, Sounds, Effects } from './effects.js';
 import { TouchControls, IS_TOUCH } from './touch.js';
 
@@ -35,6 +39,7 @@ const REACH = 7;
 const BASE_FOV = 80;
 const FIREWORK_COLORS = ['#ff4d4d', '#ffd84a', '#4dd2ff', '#7dff6a', '#ff7af0', '#ffffff', '#ff9a3c', '#b388ff'];
 const DOOR = 21;
+const BED = 64;
 
 // ---------- Saved settings ----------
 
@@ -57,6 +62,7 @@ if (settings.hotbar[0] !== HAMMER) {
 if (!PAINT_COLORS[settings.paint] && settings.paint !== CUSTOM_PAINT) settings.paint = 1;
 if (!/^#[0-9a-f]{6}$/i.test(settings.customColor)) settings.customColor = '#ff9ec7';
 if (![0, 30, 60].includes(settings.fps)) settings.fps = 60;
+settings.recent = Array.isArray(settings.recent) ? settings.recent.filter(i => ALL_ITEMS.includes(i)).slice(0, 12) : [];
 // The brush's color: a palette color, or your own.
 const paintHex = () => (settings.paint === CUSTOM_PAINT ? settings.customColor : PAINT_COLORS[settings.paint]);
 const paintName = () => (settings.paint === CUSTOM_PAINT ? 'your color' : PAINT_NAMES[settings.paint]);
@@ -216,6 +222,7 @@ async function load() {
   sky.extraLights = structureLights;
   player = new Player(world);
   player.bouncePower = trampolineBounce;
+  player.onBoost = () => sounds.zoom();
   cars = new Cars(scene, world, effects);
   cars.reflections = reflections;
   player.extraBoxes = () => cars.boxes(myCar?.id);
@@ -233,7 +240,13 @@ async function load() {
   world.load(preview.blocks.flat());
   preview.cars.forEach((c, i) => cars.add({ ...c, id: -1 - i, driver: 0, color: c.color || FIREWORK_COLORS[i % FIREWORK_COLORS.length] }));
 
-  hud = new Hud({ icons, settings, sounds, onChange: item => view.setItem(item), onPaint: choosePaint });
+  hud = new Hud({
+    icons, settings, sounds, onPaint: choosePaint,
+    onChange: item => {
+      view.setItem(item);
+      if (fillable(item)) lastBlock = item;
+    },
+  });
   editor = new Editor();
   gallery = new Gallery(new CharacterClient(), sounds);
   myBody = new Avatar(scene, { id: 0, name: '', look: settings.look }, { tag: false });
@@ -321,8 +334,10 @@ net.on('look', ({ id, look, name }) => {
   if (name) a?.setName(name);
 });
 net.on('emote', ({ id, kind }) => avatars.list.get(id)?.emote(kind));
-net.on('fx', ({ kind, x, y, z, color, seed }) => {
+net.on('fx', ({ kind, x, y, z, color, seed, dir }) => {
   if (kind === 'hearts') effects.heartsAt(x, y, z);
+  else if (kind === 'bubbles') effects.blowBubbles(x, y, z, dir || [0, 0.3, 0], 4);
+  else if (kind === 'balloon') letBalloonGo(x, y, z, color);
   else if (kind === 'sparkle') effects.sparkle(x, y, z, 30);
   else if (fireworks.launch(x, y, z, color, seed)) {
     sounds.launch(loudness(x, y, z, 80));
@@ -359,6 +374,12 @@ net.on('car_destroy', ({ id, x, y, z }) => {
   cars.remove(id);
 });
 net.on('claims', ({ claims: list }) => setClaims(list));
+net.on('many', ({ cells }) => applyMany(cells));
+net.on('throw', ({ id, p, v, color }) => launchWater(new THREE.Vector3(...p), new THREE.Vector3(...v), color, id));
+net.on('splash_hit', ({ name }) => hud.toast(`💦 You splashed ${name}!`));
+net.on('race_board', ({ board }) => {
+  hud.addChat({ system: true, text: `🏆 Best times here: ${board.map(([name, time], i) => `${i + 1}. ${name} ${time.toFixed(2)} s`).join('   ')}` });
+});
 // Someone crashed into the car we're driving.
 net.on('car_impulse', ({ id, vx, vz, spin }) => {
   if (myCar?.id !== id) return;
@@ -584,6 +605,17 @@ let useCooldown = 0;
 
 window.addEventListener('keydown', e => {
   if (!inGame || hud.chatOpen || editorOpen || galleryOpen) return;
+  if (inventoryOpen) {
+    if (e.code === 'Escape') {
+      saveSettings();
+      toggleInventory(false);
+      return;
+    }
+    if (hud.inventoryKey(e)) {
+      saveSettings();
+      return;
+    }
+  }
   if (e.code === 'KeyE') {
     if (riding()) getOut();
     else if (target?.car && locked) requestEnter(target.car);
@@ -591,11 +623,16 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (!locked) return;
-  if (['Space', 'Tab', 'ControlLeft'].includes(e.code)) e.preventDefault();
+  // (Ctrl is crouch: stop Ctrl+S, Ctrl+D and friends from opening browser windows.)
+  if (['Space', 'Tab', 'ControlLeft', 'ControlRight'].includes(e.code) || e.ctrlKey || e.metaKey) e.preventDefault();
   if (e.repeat) return;
   keys.add(e.code);
   if (sleeping && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space'].includes(e.code)) {
     wakeUp();
+    return;
+  }
+  if (seated && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space'].includes(e.code)) {
+    standUp();
     return;
   }
 
@@ -627,7 +664,22 @@ window.addEventListener('keydown', e => {
     }
   } else if (e.code === 'KeyB' && !riding()) {
     emote('wave');
+  } else if (e.code === 'KeyQ' && !riding()) {
+    hud.select(hud.prevSelected ?? 0);
+    saveSettings();
+  } else if (e.code === 'KeyP') {
+    takePhoto();
+  } else if (e.code === 'KeyH' && !myCar) {
+    toggleHud();
+  } else if (e.code === 'KeyZ' && !riding()) {
+    undo();
   }
+});
+// Leaving the page by accident (Ctrl+W while crouch-walking!) asks first.
+window.addEventListener('beforeunload', e => {
+  if (!inGame) return;
+  e.preventDefault();
+  e.returnValue = '';
 });
 window.addEventListener('keyup', e => keys.delete(e.code));
 window.addEventListener('blur', () => {
@@ -667,6 +719,8 @@ const touch = IS_TOUCH ? new TouchControls({
     if (locked && !riding() && hud.item === HAMMER && useCooldown <= 0) {
       useItem();
       useCooldown = 0.25;
+    } else if (locked && !riding() && hud.item === BUBBLES) {
+      blowBubbles(1 / 30);
     }
   },
   interact: () => {
@@ -717,7 +771,8 @@ canvas.addEventListener('mousedown', e => {
 window.addEventListener('mouseup', e => mouse.delete(e.button));
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 window.addEventListener('wheel', e => {
-  if (locked && !hud.chatOpen && !riding()) hud.select(hud.selected + Math.sign(e.deltaY));
+  if (!locked || hud.chatOpen || riding() || !e.deltaY) return;
+  if (!wandWheel(Math.sign(e.deltaY))) hud.select(hud.selected + Math.sign(e.deltaY));
 }, { passive: true });
 
 // ---------- Emotes and fun ----------
@@ -970,6 +1025,7 @@ function vehicleEvent(ev, car) {
   else if (ev.type === 'bump') sounds.crash(ev.power * volume);
   else if (ev.type === 'land') sounds.land();
   else if (ev.type === 'bounce') sounds.bounce();
+  else if (ev.type === 'boost') sounds.zoom();
   else if (ev.type === 'damage') reportDamage(ev.other || car, ev.amount, ev.impact);
   else if (ev.type === 'impulse') net.send({ t: 'car_impulse', id: ev.other.id, vx: ev.dv.x, vz: ev.dv.z, spin: ev.spin });
   else if (ev.type === 'push') net.send({ t: 'push', id: ev.id, vx: ev.dv.x, vy: ev.dv.y, vz: ev.dv.z });
@@ -1237,10 +1293,10 @@ function goToBed(bed) {
   if (riding()) return;
   const px = bed.x + 0.5, pz = bed.z + 0.5, bx = bed.x + bed.dx + 0.5, bz = bed.z + bed.dz + 0.5;
   const dir = { x: px - bx, z: pz - bz };
-  const top = bed.y + 1;
+  const top = bed.top ?? bed.y + 1;
   sleeping = { bed, standAt: [bx, top, bz] };
   // Lie on your back with your head on the pillow.
-  player.pos.set(bx - dir.x * 0.45, top + 0.15, bz - dir.z * 0.45);
+  player.pos.set(bx - dir.x * 0.45, bed.lieY ?? top + 0.15, bz - dir.z * 0.45);
   player.vel.set(0, 0, 0);
   player.flying = false;
   player.yaw = Math.atan2(dir.x, dir.z);
@@ -1282,6 +1338,7 @@ function landSpawn() {
 // Back home: your bed if you have one, then your land, then the town square.
 function respawn(joining = false) {
   wakeUp();
+  standUp();
   getOut();
   const b = settings.bed;
   const bed = b && structures.ofType('bed').find(s => s.x === b.x && s.y === b.y && s.z === b.z);
@@ -1469,6 +1526,7 @@ function toggleDoor(x, y, z) {
 function blockGroup(x, y, z, v) {
   if (shapeOf(v) === 'door') return world.doorColumnCells(x, y, z);
   if (shapeOf(v) === 'ladder') return world.ladderCells(x, y, z);
+  if (blockId(itemOf(v)) === BED) return bedCells(x, y, z, v);
   return [[x, y, z, v]];
 }
 
@@ -1525,9 +1583,15 @@ function hitBlock() {
 }
 
 function placeBlock(item) {
-  if (BLOCKS[item].shape === 'rail') return placeRail();
-  if (BLOCKS[item].shape === 'model' && placeOnFloor(item)) return;
-  if (BLOCKS[item].shape === 'flat' && placeUnder(item)) return;
+  const def = BLOCKS[item];
+  if (def.shape === 'rail') return placeRail();
+  if (def.shape === 'picture') return placePicture(item);
+  // Furniture turns to face you, speed pads point the way you're looking, and each new
+  // music block plays the next note up.
+  const placed = def.speedPad ? makeBlock(item, facingTowards(player.yaw + Math.PI))
+    : def.facing ? makeBlock(item, facingTowards(player.yaw)) : def.music ? makeBlock(item, nextNote) : item;
+  if (def.shape === 'model' && item !== BED && placeOnFloor(placed)) return;
+  if (def.shape === 'flat' && placeUnder(item)) return;
   let [x, y, z] = hit.value && isReplaceable(hit.value) ? hit.block : hit.place;
   if (!canBuildAt(x, z)) {
     notifyLand(x, z);
@@ -1542,6 +1606,10 @@ function placeBlock(item) {
   }
   if (shape === 'ladder') {
     placeLadder();
+    return;
+  }
+  if (item === BED) {
+    placeBed(item, x, y, z);
     return;
   }
   if (shape === 'door') {
@@ -1571,13 +1639,21 @@ function placeBlock(item) {
     // rolled up), or as tall as the garage door it joins.
     if (world.doorRole(x, y, z).kind === 'garage') growGarage(x, y, z, 0);
   } else {
-    if (shape === 'cube' && blockedByPlayer(x, y, z)) return;
+    if ((shape === 'cube' || (shape === 'model' && def.box)) && blockedByPlayer(x, y, z)) return;
     // Road and parking lines run the way you're facing.
     const along = Math.abs(Math.sin(player.yaw)) > Math.abs(Math.cos(player.yaw)) ? 'x' : 'z';
-    if (BLOCKS[item].turns && BLOCKS[item].along !== along) item = BLOCKS[item].turns;
-    if (!setBlock(x, y, z, item)) return;
+    const v = def.turns && def.along !== along ? def.turns : placed;
+    if (!setBlock(x, y, z, v)) return;
   }
   sounds.place();
+  if (def.music) {
+    playMusic(x, y, z);
+    nextNote = (nextNote + 1) % 16;
+    if (!musicTipShown) {
+      musicTipShown = true;
+      hud.toast('🎵 Each Music Block you put down plays the next note up. Walk on them to play a tune! Right-click to change a note, paint it for a new sound.');
+    }
+  }
   if (item === 7 && !treeTipShown && (y === 0 || [1, 2].includes(world.get(x, y - 1, z) & 255))) {
     treeTipShown = true;
     hud.toast('🌱 A lone log on the grass grows into a tree! Give it a minute.');
@@ -1598,6 +1674,7 @@ function placeOnFloor(item) {
 // A carpet (or any floor) slides in under a door or a standing lamp: click the door (or
 // lamp), or the floor right under it.
 function placeUnder(item) {
+  if (!canHoldItem(item)) return false;
   const standing = v => v && !floorOf(v) && ((shapeOf(v) === 'door' && !(blockMeta(v) & DOOR_TOP)) || (shapeOf(v) === 'model' && BLOCKS[blockId(v)].box));
   let cell = null;
   if (hit.value && shapeOf(hit.value) === 'door') cell = [hit.block[0], world.doorColumn(...hit.block).lo, hit.block[2]];
@@ -1615,6 +1692,17 @@ function useItem() {
   const item = hud.item;
   view.swing();
   myBody.swing = 0;
+  // Things you throw, blow or point work wherever you're looking.
+  if (item === WATER_BALLOON) return throwWaterBalloon();
+  if (item === BUBBLES) return blowBubbles(1);
+  if (item === CAMERA) return takePhoto();
+  if (item === BALLOON) {
+    const p = eye.clone().addScaledVector(lookDir, 0.8);
+    letBalloonGo(p.x, p.y + 0.8, p.z, paintHex());
+    net.send({ t: 'fx', kind: 'balloon', x: p.x, y: p.y + 0.8, z: p.z, color: paintHex() });
+    hud.toast('🎈 Bye bye, balloon! (Pick another color in the 🎨 Paint tab)');
+    return;
+  }
   if (target?.car) {
     if (item === HAMMER) hitVehicle(target);
     else requestEnter(target.car);
@@ -1636,12 +1724,21 @@ function useItem() {
   if (item === FIREWORKS) launchFirework();
   else if (item === BALL) throwBall();
   else if (item === CLAIM) claimClick();
+  else if (item === FILL) fillClick();
+  else if (item === COPY) copyClick();
   else if (!hit) sounds.swing();
   else placeBlock(item);
 }
 
 // Right click: interact with things (never breaks anything).
 function interact() {
+  // Wands: right-click empties the Fill box, or forgets what was copied.
+  if (hud.item === FILL && wand.b) return fillClick(true);
+  if ((hud.item === FILL || hud.item === COPY) && (wand.a || wand.clip)) {
+    resetWand(false);
+    hud.toast('✨ Cancelled.');
+    return;
+  }
   if (claimTool.a) {
     resetClaimTool();
     hud.toast('🚩 Claiming cancelled.');
@@ -1656,6 +1753,13 @@ function interact() {
       if (!canBuildAt(hit.block[0], hit.block[2])) return notifyLand(hit.block[0], hit.block[2]);
       if (setBlock(...hit.block, toggleLight(hit.value))) sounds.click();
       return;
+    }
+    const def = BLOCKS[blockId(itemOf(hit.value))];
+    if (hit.part !== 'floor') {
+      if (def?.seat) return sitOn(...hit.block, itemOf(hit.value));
+      if (def?.hug) return hugTeddy(...hit.block);
+      if (def?.shape === 'picture') return nextPicture(...hit.block, hit.value);
+      if (def?.music) return changeNote(...hit.block, hit.value);
     }
     if (BLOCKS[blockId(hit.value)]?.turns && !floorOf(hit.value)) {
       // Turn a road line (or parking line) to run the other way.
@@ -1878,6 +1982,565 @@ function groundAt(x, z, nearY) {
   return nearY;
 }
 
+// ---------- Furniture ----------
+
+let seated = null; // { x, y, z, standAt } while sitting on a chair or couch
+let pictureCount = 0;
+
+// Sit down on a chair or couch, facing out of it.
+function sitOn(x, y, z, v) {
+  if (riding() || sleeping || seated) return;
+  const def = BLOCKS[blockId(v)], a = (blockMeta(v) & 3) * Math.PI / 2;
+  const fx = Math.sin(a), fz = Math.cos(a);
+  seated = { x, y, z, standAt: [x + 0.5 + Math.round(fx), y, z + 0.5 + Math.round(fz)] };
+  player.pos.set(x + 0.5 - fx * 0.06, y + def.seat - 0.72, z + 0.5 - fz * 0.06); // hips on the seat
+  player.vel.set(0, 0, 0);
+  player.flying = false;
+  player.yaw = a + Math.PI;
+  player.pitch = -0.1;
+  sounds.land();
+  hud.toast('🛋️ Comfy! Move or jump to get up.');
+}
+
+function standUp() {
+  if (!seated) return;
+  const { x, y, z, standAt } = seated;
+  seated = null;
+  player.pos.set(...standAt);
+  // No room in front? Climb out over the top instead.
+  if (player.overlapsSomething()) player.pos.set(x + 0.5, y + 1, z + 0.5);
+  player.vel.set(0, 0, 0);
+}
+
+function hugTeddy(x, y, z) {
+  effects.heartsAt(x + 0.5, y + 0.7, z + 0.5, 8);
+  sounds.squeak();
+  net.send({ t: 'fx', kind: 'hearts', x: x + 0.5, y: y + 0.7, z: z + 0.5 });
+}
+
+// A new value for a block with different meta bits (keeping its paint).
+const withMeta = (v, meta) => (v & ~(15 << 8)) | (meta << 8);
+
+// Right-click a picture to hang a different one.
+function nextPicture(x, y, z, v) {
+  if (!canBuildAt(x, z)) return notifyLand(x, z);
+  const meta = blockMeta(v), design = ((meta >> 2) + 1) % 4;
+  if (setBlock(x, y, z, withMeta(v, (meta & 3) | (design << 2)))) {
+    sounds.click();
+    hud.toast(`🖼️ ${PICTURES[BLOCKS[blockId(v)].art][design]}`);
+  }
+}
+
+// Pictures hang on the side of a block, like ladders.
+function placePicture(item) {
+  if (!hit || hit.ground || hit.normal[1] !== 0 || shapeOf(hit.value) !== 'cube') {
+    hud.toast('🖼️ Pictures go on walls. Point at the side of a block and click!');
+    return;
+  }
+  const [bx, by, bz] = hit.block, [nx, , nz] = hit.normal;
+  const x = bx + nx, z = bz + nz;
+  if (!canBuildAt(x, z)) return notifyLand(x, z);
+  if (!inBounds(x, by, z) || world.get(x, by, z)) return;
+  const facing = nz === 1 ? 0 : nx === 1 ? 1 : nz === -1 ? 2 : 3;
+  const design = pictureCount++ % 4;
+  if (setBlock(x, by, z, makeBlock(item, facing | (design << 2)))) {
+    sounds.place();
+    hud.toast(`🖼️ ${PICTURES[BLOCKS[item].art][design]}. Right-click it to hang a different one.`);
+  }
+}
+
+// A bed is two blocks long: the foot where you click, the head one further away.
+function placeBed(item, x, y, z) {
+  const q = facingTowards(player.yaw), a = q * Math.PI / 2;
+  const dx = Math.round(Math.sin(a)), dz = Math.round(Math.cos(a));
+  const hx = x - dx, hz = z - dz;
+  const free = (cx, cz) => {
+    const v = world.get(cx, y, cz);
+    return inBounds(cx, y, cz) && (!v || (isReplaceable(v) && !railMask(v))) && !blockedByPlayer(cx, y, cz);
+  };
+  if (!canBuildAt(x, z) || !canBuildAt(hx, hz)) return notifyLand(x, z);
+  if (!free(x, z) || !free(hx, hz)) {
+    hud.toast('🛏️ A bed needs two empty spaces in a row.');
+    return;
+  }
+  setBlock(hx, y, hz, makeBlock(item, q));
+  setBlock(x, y, z, makeBlock(item, q | BED_FOOT));
+  sounds.place();
+}
+
+// The other half of a bed.
+function bedCells(x, y, z, v) {
+  const a = (blockMeta(v) & 3) * Math.PI / 2, dx = Math.round(Math.sin(a)), dz = Math.round(Math.cos(a));
+  const s = blockMeta(v) & BED_FOOT ? -1 : 1;
+  const ox = x + dx * s, oz = z + dz * s, other = world.get(ox, y, oz);
+  return blockId(itemOf(other)) === blockId(itemOf(v)) ? [[x, y, z, v], [ox, y, oz, other]] : [[x, y, z, v]];
+}
+
+// ---------- Music blocks ----------
+
+let nextNote = 0, musicTipShown = false;
+const musicCells = new Map(); // who -> the music block they're standing on
+
+// The instrument comes from the paint on the block: none is a piano, dark is a drum,
+// white or gray is a bell, red and orange are video game beeps, yellow and green a flute,
+// blue and purple a bell.
+function instrumentAt(x, y, z) {
+  const faces = world.facePaint(blockKey(x, y, z));
+  const c = faces ? [faces[2], ...faces].find(f => f >= 0) : undefined;
+  if (c === undefined) return 'piano';
+  const hsl = new THREE.Color(c).getHSL({});
+  if (hsl.l < 0.22) return 'drum';
+  if (hsl.s < 0.2) return 'bell';
+  if (hsl.h < 0.11 || hsl.h > 0.9) return 'game';
+  if (hsl.h < 0.45) return 'flute';
+  return 'bell';
+}
+
+function playMusic(x, y, z, volume = 1) {
+  const v = world.get(x, y, z);
+  if (!BLOCKS[blockId(itemOf(v))]?.music) return;
+  sounds.note(NOTE_FREQS[blockMeta(v)], instrumentAt(x, y, z), volume);
+  effects.note(x + 0.5, y + 1.3, z + 0.5);
+}
+
+// Stepping onto a music block plays its note (anyone's steps, not just yours).
+function stepMusic(id, pos) {
+  const x = Math.floor(pos.x), y = Math.floor(pos.y - 0.05), z = Math.floor(pos.z);
+  const above = pos.y - (y + 1); // how far above the top of that block our feet are
+  const v = above > -0.1 && above < 0.25 ? world.get(x, y, z) : 0;
+  const key = BLOCKS[blockId(itemOf(v))]?.music ? `${x},${y},${z}` : null;
+  if (key === (musicCells.get(id) ?? null)) return;
+  musicCells.set(id, key);
+  if (key) playMusic(x, y, z, id === myId ? 1 : loudness(x, y, z, 30));
+}
+
+function changeNote(x, y, z, v) {
+  if (!canBuildAt(x, z)) return notifyLand(x, z);
+  const n = (blockMeta(v) + 1) % 16;
+  if (setBlock(x, y, z, withMeta(v, n))) {
+    playMusic(x, y, z);
+    hud.toast(`🎵 ${NOTE_NAMES[n]}`);
+  }
+}
+
+// ---------- Races ----------
+// Step off a Race Start line and the clock starts; cross a Race Finish line to stop it.
+// Works on foot and in cars. The server keeps the best times for each finish line.
+
+const race = { running: false, t0: 0, line: null };
+
+function updateRace() {
+  const now = performance.now();
+  const p = myCar ? myCar.pos : player.pos;
+  const x = Math.floor(p.x), y = Math.floor(p.y + 0.05), z = Math.floor(p.z);
+  const v = inGame ? world.get(x, y, z) : 0;
+  const kind = [itemOf(v), floorOf(v)].map(u => BLOCKS[blockId(u)]?.race).find(Boolean) || null;
+  const line = kind ? `${kind}:${x},${y},${z}` : null;
+  if (kind === 'start') {
+    // On the start line: ready… (the clock starts as you leave it)
+    if (!race.running) sounds.beep();
+    race.running = true;
+    race.t0 = now;
+  } else if (kind === 'finish' && line !== race.line && race.running) {
+    const time = (now - race.t0) / 1000;
+    race.running = false;
+    sounds.claim();
+    if (time >= 1) net.send({ t: 'race', x, y, z, time });
+    hud.toast(`🏁 ${time.toFixed(2)} seconds!`);
+  }
+  if (race.running && kind !== 'start' && race.line?.startsWith('start')) sounds.beep(true); // GO!
+  race.line = line;
+  if (race.running && now - race.t0 > 600000) race.running = false; // gave up?
+  const el = $('race');
+  el.classList.toggle('hidden', !race.running);
+  if (race.running) el.textContent = kind === 'start' ? '🏁 Ready… GO!' : `⏱️ ${((now - race.t0) / 1000).toFixed(2)}`;
+}
+
+// ---------- Things flying through the air ----------
+// Water balloons (thrown by anyone: every game works out who gets splashed) and balloons
+// that were let go (they float up and away, then pop).
+
+const flying = [];
+const balloonGeo = new THREE.SphereGeometry(0.14, 12, 9).scale(1, 1.15, 1);
+const BALLOON_COLORS = ['#42a5f5', '#ec407a', '#66bb6a', '#ffca28', '#ab47bc', '#ff7043'];
+
+function launchWater(p, v, color, by) {
+  const mesh = new THREE.Mesh(balloonGeo, new THREE.MeshStandardMaterial({ color, roughness: 0.15, transparent: true, opacity: 0.9 }));
+  mesh.position.copy(p);
+  scene.add(mesh);
+  flying.push({ kind: 'water', mesh, pos: p.clone(), vel: v.clone(), by, age: 0, color });
+}
+
+function throwWaterBalloon() {
+  const color = BALLOON_COLORS[Math.floor(Math.random() * BALLOON_COLORS.length)];
+  const p = eye.clone().addScaledVector(lookDir, 0.6);
+  p.y -= 0.15;
+  const v = lookDir.clone().multiplyScalar(17).add(new THREE.Vector3(0, 2.5, 0)).addScaledVector(player.vel, 0.5);
+  launchWater(p, v, color, myId);
+  const r = n => Math.round(n * 100) / 100;
+  net.send({ t: 'throw', p: [r(p.x), r(p.y), r(p.z)], v: [r(v.x), r(v.y), r(v.z)], color });
+  sounds.swing();
+}
+
+function letBalloonGo(x, y, z, color) {
+  const g = new THREE.Group();
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.3, 14, 10).scale(1, 1.2, 1), new THREE.MeshStandardMaterial({ color, roughness: 0.25 }));
+  const string = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 1.2, 4).translate(0, -0.9, 0), new THREE.MeshBasicMaterial({ color: 0xeeeeee }));
+  g.add(ball, string);
+  g.position.set(x, y, z);
+  scene.add(g);
+  flying.push({ kind: 'float', mesh: g, pos: g.position, vel: new THREE.Vector3(0, 1.8, 0), age: 0, seed: Math.random() * 10, color });
+}
+
+// Is a point inside someone standing at `feet`?
+const touches = (p, feet, crouch = false) => Math.abs(p.x - feet.x) < 0.45 && Math.abs(p.z - feet.z) < 0.45 && p.y > feet.y - 0.1 && p.y < feet.y + (crouch ? 1.5 : 1.9);
+
+function updateFlying(dt) {
+  for (let i = flying.length - 1; i >= 0; i--) {
+    const f = flying[i];
+    f.age += dt;
+    let done = false;
+    if (f.kind === 'float') {
+      f.pos.x += Math.sin(f.age * 1.3 + f.seed) * 0.4 * dt;
+      f.pos.y += f.vel.y * dt;
+      f.mesh.rotation.z = Math.sin(f.age * 1.7 + f.seed) * 0.12;
+      if (f.age > 9) {
+        done = true;
+        sounds.pop();
+        effects.sparkle(f.pos.x, f.pos.y, f.pos.z, 12);
+      }
+    } else {
+      f.vel.y -= 20 * dt;
+      const steps = Math.max(1, Math.ceil((f.vel.length() * dt) / 0.2));
+      for (let s = 0; s < steps && !done; s++) {
+        f.pos.addScaledVector(f.vel, dt / steps);
+        if (f.pos.y < 0 || world.isSolid(Math.floor(f.pos.x), Math.floor(f.pos.y), Math.floor(f.pos.z))) done = true;
+        else if (f.by !== myId && !riding() && touches(f.pos, player.pos, player.crouching)) {
+          done = true;
+          splashed(f.by);
+        } else if ([...avatars.list.values()].some(a => a.id !== f.by && !a.seat && touches(f.pos, a.pos))) done = true;
+      }
+      f.mesh.position.copy(f.pos);
+      if (done || f.age > 6) {
+        done = true;
+        const c = new THREE.Color(f.color);
+        effects.splash(f.pos.x, Math.max(0.1, f.pos.y), f.pos.z, [0.4 + c.r * 0.3, 0.6 + c.g * 0.3, 0.9 + c.b * 0.1]);
+        sounds.splash(loudness(f.pos.x, f.pos.y, f.pos.z, 30));
+      }
+    }
+    if (done) {
+      scene.remove(f.mesh);
+      flying.splice(i, 1);
+    }
+  }
+}
+
+// We got hit by somebody's water balloon!
+function splashed(by) {
+  const el = $('splash');
+  el.classList.remove('show');
+  void el.offsetWidth; // restart the animation
+  el.classList.add('show');
+  sounds.splash(1.2);
+  const who = avatars.list.get(by)?.name;
+  hud.toast(who ? `💦 SPLASH! ${who} got you!` : '💦 SPLASH!');
+  net.send({ t: 'splashed', by });
+}
+
+// ---------- Bubbles ----------
+
+let bubbleTimer = 0, bubbleSendTimer = 0, popTimer = 0;
+
+function blowBubbles(dt) {
+  bubbleTimer -= dt;
+  bubbleSendTimer -= dt;
+  if (bubbleTimer > 0) return;
+  bubbleTimer = 0.12;
+  const p = eye.clone().addScaledVector(lookDir, 0.8);
+  p.y -= 0.1;
+  const dir = [lookDir.x, lookDir.y, lookDir.z];
+  effects.blowBubbles(p.x, p.y, p.z, dir, 2);
+  if (bubbleSendTimer <= 0) {
+    bubbleSendTimer = 0.3;
+    const r = n => Math.round(n * 100) / 100;
+    net.send({ t: 'fx', kind: 'bubbles', x: r(p.x), y: r(p.y), z: r(p.z), dir: dir.map(r) });
+  }
+}
+
+// Little pops now and then while there are bubbles about.
+function popBubbles(dt) {
+  popTimer -= dt;
+  if (popTimer > 0 || !effects.bubbles.count) return;
+  popTimer = 0.15 + Math.random() * 0.5;
+  sounds.pop();
+}
+
+// ---------- Builder wands ----------
+// The Fill Wand fills a box with a block (or empties it), and the Copy Wand copies a box of
+// blocks and pastes it somewhere else. Z undoes the last one.
+
+const wand = { a: null, b: null, raise: 0, clip: null };
+const undoStack = [];
+let lastBlock = 5; // the Fill Wand fills with the last block you held
+
+const wandBox = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
+  new THREE.LineBasicMaterial({ color: 0xffca28, transparent: true, opacity: 0.95, depthTest: false }),
+);
+wandBox.renderOrder = 6;
+wandBox.visible = false;
+scene.add(wandBox);
+
+const wandCell = () => (hit ? (hit.ground ? hit.place.slice() : hit.block.slice()) : null);
+
+function resetWand(keepClip = true) {
+  wand.a = wand.b = null;
+  wand.raise = 0;
+  if (!keepClip) wand.clip = null;
+}
+
+// The selected box: [x0, y0, z0, x1, y1, z1] (inclusive).
+function wandRange() {
+  if (!wand.a || !wand.b) return null;
+  const [a, b] = [wand.a, wand.b];
+  const y0 = Math.min(a[1], b[1]), y1 = Math.max(y0, Math.min(WORLD.maxY, Math.max(a[1], b[1]) + wand.raise));
+  return [Math.min(a[0], b[0]), y0, Math.min(a[2], b[2]), Math.max(a[0], b[0]), y1, Math.max(a[2], b[2])];
+}
+const rangeSize = r => (r[3] - r[0] + 1) * (r[4] - r[1] + 1) * (r[5] - r[2] + 1);
+
+function showWandBox(r, color) {
+  wandBox.visible = !!r;
+  if (!r) return;
+  wandBox.material.color.set(color);
+  wandBox.position.set((r[0] + r[3] + 1) / 2, (r[1] + r[4] + 1) / 2, (r[2] + r[5] + 1) / 2);
+  wandBox.scale.set(r[3] - r[0] + 1.02, r[4] - r[1] + 1.02, r[5] - r[2] + 1.02);
+}
+
+// Changes lots of blocks at once (here and for everyone), and remembers how to undo it.
+function changeMany(changes, label) {
+  if (!changes.length) {
+    hud.toast('✨ Nothing to change there.');
+    return false;
+  }
+  const cells = [], undo = [];
+  let blocked = 0;
+  for (const [x, y, z, v] of changes) {
+    if (!inBounds(x, y, z)) continue;
+    if (!canBuildAt(x, z)) {
+      blocked++;
+      continue;
+    }
+    const old = world.get(x, y, z);
+    if (old === v) continue;
+    cells.push(x, y, z, v);
+    undo.push(x, y, z, old);
+  }
+  if (!cells.length) {
+    hud.toast(blocked ? `🚧 That's ${claimAt(claims, changes[0][0], changes[0][2])?.owner || 'someone'}'s land.` : '✨ Nothing to change there.');
+    return false;
+  }
+  applyMany(cells);
+  net.send({ t: 'many', cells });
+  if (label) {
+    undoStack.push({ cells: undo, label });
+    if (undoStack.length > 10) undoStack.shift();
+  }
+  sounds.magic();
+  return true;
+}
+
+function applyMany(cells) {
+  const onChange = world.onChange;
+  world.onChange = null; // look for structures once at the end, not after every block
+  let changed = 0;
+  for (let i = 0; i + 3 < cells.length; i += 4) if (world.set(cells[i], cells[i + 1], cells[i + 2], cells[i + 3])) changed++;
+  world.onChange = onChange;
+  if (changed) structures.scan();
+  if (player && player.overlapsSomething()) player.unstick();
+}
+
+function undo() {
+  const last = undoStack.pop();
+  if (!last) {
+    hud.toast('↩️ Nothing to undo.');
+    return;
+  }
+  applyMany(last.cells);
+  net.send({ t: 'many', cells: last.cells });
+  sounds.magic();
+  hud.toast(`↩️ Undid the ${last.label}.`);
+}
+
+// Blocks that can't fill a box: they need a wall or a partner block.
+const fillable = item => typeof item === 'number' && !['door', 'ladder', 'picture'].includes(BLOCKS[item].shape) && item !== 64;
+
+function fillClick(empty = false) {
+  const cell = wandCell();
+  if (!wand.a) {
+    if (!cell) return;
+    wand.a = cell;
+    sounds.click();
+    hud.toast('✨ Now click the opposite corner.');
+    return;
+  }
+  if (!wand.b) {
+    if (!cell) return;
+    wand.b = cell;
+    sounds.click();
+    const r = wandRange();
+    hud.toast(`✨ ${r[3] - r[0] + 1} × ${r[4] - r[1] + 1} × ${r[5] - r[2] + 1}. Scroll to make it taller, click to fill it, right-click to empty it.`);
+    return;
+  }
+  const r = wandRange();
+  if (rangeSize(r) > MAX_MANY) {
+    hud.toast(`✨ Too big! A box can have up to ${MAX_MANY} blocks (that one has ${rangeSize(r)}).`);
+    return;
+  }
+  if (!empty && !fillable(lastBlock)) {
+    hud.toast('✨ Hold a block for a moment first (like Brick), then come back to the Fill Wand.');
+    return;
+  }
+  const v = empty ? 0 : lastBlock;
+  const changes = [];
+  for (let x = r[0]; x <= r[3]; x++) for (let y = r[1]; y <= r[4]; y++) for (let z = r[2]; z <= r[5]; z++) changes.push([x, y, z, v]);
+  if (changeMany(changes, empty ? 'emptied box' : 'fill')) {
+    hud.toast(empty ? '✨ Emptied! (Press Z to undo)' : `✨ Filled with ${BLOCKS[v].name}! (Press Z to undo)`);
+    resetWand();
+  }
+}
+
+// Turns a block a quarter turn (for pasting a copy turned around).
+function turnValue(v) {
+  if (!v) return v;
+  if (floorOf(v)) return stack(turnValue(itemOf(v)), turnValue(floorOf(v)));
+  const def = BLOCKS[blockId(v)];
+  if (!def) return v;
+  const meta = blockMeta(v), shape = def.shape || 'cube';
+  if (shape === 'door' || shape === 'ladder' || shape === 'picture' || def.facing) return withMeta(v, (meta & ~3) | ((meta + 1) & 3));
+  if (shape === 'rail' || shape === 'flat') {
+    const turned = withMeta(v, ((meta >> 1) | (meta << 3)) & 15);
+    return def.turns ? turnLine(turned) : turned;
+  }
+  return v;
+}
+
+function turnClip() {
+  const c = wand.clip;
+  c.cells = c.cells.map(([dx, dy, dz, v]) => [dz, dy, c.w - 1 - dx, turnValue(v)]);
+  [c.w, c.d] = [c.d, c.w];
+  sounds.click();
+}
+
+function copyClick() {
+  if (wand.clip) {
+    // Paste, with its bottom corner where you point.
+    const o = hit?.place;
+    if (!o) return;
+    const changes = wand.clip.cells.map(([dx, dy, dz, v]) => [o[0] + dx, o[1] + dy, o[2] + dz, v]);
+    if (changeMany(changes, 'paste')) hud.toast('📋 Pasted! Click again for another copy. (Z to undo, right-click to forget it)');
+    return;
+  }
+  const cell = wandCell();
+  if (!cell) return;
+  if (!wand.a) {
+    wand.a = cell;
+    sounds.click();
+    hud.toast('📋 Now click the opposite corner of what you want to copy.');
+    return;
+  }
+  wand.b = cell;
+  const r = wandRange();
+  if (rangeSize(r) > MAX_MANY * 4) {
+    hud.toast('📋 That\'s too big to copy. Try a smaller piece!');
+    resetWand();
+    return;
+  }
+  const cells = [];
+  for (let x = r[0]; x <= r[3]; x++) for (let y = r[1]; y <= r[4]; y++) for (let z = r[2]; z <= r[5]; z++) {
+    const v = world.get(x, y, z);
+    if (v) cells.push([x - r[0], y - r[1], z - r[2], v]);
+  }
+  resetWand();
+  if (!cells.length) {
+    hud.toast('📋 There\'s nothing there to copy.');
+    return;
+  }
+  if (cells.length > MAX_MANY) {
+    hud.toast(`📋 That has ${cells.length} blocks: the most you can copy is ${MAX_MANY}.`);
+    return;
+  }
+  wand.clip = { w: r[3] - r[0] + 1, h: r[4] - r[1] + 1, d: r[5] - r[2] + 1, cells };
+  sounds.magic();
+  hud.toast(`📋 Copied ${cells.length} blocks! Point somewhere and click to paste. Scroll to turn it around.`);
+}
+
+// While holding a wand: show the box, and what the mouse wheel does.
+function updateWand() {
+  const item = hud.item;
+  if (item !== FILL && item !== COPY) {
+    if (wand.a) resetWand();
+    wandBox.visible = false;
+    return;
+  }
+  if (item === COPY && wand.clip && hit && !wand.a) {
+    const o = hit.place, c = wand.clip;
+    showWandBox([o[0], o[1], o[2], o[0] + c.w - 1, o[1] + c.h - 1, o[2] + c.d - 1], 0x4dd0e1);
+    return;
+  }
+  const cell = wandCell();
+  const r = wandRange() || (wand.a && cell ? [Math.min(wand.a[0], cell[0]), Math.min(wand.a[1], cell[1]), Math.min(wand.a[2], cell[2]), Math.max(wand.a[0], cell[0]), Math.max(wand.a[1], cell[1]), Math.max(wand.a[2], cell[2])] : null);
+  showWandBox(r, item === FILL ? 0xffca28 : 0x4dd0e1);
+}
+
+// The mouse wheel: taller or shorter Fill box, or turn the copy around. Returns true if used.
+function wandWheel(dir) {
+  if (hud.item === FILL && wand.b) {
+    // (Scrolling up makes it taller; it can't get shorter than one block.)
+    wand.raise = Math.max(-Math.abs(wand.a[1] - wand.b[1]), Math.min(40, wand.raise - dir));
+    sounds.click();
+    return true;
+  }
+  if (hud.item === COPY && wand.clip) {
+    turnClip();
+    return true;
+  }
+  return false;
+}
+
+// ---------- Photos ----------
+
+let photoPending = false, hudHidden = false;
+
+function takePhoto() {
+  photoPending = true;
+}
+
+// Called right after drawing a frame, while the picture is still there.
+function savePhoto() {
+  photoPending = false;
+  sounds.shutter();
+  const flash = $('flash');
+  flash.classList.remove('show');
+  void flash.offsetWidth;
+  flash.classList.add('show');
+  canvas.toBlob(blob => {
+    if (!blob) return;
+    const a = document.createElement('a');
+    const d = new Date(), pad = n => String(n).padStart(2, '0');
+    a.download = `BuildZone ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}.${pad(d.getMinutes())}.${pad(d.getSeconds())}.png`;
+    a.href = URL.createObjectURL(blob);
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    hud.toast('📸 Photo saved! (Look in your Downloads)');
+  }, 'image/png');
+}
+
+function toggleHud() {
+  hudHidden = !hudHidden;
+  $('hud').classList.toggle('photo-mode', hudHidden);
+  hud.toast(hudHidden ? '🙈 HUD hidden. Press H to bring it back.' : '👀 HUD is back.');
+}
+
 // ---------- Camera ----------
 
 const tmp = new THREE.Vector3();
@@ -1916,12 +2579,14 @@ function updateCamera(dt) {
     return;
   }
   player.eye(eye);
+  eye.y -= CROUCH_DROP * crouchK;
   lookDir.set(-Math.sin(player.yaw) * Math.cos(player.pitch), Math.sin(player.pitch), -Math.cos(player.yaw) * Math.cos(player.pitch));
   if (sleeping) {
-    // Look down at yourself sleeping.
-    const head = new THREE.Vector3(player.pos.x + Math.sin(player.yaw) * 1.4, player.pos.y, player.pos.z + Math.cos(player.yaw) * 1.4);
-    camera.position.copy(avoidWalls(head, head.clone().add(new THREE.Vector3(Math.sin(player.yaw) * 1.2, 2.2, Math.cos(player.yaw) * 1.2))));
-    camera.lookAt(player.pos.x + Math.sin(player.yaw) * 0.8, player.pos.y, player.pos.z + Math.cos(player.yaw) * 0.8);
+    // Look down at yourself sleeping, from above the foot of the bed (beds have headboards).
+    const dir = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw)); // feet to head
+    const above = player.pos.clone().addScaledVector(dir, 0.9).add(new THREE.Vector3(0, 0.8, 0));
+    camera.position.copy(avoidWalls(above, player.pos.clone().addScaledVector(dir, -0.7).add(new THREE.Vector3(0, 2.1, 0))));
+    camera.lookAt(player.pos.x + dir.x * 1.2, player.pos.y + 0.2, player.pos.z + dir.z * 1.2);
   } else if (viewMode === 0) {
     camera.position.copy(eye);
     camera.rotation.set(player.pitch, player.yaw, 0);
@@ -1945,7 +2610,7 @@ function updateCamera(dt) {
 const timer = new THREE.Timer();
 timer.connect(document);
 let sendTimer = 0, hudTimer = 0, fpsFrames = 0, fpsTime = 0, fps = 0, landTimer = 0, vehicleHudTimer = 0;
-let menuSpin = 0, lastFrame = 0, frameCount = 0;
+let menuSpin = 0, lastFrame = 0, frameCount = 0, crouchK = 0;
 
 // How many frames a second to draw. Fewer frames means a cooler, quieter computer: the
 // frame rate setting while playing, and much less while the game is paused or behind a
@@ -1976,6 +2641,7 @@ function frame(timestamp) {
     touch.setMode(myCar ? (myCar.spec.flying ? 'heli' : 'car') : myRide ? 'ride' : player?.flying ? 'fly' : 'walk');
     touch.update();
     if (sleeping && (touch.stick.x || touch.stick.y || touch.keys.has('Space'))) wakeUp();
+    if (seated && (touch.stick.x || touch.stick.y || touch.keys.has('Space'))) standUp();
   }
   const nightK = 1 - sky.dayK;
   let fire = 0;
@@ -1997,12 +2663,20 @@ function frame(timestamp) {
     } else if (myRide) {
       player.pos.copy(cars.seat(myRide, mySeat()).position);
       player.vel.set(0, 0, 0);
+    } else if (seated) {
+      // Sitting still. (If the chair gets broken, you stand up.)
+      player.vel.set(0, 0, 0);
+      if (!BLOCKS[blockId(itemOf(world.get(seated.x, seated.y, seated.z)))]?.seat) standUp();
     } else if (!sleeping) {
       const wasOnGround = player.onGround;
       const vyBefore = player.vel.y;
       player.stick = touch?.enabled && active ? touch.stick : null;
+      player.balloon = hud.item === BALLOON;
       player.update(dt, active ? held : noKeys);
-      if (player.bounced) {
+      if (player.springed) {
+        player.springed = false;
+        sounds.boing();
+      } else if (player.bounced) {
         player.bounced = false;
         if (lastBounceTramp) sounds.boing();
         else sounds.bounce();
@@ -2017,6 +2691,7 @@ function frame(timestamp) {
       danceView -= dt;
       if (danceView <= 0 && viewMode === 2) viewMode = 0;
     }
+    crouchK += ((player.crouching && !riding() ? 1 : 0) - crouchK) * Math.min(1, dt * 12);
     updateCamera(dt);
 
     // What are we looking at? Vehicles and pets count if they're closer than the nearest block.
@@ -2073,8 +2748,18 @@ function frame(timestamp) {
       hint = '🪜 W / Space: up · S: down';
     } else if (item === CLAIM && claimTool.a) {
       hint = claimTool.confirm ? '🚩 Click to claim · Right-click to cancel' : '🚩 Click the opposite corner';
+    } else if (item === FILL) {
+      hint = wand.b ? `✨ Click: fill with ${BLOCKS[lastBlock]?.name} · Scroll: taller / shorter · Right-click: empty it`
+        : wand.a ? '✨ Click the opposite corner · Right-click to cancel' : `✨ Click a corner of the box to fill (with ${BLOCKS[lastBlock]?.name}, the last block you held)`;
+    } else if (item === COPY) {
+      hint = wand.clip ? '📋 Click to paste · Scroll to turn it · Right-click to forget it · Z to undo'
+        : wand.a ? '📋 Click the opposite corner · Right-click to cancel' : '📋 Click one corner of what you want to copy';
+    } else if (seated) {
+      hint = '🛋️ Move or jump to get up';
     } else {
       const s = hit && !hit.ground ? structures.at(...hit.block) : null;
+      const def = hit && !hit.ground && hit.part !== 'floor' ? BLOCKS[blockId(itemOf(hit.value))] : null;
+      const tool = item === HAMMER || item === BRUSH || item === SCRAPER;
       if (item === BRUSH && hit && !hit.ground) hint = `🎨 Click to paint this side ${paintName()}`;
       else if (item === SCRAPER && hit && !hit.ground) hint = sidePaint(hit) >= 0 ? '🧽 Click to scrape the paint off this side' : '';
       else if (hit && shapeOf(hit.value) === 'door') hint = '🚪 Right-click to open / close';
@@ -2083,10 +2768,21 @@ function frame(timestamp) {
       else if (hit && BLOCKS[blockId(hit.value)]?.turns && !floorOf(hit.value) && item !== HAMMER) hint = '↻ Right-click to turn the line';
       else if (hit && shapeOf(hit.value) === 'ladder' && item !== HAMMER) hint = '🪜 Walk into it and hold W or Space to climb';
       else if (item === RAILING && hit) hint = railPreview && withRail(railPreview) ? '🚧 Click to add a railing here' : '🚧 Point near the edge of a floor, or at the side of a block';
-      else if (s?.type === 'bed') hint = '🛏️ Right-click to sleep';
+      else if (s?.type === 'bed') hint = '🛏️ Right-click to sleep · Jump on it to bounce!';
+      else if (def?.seat && !tool) hint = '🛋️ Right-click to sit down';
+      else if (def?.hug && !tool) hint = '🧸 Right-click for a hug';
+      else if (def?.shape === 'picture' && !tool) hint = '🖼️ Right-click to hang a different picture';
+      else if (def?.music && !tool) hint = `🎵 ${NOTE_NAMES[blockMeta(hit.value)]} · Walk on it to play · Right-click: next note`;
+      else if (def?.speedPad && item !== HAMMER) hint = '⚡ Run (or drive) over it the way the arrows point!';
+      else if (def?.race === 'start' && item !== HAMMER) hint = '🏁 Start line: step off it to start the clock, then race to a Finish line!';
+      else if (def?.race === 'finish' && item !== HAMMER) hint = '🏁 Finish line: cross it after a Start line to set a time';
       else if (s?.type === 'cannon') hint = '💥 Right-click to launch yourself!';
       else if (s?.type === 'tv') hint = '📺 Right-click to change the channel';
       else if (item === CLAIM) hint = '🚩 Click a corner to start claiming land (max 10×15)';
+      else if (item === WATER_BALLOON) hint = '💦 Click to throw a water balloon!';
+      else if (item === BUBBLES) hint = '🫧 Hold the mouse button to blow bubbles';
+      else if (item === BALLOON) hint = player.onGround ? '🎈 Jump off something high and float down! Click to let a balloon go' : '🎈 Wheee!';
+      else if (item === CAMERA) hint = '📸 Click (or press P) to take a photo · H hides the HUD';
     }
     hud.setHint(hint);
 
@@ -2106,6 +2802,15 @@ function frame(timestamp) {
       useItem();
       useCooldown = item === HAMMER ? 0.25 : 0.2;
     }
+    if (locked && !riding() && mouse.has(0) && item === BUBBLES) blowBubbles(dt);
+
+    // Music blocks play under anyone's feet; races, flying balloons and the wands' boxes.
+    if (!riding() && (player.onGround || seated)) stepMusic(myId, player.pos);
+    for (const a of avatars.list.values()) if (!a.seat) stepMusic(a.id, a.pos);
+    updateRace();
+    updateFlying(dt);
+    popBubbles(dt);
+    updateWand();
 
     kickBall();
     updateDownwash(dt, time);
@@ -2120,7 +2825,10 @@ function frame(timestamp) {
       const r = v => Math.round(v * 100) / 100;
       const rot = myCar ? [r(myCar.h), 0] : [r(player.yaw), r(player.pitch)];
       const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
-      net.send({ t: 'state', pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags: sleeping ? 1 : 0 });
+      const balloon = hud.item === BALLOON && !riding() && !sleeping;
+      const flags = (sleeping ? FLAG.sleeping : 0) | (seated ? FLAG.sitting : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
+        (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
+      net.send({ t: 'state', pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags });
       sendCarState();
       // Parked cars we knocked (or pushed): tell everyone where they are.
       for (const car of cars.list.values()) {
@@ -2148,6 +2856,9 @@ function frame(timestamp) {
     myBody.targetPitch = player.pitch;
     myBody.flying = player.flying;
     myBody.swing = view.swingT;
+    myBody.sitting = !!seated;
+    myBody.crouching = player.crouching && !riding();
+    myBody.balloon = hud.item === BALLOON && !riding() && !sleeping ? paintHex() : null;
     myBody.update(dt, time);
 
     // Say whose land you just walked onto.
@@ -2272,10 +2983,11 @@ function frame(timestamp) {
     renderer.clear();
     renderer.render(scene, camera);
   }
-  if (firstPerson) {
+  if (firstPerson && !photoPending) {
     renderer.clearDepth();
     renderer.render(view.scene, view.camera);
   }
+  if (photoPending) savePhoto();
 }
 
 window.addEventListener('resize', () => {
@@ -2304,6 +3016,12 @@ window.buildzone = {
   get ball() { return ball; },
   get claims() { return claims; },
   get sleeping() { return sleeping; },
+  get seated() { return seated; },
+  get wand() { return wand; },
+  get flying() { return flying; },
+  get race() { return race; },
+  get undoStack() { return undoStack; },
+  undo: () => undo(),
   useItem: () => useItem(),
   kickBall: () => kickBall(),
   throwBall: () => throwBall(),

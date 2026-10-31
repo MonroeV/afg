@@ -32,7 +32,10 @@
       <input id="chat-input" maxlength="160" autocomplete="off" placeholder="Say something… (Enter to send, Esc to cancel)">
     </div>
     <div id="banner" class="hidden"></div>
+    <div id="race" class="hidden"></div>
+    <div id="splash"></div>
   </div>
+  <div id="flash"></div>
 
   <div id="menu" class="screen">
     <div class="panel">
@@ -82,11 +85,19 @@
   </div>
 
   <div id="inventory" class="screen hidden">
-    <div class="panel wide">
-      <h2>Items</h2>
-      <p class="hint">Click an item to put it in your selected hotbar slot. Scroll down for the Build Book!</p>
+    <div class="panel wide inv-panel">
+      <div class="inv-head">
+        <div id="inv-tabs" class="inv-tabs"></div>
+        <input id="inv-search" type="search" placeholder="🔍 Find…" autocomplete="off" spellcheck="false" maxlength="30">
+      </div>
       <div id="inventory-grid"></div>
-      <button id="inventory-done">DONE</button>
+      <div class="inv-foot">
+        <div class="inv-bar-wrap">
+          <div id="inv-name" class="inv-name"></div>
+          <div id="inv-hotbar" class="inv-hotbar"></div>
+        </div>
+        <button id="inventory-done">DONE</button>
+      </div>
     </div>
   </div>
 

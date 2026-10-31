@@ -144,25 +144,43 @@ button:disabled { opacity: 0.6; cursor: wait; }
 .bar { height: 10px; border-radius: 5px; background: #222a38; overflow: hidden; }
 #loading-fill { height: 100%; width: 0; background: var(--accent); transition: width 0.1s; }
 
+/* The item menu: tabs, a search box, the items, and your hotbar along the bottom. */
+.inv-panel { width: min(860px, 100%); height: min(680px, 100%); display: flex; flex-direction: column; padding: 16px 18px; overflow: hidden; }
+.inv-head { display: flex; gap: 10px; align-items: center; }
+.inv-tabs { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
+.inv-tab {
+  display: flex; align-items: center; gap: 5px; width: auto; margin: 0; padding: 7px 10px; border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06); color: var(--text); box-shadow: none; font: 700 13px/1.2 inherit; letter-spacing: 0;
+}
+.inv-tab:active { transform: scale(0.96); box-shadow: none; }
+.inv-tab.active { background: var(--accent); color: #241600; }
+.inv-tab-icon { font-size: 17px; line-height: 1; }
+#inv-search {
+  width: 140px; padding: 8px 10px; border-radius: 10px; border: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.08); color: var(--text); font: inherit; font-size: 14px; outline: none;
+}
+#inv-search:focus { border-color: var(--accent); }
 #inventory-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-  gap: 10px;
-  margin: 16px 0 4px;
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px;
+  align-content: start; margin: 10px 0 8px; padding-right: 4px;
 }
 .inv-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 4px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 2px solid transparent;
-  font-size: 12px;
-  cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 3px;
+  border-radius: 10px; background: rgba(255, 255, 255, 0.05); border: 2px solid transparent; font-size: 11px; cursor: pointer;
 }
+.inv-item canvas { width: 48px; height: 48px; pointer-events: none; }
+.inv-item.recent { background: rgba(120, 180, 255, 0.08); }
+.inv-label { width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); pointer-events: none; }
 .inv-item:hover { border-color: var(--accent); background: rgba(255, 179, 33, 0.1); }
+.inv-foot { display: flex; gap: 12px; align-items: flex-end; }
+.inv-bar-wrap { flex: 1; min-width: 0; }
+.inv-name { min-height: 18px; margin-bottom: 5px; font-size: 13px; color: var(--muted); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.inv-hotbar { display: flex; gap: 5px; }
+.inv-hotbar .slot { cursor: pointer; }
+.inv-hotbar .slot.locked { opacity: 0.75; }
+.inv-hotbar .slot.drop { border-color: #7dff8a; transform: scale(1.08); }
+#inventory-done { flex: none; width: auto; margin: 0 0 4px; padding: 12px 26px; }
 
 /* ---------- In-game HUD ---------- */
 
@@ -481,6 +499,32 @@ button.secondary {
   transition: opacity 0.3s, transform 0.3s;
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* The race clock. */
+#race {
+  position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+  padding: 6px 18px; border-radius: 12px; background: rgba(0, 0, 0, 0.6);
+  font: 800 28px/1.2 ui-monospace, "SF Mono", Consolas, monospace; color: #ffe066; text-shadow: 0 2px 3px #000;
+}
+/* Splashed by a water balloon: drips all over the screen for a moment. */
+#splash {
+  position: absolute; inset: 0; opacity: 0; pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 30%, rgba(120, 190, 255, 0.55) 0 7%, transparent 8%),
+    radial-gradient(circle at 70% 20%, rgba(120, 190, 255, 0.5) 0 5%, transparent 6%),
+    radial-gradient(circle at 60% 70%, rgba(120, 190, 255, 0.5) 0 9%, transparent 10%),
+    radial-gradient(circle at 30% 80%, rgba(120, 190, 255, 0.45) 0 4%, transparent 5%),
+    radial-gradient(circle at 85% 60%, rgba(120, 190, 255, 0.45) 0 6%, transparent 7%),
+    rgba(90, 160, 255, 0.25);
+}
+#splash.show { animation: splash 2.2s ease-out; }
+@keyframes splash { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(40px); } }
+/* A camera flash when you take a photo. */
+#flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 30; }
+#flash.show { animation: flash 0.45s ease-out; }
+@keyframes flash { 0% { opacity: 0.85; } 100% { opacity: 0; } }
+/* H hides the HUD (for photos and videos), all but the race clock. */
+#hud.photo-mode > :not(#race):not(#splash) { visibility: hidden; }
 #vehicle-hud {
   position: absolute;
   bottom: 128px;
@@ -615,7 +659,15 @@ body.touch #car-help { display: none; }
 body.touch #vehicle-hud { bottom: 58px; font-size: 13px; }
 body.touch #target-hint { font-size: 12px; }
 body.touch #toast { top: 54px; font-size: 14px; }
+body.touch #race { top: 52px; font-size: 20px; }
 body.touch .panel { padding: 18px; }
+body.touch .inv-panel { padding: 8px 10px; height: 100%; }
+body.touch .inv-tab { padding: 6px 8px; }
+body.touch .inv-tab-name { display: none; }
+body.touch .inv-tab-icon { font-size: 20px; }
+body.touch #inv-search { width: 100px; }
+body.touch .inv-hotbar .slot { width: 38px; height: 38px; }
+body.touch .inv-name { display: none; }
 @media (max-height: 500px) {
   body.touch h1 { font-size: 34px; margin: 0; }
   body.touch .tagline { margin: 4px 0 8px; }

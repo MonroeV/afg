@@ -87,6 +87,36 @@ export const BLOCKS = {
   57: { name: 'Parking Line', shape: 'flat', tex: 'parking_line_turned', turns: 56, along: 'x', hidden: true },
   58: { name: 'Parking Sign', tex: 'parking_sign' },
   59: { name: 'Tinted Glass', tex: 'tinted_glass', transparent: true, fragile: true },
+  // Furniture. `facing` models turn to face you when you put them down (meta bits 0-1).
+  // seat: how high you sit on it (right-click to sit). connects: side by side they join up.
+  60: { name: 'Chair', shape: 'model', model: 'chair', facing: true, seat: 0.5, box: [0.15, 0, 0.15, 0.85, 0.5, 0.85] },
+  61: { name: 'Couch', shape: 'model', model: 'couchab', facing: true, connects: true, seat: 0.45, box: [0, 0, 0, 1, 0.45, 1] },
+  62: { name: 'Table', shape: 'model', model: 'table', box: [0.04, 0, 0.04, 0.96, 1, 0.96] },
+  63: { name: 'Bookshelf', tex: { top: 'planks', side: 'bookshelf', bottom: 'planks' } },
+  // A bed is two cells long: meta bit 2 marks the foot end.
+  64: { name: 'Bed', shape: 'model', model: 'bed', facing: true, springy: true, box: [0, 0, 0, 1, 0.55, 1] },
+  // Pictures hang on a wall (meta bits 0-1 which way, bits 2-3 which picture).
+  65: { name: 'Painting', shape: 'picture', art: 'painting' },
+  66: { name: 'Poster', shape: 'picture', art: 'poster' },
+  67: { name: 'Flower Pot', shape: 'model', model: 'flowerPot', box: [0.3, 0, 0.3, 0.7, 0.62, 0.7] },
+  68: { name: 'Teddy Bear', shape: 'model', model: 'teddy', facing: true, hug: true, box: [0.25, 0, 0.25, 0.75, 0.7, 0.75] },
+  // Fun blocks
+  69: { name: 'Music Block', tex: { top: 'music_top', side: 'music_side', bottom: 'music_side' }, music: true }, // meta: the note
+  70: { name: 'Speed Pad', shape: 'flat', tex: 'speed_pad', facing: true, speedPad: true },
+  71: { name: 'Race Start', shape: 'flat', tex: 'race_start', race: 'start' },
+  72: { name: 'Race Finish', shape: 'flat', tex: 'race_finish', race: 'finish' },
+};
+
+// Furniture that faces you: which quarter turn makes its front (+z in the model) face
+// someone looking along `yaw`.
+export const facingTowards = yaw => ((Math.round(yaw / (Math.PI / 2)) % 4) + 4) % 4;
+export const BED_FOOT = 4;
+// Notes for the Music Block: two octaves of the major scale, from middle C.
+export const NOTE_NAMES = ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'C²', 'D²', 'E²', 'F²', 'G²', 'A²', 'B²', 'C³', 'D³'];
+export const NOTE_FREQS = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24, 26].map(s => 261.63 * 2 ** (s / 12));
+export const PICTURES = {
+  painting: ['Sunset', 'Mountains', 'Flowers', 'Starry Night'],
+  poster: ['Cat', 'Puppy', 'Rocket', 'Dinosaur'],
 };
 
 // Paint colors for the Paint Brush (index 1-15; 0 means "not painted").
@@ -116,13 +146,14 @@ export const shapeOf = v => BLOCKS[v & 255]?.shape || 'cube';
 export const isSolidBlock = v => {
   const shape = shapeOf(v);
   if (shape === 'model') return !!BLOCKS[v & 255].box;
-  return v !== 0 && shape !== 'flat' && shape !== 'plant' && shape !== 'ladder' && shape !== 'rail';
+  return v !== 0 && shape !== 'flat' && shape !== 'plant' && shape !== 'ladder' && shape !== 'rail' && shape !== 'picture';
 };
 export const isReplaceable = v => {
   const shape = shapeOf(v);
   return shape === 'flat' || shape === 'plant';
 };
 
+const BED = 64;
 export function isValidBlock(v) {
   if (!Number.isInteger(v) || v < 0 || v >= SPLIT * SPLIT) return false;
   if (v >= SPLIT) {
@@ -138,6 +169,8 @@ export function isValidBlock(v) {
   if (def.shape === 'door' || def.shape === 'flat') return true;
   if (def.shape === 'rail') return meta > 0;
   if (def.light && (v & 255) !== STREET_LAMP) return meta === 0 || meta === LIGHT_OFF;
+  if (def.music || def.shape === 'picture') return true; // the note, or which way and which picture
+  if (def.facing) return meta < ((v & 255) === BED ? 8 : 4);
   return def.shape === 'ladder' ? meta < 4 : meta === 0;
 }
 
@@ -199,14 +232,15 @@ export const RAIL_EDGES = [1, 2, 4, 8];
 const RAIL_THICK = 0.12;
 export const RAIL_HEIGHT = 1.6; // taller than it looks, so you can't jump over it (jumps reach 1.45)
 
+// (A speed pad's meta is the way it points, not railings.)
 const partRails = v => {
   const shape = shapeOf(v);
-  return v && (shape === 'rail' || shape === 'flat') ? blockMeta(v) : 0;
+  return v && (shape === 'rail' || (shape === 'flat' && !BLOCKS[v & 255].facing)) ? blockMeta(v) : 0;
 };
 export const railMask = v => partRails(itemOf(v)) | partRails(floorOf(v));
 
 // Floors and railings can have an item (a torch, a lamp…) standing in the middle of them.
-export const canHoldItem = v => v > 0 && v < SPLIT && (shapeOf(v) === 'flat' || shapeOf(v) === 'rail');
+export const canHoldItem = v => v > 0 && v < SPLIT && (shapeOf(v) === 'flat' || shapeOf(v) === 'rail') && !BLOCKS[v & 255].facing;
 
 // The railing pieces as boxes inside the cell: [x0, y0, z0, x1, y1, z1] from its corner.
 export function railBoxes(mask, height = RAIL_HEIGHT) {

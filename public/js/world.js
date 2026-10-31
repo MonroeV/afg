@@ -4,9 +4,10 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   BLOCKS, WORLD, PAINT_COLORS, blockKey, blockId, blockMeta, paintOf, withPaint, makeBlock, shapeOf, isSolidBlock, doorBox,
-  railBoxes, railMask, itemOf, floorOf, carryPaint, rgbToHex, switchable, lightOff, DOOR_OPEN, DOOR_TOP,
+  railBoxes, railMask, itemOf, floorOf, carryPaint, rgbToHex, switchable, lightOff, DOOR_OPEN, DOOR_TOP, BED_FOOT,
 } from './shared/blocks.js';
 import { modelGeometry, modelMaterials } from './models.js';
+import { pictureCanvas } from './pictures.js';
 
 const GEOMETRY = {
   cube: new THREE.BoxGeometry(1, 1, 1).translate(0.5, 0.5, 0.5),
@@ -22,7 +23,10 @@ const GEOMETRY = {
     new THREE.BoxGeometry(0.07, 1, 0.05).translate(0.36, 0.5, -0.46),
     ...[0.17, 0.5, 0.83].map(y => new THREE.BoxGeometry(0.72, 0.06, 0.04).translate(0, y, -0.45)),
   ]),
+  // A picture hanging on the wall on the block's -z side (its front, +z, is the picture).
+  picture: new THREE.BoxGeometry(0.9, 0.68, 0.05).translate(0, 0.5, -0.475),
 };
+const PICTURE_BOX = [-0.45, 0.16, -0.5, 0.45, 0.84, -0.44];
 
 export const RAILING = 54;
 
@@ -57,17 +61,32 @@ function turnBox(b, quarter) {
   return [Math.min(...xs), b[1], Math.min(...zs), Math.max(...xs), b[4], Math.max(...zs)];
 }
 
-// What you can click on a lamp model: the box around its shape.
+// The same, for a box given from the cell's corner (furniture turned to face you).
+export const turnCellBox = (b, quarter) => (quarter ? turnBox([b[0] - 0.5, b[1], b[2] - 0.5, b[3] - 0.5, b[4], b[5] - 0.5], quarter) : b);
+
+// Which model a model block draws: couches have arms only on the ends of a row, and a bed
+// has a head end and a foot end.
+function modelName(v, renderKey) {
+  const def = BLOCKS[blockId(v)];
+  const variant = renderKey?.split(':')[1];
+  if (def.connects && variant !== undefined) return `couch${variant}`;
+  if (blockId(v) === BED) return blockMeta(v) & BED_FOOT ? 'bedFoot' : 'bed';
+  return def.model;
+}
+const BED = 64;
+
+// What you can click on a model: the box around its shape (turned the way it faces).
 const modelBoxes = {};
-function modelPickBox(id) {
-  if (!modelBoxes[id]) {
-    const g = modelGeometry(BLOCKS[id].model);
+function modelPickBox(v) {
+  const name = modelName(v);
+  if (!modelBoxes[name]) {
+    const g = modelGeometry(name);
     g.computeBoundingBox();
     const { min, max } = g.boundingBox;
     const pad = 0.04;
-    modelBoxes[id] = [Math.max(0, min.x - pad), Math.max(0, min.y - pad), Math.max(0, min.z - pad), Math.min(1, max.x + pad), Math.min(1, max.y + pad), Math.min(1, max.z + pad)];
+    modelBoxes[name] = [Math.max(0, min.x - pad), Math.max(0, min.y - pad), Math.max(0, min.z - pad), Math.min(1, max.x + pad), Math.min(1, max.y + pad), Math.min(1, max.z + pad)];
   }
-  return modelBoxes[id];
+  return BLOCKS[blockId(v)].facing ? turnCellBox(modelBoxes[name], blockMeta(v) & 3) : modelBoxes[name];
 }
 
 // Does a ray hit a box? Returns the distance and the face it went in through.
@@ -226,16 +245,29 @@ export function createBlockMaterials(textures) {
   const materials = {};
   for (const [id, def] of Object.entries(BLOCKS)) {
     const shape = def.shape || 'cube';
-    if (shape === 'model') {
+    if (shape === 'picture') {
+      // One material set per picture: the picture on the front, the frame color elsewhere.
+      const frame = new THREE.MeshStandardMaterial({ color: def.art === 'poster' ? 0xf4f4f4 : 0x9a7330, roughness: 0.5, metalness: def.art === 'poster' ? 0 : 0.4 });
+      for (let i = 0; i < 4; i++) {
+        const tex = new THREE.CanvasTexture(pictureCanvas(def.art, i));
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.anisotropy = 4;
+        const art = new THREE.MeshStandardMaterial({ map: tex, roughness: def.art === 'poster' ? 0.55 : 0.75 });
+        materials[`${id}:${i}`] = [frame, frame, frame, frame, art, frame];
+      }
+      materials[id] = materials[`${id}:0`];
+    } else if (shape === 'model') {
       materials[id] = modelMaterials(def.model);
       paintable(materials[id][0]);
       paintable(materials[id][2]);
+      paintable(materials[id][3]);
       if (switchable(Number(id))) {
         // Switched off: the shade or bulb is just a dull, unlit color.
         const off = modelMaterials(def.model);
         off[1] = new THREE.MeshStandardMaterial({ color: off[1].userData.baseColor.clone().multiplyScalar(0.4), vertexColors: true, roughness: 0.6 });
         paintable(off[0]);
         paintable(off[2]);
+        paintable(off[3]);
         materials[`${id}:off`] = off;
       }
     } else if (shape === 'door') {
@@ -344,7 +376,8 @@ export class World {
       }
       out.push([x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
     } else if (shape === 'model') {
-      const b = BLOCKS[blockId(v)].box;
+      const def = BLOCKS[blockId(v)];
+      const b = def.box && (def.facing ? turnCellBox(def.box, blockMeta(v) & 3) : def.box);
       if (b) out.push([x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
     } else if (shape === 'rail' || shape === 'flat') {
       for (const b of railBoxes(blockMeta(v))) out.push([x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
@@ -366,7 +399,8 @@ export class World {
       } else if (shape === 'rail') for (const b of railBoxes(blockMeta(u), 1)) add(b, part);
       else if (shape === 'plant') add([0.15, 0, 0.15, 0.85, 0.85, 0.85], part);
       else if (shape === 'ladder') add(turnBox([-0.42, 0, -0.5, 0.42, 1, -0.38], blockMeta(u)), part);
-      else if (shape === 'model') add(modelPickBox(blockId(u)), part);
+      else if (shape === 'model') add(modelPickBox(u), part);
+      else if (shape === 'picture') add(turnBox(PICTURE_BOX, blockMeta(u) & 3), part);
       else if (shape === 'door') {
         // The door's panel (or, for an open garage door, just the roll at the top).
         const boxes = [];
@@ -387,9 +421,10 @@ export class World {
     }
     for (let i = 0; i + 3 < flat.length; i += 4) this.set(flat[i], flat[i + 1], flat[i + 2], flat[i + 3]);
     this.loading = false;
-    // Doors could only tell they were double or garage doors once all their neighbors arrived.
+    // Doors could only tell they were double or garage doors (and couches whether they join
+    // up) once all their neighbors arrived.
     for (const [k, v] of this.blocks) {
-      if (shapeOf(v) !== 'door') continue;
+      if (shapeOf(v) !== 'door' && !BLOCKS[blockId(itemOf(v))]?.connects) continue;
       const [x, y, z] = k.split(',').map(Number);
       this.rerender(x, y, z);
     }
@@ -416,6 +451,7 @@ export class World {
     this.revision++;
     if (!this.loading) {
       if (shapeOf(old) === 'door' || shapeOf(v) === 'door') this.refreshDoorsNear(x, y, z);
+      if (BLOCKS[blockId(itemOf(old))]?.connects || BLOCKS[blockId(itemOf(v))]?.connects) this.refreshCouchesNear(x, y, z);
       this.onChange?.(x, y, z);
     }
     return true;
@@ -537,8 +573,28 @@ export class World {
       return `${id}:${blockMeta(v) & DOOR_TOP ? 'top' : 'bottom'}`;
     }
     if (shapeOf(v) === 'rail') return `${id}:${blockMeta(v)}`;
+    if (shapeOf(v) === 'picture') return `${id}:${(blockMeta(v) >> 2) & 3}`;
+    if (BLOCKS[id].connects) return `${id}:${x === undefined ? 'ab' : this.couchArms(v, x, y, z)}`;
+    if (id === BED) return `${id}:${blockMeta(v) & BED_FOOT ? 'foot' : 'head'}`;
     if (lightOff(v)) return `${id}:off`;
     return String(id);
+  }
+
+  // Which ends of a couch get an arm: not the sides where another couch (facing the same
+  // way) carries on.
+  couchArms(v, x, y, z) {
+    const q = blockMeta(v) & 3, a = q * Math.PI / 2, c = Math.round(Math.cos(a)), s = Math.round(Math.sin(a));
+    const joins = (dx, dz) => {
+      const n = itemOf(this.get(x + dx, y, z + dz));
+      return blockId(n) === blockId(v) && (blockMeta(n) & 3) === q;
+    };
+    return (joins(-c, s) ? '' : 'a') + (joins(c, -s) ? '' : 'b');
+  }
+
+  refreshCouchesNear(x, y, z) {
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      if (BLOCKS[blockId(itemOf(this.get(x + dx, y, z + dz)))]?.connects) this.rerender(x + dx, y, z + dz);
+    }
   }
 
   layer(key, renderKey, v, x, z) {
@@ -549,7 +605,7 @@ export class World {
       layer = this.layers[key] = {
         mesh: null, keys: [], index: new Map(), def,
         // Each layer has its own copy of the shape, to hold its blocks' painted sides.
-        geometry: (def.shape === 'model' ? modelGeometry(def.model) : def.shape === 'rail' ? railGeometry(blockMeta(v)) : GEOMETRY[def.shape || 'cube']).clone(),
+        geometry: (def.shape === 'model' ? modelGeometry(modelName(v, renderKey)) : def.shape === 'rail' ? railGeometry(blockMeta(v)) : GEOMETRY[def.shape || 'cube']).clone(),
         material: this.materials[renderKey] ?? this.materials[blockId(v)],
         center: new THREE.Vector3(cx, 32, cz),
       };
@@ -563,8 +619,9 @@ export class World {
     mesh.count = layer.keys.length;
     mesh.boundingSphere = new THREE.Sphere(layer.center, CHUNK_RADIUS + 2);
     const shape = layer.def.shape || 'cube';
-    // (Little lamp models don't need shadows: you'd hardly see them, and they cost a lot.)
-    mesh.castShadow = !layer.def.transparent && shape !== 'flat' && shape !== 'model';
+    // (Little lamp models don't need shadows: you'd hardly see them, and they cost a lot.
+    // Furniture does, or it would look like it's floating.)
+    mesh.castShadow = !layer.def.transparent && shape !== 'flat' && shape !== 'picture' && !(shape === 'model' && layer.def.light);
     mesh.receiveShadow = true;
     if (layer.def.transparent) mesh.renderOrder = 1;
     // Every instance has a color: white for normal blocks, the paint color for painted ones.
@@ -593,7 +650,11 @@ export class World {
     const m = this.matrix;
     const shape = shapeOf(v);
     const meta = blockMeta(v);
-    if (shape === 'ladder') return m.makeTranslation(x + 0.5, y, z + 0.5).multiply(this.tmp.makeRotationY(meta * Math.PI / 2));
+    if (shape === 'ladder' || shape === 'picture') return m.makeTranslation(x + 0.5, y, z + 0.5).multiply(this.tmp.makeRotationY((meta & 3) * Math.PI / 2));
+    if (BLOCKS[blockId(v)].facing) {
+      // Furniture (and speed pads) turned around the middle of the cell.
+      return m.makeTranslation(x + 0.5, y, z + 0.5).multiply(this.tmp.makeRotationY((meta & 3) * Math.PI / 2)).multiply(this.tmp.makeTranslation(-0.5, 0, -0.5));
+    }
     if (shape !== 'door') return m.makeTranslation(x, y, z);
     m.makeTranslation(x + 0.5, y, z + 0.5).multiply(this.tmp.makeRotationY((meta & 3) * Math.PI / 2));
     if (!(meta & DOOR_OPEN)) return m;

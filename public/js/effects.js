@@ -323,6 +323,21 @@ export const SPRITES = {
     ctx.textBaseline = 'middle';
     ctx.fillText('♪', 32, 34);
   }),
+  // A soap bubble: see-through, with a rainbow rim and a shiny spot.
+  bubble: () => spriteTexture(ctx => {
+    const g = ctx.createRadialGradient(32, 32, 18, 32, 32, 30);
+    g.addColorStop(0, 'rgba(255,255,255,0.05)');
+    g.addColorStop(0.75, 'rgba(255,255,255,0.25)');
+    g.addColorStop(1, 'rgba(255,255,255,0.85)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(32, 32, 30, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.beginPath();
+    ctx.ellipse(22, 20, 6, 4, -0.6, 0, Math.PI * 2);
+    ctx.fill();
+  }),
   z: () => spriteTexture(ctx => {
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 46px sans-serif';
@@ -430,10 +445,33 @@ export class Effects {
     this.hearts = new Emitter(scene, 'heart', { max: 200 });
     this.notes = new Emitter(scene, 'note', { max: 200 });
     this.zzz = new Emitter(scene, 'z', { max: 60 });
+    this.bubbles = new Emitter(scene, 'bubble', { max: 300 });
   }
 
   update(dt, camera, height) {
-    for (const e of [this.glow, this.smoke, this.hearts, this.notes, this.zzz]) e.update(dt, camera, height);
+    for (const e of [this.glow, this.smoke, this.hearts, this.notes, this.zzz, this.bubbles]) e.update(dt, camera, height);
+  }
+
+  // Soap bubbles blown from (x, y, z) in direction dir: they float, wobble and drift up.
+  blowBubbles(x, y, z, dir, count = 3) {
+    for (let i = 0; i < count; i++) {
+      const c = new THREE.Color().setHSL(Math.random(), 0.7, 0.85);
+      const sp = 1.2 + Math.random() * 1.6;
+      this.bubbles.spawn({
+        x: x + (Math.random() - 0.5) * 0.2, y: y + (Math.random() - 0.5) * 0.2, z: z + (Math.random() - 0.5) * 0.2,
+        vx: dir[0] * sp + (Math.random() - 0.5) * 0.8, vy: dir[1] * sp + 0.3 + Math.random() * 0.5, vz: dir[2] * sp + (Math.random() - 0.5) * 0.8,
+        life: 2.5 + Math.random() * 3, size: 0.12 + Math.random() * 0.22, grow: 0.02, color: [c.r, c.g, c.b], gravity: -0.25, drag: 1.1, alpha: 1.6,
+      });
+    }
+  }
+
+  // A water balloon bursting.
+  splash(x, y, z, color = [0.45, 0.7, 1]) {
+    for (let i = 0; i < 40; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 1.5 + Math.random() * 4;
+      this.glow.spawn({ x, y, z, vx: Math.cos(a) * sp, vy: 1.5 + Math.random() * 4, vz: Math.sin(a) * sp, life: 0.5 + Math.random() * 0.5, size: 0.16, color, gravity: 14, alpha: 0.9 });
+    }
+    for (let i = 0; i < 6; i++) this.smoke.spawn({ x, y, z, vx: (Math.random() - 0.5) * 2, vy: 0.5, vz: (Math.random() - 0.5) * 2, life: 0.8, size: 0.5, grow: 1.2, color: [0.75, 0.88, 1], alpha: 0.5, drag: 2 });
   }
 
   smokePuff(x, y, z, dark = 0.5) {
@@ -600,6 +638,51 @@ export class Sounds {
     for (let i = 0; i < 6; i++) this.noiseHit(3000 + Math.random() * 3000, 0.08, 0.2 * volume, 'bandpass', 0.3 + Math.random() * 0.6);
   }
   spawnCar() { this.together(() => { this.tone(300, 600, 0.15, 0.3, 'triangle'); this.tone(600, 900, 0.15, 0.3, 'triangle', 0.12); }); }
+  // A musical note for the Music Block, in tune (no wobble). Each instrument sounds different.
+  note(freq, instrument = 'piano', volume = 1) {
+    const ctx = this.ensure();
+    if (!ctx || volume < 0.02) return;
+    const t = ctx.currentTime;
+    const play = (f, type, dur, gain, attack = 0.005) => {
+      const osc = ctx.createOscillator();
+      osc.type = type;
+      osc.frequency.setValueAtTime(f, t);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(gain * volume, t + attack);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(g).connect(this.master);
+      osc.start(t);
+      osc.stop(t + dur + 0.05);
+      return osc;
+    };
+    if (instrument === 'drum') {
+      this.noiseHit(freq * 0.6, 0.25, 1.2 * volume, 'lowpass');
+      play(freq / 4, 'sine', 0.25, 0.5);
+    } else if (instrument === 'bell') {
+      play(freq * 2, 'sine', 1.6, 0.18);
+      play(freq * 5.4, 'sine', 0.6, 0.05);
+    } else if (instrument === 'game') {
+      play(freq, 'square', 0.3, 0.08);
+    } else if (instrument === 'flute') {
+      const o = play(freq * 2, 'triangle', 0.7, 0.16, 0.06);
+      o.frequency.setValueAtTime(freq * 2, t + 0.15);
+      o.frequency.linearRampToValueAtTime(freq * 2 * 1.01, t + 0.4);
+    } else {
+      // Piano-ish: a quick, bright attack that fades.
+      play(freq, 'triangle', 1.1, 0.22);
+      play(freq * 2, 'sine', 0.5, 0.07);
+    }
+  }
+
+  pop() { this.tone(900, 1600, 0.05, 0.12, 'sine'); }
+  splash(volume = 1) { this.noiseHit(1800, 0.35, 0.9 * volume, 'bandpass'); this.noiseHit(500, 0.25, 0.6 * volume, 'lowpass'); }
+  squeak() { this.tone(900, 1400, 0.12, 0.18, 'sine'); this.tone(1400, 1000, 0.1, 0.12, 'sine', 0.1); }
+  shutter() { this.noiseHit(4000, 0.05, 0.5, 'highpass'); this.noiseHit(2500, 0.06, 0.4, 'highpass', 0.08); }
+  zoom() { this.tone(400, 1200, 0.3, 0.2, 'sawtooth'); this.noiseHit(2000, 0.3, 0.3, 'highpass'); }
+  beep(high = false) { this.tone(high ? 1320 : 660, high ? 1320 : 660, high ? 0.45 : 0.2, 0.2, 'square'); }
+  magic() { this.together(() => [784, 988, 1175, 1568].forEach((f, i) => this.tone(f, f, 0.12, 0.1, 'sine', i * 0.05))); }
+
   tune() {
     // A short happy melody for dancing.
     const notes = [523, 659, 784, 659, 698, 880, 784, 0, 659, 784, 1047];

@@ -89,8 +89,37 @@ customize your character, drive cars, build anything and play with friends.
   porch lanterns, ceiling lights and table lamps in houses, garden lights and tiki torches in parks.
   Any lamp with a roof over it counts as indoors, so it lights up the room day and night. Windows
   are clear enough to see in and out, with just a little reflection
-- **57 kinds of blocks** with realistic textures: brick, wood, glass, tinted glass, marble, roads,
-  parking lines, flowers, rainbow, gold, mirrors, lamps, ladders, railings…
+- **Furniture**: chairs, couches, tables, beds, bookshelves, flower pots, teddy bears, paintings
+  and posters. Furniture turns to face you when you put it down. Right-click a chair or couch to
+  sit on it (move or jump to get up), and everyone sees you sitting. Put couches side by side and
+  they join into one long couch, with arms only on the ends. A bed is two blocks long: right-click
+  to sleep in it (it's your home spot, like the Build Book bed), and it's a little bit bouncy.
+  Hang a painting or poster on any wall (sunsets, mountains, flowers, a starry night, a cat, a
+  puppy, a rocket and a dinosaur) and right-click it to change the picture. Tables are just the
+  right height for a lamp or a teddy bear, and you can hug the teddy bear (right-click)
+- **Crouch** with Ctrl or C: you move slowly and won't walk off the edge of anything (great for
+  building on rooftops and bridges). Everyone sees you crouch
+- **Music Blocks**: each one you put down plays the next note up the scale, so a row of them is a
+  piano you can walk on. Walk (or jump) on one to play its note, right-click to change the note,
+  and paint it to change the sound: unpainted is a piano, red or orange is a video game beep,
+  yellow or green a flute, blue, purple or white a bell, and black a drum
+- **Water balloons**: throw them at your friends! A balloon that hits someone splashes their whole
+  screen, and you both find out who got who
+- **Speed pads** shoot you (or your car) off the way their arrows point. Put one down while looking
+  the way you want it to push
+- **Races**: put down a Race Start line and a Race Finish line. Step off the start and a big clock
+  starts; cross the finish to stop it. On foot or in a car. The best five times for each finish
+  line are kept, and a new record is announced to everyone
+- **For little builders**: a Bubble Wand (hold the button to blow bubbles that float away and pop),
+  a Balloon (hold it and jump off something high to float gently down; click to let one go and
+  watch it float into the sky; it's the color you pick in the Paint tab), and the Teddy Bear
+- **For big builders**: the Fill Wand fills a whole box with blocks (click two corners, scroll to
+  make it taller, click to fill it, or right-click to empty it), and the Copy Wand copies a piece
+  of a build and pastes it somewhere else (scroll to turn it around). Up to 4096 blocks at a time,
+  and Z undoes your last Fill or Paste. Plus a Camera (or press P) that saves a photo of what you
+  see to your Downloads, and H to hide the HUD for clean photos and videos
+- **72 kinds of blocks** with realistic textures: brick, wood, glass, tinted glass, marble, roads,
+  parking lines, flowers, rainbow, gold, mirrors, lamps, ladders, railings, bookshelves…
 - **Sounds that don't get old**: every sound is a little different each time, every vehicle has its
   own engine and horn note, and a steady engine or helicopter hum slowly settles into the
   background (it comes right back when you speed up, slow down or climb)
@@ -106,20 +135,34 @@ customize your character, drive cars, build anything and play with friends.
 | Mouse | Look around |
 | W A S D | Move |
 | Space | Jump |
-| Left click | Use the item in your hand (place a block, paint, throw the ball, launch fireworks) |
+| Left click | Use the item in your hand (place a block, paint, throw the ball or a water balloon, launch fireworks, take a photo) |
 | Left click with the Hammer | Break a block: it takes 3 hits (glass and carpet break in 1), so you don't break things by accident |
-| Right click | Interact: open and close doors, switch lights on and off, turn road lines, get in vehicles, pet pets, sleep in beds, fire cannons |
+| Right click | Interact: open and close doors, switch lights on and off, turn road lines, get in vehicles, pet pets, sit on chairs and couches, sleep in beds, change pictures and music notes, hug teddy bears, fire cannons |
 | Middle click | Copy the block you're looking at |
 | 1–9 or mouse wheel | Choose hotbar slot. Slot 1 always holds the Hammer; anything you pick while slot 1 is selected goes in slot 2 |
+| Q | Swap back to the item you were holding before |
 | E | Open the item menu and the Build Book, or get in/out of a vehicle you're looking at |
 | Shift | Sprint |
+| Ctrl or C | Crouch: slow, and you won't fall off edges |
 | F | Toggle flying (Space = up, C = down) |
 | V | Switch camera: first person, behind you, in front of you |
 | G | Dance! (on a dance floor it starts a party) |
 | B | Wave |
 | T or Enter | Chat |
 | R | Go home: your bed, or your land if you have no bed, or else the town square |
+| P | Take a photo (it's saved to your Downloads) |
+| H | Hide or show the HUD |
+| Z | Undo your last Fill or Paste |
 | Esc | Pause menu: settings, character, Go Home, and Exit to Menu |
+
+**The item menu (E):** the tabs along the top sort everything into Tools, Fun, Blocks, Home,
+Lights, Town, Paint and the Build Book, so there's no long list to scroll. Things you picked
+recently are at the top of every tab. Click an item to put it in the glowing hotbar slot, drag it
+onto any slot, or point at it and press a number key 1–9 to put it in that slot. Start typing
+(say "couch", "race" or "piano") to search everything. Tab switches tabs, Esc closes the menu.
+
+> **Careful with Ctrl:** Ctrl+W closes a browser tab, and browsers don't let games stop that.
+> If you crouch-walk with Ctrl held, the game asks before leaving, but **C** is the safer crouch key.
 
 **Driving:** W to drive, S to brake (keep holding it once you've stopped to back up), A/D to
 steer, Space to brake, Shift for a boost, H (or click) for the horn, G for the police siren, V to
@@ -157,6 +200,7 @@ When you press PLAY it goes full screen.
 - **Use your item:** tap the right side (place a block, hit with the hammer, paint, throw the
   ball). Keep your finger still on the screen to keep hammering.
 - **⬆** jumps (tap it twice quickly to start or stop flying; then **⬆** and **⬇** go up and down).
+  Walking, **⬇** crouches.
 - **✋** opens doors, gets in cars, pets pets and sleeps in beds. In a vehicle it turns into **🚪**
   to get out.
 - **Driving:** the joystick drives and steers (push it all the way up for a boost), **🛑** brakes.
@@ -265,7 +309,8 @@ public/
     landview.js        Draws land claim borders
     lighting.js        Live reflections and the glow effect
     lightpools.js      Soft pools of light on the ground under every lamp
-    models.js          3D models for the lamps
+    models.js          3D models for the lamps and furniture
+    pictures.js        The paintings and posters (drawn in code)
     tv.js              The TV shows
     daynight.js        Sky, sun, moon, stars and night lighting
     items.js           Hotbar items, icons, the item in your hand
@@ -284,8 +329,8 @@ public/
 ### Ideas for what to add next
 
 - Signs you can write on
-- A race track with a timer, or hide and seek
-- Boats and water you can swim in
+- Hide and seek, or tag
+- Water you can swim in
 - Trains between the towns
 - More Build Book recipes: a slide, a zipline, a jukebox
 

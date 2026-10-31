@@ -546,9 +546,19 @@ export function animateCharacter(ch, s) {
     armRz = 2.6;
     swingR = Math.sin(t * 12) * 0.3;
   }
+  // (A positive turn swings a leg or arm forward, the way the face looks.)
   if (s.sitting) {
-    legL = legR = -Math.PI / 2;
-    swingL = swingR = -0.9;
+    legL = legR = Math.PI / 2;
+    swingL = swingR = 0.55;
+  }
+  // Crouching: knees forward and a little lower, arms out in front for balance.
+  let crouchDrop = 0;
+  if (s.crouch) {
+    legL = 0.75 + walk * 0.4;
+    legR = 0.75 - walk * 0.4;
+    swingL = 0.6 - walk * 0.3;
+    swingR = 0.6 + walk * 0.3;
+    crouchDrop = 0.72 * (1 - Math.cos(0.75)) + 0.05;
   }
   if (s.swing !== undefined && s.swing < 1) swingR = -1.8 * Math.sin(s.swing * Math.PI);
 
@@ -556,7 +566,7 @@ export function animateCharacter(ch, s) {
   ch.legR.rotation.x = legR;
   ch.armL.rotation.set(swingL, 0, armLz * 0.5);
   ch.armR.rotation.set(swingR, 0, armRz * 0.5);
-  ch.group.position.y = bob;
+  ch.group.position.y = bob - crouchDrop;
   ch.head.rotation.set(Math.max(-0.8, Math.min(0.8, s.pitch || 0)), 0, headZ);
   if (ch.cape) ch.cape.rotation.x = 0.08 + (s.speed || 0) * 0.9 + Math.sin(t * 6) * 0.05 * (s.speed || 0);
   if (ch.wings) {
