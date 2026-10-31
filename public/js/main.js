@@ -22,6 +22,7 @@ import { Reflections, Glow } from './lighting.js';
 import { LightPools } from './lightpools.js';
 import { LandView, describeSize } from './landview.js';
 import { Ball, PetBrain } from './pets.js';
+import { PetNav } from './petmove.js';
 import { DayNight } from './daynight.js';
 import { Editor } from './editor.js';
 import { CharacterClient, Gallery } from './gallery.js';
@@ -254,10 +255,25 @@ async function load() {
   myBody.root.visible = false;
   myBody.brain = new PetBrain();
   myBody.ball = ball;
-  myBody.groundAt = groundAt;
-  myBody.onPetEvent = () => {
-    sounds.pet(myBody.pet?.kind);
-    effects.heartsAt(myBody.pet.pos.x, myBody.pet.pos.y + 0.6, myBody.pet.pos.z);
+  myBody.petNav = new PetNav(world);
+  myBody.petBoxes = () => cars.boxes(); // pets bump into cars too
+  myBody.onPetEvent = (kind, what) => {
+    const pet = myBody.pet;
+    if (!pet) return;
+    if (kind === 'dropped') {
+      sounds.pet(pet.kind);
+      effects.heartsAt(pet.pos.x, pet.pos.y + 0.6, pet.pos.z);
+    } else if (kind === 'whine') {
+      sounds.pet(pet.kind);
+    } else if (kind === 'giveup') {
+      // It couldn't get to the ball (or back to you): the ball pops back into your hand.
+      if (ball.active) effects.sparkle(ball.pos.x, ball.pos.y, ball.pos.z, 14);
+      ball.active = ball.carried = false;
+      sounds.pet(pet.kind);
+      hud.toast(what === 'ball'
+        ? "🐾 Your pet can't find a way to the ball, so it's back in your hand."
+        : "🐾 Your pet can't find a way up to you, so it's waiting below. (The ball is back in your hand.)");
+    }
   };
   renderControls($('menu-controls'));
   renderControls($('pause-controls'));
@@ -1992,14 +2008,6 @@ function pickBlock() {
   if (existing >= 0) hud.select(existing);
   else hud.setSlot(hit.id);
   saveSettings();
-}
-
-function groundAt(x, z, nearY) {
-  const fx = Math.floor(x), fz = Math.floor(z);
-  for (let y = Math.floor(nearY) + 1; y >= Math.floor(nearY) - 4; y--) {
-    if (world.isSolid(fx, y, fz) && !world.isSolid(fx, y + 1, fz)) return y + 1;
-  }
-  return nearY;
 }
 
 // ---------- Furniture ----------

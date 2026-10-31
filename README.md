@@ -21,7 +21,13 @@ customize your character, drive cars, build anything and play with friends.
   flies in a big arc with a little trail and a shadow under it, and bounces off the ground, walls,
   railings, cars and people (with a boing and a puff of dust) before rolling to a stop. Pets chase
   it like real puppies: they watch where it goes first, run past it and swing back round, and a
-  bouncing ball sometimes gets away from them
+  bouncing ball sometimes gets away from them. Pets move for real: they never walk through
+  walls, closed doors, railings or cars, but find their way around them. They hop up steps (a
+  little crouch, a leap, and a bump as they land), jump down drops of up to 3 blocks, and climb
+  ladders paw over paw, so a ball thrown off a roof means a trip down the ladder and back up.
+  If there's no way to reach you, your pet waits as close as it can get, looking up and whining;
+  if the ball lands somewhere it can't reach, it gives up and the ball comes back to your hand.
+  Dragons fly, so they go up and over walls instead
 - **Character Gallery**: save your character (with your name) so anyone can pick it later.
   It holds 25 characters in a 5×5 grid; when it's full you choose one to replace, or replace the oldest
 - **Day and night**: the sun sets, the stars and moon come out and the street lamps light up

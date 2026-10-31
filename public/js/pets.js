@@ -166,9 +166,11 @@ export class PetBrain {
     this.happy = 1.4;
   }
 
-  // owner: { pos, yaw, speed }. Returns where to go, how fast, and what the pet is doing.
-  think(dt, owner, petPos, ball) {
+  // owner: { pos, yaw, speed }. reachable: whether the pet can find a way to where it's
+  // going. Returns where to go, how fast, and what the pet is doing.
+  think(dt, owner, petPos, ball, reachable = true) {
     this.timer -= dt;
+    this.unreach = reachable ? 0 : (this.unreach || 0) + dt;
     this.happy = Math.max(0, this.happy - dt);
     this.idle = owner.speed < 0.2 ? this.idle + dt : 0;
     const behind = () => {
@@ -185,10 +187,16 @@ export class PetBrain {
       this.aim = null;
       this.aimTimer = 0;
       this.missTimer = 0;
+      this.unreach = 0;
     }
     if (this.state === 'fetch') {
       if (!ball?.active) this.state = 'follow';
-      else {
+      else if (this.unreach > 4 && ball.resting) {
+        // It can't find a way to the ball (on a roof with no way up?): it gives up.
+        this.state = 'follow';
+        this.unreach = 0;
+        return { goal: null, action: PET_IDLE, giveUp: 'ball', look: ball.pos };
+      } else {
         this.react -= dt;
         if (this.react > 0) return { goal: null, action: PET_IDLE, look: ball.pos };
         // It only checks where the ball is every so often (and not exactly), so it runs past
@@ -218,6 +226,12 @@ export class PetBrain {
     }
     if (this.state === 'return') {
       const front = new THREE.Vector3(owner.pos.x - Math.sin(owner.yaw) * 1.1, owner.pos.y, owner.pos.z - Math.cos(owner.yaw) * 1.1);
+      if (this.unreach > 5) {
+        // It can't find a way back to you: it waits where it is (and you get the ball back).
+        this.state = 'follow';
+        this.unreach = 0;
+        return { goal: null, action: PET_IDLE, giveUp: 'return', look: owner.pos };
+      }
       if (petPos.distanceTo(front) < 0.6) {
         ball.active = ball.carried = false; // dropped at your feet: throw it again!
         this.state = 'follow';
@@ -229,16 +243,27 @@ export class PetBrain {
     if (this.happy > 0) return { goal: null, action: PET_HAPPY };
 
     // Wander a little when you stand still for a while.
-    if (this.idle > 3 && owner.pos.distanceTo(petPos) < 7) {
+    if (this.idle > 3 && owner.pos.distanceTo(petPos) < 7 && reachable) {
       if (this.state !== 'wander' || this.timer <= 0) {
         this.state = 'wander';
         const a = Math.random() * Math.PI * 2, r = 1.5 + Math.random() * 3;
         this.goal = new THREE.Vector3(owner.pos.x + Math.cos(a) * r, owner.pos.y, owner.pos.z + Math.sin(a) * r);
         this.timer = 3 + Math.random() * 3;
       }
-      return { goal: this.goal, speed: 1.6, action: PET_MOVING, sniff: petPos.distanceTo(this.goal) < 0.4 };
+      return { goal: this.goal, speed: 1.6, action: PET_MOVING, sniff: petPos.distanceTo(this.goal) < 0.4, level: true };
     }
     this.state = 'follow';
+    // Can't get to you (you're up on a roof with no way up)? It waits as close as it can get,
+    // looking up at you and whining now and then.
+    if (!reachable) {
+      let whine = false;
+      this.whine = (this.whine ?? 2) - dt;
+      if (this.whine <= 0) {
+        this.whine = 6 + Math.random() * 4;
+        whine = true;
+      }
+      return { goal: behind(), speed: null, action: PET_MOVING, look: owner.pos, whine };
+    }
     return { goal: behind(), speed: null, action: PET_MOVING };
   }
 }

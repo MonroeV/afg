@@ -3,6 +3,10 @@ import * as THREE from 'three';
 import { buildCharacter, animateCharacter, buildPet, animatePet } from './character.js';
 import { SEAT_SCALE } from './cars.js';
 import { PET_HAPPY, PET_CARRYING } from './pets.js';
+import { PetMover } from './petmove.js';
+
+// Extra bits in a pet's action number (sent to other players): jumping or falling, climbing.
+const PET_AIR = 8, PET_CLIMB = 16;
 
 function nameTag(name, color) {
   const canvas = document.createElement('canvas');
@@ -119,7 +123,7 @@ export class Avatar {
     const p = this.pet;
     if (!p) return 0;
     const r = v => Math.round(v * 100) / 100;
-    return [r(p.pos.x), r(p.pos.y), r(p.pos.z), r(p.yaw), p.action];
+    return [r(p.pos.x), r(p.pos.y), r(p.pos.z), r(p.yaw), p.action | (p.air ? PET_AIR : 0) | (p.climb ? PET_CLIMB : 0)];
   }
 
   // Another player's pet, as they sent it.
@@ -127,7 +131,9 @@ export class Avatar {
     if (!this.pet || !Array.isArray(state)) return;
     this.pet.target.set(state[0], state[1], state[2]);
     this.pet.targetYaw = state[3];
-    this.pet.action = state[4];
+    this.pet.action = state[4] & 7;
+    this.pet.air = !!(state[4] & PET_AIR);
+    this.pet.climb = !!(state[4] & PET_CLIMB);
   }
 
   setName(name) {
@@ -146,50 +152,55 @@ export class Avatar {
     pet.group.visible = !this.seat;
     if (this.seat) {
       pet.pos.copy(this.pos);
+      pet.mover?.place(this.pos);
       return;
     }
     let moving = 0;
     if (this.brain) {
-      // Our own pet thinks for itself.
-      const plan = this.brain.think(dt, { pos: this.pos, yaw: this.yaw, speed: this.speed }, pet.pos, this.ball);
+      // Our own pet thinks for itself, and moves for real: it finds a way round walls, hops
+      // up steps, jumps down (not too far), climbs ladders and bumps into cars.
+      if (!pet.mover) {
+        pet.mover = new PetMover(this.petNav, pet.kind === 'dragon');
+        pet.mover.place(pet.pos);
+        pet.mover.yaw = pet.yaw;
+      }
+      const m = pet.mover;
+      if (m.pos.distanceTo(this.pos) > 40) {
+        // We flew or drove far away: it catches up (it can't really, but it finds us).
+        const spot = this.petNav.landing(this.pos);
+        m.place(spot ? new THREE.Vector3(spot[0] + 0.5, spot[1], spot[2] + 0.5) : this.pos);
+      }
+      const plan = this.brain.think(dt, { pos: this.pos, yaw: this.yaw, speed: this.speed }, m.pos, this.ball, m.reachable);
       pet.action = plan.action;
       if (plan.dropped) this.onPetEvent?.('dropped');
-      if (plan.goal) {
-        const to = plan.goal.clone().sub(pet.pos);
-        const dist = Math.hypot(to.x, to.z);
-        if (dist > (plan.far ?? 14)) pet.pos.copy(plan.goal); // too far behind: catch up
-        else if (dist > 0.3) {
-          const speed = plan.speed ?? Math.max(3, dist * 2.5);
-          if (plan.turnRate) {
-            // Running like an animal: it can only turn so fast (so it swings wide and
-            // overshoots), and it slows down for sharp turns.
-            let dy = Math.atan2(-to.x, -to.z) - pet.yaw;
-            dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-            pet.yaw += Math.max(-plan.turnRate * dt, Math.min(plan.turnRate * dt, dy));
-            const step = Math.min(dist, speed * dt * Math.max(0.25, Math.cos(dy)));
-            pet.pos.x -= Math.sin(pet.yaw) * step;
-            pet.pos.z -= Math.cos(pet.yaw) * step;
-          } else {
-            const step = Math.min(dist, speed * dt);
-            pet.pos.x += (to.x / dist) * step;
-            pet.pos.z += (to.z / dist) * step;
-            pet.yaw = Math.atan2(-to.x, -to.z);
-          }
-          moving = Math.min(1, dist);
-        } else if (!plan.sniff) {
-          let dy = this.yaw - pet.yaw;
-          dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-          pet.yaw += dy * Math.min(1, dt * 3);
-        }
-      }
-      if (!plan.goal && plan.look) {
-        // Watching something (the ball flying off).
-        let dy = Math.atan2(-(plan.look.x - pet.pos.x), -(plan.look.z - pet.pos.z)) - pet.yaw;
+      if (plan.giveUp) this.onPetEvent?.('giveup', plan.giveUp);
+      if (plan.whine) this.onPetEvent?.('whine');
+      const dist = plan.goal ? Math.hypot(plan.goal.x - m.pos.x, plan.goal.z - m.pos.z) : 0;
+      moving = m.update(dt, plan.goal, {
+        speed: plan.speed ?? Math.max(3, Math.min(7.5, dist * 2.5)),
+        turnRate: plan.turnRate || 0,
+        fallback: this.pos,
+        boxes: this.petBoxes || (() => []),
+        level: !!plan.level,
+      });
+      const arrived = !plan.goal || (!m.path.length && dist < 0.5);
+      if (plan.look && (!plan.goal || (!m.reachable && !m.path.length))) {
+        // Watching something (the ball flying off, or us up where it can't get to).
+        let dy = Math.atan2(-(plan.look.x - m.pos.x), -(plan.look.z - m.pos.z)) - m.yaw;
         dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-        pet.yaw += dy * Math.min(1, dt * 8);
+        m.yaw += dy * Math.min(1, dt * 8);
+      } else if (arrived && !plan.sniff && moving < 0.1) {
+        let dy = this.yaw - m.yaw;
+        dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+        m.yaw += dy * Math.min(1, dt * 3);
       }
-      const ground = this.groundAt ? this.groundAt(pet.pos.x, pet.pos.z, this.pos.y) : this.pos.y;
-      pet.pos.y += (ground - pet.pos.y) * Math.min(1, dt * 10);
+      pet.pos.copy(m.pos);
+      pet.yaw = m.yaw;
+      pet.air = !m.onGround && !m.holding && pet.kind !== 'dragon';
+      pet.climb = m.climbing;
+      pet.vy = m.vel.y;
+      pet.landed = m.landed;
+      pet.windup = m.windup > 0 ? 1 - m.windup / 0.1 : 0;
       pet.sniff = plan.sniff;
     } else {
       // Someone else's pet: glide to where their game says it is.
@@ -199,12 +210,14 @@ export class Avatar {
       let dy = pet.targetYaw - pet.yaw;
       dy = Math.atan2(Math.sin(dy), Math.cos(dy));
       pet.yaw += dy * Math.min(1, dt * 10);
-      moving = Math.min(1, before.distanceTo(pet.pos) / Math.max(dt, 1e-3) / 3);
+      moving = Math.min(1, Math.hypot(pet.pos.x - before.x, pet.pos.z - before.z) / Math.max(dt, 1e-3) / 3);
+      pet.vy = (pet.pos.y - before.y) / Math.max(dt, 1e-3);
     }
     pet.group.position.copy(pet.pos);
     pet.group.rotation.y = pet.yaw;
     pet.ball.visible = pet.action === PET_CARRYING;
     animatePet(pet, moving, time);
+    this.poseJump(pet, dt, time);
     if (pet.action === PET_HAPPY) {
       // Jump for joy and spin around.
       pet.body.position.y += Math.abs(Math.sin(time * 9)) * 0.35;
@@ -212,6 +225,33 @@ export class Avatar {
     } else if (pet.sniff) {
       pet.head.rotation.x = -0.5 + Math.sin(time * 12) * 0.08;
     }
+  }
+
+  // Leaping, landing and climbing, blended in smoothly over the walk.
+  poseJump(pet, dt, time) {
+    if (pet.kind === 'dragon') return;
+    const k = Math.min(1, dt * 14);
+    pet.airK = (pet.airK || 0) + ((pet.air ? 1 : 0) - (pet.airK || 0)) * k;
+    pet.climbK = (pet.climbK || 0) + ((pet.climb ? 1 : 0) - (pet.climbK || 0)) * k;
+    // Nose up going up, nose down coming down; nose right up on a ladder.
+    const lean = pet.climb ? 1.05 : pet.air ? Math.max(-0.5, Math.min(0.5, (pet.vy || 0) * 0.07)) : 0;
+    pet.pitch = (pet.pitch || 0) + (lean - (pet.pitch || 0)) * Math.min(1, dt * 10);
+    // Tilt around the middle of the body, not the feet.
+    const c = 0.3;
+    pet.body.rotation.x = pet.pitch;
+    pet.body.position.y += c - c * Math.cos(pet.pitch) + (pet.climb ? 0.08 : 0);
+    pet.body.position.z = -c * Math.sin(pet.pitch) * 0.5;
+    pet.legs.forEach((l, i) => {
+      const front = i % 2 === 0;
+      // In the air: front legs reach forward, back legs push out behind (a proper leap).
+      const leap = front ? 0.85 : -0.85;
+      // On a ladder: paw over paw.
+      const paw = Math.sin(time * 12 + (front ? 0 : Math.PI) + (i > 1 ? Math.PI / 2 : 0)) * 0.6 + (front ? 0.4 : -0.2);
+      l.rotation.x = l.rotation.x * (1 - pet.airK - pet.climbK * (1 - pet.airK)) + leap * pet.airK + paw * pet.climbK * (1 - pet.airK);
+    });
+    // A little crouch before jumping, and a squash when it lands.
+    const sq = Math.max(pet.landed || 0, (pet.windup || 0) * 0.8);
+    pet.body.scale.set(1 + 0.12 * sq, 1 - 0.22 * sq, 1 + 0.12 * sq);
   }
 
   setState(x, y, z, yaw, pitch) {
