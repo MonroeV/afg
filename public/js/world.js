@@ -328,6 +328,7 @@ export class World {
     this.matrix = new THREE.Matrix4();
     this.tmp = new THREE.Matrix4();
     this.color = new THREE.Color();
+    this.rolling = new Map(); // garage door columns rolling up or down: "x,lo,z" -> { x, z, lo, hi, t, target }
   }
 
   get(x, y, z) {
@@ -450,6 +451,8 @@ export class World {
     }
     this.revision++;
     if (!this.loading) {
+      // A garage door opening or closing rolls up (or down) instead of jumping.
+      if (shapeOf(old) === 'door' && shapeOf(v) === 'door' && (itemOf(old) ^ itemOf(v)) === DOOR_OPEN << 8) this.startRolling(x, y, z, blockMeta(itemOf(v)) & DOOR_OPEN);
       if (shapeOf(old) === 'door' || shapeOf(v) === 'door') this.refreshDoorsNear(x, y, z);
       if (BLOCKS[blockId(itemOf(old))]?.connects || BLOCKS[blockId(itemOf(v))]?.connects) this.refreshCouchesNear(x, y, z);
       this.onChange?.(x, y, z);
@@ -656,6 +659,8 @@ export class World {
       return m.makeTranslation(x + 0.5, y, z + 0.5).multiply(this.tmp.makeRotationY((meta & 3) * Math.PI / 2)).multiply(this.tmp.makeTranslation(-0.5, 0, -0.5));
     }
     if (shape !== 'door') return m.makeTranslation(x, y, z);
+    const rolling = this.rolling.size ? this.rolling.get(this.columnKey(x, y, z)) : null;
+    if (rolling) return this.rollMatrix(m, meta, x, y, z, rolling);
     m.makeTranslation(x + 0.5, y, z + 0.5).multiply(this.tmp.makeRotationY((meta & 3) * Math.PI / 2));
     if (!(meta & DOOR_OPEN)) return m;
     const role = this.doorRole(x, y, z);
@@ -666,6 +671,57 @@ export class World {
     }
     // Swing open on its hinge side.
     return m.multiply(this.tmp.makeTranslation(role.hinge * 0.41, 0, 0)).multiply(this.tmp.makeRotationY(Math.PI / 2));
+  }
+
+  // ---------- Rolling garage doors ----------
+  // The whole door slides up as one piece, and each section winds into the roll at the top
+  // (squeezing into it as it goes in, so the roll grows fatter). Closing is the same, backwards.
+  // Only the picture moves: the doorway is open (or shut) straight away.
+
+  columnKey(x, y, z) {
+    return `${x},${this.doorColumn(x, y, z).lo},${z}`;
+  }
+
+  // How long a garage door this many blocks tall takes to roll all the way.
+  static rollSeconds(height) {
+    return 0.6 + 0.2 * height;
+  }
+
+  startRolling(x, y, z, open) {
+    if (this.doorRole(x, y, z).kind !== 'garage') return;
+    const { lo, hi } = this.doorColumn(x, y, z);
+    const key = `${x},${lo},${z}`;
+    const target = open ? 1 : 0;
+    const r = this.rolling.get(key);
+    if (r) r.target = target;
+    else this.rolling.set(key, { x, z, lo, hi, t: 1 - target, target });
+  }
+
+  // Where one section of a rolling door is drawn: t = 0 is shut, 1 is rolled up.
+  rollMatrix(m, meta, x, y, z, { lo, hi, t }) {
+    const top = hi + 1, a = y + t * (hi - lo + 1 - 0.15); // this section's bottom edge, slid up
+    const h = Math.min(1, top - a);
+    m.makeTranslation(x + 0.5, a, z + 0.5).multiply(this.tmp.makeRotationY((meta & 3) * Math.PI / 2));
+    if (h <= 0.002) return m.multiply(this.tmp.makeScale(0.0001, 0.0001, 0.0001)); // all wound up
+    // The section going into the roll is squeezed, and the roll gets fatter the more is in it.
+    return m.multiply(this.tmp.makeScale(1, h, h < 1 ? 1 + 0.5 * t : 1));
+  }
+
+  // Moves rolling garage doors along (every frame).
+  update(dt) {
+    for (const [key, r] of this.rolling) {
+      const step = dt / World.rollSeconds(r.hi - r.lo + 1);
+      r.t = r.target > r.t ? Math.min(r.target, r.t + step) : Math.max(r.target, r.t - step);
+      const done = r.t === r.target;
+      if (done) this.rolling.delete(key);
+      for (let y = r.lo; y <= r.hi; y++) {
+        const k = blockKey(r.x, y, r.z), v = itemOf(this.get(r.x, y, r.z));
+        const layer = this.layers[this.cellLayer.get(k)];
+        if (shapeOf(v) !== 'door' || !layer) continue;
+        layer.mesh.setMatrixAt(layer.index.get(k), this.instanceMatrix(v, r.x, y, r.z));
+        layer.mesh.instanceMatrix.needsUpdate = true;
+      }
+    }
   }
 
   addInstance(v, k, x, y, z) {

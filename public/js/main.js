@@ -1534,7 +1534,10 @@ function toggleDoor(x, y, z) {
     return;
   }
   for (const [px, py, pz, , nv] of changes) net.send({ t: 'set', x: px, y: py, z: pz, b: nv });
-  if (world.doorRole(x, y, z).kind === 'garage') sounds.garage(opening);
+  if (world.doorRole(x, y, z).kind === 'garage') {
+    const { lo, hi } = world.doorColumn(x, y, z);
+    sounds.garage(opening, World.rollSeconds(hi - lo + 1));
+  }
   else sounds.door(opening);
 }
 
@@ -2963,6 +2966,7 @@ function frame(timestamp) {
     tvs.update(dt, time, camera.position, { players: avatars.list.size + 1, clock: sky.clockText(), night: sky.isNight, dayPhase: phase < 0.62 ? phase / 0.62 : 0 });
   }
   world.updateVisibility(camera.position, settings.quality === 'low' ? Math.min(140, scene.fog.far) : scene.fog.far);
+  world.update(dt);
   avatars.update(dt, time);
   cars.setView(camera.position, scene.fog.far);
   cars.update(dt, time, nightK, myCar?.id);

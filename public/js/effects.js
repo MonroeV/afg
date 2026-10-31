@@ -882,10 +882,12 @@ export class Sounds {
   }
   cannon() { this.noiseHit(90, 0.9, 2, 'lowpass'); this.whoosh(); }
   paint() { this.noiseHit(1200, 0.12, 0.6, 'lowpass'); this.noiseHit(3000, 0.06, 0.2, 'highpass', 0.04); }
-  garage(open) {
-    // A rattling roll-up door.
-    for (let i = 0; i < 8; i++) this.noiseHit(300 + (i % 2) * 200, 0.08, 0.35, 'bandpass', i * 0.07);
-    this.tone(open ? 90 : 120, open ? 130 : 80, 0.6, 0.12, 'sawtooth');
+  garage(open, seconds = 1.2) {
+    // A rattling roll-up door, rattling for as long as it rolls, and a clunk at the end.
+    const n = Math.round(seconds / 0.07);
+    for (let i = 0; i < n; i++) this.noiseHit(300 + (i % 2) * 200, 0.08, 0.3, 'bandpass', i * 0.07);
+    this.tone(open ? 90 : 120, open ? 130 : 80, seconds, 0.1, 'sawtooth');
+    this.noiseHit(160, 0.2, 0.9, 'lowpass', seconds);
   }
   claim() { this.together(() => [523, 659, 784, 1047].forEach((f, i) => this.tone(f, f, 0.15, 0.15, 'triangle', i * 0.09))); }
   party() {
