@@ -669,9 +669,10 @@ export class World {
   }
 
   addInstance(v, k, x, y, z) {
-    // An item standing on a floor (a torch on a sidewalk): draw both.
-    if (floorOf(v)) this.addPart(floorOf(v), `${k}|floor`, x, y, z);
-    this.addPart(itemOf(v), k, x, y, z);
+    // An item standing on a floor (a torch on a sidewalk): draw both. (Blocks from a newer
+    // version of the game that this one doesn't know aren't drawn.)
+    if (floorOf(v) && BLOCKS[blockId(floorOf(v))]) this.addPart(floorOf(v), `${k}|floor`, x, y, z);
+    if (BLOCKS[blockId(itemOf(v))]) this.addPart(itemOf(v), k, x, y, z);
   }
 
   addPart(v, k, x, y, z) {

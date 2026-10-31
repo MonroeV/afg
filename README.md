@@ -232,6 +232,14 @@ To play with someone else on the same Wi-Fi, they can open `http://YOUR-COMPUTER
 If the game feels slow, press Esc and set **Graphics** to Medium or Low. High has live
 reflections, glow and soft shadows; Medium has cheaper versions; Low turns them off.
 
+### Updating the game
+
+Get the newest version with `git pull`, then stop the server (Ctrl+C in its terminal) and start
+it again with `npm start`. Your world is kept (and backed up first if it needs upgrading).
+Browser tabs that were already open notice the update when you press PLAY and load the new
+version by themselves. If a game page ever acts strangely right after an update, reload it while
+holding Shift (Ctrl+Shift+R, or Cmd+Shift+R on a Mac).
+
 ### Keeping your computer cool
 
 Drawing a 3D world is hard work for a computer, so the game tries not to do more than it needs:

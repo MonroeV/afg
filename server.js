@@ -2,6 +2,7 @@
 // The actual game rules live in public/js/shared/game.js.
 import http from 'node:http';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
@@ -31,6 +32,23 @@ const MIME = {
   '.ico': 'image/x-icon',
 };
 
+// Which version of the game files this server has: a fingerprint of every file in public/.
+// Browsers are told it, so one still running older files (a tab left open while the game was
+// updated) can notice and reload itself.
+function fingerprint(dir) {
+  const hash = crypto.createHash('sha1');
+  const walk = d => {
+    for (const name of fs.readdirSync(d).sort()) {
+      const f = path.join(d, name), st = fs.statSync(f);
+      if (st.isDirectory()) walk(f);
+      else hash.update(`${path.relative(dir, f)}:${st.size}:${st.mtimeMs}\n`);
+    }
+  };
+  walk(dir);
+  return hash.digest('hex').slice(0, 12);
+}
+const BUILD = fingerprint(path.join(ROOT, 'public'));
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/api/characters') {
@@ -46,13 +64,28 @@ const server = http.createServer((req, res) => {
     res.writeHead(403).end('Forbidden');
     return;
   }
-  fs.readFile(file, (err, data) => {
-    if (err) {
+  fs.stat(file, (err, st) => {
+    if (err || !st.isFile()) {
       res.writeHead(404).end('Not found');
       return;
     }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
-    res.end(data);
+    // Browsers keep a copy, but always check with us first (no-cache) whether it's still the
+    // newest: unchanged files just get a quick "304 Not Modified".
+    const etag = `"${st.size}-${Math.round(st.mtimeMs)}-${BUILD}"`;
+    const headers = { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache', ETag: etag };
+    if (req.headers['if-none-match'] === etag) {
+      res.writeHead(304, headers).end();
+      return;
+    }
+    fs.readFile(file, (readErr, data) => {
+      if (readErr) {
+        res.writeHead(404).end('Not found');
+        return;
+      }
+      if (file.endsWith('index.html')) data = data.toString().replace('%BUILD%', BUILD);
+      res.writeHead(200, headers);
+      res.end(data);
+    });
   });
 });
 
@@ -63,6 +96,7 @@ const room = new GameRoom({
   onDirty: () => (saveTimer ??= setTimeout(saveWorld, 5000)),
   log: msg => console.log(msg),
 });
+room.build = BUILD;
 
 function saveWorld() {
   clearTimeout(saveTimer);

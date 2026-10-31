@@ -293,6 +293,23 @@ $('join-form').addEventListener('submit', async e => {
     online = false;
   }
 
+  // The server has a newer version of the game than this page (it was updated while this
+  // tab was open): load the new version. Only once, so it can never keep reloading.
+  const pageBuild = document.querySelector('meta[name="build"]')?.content;
+  if (welcome.build && pageBuild && pageBuild !== '%BUILD%' && welcome.build !== pageBuild) {
+    let tried = null;
+    try {
+      tried = sessionStorage.getItem('buildzone-update');
+      sessionStorage.setItem('buildzone-update', welcome.build);
+    } catch { /* storage unavailable */ }
+    if (tried !== welcome.build) {
+      $('status').textContent = 'BuildZone was updated! Loading the new version…';
+      net.leave?.();
+      location.reload();
+      return;
+    }
+  }
+
   myId = welcome.id;
   world.load(welcome.world);
   world.loadPaints(welcome.paints);

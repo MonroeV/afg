@@ -272,6 +272,7 @@ export class GameRoom {
     client.send({
       t: 'welcome',
       id: client.id,
+      build: this.build, // (the server's version of the game files; none in single player)
       time: this.time,
       dayLength: DAY_LENGTH,
       world: this.flatBlocks(),

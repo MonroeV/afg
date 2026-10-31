@@ -275,6 +275,7 @@ export class Cars {
 
   add(data) {
     this.remove(data.id);
+    if (!VEHICLES[data.kind]) return; // a kind of vehicle from a newer version of the game
     const spec = CAR_SPECS[data.kind] || CAR_SPECS.car;
     const model = buildCarModel(data.kind, data.color);
     const car = {
