@@ -48,7 +48,7 @@ customize your character, drive cars, build anything and play with friends.
   its wind blows dust (or sand, or spray off the water) out in a ring, tears leaves off trees,
   flattens the flowers and pushes the ball and people away. Easy to learn, tricky to master. If
   it's destroyed, a new one arrives after 5 minutes
-- **Claim your own land** (up to 10 × 15 blocks) with the Land Flag so only you can build there
+- **Claim your own land** (up to 18 × 18 blocks) with the Land Flag so only you can build there
 - **Logs grow into trees**: put a lone log on the grass and watch it grow
 - **Build Book**: special things you can make out of blocks: beds, trampolines, campfires,
   teleporters, cannons, fountains, dance floors and TVs (with cartoons, news, weather and

@@ -6,7 +6,7 @@ import { sanitizeLook, cleanName } from './avatar.js';
 import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines, buildStore, furnishHouses, furnishTowers } from './worldgen.js';
 import { NpcCrew } from './npcs.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot } from './vehicles.js';
-import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS } from './claims.js';
+import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
 
 export const SAVE_VERSION = 7;
 const COIN_COUNT = 26; // gold coins lying around the world at once
@@ -715,7 +715,7 @@ export class GameRoom {
       const rect = normalizeRect(...coords);
       const key = nameKey(client.name);
       const reply = text => client.send({ t: 'chat', system: true, text });
-      if (!claimSizeOk(rect)) return reply('🚧 Land can be at most 10 by 15 blocks.');
+      if (!claimSizeOk(rect)) return reply(`🚧 Land can be at most ${CLAIM_MAX} by ${CLAIM_MAX} blocks.`);
       const clash = this.claims.find(c => c.key !== key && rectsOverlap(c, rect));
       if (clash) return reply(`🚧 That overlaps ${clash.owner}'s land. Try somewhere else!`);
       const had = this.claims.some(c => c.key === key);

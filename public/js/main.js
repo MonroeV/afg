@@ -15,7 +15,7 @@ import { Network } from './network.js';
 import { Avatar, Avatars, FLAG } from './avatars.js';
 import { Cars, SEAT_SCALE } from './cars.js';
 import { MAX_HP, FIRE_HP, PERSON_MASS } from './shared/vehicles.js';
-import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey } from './shared/claims.js';
+import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_MAX } from './shared/claims.js';
 import { Structures } from './structures.js';
 import { TVs, CHANNELS } from './tv.js';
 import { Reflections, Glow } from './lighting.js';
@@ -1263,7 +1263,7 @@ function updateDownwash(dt, time) {
 
 // ---------- Land claims ----------
 
-const claimTool = { a: null, rect: null, confirm: false, unclaimAsk: 0 };
+const claimTool = { a: null, rect: null, live: null, confirm: false, unclaimAsk: 0 };
 let lastLandKey = null, landMsgTime = 0;
 
 function setClaims(list) {
@@ -1280,7 +1280,7 @@ function notifyLand(x, z) {
 }
 
 function claimProblem(rect) {
-  if (!claimSizeOk(rect)) return '🚩 Too big! Land can be at most 10 × 15 blocks.';
+  if (!claimSizeOk(rect)) return `🚩 Too big! Land can be at most ${CLAIM_MAX} × ${CLAIM_MAX} blocks.`;
   const clash = claims.find(c => c.key !== nameKey(settings.name) && rectsOverlap(c, rect));
   return clash ? `🚩 That overlaps ${clash.owner}'s land.` : null;
 }
@@ -1292,7 +1292,7 @@ function claimCell() {
 }
 
 function resetClaimTool() {
-  claimTool.a = claimTool.rect = null;
+  claimTool.a = claimTool.rect = claimTool.live = null;
   claimTool.confirm = false;
   landView.preview(null);
 }
@@ -3029,7 +3029,8 @@ function frame(timestamp) {
     } else if (player.climbing) {
       hint = '🪜 W / Space: up · S: down';
     } else if (item === CLAIM && claimTool.a) {
-      hint = claimTool.confirm ? '🚩 Click to claim · Right-click to cancel' : '🚩 Click the opposite corner';
+      hint = claimTool.confirm ? '🚩 Click to claim · Right-click to cancel'
+        : `🚩 Click the opposite corner${claimTool.live ? ` (${describeSize(claimTool.live)}, max ${CLAIM_MAX} × ${CLAIM_MAX})` : ''}`;
     } else if (item === FILL) {
       hint = wand.b ? `✨ Click: fill with ${BLOCKS[lastBlock]?.name} · Scroll: taller / shorter · Right-click: empty it`
         : wand.a ? '✨ Click the opposite corner · Right-click to cancel' : `✨ Click a corner of the box to fill (with ${BLOCKS[lastBlock]?.name}, the last block you held)`;
@@ -3062,7 +3063,7 @@ function frame(timestamp) {
       else if (def?.race === 'finish' && item !== HAMMER) hint = '🏁 Finish line: cross it after a Start line to set a time';
       else if (s?.type === 'cannon') hint = '💥 Right-click to launch yourself!';
       else if (s?.type === 'tv') hint = '📺 Right-click to change the channel';
-      else if (item === CLAIM) hint = '🚩 Click a corner to start claiming land (max 10×15)';
+      else if (item === CLAIM) hint = `🚩 Click a corner to start claiming land (max ${CLAIM_MAX}×${CLAIM_MAX})`;
       else if (item === WATER_BALLOON) hint = '💦 Click to throw a water balloon!';
       else if (item === BUBBLES) hint = '🫧 Hold the mouse button to blow bubbles';
       else if (item === BALLOON) hint = player.onGround ? '🎈 Jump off something high and float down! Click to let a balloon go' : '🎈 Wheee!';
@@ -3079,6 +3080,7 @@ function frame(timestamp) {
       const cell = claimCell();
       if (cell) {
         const rect = normalizeRect(claimTool.a[0], claimTool.a[1], cell[0], cell[1]);
+        claimTool.live = rect;
         landView.preview(rect, !claimProblem(rect));
       }
     }

@@ -1,8 +1,7 @@
-// Land claims: a player can claim up to 10 x 15 blocks (from the ground to the sky).
+// Land claims: a player can claim up to 18 x 18 blocks (from the ground to the sky).
 // Only someone using the owner's name can build or break there. Doors still work for everyone.
 
-export const CLAIM_SHORT = 10;
-export const CLAIM_LONG = 15;
+export const CLAIM_MAX = 18; // longest side, in blocks
 export const CLAIM_EXPIRE_DAYS = 30;
 
 export const nameKey = name => String(name || '').trim().toLowerCase();
@@ -17,7 +16,7 @@ export function claimSize(r) {
 
 export function claimSizeOk(r) {
   const [w, d] = claimSize(r);
-  return w >= 1 && d >= 1 && Math.min(w, d) <= CLAIM_SHORT && Math.max(w, d) <= CLAIM_LONG;
+  return w >= 1 && d >= 1 && w <= CLAIM_MAX && d <= CLAIM_MAX;
 }
 
 export function claimAt(claims, x, z) {
