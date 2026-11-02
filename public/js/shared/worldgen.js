@@ -1,6 +1,7 @@
 // Builds the starting world: a main town around spawn, villages in each corner,
 // roads joining them, parks, playgrounds, trees, flowers and parked cars.
 import { WORLD, DOOR_TOP, BED_FOOT, makeBlock, blockId, turnLine, stack, itemOf, floorOf, shapeOf } from './blocks.js';
+import { buildFrontier, buildPizzeria } from './frontier.js';
 
 const B = {
   grass: 1, dirt: 2, stone: 3, cobble: 4, brick: 5, planks: 6, log: 7, leaves: 8, glass: 9,
@@ -453,7 +454,15 @@ export function generateWorld(seed = 2024) {
   };
   furnishHouses({ each, get: getB, set: put, canUse: () => true });
   const towers = furnishTowers({ each, get: getB, set: put, canUse: () => true });
-  const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null };
+  // The Pizza Palace in town, and the country beyond the towns: the ski resort up north, and
+  // the woods, cabins, lake and rocky mountain out west.
+  const free = (x, z) => !used.has(`${x},${z}`);
+  const pizza = buildPizzeria({ get: getB, set: put, canUse: free });
+  if (pizza) markUsed(...pizza.area);
+  const frontier = buildFrontier({ get: getB, set: put, canUse: free, canPave: () => true });
+  for (const a of frontier.areas) markUsed(...a);
+  cars.push(...frontier.cars);
+  const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null, pizza: pizza?.place || null, lodge: frontier.places.lodge };
 
   // ---------- Countryside ----------
 
@@ -508,7 +517,7 @@ export function generateWorld(seed = 2024) {
     const [x, y, z] = k.split(',').map(Number);
     blocks.push([x, y, z, v]);
   }
-  return { blocks, cars: placed, places, claims: store ? [store.claim] : [] };
+  return { blocks, cars: placed, places, claims: [store?.claim, pizza?.claim, ...frontier.claims].filter(Boolean) };
 }
 
 // Saved worlds from before the new lamps: put proper lamp heads on the town's street lamps
@@ -534,7 +543,7 @@ export function upgradeLamps(lampKeys, get, set) {
 
 // The roads out of the main town and the ring road between the villages (the same ones
 // generateWorld lays out).
-function exitRoads() {
+export function exitRoads() {
   const W = 3 * PITCH + 2 * ROAD_HALF + 1, x0 = -Math.floor(W / 2);
   const mx = x0 + ROAD_HALF + 2 * PITCH, mz = x0 + ROAD_HALF + PITCH, out = x0 + W + 2;
   return {
@@ -582,7 +591,7 @@ export function buildLandmarks({ get, set, canUse }) {
 }
 
 // A site beside a road: u runs along the road, v away from it (v = 0 touches the sidewalk).
-function makeSite(road, side, a) {
+export function makeSite(road, side, a) {
   const near = road.c + side * (ROAD_HALF + 1); // first row past the sidewalk
   const at = (u, v) => (road.axis === 'x' ? [a + u, near + side * v] : [near + side * v, a + u]);
   // Exact positions inside the site (for parking cars), measured from its corner.
@@ -986,7 +995,7 @@ function storeAt(site, L, D, set) {
   };
 }
 
-function siteFree(site, L, D, tall, get, canUse) {
+export function siteFree(site, L, D, tall, get, canUse) {
   for (let u = -1; u <= L; u++)
     for (let v = 0; v <= D; v++) {
       const [x, z] = site.at(u, v);

@@ -10,6 +10,7 @@ export const CAR_SPECS = VEHICLES;
 const GRAVITY = 30;
 const HELI_GRAVITY = 14;
 export const SEAT_SCALE = 0.85;
+const GOLD = '#d9a21b'; // the color of gold car paint
 
 function textTexture(text, bg, fg) {
   const c = document.createElement('canvas');
@@ -278,7 +279,7 @@ export class Cars {
     this.remove(data.id);
     if (!VEHICLES[data.kind]) return; // a kind of vehicle from a newer version of the game
     const spec = CAR_SPECS[data.kind] || CAR_SPECS.car;
-    const model = buildCarModel(data.kind, data.color);
+    const model = buildCarModel(data.kind, data.color === 'gold' ? GOLD : data.color);
     const car = {
       ...data,
       passengers: data.passengers || [],
@@ -302,6 +303,7 @@ export class Cars {
       clock: new PlayClock(), track: new Track(6, { angles: [3], jump: 12 }), trackDriver: null,
     };
     this.list.set(car.id, car);
+    if (car.color === 'gold') this.finish(car);
     this.scene.add(model.group);
     // Shiny paint and windows reflect the world around them.
     model.group.traverse(o => {
@@ -382,8 +384,22 @@ export class Cars {
   // A fresh coat of paint (the Paint Brush).
   setColor(car, color) {
     car.color = color;
-    car.model.baseColor.set(color);
+    car.model.baseColor.set(color === 'gold' ? GOLD : color);
+    this.finish(car);
     this.applyHp(car, car.hp);
+  }
+
+  // Gold paint (from the Luxe Store) is real metal: shiny and mirror-like.
+  // (Not all metal, so it still looks golden on the Low graphics setting, with no reflections.)
+  finish(car) {
+    const m = car.model.paint, gold = car.color === 'gold';
+    m.userData.normal ??= { metalness: m.metalness, roughness: m.roughness, clearcoat: m.clearcoat ?? 0, env: m.envMapIntensity, strength: m.userData.envStrength };
+    m.metalness = gold ? 0.9 : m.userData.normal.metalness;
+    m.roughness = gold ? 0.32 : m.userData.normal.roughness;
+    if ('clearcoat' in m) m.clearcoat = gold ? 0 : m.userData.normal.clearcoat;
+    m.envMapIntensity = gold ? 0.55 : m.userData.normal.env;
+    if (m.userData.normal.strength !== undefined) m.userData.envStrength = gold ? m.userData.normal.strength * 0.45 : m.userData.normal.strength;
+    m.emissive?.set(gold ? 0x2a1a00 : 0x000000);
   }
 
   undent(car, k) {
@@ -492,6 +508,17 @@ export class Cars {
   }
 
   // Would this vehicle fit here? Also notes which other vehicle it bumped into.
+  // Somewhere this vehicle fits, a few steps out from (x, y, z): straight ahead first (so it
+  // drives out of a teleporter the way it went in), then to the sides, then behind.
+  spotNear(car, x, y, z) {
+    for (const d of [3.6, 5, 6.5])
+      for (const turn of [0, Math.PI / 2, -Math.PI / 2, Math.PI]) {
+        const a = car.h + turn, px = x - Math.sin(a) * d, pz = z - Math.cos(a) * d;
+        if (!this.blocked(car.spec, px, y, pz, car.h, car.id, car.outline)) return [px, y, pz];
+      }
+    return null;
+  }
+
   blocked(spec, x, y, z, h, ignoreId, points) {
     this.lastHit = null;
     if (vehicleBlocked(this.isSolid, spec, x, y, z, h, points || outlinePoints(spec))) return true;

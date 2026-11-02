@@ -27,7 +27,19 @@ const NPCS = [
     id: -3, place: 'plaza', name: 'Mayor Maple', title: 'Mayor Maple 🎩', roam: 7,
     look: { face: 'smile', hair: 'none', hat: 'tophat', shirt: 'jacket', pants: 'jeans', skin: '#e8b088', hatColor: '#111111', shirtColor: '#6d4c41', shirtColor2: '#ffd54f', pantsColor: '#424242', shoesColor: '#111111' },
     hello: n => [`Hello ${n}! Welcome to town! 🎩`, `Lovely day, ${n}! Have you found the gold coins yet?`, `${n}! Have you been to the Luxe Store? It's fabulous!`],
-    tips: ['Gold coins pop up all over town. Walk into them to collect them! 🪙', 'Win a race and you get 3 coins! 🏁', 'You get 10 coins every day just for visiting!', 'Spend your coins at the Luxe Store by the road out of town!'],
+    tips: ['Gold coins pop up all over town. Walk into them to collect them! 🪙', 'Win a race and you get 3 coins! 🏁', 'You get 10 coins every day just for visiting!', 'Spend your coins at the Luxe Store by the road out of town!', 'Need more coins? The Pizza Palace is looking for delivery helpers! 🍕', 'Have you been up north? There\'s a ski resort in the snow! ⛷️'],
+  },
+  {
+    id: -4, place: 'pizza', name: 'Chef Rosa', title: 'Chef Rosa 🍕', roam: 2,
+    look: { face: 'grin', hair: 'buns', hat: 'tophat', shirt: 'jacket', pants: 'jeans', skin: '#d9a273', hairColor: '#2b1a10', hatColor: '#ffffff', shirtColor: '#ffffff', shirtColor2: '#e53935', pantsColor: '#1d1f24', shoesColor: '#111111' },
+    hello: n => [`Hi ${n}! Welcome to the Pizza Palace! 🍕`, `${n}! Want to earn some coins? I need a delivery helper!`, `Hello ${n}! The pizzas are hot and ready! 🔥`],
+    tips: ['Right-click me (or the oven) to take a pizza out for delivery. 🍕', 'Deliver it quickly and you get a tip! ⏱️', 'Driving is faster than walking! 🚗', 'Super Sneakers from the Luxe Store make deliveries zoom! 👟'],
+  },
+  {
+    id: -5, place: 'lodge', name: 'Coach Frost', title: 'Coach Frost ⛷️', roam: 3,
+    look: { face: 'cool', hair: 'short', hat: 'beanie', shirt: 'hoodie', pants: 'jeans', skin: '#f2c6a5', hairColor: '#c9b38a', hatColor: '#1e88e5', shirtColor: '#e53935', shirtColor2: '#ffffff', pantsColor: '#283593', shoesColor: '#111111' },
+    hello: n => [`Hey ${n}! Ready to hit the slopes? ⛷️`, `Welcome to the lodge, ${n}! Warm up by the fire! 🔥`, `${n}! The snow is perfect today! ❄️`],
+    tips: ['Grab the Skis from the 🎉 Fun tab, then ride down the slope! ⛷️', 'Right-click the chair at the bottom of the ski lift to ride up to the top! 🚡', 'On skis: hold W to carve toward where you look, S to slow down.', 'The ice rink is super slippery. Have fun skating! ⛸️', 'Try a jump on skis! Press Space! 🏂'],
   },
 ];
 
@@ -37,7 +49,8 @@ const COOL = {
   bubbles: 'Bubbles! I love bubbles! 🫧', jetpack: "A JETPACK?! That's the coolest thing ever! 🚀", trail: 'Ooh, sparkly! ✨',
   showtime: 'A whole fireworks show? Can I watch? 🎇', camera: 'Say cheese! 📸', ball: 'Playing fetch? 🎾',
   82: 'Is that a real diamond?! 💎', 83: 'A throne fit for a king! 👑', 84: 'Party time! 🪩', 85: "A golden trophy! You're a champion! 🏆",
-  wrench: 'A wrench! Are you a mechanic? 🔧', 68: 'Aww, a teddy bear! 🧸', 79: 'A grand piano! Can you play it? 🎹',
+  wrench: 'A wrench! Are you a mechanic? 🔧', skis: 'Off to the slopes? ⛷️', sneakers: 'Whoa, those sneakers! You must be SO fast! 👟',
+  goldpaint: 'Gold paint?! Make my car gold next! ✨', 93: 'A hot tub! So fancy! 🛁', 68: 'Aww, a teddy bear! 🧸', 79: 'A grand piano! Can you play it? 🎹',
 };
 const PET_WORDS = { dog: 'puppy', cat: 'kitty', bunny: 'bunny', pig: 'piggy', dragon: 'dragon' };
 
@@ -81,7 +94,7 @@ export class NpcCrew {
   // ---------- Where they can walk ----------
 
   solid(x, y, z) {
-    return y < 0 || isSolidBlock(itemOf(this.room.get(x, y, z)));
+    return y < 0 ? this.room.groundSolid(x, y, z) : isSolidBlock(itemOf(this.room.get(x, y, z)));
   }
 
   standable(x, y, z) {
@@ -319,9 +332,17 @@ export class NpcCrew {
     if (n.def.place === 'store') {
       this.say(n, pickOne([`Take a look, ${c.name}! ✨`, 'Everything sparkles here! 💎', 'What catches your eye? 🛍️']), true);
       c.send({ t: 'shop_open' });
+    } else if (n.def.place === 'pizza') {
+      this.room.startJob(c);
     } else {
       this.say(n, pickOne(n.def.tips), true);
     }
+  }
+
+  // The chef sends someone off with a pizza (or cheers when they're back).
+  chefSays(text) {
+    const n = this.list.find(m => m.def.place === 'pizza');
+    if (n) this.say(n, text, true);
   }
 
   onBuy(c, item) {

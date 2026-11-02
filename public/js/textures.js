@@ -543,6 +543,47 @@ function diamond(u, v) {
   return { c: [0.6 * k, 0.9 * k, 1 * k], h: edge ? 1 : 0.5 + f, e: edge ? 0.25 : 0.05 };
 }
 
+// Bedrock: the dark, hard rock at the bottom of a hole in the ground.
+function bedrock(u, v) {
+  const w = worley(u, v, 7, 880);
+  const n = fbm(u, v, 6, 5, 881);
+  const crack = 1 - smooth(0, 0.05, w.d2 - w.d1);
+  let c = mixc([0.13, 0.13, 0.14], [0.36, 0.35, 0.36], n * 0.7 + w.id * 0.3);
+  c = mixc(c, [0.05, 0.05, 0.06], crack * 0.8);
+  if (hash(Math.floor(u * 64), Math.floor(v * 64), 882) > 0.93) c = shade(c, 1.6);
+  return { c, h: n - crack * 0.5 };
+}
+
+// Snow: soft white, a little blue in the hollows, with a few glints.
+function snow(u, v) {
+  const n = fbm(u, v, 6, 5, 890);
+  const glint = hash(Math.floor(u * SIZE), Math.floor(v * SIZE), 891) > 0.992;
+  const c = glint ? [1, 1, 1] : mixc([0.80, 0.85, 0.93], [0.97, 0.98, 1], n);
+  return { c, h: n * 0.6 };
+}
+
+// Ice: pale blue and glassy, with white cracks and frosty patches.
+function ice(u, v) {
+  const w = worley(u, v, 4, 900);
+  const n = fbm(u, v, 5, 4, 901);
+  const crack = 1 - smooth(0, 0.02, w.d2 - w.d1);
+  let c = mixc([0.55, 0.75, 0.9], [0.75, 0.9, 0.98], n);
+  c = mixc(c, [0.95, 0.98, 1], crack * 0.7 + smooth(0.6, 0.9, n) * 0.3);
+  return { c, h: 0.5 + crack * 0.3 };
+}
+
+// Pine needles with snow on them.
+function pine(u, v) {
+  const w = worley(u, v, 12, 910);
+  const n = fbm(u, v, 8, 4, 911);
+  const needle = 1 - w.d1 * 1.7;
+  let c = mixc([0.04, 0.18, 0.1], [0.12, 0.34, 0.18], clamp(needle * 0.7 + w.id * 0.4));
+  const snowy = fbm(u, v, 5, 3, 912) > 0.58;
+  if (snowy) c = mixc([0.85, 0.9, 0.96], [1, 1, 1], n);
+  const a = needle + n * 0.5 > 0.42 ? 1 : 0;
+  return { c: shade(c, 0.85 + n * 0.3), h: clamp(needle), a };
+}
+
 const GENERATORS = {
   grass_top: grassTop,
   grass_side: grassSide,
@@ -601,6 +642,10 @@ const GENERATORS = {
   race_finish: checkers([0.08, 0.08, 0.1], 6),
   filing,
   diamond,
+  bedrock,
+  snow,
+  ice,
+  pine,
 };
 
 const NORMAL_STRENGTH = {

@@ -319,6 +319,12 @@ export function blockMaterial(materials, v) {
 const CHUNK = 64;
 const CHUNK_RADIUS = Math.hypot(CHUNK / 2, CHUNK / 2, 32);
 
+// Solid, see-through-nowhere cubes: one completely surrounded by these (inside a mountain, or a
+// thick wall) can't be seen from anywhere, so it isn't drawn at all.
+const OPAQUE = new Set(Object.entries(BLOCKS).filter(([, d]) => !d.shape && !d.transparent && !d.cutout).map(([id]) => Number(id)));
+const opaque = v => v > 0 && v < 4096 * 16 && OPAQUE.has(v & 255);
+const SIX = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+
 export class World {
   constructor(scene, materials) {
     this.scene = scene;
@@ -327,7 +333,11 @@ export class World {
     this.layers = {}; // "chunk|render key" -> { mesh, keys: [], index: Map(key -> instance index) }
     this.cellLayer = new Map(); // "x,y,z" -> the layer its instance is in
     this.lamps = new Set(); // keys of light-giving blocks
+    this.lifts = new Set(); // keys of ski lift chairs
+    this.liftsVersion = 0;
     this.paints = new Map(); // painted sides, by spot (see blocks.js)
+    this.holes = new Set(); // "x,z" where the ground has been dug out, down to the bedrock
+    this.buried = new Set(); // keys of blocks hidden inside other blocks (not drawn)
     this.revision = 0; // goes up whenever anything changes
     this.matrix = new THREE.Matrix4();
     this.tmp = new THREE.Matrix4();
@@ -339,9 +349,10 @@ export class World {
     return this.blocks.get(blockKey(x, y, z)) || 0;
   }
 
-  // Ground (below y=0) and the world edges are solid.
+  // Ground (below y=0) and the world edges are solid. The ground is one layer deep (y = -1),
+  // and can be dug out; under it is the bedrock, which can't.
   isSolid(x, y, z) {
-    if (y < 0) return true;
+    if (y < 0) return y < -1 || !this.holes.has(`${x},${z}`);
     if (x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max) return true;
     return isSolidBlock(this.get(x, y, z));
   }
@@ -354,6 +365,7 @@ export class World {
 
   // Adds the collision boxes of one cell to `out` as [minX, minY, minZ, maxX, maxY, maxZ].
   cellBoxes(x, y, z, out) {
+    if (y < 0 && y === -1 && this.holes.has(`${x},${z}`)) return; // a hole in the ground
     if (y < 0 || x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max) {
       out.push([x, y, z, x + 1, y + 1, z + 1]);
       return;
@@ -426,6 +438,15 @@ export class World {
     }
     for (let i = 0; i + 3 < flat.length; i += 4) this.set(flat[i], flat[i + 1], flat[i + 2], flat[i + 3]);
     this.loading = false;
+    // Now that every block is here, stop drawing the ones buried inside others.
+    for (const [k, v] of this.blocks) {
+      if (!opaque(v)) continue;
+      const [x, y, z] = k.split(',').map(Number);
+      if (this.isBuried(x, y, z)) {
+        this.removeInstance(k);
+        this.buried.add(k);
+      }
+    }
     // Doors could only tell they were double or garage doors (and couches whether they join
     // up) once all their neighbors arrived.
     for (const [k, v] of this.blocks) {
@@ -444,17 +465,23 @@ export class World {
     if (old) {
       this.removeInstance(k);
       this.lamps.delete(k);
+      if (this.lifts.delete(k)) this.liftsVersion++;
     }
     carryPaint(this.paints, k, old, v);
     if (v) {
       this.blocks.set(k, v);
       this.addInstance(v, k, x, y, z);
       if (BLOCKS[blockId(v)]?.light) this.lamps.add(k);
+      if (BLOCKS[blockId(itemOf(v))]?.lift) {
+        this.lifts.add(k);
+        this.liftsVersion++;
+      }
     } else {
       this.blocks.delete(k);
     }
     this.revision++;
     if (!this.loading) {
+      for (const [dx, dy, dz] of SIX) this.recheckBuried(x + dx, y + dy, z + dz);
       // A garage door opening or closing rolls up (or down) instead of jumping.
       if (shapeOf(old) === 'door' && shapeOf(v) === 'door' && (itemOf(old) ^ itemOf(v)) === DOOR_OPEN << 8) this.startRolling(x, y, z, blockMeta(itemOf(v)) & DOOR_OPEN);
       if (shapeOf(old) === 'door' || shapeOf(v) === 'door') this.refreshDoorsNear(x, y, z);
@@ -546,6 +573,7 @@ export class World {
   // Can a vehicle drive through this spot? Open doors let it through, except for the roll at
   // the top of a garage door; railings stop it.
   vehicleSolid(x, y, z) {
+    if (y < 0) return true; // (wheels just roll over a hole in the ground)
     const v = this.get(x, y, z);
     if (shapeOf(v) === 'door' && v && blockMeta(v) & DOOR_OPEN) {
       const role = this.doorRole(x, y, z);
@@ -728,7 +756,56 @@ export class World {
     }
   }
 
+  // ---------- Buried blocks ----------
+
+  isBuried(x, y, z) {
+    if (x <= WORLD.min || x >= WORLD.max || z <= WORLD.min || z >= WORLD.max) return false;
+    const below = y > 0 ? opaque(this.blocks.get(blockKey(x, y - 1, z))) : !this.holes.has(`${x},${z}`);
+    if (!below) return false;
+    for (const [dx, dy, dz] of SIX) if (dy >= 0 && !opaque(this.blocks.get(blockKey(x + dx, y + dy, z + dz)))) return false;
+    return true;
+  }
+
+  // Something next to (x, y, z) changed: should it be drawn now (or not any more)?
+  recheckBuried(x, y, z) {
+    const k = blockKey(x, y, z), v = this.blocks.get(k);
+    if (!opaque(v)) return;
+    const should = this.isBuried(x, y, z);
+    if (should === this.buried.has(k)) return;
+    if (should) {
+      this.removeInstance(k);
+      this.buried.add(k);
+    } else {
+      this.buried.delete(k);
+      this.addInstance(v, k, x, y, z);
+    }
+  }
+
+  // ---------- Holes in the ground ----------
+
+  setHole(x, z, on) {
+    const k = `${x},${z}`;
+    if (on === this.holes.has(k)) return false;
+    if (on) this.holes.add(k);
+    else this.holes.delete(k);
+    this.recheckBuried(x, 0, z);
+    this.revision++;
+    return true;
+  }
+
+  setHoles(list) {
+    for (const k of [...this.holes]) {
+      const [x, z] = k.split(',').map(Number);
+      this.setHole(x, z, false);
+    }
+    for (const [x, z] of list) this.setHole(x, z, true);
+  }
+
   addInstance(v, k, x, y, z) {
+    if (!this.loading && opaque(v) && this.isBuried(x, y, z)) {
+      this.buried.add(k);
+      return;
+    }
     // An item standing on a floor (a torch on a sidewalk): draw both. (Blocks from a newer
     // version of the game that this one doesn't know aren't drawn.)
     if (floorOf(v) && BLOCKS[blockId(floorOf(v))]) this.addPart(floorOf(v), `${k}|floor`, x, y, z);
@@ -744,6 +821,7 @@ export class World {
   }
 
   removeInstance(k) {
+    this.buried.delete(k);
     for (const part of [k, `${k}|rail`, `${k}|floor`, `${k}|floor|rail`]) if (this.cellLayer.has(part)) this.removeOne(part);
   }
 
@@ -867,9 +945,14 @@ export class World {
     let t = 0;
 
     while (t <= maxDist) {
-      if (y < 0) {
-        if (normal[1] !== 1) return null;
-        return { ground: true, block: [x, y, z], normal, place: [x, 0, z], distance: t, point: origin.clone().addScaledVector(dir, t) };
+      if (y < 0 && !(y === -1 && this.holes.has(`${x},${z}`))) {
+        // The ground (which can be dug out), or the bedrock at the bottom of a hole.
+        if (normal[1] === -1 || (y === -1 && normal[1] !== 1 && !this.holes.size)) return null;
+        const bedrock = y < -1;
+        return {
+          ground: true, bedrock, dig: bedrock ? null : [x, z], block: [x, y, z], normal,
+          place: [x + normal[0], y + normal[1], z + normal[2]], distance: t, point: origin.clone().addScaledVector(dir, t),
+        };
       }
       if (x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max) return null;
       const v = this.get(x, y, z);

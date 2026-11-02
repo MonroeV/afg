@@ -92,13 +92,32 @@ const server = http.createServer((req, res) => {
 // ---------- Saving and loading ----------
 
 let saveTimer = null;
+// The world is saved a little while after something changes (not after every block, which
+// would wear out a Raspberry Pi's SD card), and written in the background so nobody's game
+// stutters while the file is being written.
+const SAVE_DELAY = 15000;
 const room = new GameRoom({
-  onDirty: () => (saveTimer ??= setTimeout(saveWorld, 5000)),
+  onDirty: () => (saveTimer ??= setTimeout(saveWorld, SAVE_DELAY)),
   log: msg => console.log(msg),
 });
 room.build = BUILD;
 
+let saving = null; // the save being written right now
 function saveWorld() {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  const text = JSON.stringify(room.serialize());
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const write = async () => {
+    await fs.promises.writeFile(WORLD_FILE + '.tmp', text);
+    await fs.promises.rename(WORLD_FILE + '.tmp', WORLD_FILE);
+  };
+  // One write at a time (the newest one goes last).
+  saving = (saving || Promise.resolve()).then(write).catch(err => console.error('Could not save the world:', err.message));
+}
+
+// When the server is stopped: save right away, and wait for it to finish.
+function saveNow() {
   clearTimeout(saveTimer);
   saveTimer = null;
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -115,7 +134,7 @@ function loadWorld() {
   }
   if (text === null) {
     room.generate();
-    saveWorld();
+    saveNow();
     console.log(`Generated a new world (${room.world.size} blocks, ${room.vehicles.size} vehicles)`);
     return;
   }
@@ -244,7 +263,7 @@ setInterval(() => {
 }, 1000 / 30);
 
 function shutdown() {
-  if (saveTimer) saveWorld();
+  if (saveTimer || saving) saveNow();
   process.exit(0);
 }
 process.on('SIGINT', shutdown);

@@ -36,7 +36,7 @@ function nameTag(name, color) {
 
 // What a player is doing, sent with their position: bits of `flags`. The top 24 bits are
 // the color of the balloon they're holding.
-export const FLAG = { sleeping: 1, sitting: 2, crouching: 4, balloon: 8, jet: 16, trail: 32 };
+export const FLAG = { sleeping: 1, sitting: 2, crouching: 4, balloon: 8, jet: 16, trail: 32, pizza: 64 };
 
 // A speech bubble: rounded and white, with up to two lines of text and a little tail.
 function speechBubble(text) {
@@ -325,6 +325,7 @@ export class Avatar {
     this.balloon = flags & FLAG.balloon ? `#${((flags >>> 8) & 0xffffff).toString(16).padStart(6, '0')}` : null;
     this.jet = !!(flags & FLAG.jet);
     this.trail = !!(flags & FLAG.trail);
+    this.pizza = !!(flags & FLAG.pizza);
   }
 
   emote(kind) {
@@ -380,6 +381,7 @@ export class Avatar {
       this.tag.position.y = this.crouching ? 2.05 : 2.35;
     }
     this.updateRemoteBall(dt);
+    this.updatePizzaBox();
     this.updateBalloon(time);
     if (this.bubble) {
       this.bubbleT -= dt;
@@ -396,6 +398,22 @@ export class Avatar {
       flying: this.flying, crouch: this.crouching && !sitting,
     });
     this.updatePet(dt, time);
+  }
+
+  // A pizza box carried in front (out on a delivery).
+  updatePizzaBox() {
+    if (!this.pizza && !this.pizzaBox) return;
+    if (!this.pizzaBox) {
+      const box = new THREE.Group();
+      box.add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.07, 0.5), new THREE.MeshStandardMaterial({ color: 0xe9d3a7, roughness: 0.8 })));
+      const top = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.005, 0.3), new THREE.MeshStandardMaterial({ color: 0xe53935 }));
+      top.position.y = 0.04;
+      box.add(top);
+      box.position.set(0, 1.0, -0.36);
+      this.root.add(box);
+      this.pizzaBox = box;
+    }
+    this.pizzaBox.visible = this.pizza && !this.seat && !this.lying;
   }
 
   // Says something (in a speech bubble over their head, for a few seconds).

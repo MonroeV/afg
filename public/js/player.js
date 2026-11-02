@@ -1,7 +1,7 @@
 // First-person movement and collision.
 // Collision works with boxes, so thin doors and car roofs feel solid in the right places.
 import * as THREE from 'three';
-import { BLOCKS, SPAWN, blockId, blockMeta, shapeOf, itemOf, floorOf } from './shared/blocks.js';
+import { BLOCKS, SPAWN, blockId, blockMeta, shapeOf, itemOf, floorOf, isSnowyAt } from './shared/blocks.js';
 
 const HALF_WIDTH = 0.3;
 export const HEIGHT = 1.8;
@@ -18,6 +18,8 @@ const CROUCH_SPEED = 2.4;
 const BOOST_SPEED = 22; // speed pads
 const BOOST_TIME = 0.7;
 const BALLOON_FALL = 2.4; // holding a balloon, you float down this fast
+const SKI_MAX = 24; // the fastest you can go on skis
+const SNEAKER_SPEED = 1.7, SNEAKER_JUMP = 11.5; // Super Sneakers
 const AXES = { x: 0, y: 1, z: 2 };
 
 export class Player {
@@ -91,18 +93,21 @@ export class Player {
       const up = (keys.has('Space') ? 1 : 0) - (keys.has('KeyC') || keys.has('ControlLeft') ? 1 : 0);
       const target = new THREE.Vector3(wish.x * speed, up * speed, wish.z * speed);
       this.vel.lerp(target, 1 - Math.exp(-10 * dt));
+    } else if (this.skiOn(wish, keys, dt)) {
+      // (Skiing: see skiOn.)
     } else {
-      const speed = this.crouching ? CROUCH_SPEED : this.sprinting ? SPRINT_SPEED : WALK_SPEED;
+      const speed = (this.crouching ? CROUCH_SPEED : this.sprinting ? SPRINT_SPEED : WALK_SPEED) * (this.sneakers ? SNEAKER_SPEED : 1);
       // Less control in the air, and almost none while flying out of a cannon (a jetpack
       // steers better).
-      const accel = this.onGround ? 14 : this.launched ? 0.4 : this.jetting ? 6 : 3;
+      // (Ice is slippery: you slide about on it.)
+      const accel = this.onGround ? (this.surface() === 'ice' ? 1.6 : 14) : this.launched ? 0.4 : this.jetting ? 6 : 3;
       const k = 1 - Math.exp(-accel * dt);
       // A speed pad's push fades away over a moment.
       const push = this.boostT > 0 ? this.boostT / BOOST_TIME : 0;
       this.vel.x += (wish.x * speed + this.boost.x * push - this.vel.x) * k;
       this.vel.z += (wish.z * speed + this.boost.z * push - this.vel.z) * k;
       if (keys.has('Space') && this.onGround) {
-        this.vel.y = JUMP_SPEED;
+        this.vel.y = this.sneakers ? SNEAKER_JUMP : JUMP_SPEED;
         this.onGround = false;
       }
     }
@@ -137,6 +142,84 @@ export class Player {
     if (falling && !this.onGround) this.vel.y -= gravity * dt / 2;
     if (this.balloon && falling && this.vel.y < -BALLOON_FALL) this.vel.y += (-BALLOON_FALL - this.vel.y) * (1 - Math.exp(-5 * dt));
     if (this.onGround && this.flying && !wasOnGround) this.flying = false;
+  }
+
+  // What we're standing on, if it's slippery: 'ice', or 'snow' (snow blocks, or the snowy
+  // ground up north).
+  surface() {
+    const y = Math.floor(this.pos.y - 0.05);
+    // Under the middle of our feet, or (standing on an edge) under the toes or heels.
+    for (const [dx, dz] of [[0, 0], [0.25, 0.25], [-0.25, 0.25], [0.25, -0.25], [-0.25, -0.25]]) {
+      const x = Math.floor(this.pos.x + dx), z = Math.floor(this.pos.z + dz);
+      if (y === -1) {
+        if (isSnowyAt(x, z) && this.world.isSolid(x, -1, z)) return 'snow';
+        continue;
+      }
+      const id = blockId(itemOf(this.world.get(x, y, z)));
+      if (id === 88) return 'ice';
+      if (id === 87) return 'snow';
+    }
+    return null;
+  }
+
+  // Which way is downhill here (and how steep): from the heights of the ground around us.
+  slope() {
+    const x = Math.floor(this.pos.x), z = Math.floor(this.pos.z), y = Math.floor(this.pos.y + 0.05);
+    const top = (cx, cz) => {
+      for (let k = y + 1; k >= y - 3; k--) if (this.world.isSolid(cx, k, cz)) return k + 1;
+      return y - 3;
+    };
+    // (Over a few blocks each way, so the steps of a slope feel like one smooth slope.)
+    const clamp = v => Math.max(-1, Math.min(1, v));
+    return [clamp((top(x - 2, z) - top(x + 2, z)) / 4), clamp((top(x, z - 2) - top(x, z + 2)) / 4)];
+  }
+
+  // Skis on snow (or ice): downhill pulls you along faster and faster, you carve round toward
+  // where you're looking (hold W), A and D lean you sideways, and S digs in to slow down. Off the
+  // edge of a step you keep flying along. Returns false when we aren't skiing.
+  skiOn(wish, keys, dt) {
+    this.skiT = Math.max(0, (this.skiT || 0) - dt);
+    const snowy = this.skis && this.onGround && this.surface();
+    if (snowy) this.skiT = 0.5;
+    this.skiing = !!snowy && Math.hypot(this.vel.x, this.vel.z) > 2;
+    if (!this.skis || (!snowy && this.skiT <= 0) || this.crouching) return false;
+    // Downhill pulls you along, even in the moment you're in the air off the edge of a step.
+    const [gx, gz] = this.slope();
+    this.vel.x += gx * 18 * dt;
+    this.vel.z += gz * 18 * dt;
+    // S digs the skis in (a snowplough) to slow down.
+    const drag = Math.exp(-(keys.has('KeyS') ? 2.8 : 0.15) * dt);
+    this.vel.x *= drag;
+    this.vel.z *= drag;
+    if (snowy) {
+      const speed = Math.hypot(this.vel.x, this.vel.z);
+      // Carving: turn the way you're going toward the way you're looking.
+      if (keys.has('KeyW') && speed > 1) {
+        const want = Math.atan2(-Math.sin(this.yaw), -Math.cos(this.yaw)), now = Math.atan2(this.vel.x, this.vel.z);
+        let d = Math.atan2(Math.sin(want - now), Math.cos(want - now));
+        d = Math.max(-2.2 * dt, Math.min(2.2 * dt, d));
+        const a = now + d;
+        this.vel.x = Math.sin(a) * speed;
+        this.vel.z = Math.cos(a) * speed;
+        if (speed < 7) {
+          this.vel.x += -Math.sin(this.yaw) * 5 * dt; // a little push with the poles
+          this.vel.z += -Math.cos(this.yaw) * 5 * dt;
+        }
+      } else if (!keys.has('KeyS')) {
+        this.vel.x += wish.x * 3 * dt;
+        this.vel.z += wish.z * 3 * dt;
+      }
+      const sp = Math.hypot(this.vel.x, this.vel.z);
+      if (sp > SKI_MAX) {
+        this.vel.x *= SKI_MAX / sp;
+        this.vel.z *= SKI_MAX / sp;
+      }
+      if (keys.has('Space')) {
+        this.vel.y = JUMP_SPEED;
+        this.onGround = false;
+      }
+    }
+    return true;
   }
 
   // Is there something to stand on under our feet (no more than a small step down)?

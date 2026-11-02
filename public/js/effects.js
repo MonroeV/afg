@@ -513,6 +513,18 @@ export class Effects {
     for (let i = 0; i < 40; i++) this.smoke.spawn({ x: x + (Math.random() - 0.5) * 2, y: y + Math.random(), z: z + (Math.random() - 0.5) * 2, vx: (Math.random() - 0.5) * 4, vy: 1 + Math.random() * 3, vz: (Math.random() - 0.5) * 4, life: 3 + Math.random() * 2, size: 1.2, grow: 1.6, color: [0.18, 0.18, 0.18], alpha: 0.9, drag: 1.2 });
   }
 
+  // Snow powder thrown up by skis (more the faster you go).
+  powder(x, y, z, k = 1) {
+    for (let i = 0; i < 2; i++) {
+      this.smoke.spawn({ x: x + (Math.random() - 0.5) * 0.6, y, z: z + (Math.random() - 0.5) * 0.6, vx: (Math.random() - 0.5) * 2, vy: 0.6 + Math.random() * 1.2 * k, vz: (Math.random() - 0.5) * 2, life: 0.7 + Math.random() * 0.5, size: 0.35 + k * 0.4, grow: 0.8, color: [0.95, 0.97, 1], alpha: 0.6, drag: 2 });
+    }
+  }
+
+  // A bubble rising out of a hot tub.
+  fizz(x, y, z) {
+    this.glow.spawn({ x, y, z, vx: 0, vy: 0.5 + Math.random() * 0.4, vz: 0, life: 0.6 + Math.random() * 0.4, size: 0.09, grow: -0.05, color: [0.85, 0.97, 1] });
+  }
+
   // Little sparks off a wrench.
   sparks(x, y, z, count = 8) {
     for (let i = 0; i < count; i++) {

@@ -507,6 +507,13 @@ button.secondary {
   transition: transform 0.15s;
 }
 #coins.bump { transform: scale(1.25); }
+#job {
+  position: absolute; top: 132px; left: 14px; display: flex; align-items: center; gap: 8px; padding: 5px 6px 5px 12px;
+  border-radius: 12px; background: rgba(120, 40, 0, 0.7); border: 2px solid #ffa030; font-size: 15px; font-weight: 800;
+  color: #fff3d6; text-shadow: 0 1px 2px #000; pointer-events: auto; white-space: nowrap;
+}
+#job button { border: none; border-radius: 8px; background: rgba(0, 0, 0, 0.35); color: #fff; font-weight: 900; cursor: pointer; padding: 2px 8px; }
+body.touch #job { top: 92px; left: 8px; font-size: 12px; }
 body.touch #coins { top: 62px; left: 8px; font-size: 14px; }
 .shop-panel { width: min(820px, 100%); max-height: 100%; overflow-y: auto; }
 .shop-panel h2 { color: #ffd54f; text-shadow: 0 2px 6px rgba(255, 180, 0, 0.5); }

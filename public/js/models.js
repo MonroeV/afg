@@ -232,6 +232,40 @@ export const MODELS = {
     trim: Array.from({ length: 9 }, (_, i) => box(0.06, 0.02, 0.06, 0.4 + (i % 3) * 0.1, 0.37, 0.48 + Math.floor(i / 3) * 0.08)),
     colors: { body: 0x5b6470, glow: 0x7dff9a, accent: 0x3b414a, trim: 0xf2f2f2, metal: 0 },
   },
+  // A ski lift's chair, waiting at its station (right-click it to ride up the cable).
+  skiLift: {
+    body: [box(0.96, 0.06, 0.96, 0.5, 0.03, 0.5), box(0.12, 0.06, 0.96, 0.06, 0.09, 0.5), box(0.12, 0.06, 0.96, 0.94, 0.09, 0.5)],
+    accent: [box(0.8, 0.07, 0.4, 0.5, 0.42, 0.56), box(0.8, 0.36, 0.07, 0.5, 0.62, 0.36)],
+    trim: [
+      box(0.04, 0.6, 0.04, 0.12, 0.72, 0.4), box(0.04, 0.6, 0.04, 0.88, 0.72, 0.4), box(0.8, 0.04, 0.04, 0.5, 1.02, 0.4),
+      box(0.04, 0.3, 0.04, 0.5, 1.18, 0.4), box(0.8, 0.03, 0.03, 0.5, 0.5, 0.82),
+    ],
+    colors: { body: 0x3b414a, accent: 0xe53935, trim: 0xc9d0d8, metal: 0.3, accentMetal: 0.2 },
+  },
+  snowman: {
+    body: [ball(0.3, 0.5, 0.28, 0.5), ball(0.22, 0.5, 0.68, 0.5), ball(0.16, 0.5, 0.98, 0.5)],
+    accent: [
+      cyl(0.11, 0.11, 0.16, 0.5, 1.2, 0.5), cyl(0.17, 0.17, 0.02, 0.5, 1.12, 0.5),
+      ball(0.025, 0.44, 1.02, 0.64), ball(0.025, 0.56, 1.02, 0.64),
+      ball(0.03, 0.5, 0.74, 0.71), ball(0.03, 0.5, 0.62, 0.72), ball(0.03, 0.5, 0.4, 0.79),
+    ],
+    trim: [new THREE.ConeGeometry(0.035, 0.18, 6).rotateX(Math.PI / 2).translate(0.5, 0.96, 0.74)],
+    colors: { body: 0xf4f8fc, accent: 0x1d1f24, trim: 0xff7a1a, metal: 0 },
+  },
+  pizzaOven: {
+    body: [box(0.96, 0.4, 0.9, 0.5, 0.2, 0.5), new THREE.SphereGeometry(0.44, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.95, 1).translate(0.5, 0.4, 0.45)],
+    glow: [box(0.34, 0.2, 0.06, 0.5, 0.5, 0.88)],
+    accent: [cyl(0.07, 0.07, 0.35, 0.5, 0.95, 0.3), box(0.5, 0.04, 0.16, 0.5, 0.42, 0.97)],
+    trim: [cyl(0.13, 0.13, 0.02, 0.5, 0.45, 0.98, 14)],
+    colors: { body: 0xb5502e, glow: 0xffa040, accent: 0x3a2a22, trim: 0xf2c14e, metal: 0 },
+  },
+  hotTub: {
+    body: [box(1, 0.55, 0.1, 0.5, 0.275, 0.05), box(1, 0.55, 0.1, 0.5, 0.275, 0.95), box(0.1, 0.55, 0.8, 0.05, 0.275, 0.5), box(0.1, 0.55, 0.8, 0.95, 0.275, 0.5), box(0.8, 0.1, 0.8, 0.5, 0.05, 0.5)],
+    glow: [box(0.8, 0.38, 0.8, 0.5, 0.29, 0.5)],
+    accent: [box(1.02, 0.04, 0.12, 0.5, 0.57, 0.05), box(1.02, 0.04, 0.12, 0.5, 0.57, 0.95), box(0.12, 0.04, 0.8, 0.05, 0.57, 0.5), box(0.12, 0.04, 0.8, 0.95, 0.57, 0.5)],
+    trim: [0.3, 0.5, 0.7].map(x => ball(0.03, x, 0.48, 0.5)),
+    colors: { body: 0x8a5a33, glow: 0x4fd2ff, accent: 0xf3f1ea, trim: 0xffffff, metal: 0 },
+  },
 };
 
 // A couch piece. Side by side, couches join up into one long couch: the arms only go on

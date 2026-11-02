@@ -4,7 +4,7 @@ import {
   BLOCKS, WORLD, inBounds, blockId, blockMeta, shapeOf, isReplaceable, makeBlock, doorFacingFromYaw, paintOf, withPaint,
   railMask, railBoxes, nearestRailEdge, canHoldItem, stack, itemOf, floorOf, turnLine, blockKey, faceIndex, hexToRgb,
   switchable, lightOff, toggleLight, setDoorOpen, isWaterBlock, facingTowards,
-  PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP, BED_FOOT, NOTE_NAMES, NOTE_FREQS, PICTURES,
+  PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP, BED_FOOT, NOTE_NAMES, NOTE_FREQS, PICTURES, isSnowyAt, SNOW_LINE,
 } from './shared/blocks.js';
 import { generateWorld } from './shared/worldgen.js';
 import { randomLook, sanitizeLook } from './shared/avatar.js';
@@ -28,13 +28,15 @@ import { Editor } from './editor.js';
 import { CharacterClient, Gallery } from './gallery.js';
 import { Hud, renderControls, CUSTOM_PAINT } from './hud.js';
 import {
-  HAMMER, FIREWORKS, BALL, CLAIM, BRUSH, SCRAPER, WRENCH, LADDER, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME,
+  HAMMER, FIREWORKS, BALL, CLAIM, BRUSH, SCRAPER, WRENCH, SKIS, GOLDPAINT, SNEAKERS, LADDER, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME,
   ALL_ITEMS, DEFAULT_HOTBAR, makeIcon, ViewModel,
 } from './items.js';
 import { MAX_MANY } from './shared/game.js';
 import { NPC_ACT } from './shared/npcs.js';
 import { Shop } from './shop.js';
 import { Particles, Fireworks, Sounds, Effects } from './effects.js';
+import { Ground } from './ground.js';
+import { SkiLifts, along } from './lifts.js';
 import { TouchControls, IS_TOUCH } from './touch.js';
 
 const $ = id => document.getElementById(id);
@@ -148,7 +150,7 @@ sounds.volume = settings.volume;
 
 // ---------- Game state ----------
 
-let world, player, materials, textures, icons, hud, cars, myBody, editor, gallery, structures, ball, shop;
+let world, player, materials, textures, icons, hud, cars, myBody, editor, gallery, structures, ball, shop, ground, lifts;
 const npcs = new Map(); // the town's people (run by the server): id -> Avatar
 const coinMap = new Map(); // gold coins lying about: id -> { x, y, z, value, asked }
 let wallet = { coins: 0, owned: [] };
@@ -169,50 +171,6 @@ let carView = 1;
 const carCam = { yaw: 0, pitch: -0.15 };
 let danceView = 0;
 
-function buildGround() {
-  const groundTex = textures.grass_top;
-  const repeat = 700;
-  const map = groundTex.map.clone();
-  const normalMap = groundTex.normalMap.clone();
-  for (const t of [map, normalMap]) {
-    t.repeat.set(repeat, repeat);
-    t.needsUpdate = true;
-  }
-  const geo = new THREE.PlaneGeometry(repeat, repeat, 140, 140).rotateX(-Math.PI / 2);
-  // Gentle large-scale color variation hides the texture repeating.
-  const colors = [];
-  const pos = geo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), z = pos.getZ(i);
-    const n = Math.sin(x * 0.07) * Math.cos(z * 0.05) * 0.5 + Math.sin(x * 0.023 + z * 0.031) * 0.5;
-    const k = 0.9 + n * 0.1;
-    colors.push(k * (0.97 + n * 0.03), k, k * (0.95 - n * 0.05));
-  }
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  const ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map, normalMap, vertexColors: true, roughness: 0.95 }));
-  ground.receiveShadow = true;
-  scene.add(ground);
-
-  // A soft force-field marks the edge of the world.
-  const fc = document.createElement('canvas');
-  fc.width = 4;
-  fc.height = 64;
-  const g = fc.getContext('2d');
-  const grad = g.createLinearGradient(0, 0, 0, 64);
-  grad.addColorStop(0, 'rgba(90,180,255,0)');
-  grad.addColorStop(1, 'rgba(90,180,255,0.55)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 4, 64);
-  const fieldMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(fc), transparent: true, side: THREE.DoubleSide, depthWrite: false, fog: false });
-  const span = WORLD.max - WORLD.min + 1, h = 4, mid = (WORLD.min + WORLD.max + 1) / 2;
-  for (const [x, z, ry] of [[mid, WORLD.min, 0], [mid, WORLD.max + 1, 0], [WORLD.min, mid, Math.PI / 2], [WORLD.max + 1, mid, Math.PI / 2]]) {
-    const wall = new THREE.Mesh(new THREE.PlaneGeometry(span, h), fieldMat);
-    wall.position.set(x, h / 2, z);
-    wall.rotation.y = ry;
-    scene.add(wall);
-  }
-}
-
 async function load() {
   const anisotropy = renderer.capabilities.getMaxAnisotropy();
   textures = await generateTextures(anisotropy, p => ($('loading-fill').style.width = `${p * 100}%`));
@@ -225,6 +183,7 @@ async function load() {
   view.setPaint(paintHex());
   world = new World(scene, materials);
   structures = new Structures(world);
+  lifts = new SkiLifts(scene, world);
   world.onChange = (x, y, z) => structures.changed(x, y, z);
   world.onLoad = () => structures.scan();
   sky.extraLights = structureLights;
@@ -241,7 +200,7 @@ async function load() {
     sounds.ballBounce(k * loudness(p.x, p.y, p.z, 30));
     if (axis === 'y' && k > 0.3) for (let i = 0; i < 2; i++) effects.smokePuff(p.x, p.y - 0.15, p.z, 0);
   };
-  buildGround();
+  ground = new Ground(scene, textures);
 
   // Show the town behind the main menu.
   const preview = generateWorld();
@@ -345,6 +304,8 @@ $('join-form').addEventListener('submit', async e => {
   myId = welcome.id;
   world.load(welcome.world);
   world.loadPaints(welcome.paints);
+  world.setHoles(welcome.holes || []);
+  ground.set(welcome.holes || []);
   avatars.clear();
   for (const p of welcome.players) avatars.add(p);
   for (const n of welcome.npcs || []) npcs.set(n.id, new Avatar(scene, { id: n.id, name: n.name, look: n.look }));
@@ -366,6 +327,29 @@ $('join-form').addEventListener('submit', async e => {
   $('menu').classList.add('hidden');
   $('hud').classList.remove('hidden');
   lock();
+});
+
+// Holes dug in the ground (and the grass growing back over them).
+function setHoleHere(x, z, on) {
+  world.setHole(x, z, on);
+  ground.setHole(x, z, on);
+  if (on) return;
+  // Nothing gets stuck in the ground when it grows back: up they pop.
+  const inside = p => p.y < 0 && Math.floor(p.x) === x && Math.floor(p.z) === z;
+  if (inside(player.pos)) {
+    player.pos.y = 0;
+    player.vel.y = Math.max(0, player.vel.y);
+  }
+  if (ball.active && inside(ball.pos)) ball.pos.y = 0.3;
+  const m = myBody.pet?.mover;
+  if (m && inside(m.pos)) m.place(m.pos.clone().setY(0));
+}
+net.on('hole', ({ x, z, on, grow }) => {
+  setHoleHere(x, z, on);
+  if (grow) {
+    effects.sparkle(x + 0.5, 0.1, z + 0.5, 6);
+    particles.burst(x, -0.6, z, blockMaterial(materials, GRASS_BLOCK), 5);
+  }
 });
 
 net.on('set', ({ x, y, z, b }) => {
@@ -1208,10 +1192,9 @@ function fixVehicle(t) {
 }
 
 // The Paint Brush on a vehicle: a whole new color (it keeps it, even after it comes back).
-function paintVehicle(t) {
-  const color = paintHex();
+function paintVehicle(t, color = paintHex()) {
   if (t.car.color?.toLowerCase() === color.toLowerCase()) {
-    hud.toast(`🎨 It's already ${paintName()}! Pick another color in the 🎨 Paint tab.`);
+    hud.toast(color === 'gold' ? '✨ It\'s already solid gold!' : `🎨 It's already ${paintName()}! Pick another color in the 🎨 Paint tab.`);
     return;
   }
   cars.setColor(t.car, color);
@@ -1528,6 +1511,7 @@ function respawn(joining = false) {
   wakeUp(true);
   standUp(true);
   move = null;
+  liftRide = null;
   getOut();
   const b = settings.bed;
   const bed = b && structures.ofType('bed').find(s => s.x === b.x && s.y === b.y && s.z === b.z);
@@ -1586,8 +1570,7 @@ function updateStructures(dt, time) {
   // Stand on a teleporter's lamp for a moment to zoom to the next one.
   teleCooldown -= dt;
   const p = player.pos;
-  const tp = !riding() && !sleeping && teleCooldown <= 0 &&
-    structures.ofType('teleporter').find(t => Math.floor(p.x) === t.x && Math.floor(p.z) === t.z && Math.abs(p.y - t.y - 1) < 0.2);
+  const tp = !riding() && !sleeping && teleCooldown <= 0 && teleporterAt(p, 0.2);
   if (tp) {
     teleCharge += dt;
     if (emit) effects.sparkle(p.x, p.y, p.z, 3);
@@ -1595,12 +1578,12 @@ function updateStructures(dt, time) {
       teleCharge = 0;
       const next = structures.nextTeleporter(tp);
       if (next) {
-        net.send({ t: 'fx', kind: 'sparkle', x: p.x, y: p.y, z: p.z });
+        const from = p.clone();
+        // Your pet comes along too, if it's close by.
+        if (myBody.pet?.mover && myBody.pet.mover.pos.distanceTo(p) < 14) petPortal = { t: 0.35, to: next };
         player.pos.set(next.x + 0.5, next.y + 1, next.z + 0.5);
         player.vel.set(0, 0, 0);
-        effects.sparkle(player.pos.x, player.pos.y, player.pos.z, 40);
-        net.send({ t: 'fx', kind: 'sparkle', x: player.pos.x, y: player.pos.y, z: player.pos.z });
-        sounds.whoosh();
+        teleportFx(from, player.pos);
         teleCooldown = 2.5;
       } else {
         hud.toast('🌀 Build another teleporter somewhere to travel to it!');
@@ -1610,6 +1593,7 @@ function updateStructures(dt, time) {
   } else {
     teleCharge = 0;
   }
+  teleportThings(dt);
 
   // Snoring sleepers.
   snoreTimer -= dt;
@@ -1623,6 +1607,298 @@ function updateStructures(dt, time) {
   return fire;
 }
 
+// ---------- The ski lift ----------
+
+let liftRide = null; // { pts, length, d, to }
+
+function rideLift(x, y, z) {
+  if (riding() || sleeping || seated || liftRide) return;
+  const ride = lifts.ride(x, y, z);
+  if (!ride) {
+    hud.toast('🚡 A ski lift needs a second Ski Lift chair to ride to (put one at the top of a hill!)');
+    return;
+  }
+  player.flying = false;
+  player.vel.set(0, 0, 0);
+  liftRide = { ...ride, d: 0 };
+  const a = ride.pts[0], b = ride.pts[ride.pts.length - 1];
+  player.yaw = Math.atan2(-(b.x - a.x), -(b.z - a.z));
+  sounds.click();
+  hud.toast(ride.to[1] > y ? '🚡 Up we go! Enjoy the view. (Space to hop off)' : '🚡 Down we go! (Space to hop off)');
+}
+
+// Carried along the cable, sitting in the chair (you can look around; Space hops off).
+function updateLift(dt, keys) {
+  if (!liftRide) return false;
+  if (keys.has('Space') && liftRide.d > 1.5) {
+    liftRide = null;
+    return false;
+  }
+  liftRide.d += dt * lifts.speed;
+  const p = along(liftRide.pts, liftRide.d);
+  player.pos.set(p.x, p.y - 0.72, p.z);
+  player.vel.set(0, 0, 0);
+  if (liftRide.d >= liftRide.length) {
+    // Off at the other end: step out beside the chair.
+    const [x, y, z] = liftRide.to;
+    liftRide = null;
+    for (const [dx, dz] of [[0, 1], [1, 0], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+      player.pos.set(x + 0.5 + dx * 1.2, y, z + 0.5 + dz * 1.2);
+      if (!player.overlapsSomething()) break;
+    }
+    sounds.land();
+    if (hud.item !== SKIS && isSnowyAt(x, z)) hud.toast('⛷️ Grab the Skis from the 🎉 Fun tab and ski down!');
+  }
+  return true;
+}
+
+// ---------- Pizza delivery ----------
+// Chef Rosa (or the oven) gives you a pizza and a house to take it to: a glowing marker shows
+// where. Get there and you're paid, with a tip if you were quick.
+
+let job = null; // { x, z, reward, par, start, sent }
+const jobBanner = document.createElement('div');
+jobBanner.id = 'job';
+jobBanner.className = 'hidden';
+const jobText = document.createElement('span');
+const jobQuit = document.createElement('button');
+jobQuit.textContent = '✕';
+jobQuit.title = 'Give up this delivery';
+jobQuit.addEventListener('click', () => {
+  net.send({ t: 'job_quit' });
+  endJob();
+  hud.toast('🍕 Delivery cancelled.');
+});
+jobBanner.append(jobText, jobQuit);
+document.getElementById('hud').append(jobBanner);
+
+const jobMarker = (() => {
+  const g = new THREE.Group();
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 40, 12, 1, true).translate(0, 20, 0),
+    new THREE.MeshBasicMaterial({ color: 0xffa030, transparent: true, opacity: 0.28, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  ctx.font = '100px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('🍕', 64, 70);
+  const pizza = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, fog: false }));
+  pizza.scale.setScalar(1.6);
+  pizza.renderOrder = 12;
+  g.add(beam, pizza);
+  g.pizza = pizza;
+  g.visible = false;
+  scene.add(g);
+  return g;
+})();
+
+function endJob() {
+  job = null;
+  jobMarker.visible = false;
+  jobBanner.classList.add('hidden');
+}
+
+net.on('job', ({ x, z, reward, par, again }) => {
+  job = { x, z, reward, par, start: performance.now(), sent: false };
+  jobBanner.classList.remove('hidden');
+  if (!again) {
+    sounds.magic();
+    hud.toast(`🍕 Take this pizza to the house with the 🍕 marker! (${reward} coins, and a tip if you're quick)`);
+  }
+});
+net.on('job_done', ({ coins, fast }) => {
+  const at = player.pos;
+  effects.sparkle(at.x, at.y + 1, at.z, 30);
+  sounds.coin();
+  hud.toast(fast ? `🍕 Delivered, and fast! +${coins} coins (with a tip)! Get another one at the Pizza Palace.` : `🍕 Delivered! +${coins} coins. Get another one at the Pizza Palace.`);
+  endJob();
+});
+
+function updateJob(dt, time) {
+  if (!job) return;
+  const ground = groundBelow(job.x, 40, job.z);
+  jobMarker.visible = true;
+  jobMarker.position.set(job.x, ground, job.z);
+  jobMarker.pizza.position.y = 3.2 + Math.sin(time * 2.5) * 0.25;
+  jobMarker.pizza.material.rotation = Math.sin(time * 1.5) * 0.3;
+  const d = Math.hypot(player.pos.x - job.x, player.pos.z - job.z);
+  const t = (performance.now() - job.start) / 1000, left = Math.max(0, job.par - t);
+  const clock = `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`;
+  jobText.textContent = `🍕 Deliver the pizza: ${Math.round(d)} m · ${left > 0 ? `⏱ ${clock} for a tip` : 'no tip now, but they\'re still hungry!'}`;
+  if (d < 3 && Math.abs(player.pos.y - ground) < 3 && !job.sent) {
+    job.sent = true;
+    net.send({ t: 'job_done' });
+    setTimeout(() => job && (job.sent = false), 2000);
+  }
+}
+
+// ---------- Snow ----------
+// Snowflakes drift down around you up in the snowy country, skis throw up powder, and hot tubs
+// bubble.
+
+const snowfall = (() => {
+  const n = 700, pos = new Float32Array(n * 3);
+  for (let i = 0; i < n * 3; i++) pos[i] = (Math.random() - 0.5) * 50;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.14, transparent: true, opacity: 0, depthWrite: false }));
+  pts.frustumCulled = false;
+  scene.add(pts);
+  return pts;
+})();
+let powderTimer = 0, fizzTimer = 0;
+
+function updateSnow(dt, time) {
+  const c = camera.position;
+  const cold = Math.max(0, Math.min(1, (SNOW_LINE - c.z) / 12));
+  snowfall.material.opacity = cold * 0.85;
+  snowfall.visible = cold > 0;
+  if (cold > 0) {
+    const a = snowfall.geometry.attributes.position.array;
+    for (let i = 0; i < a.length; i += 3) {
+      a[i + 1] -= dt * (1.2 + (i % 7) * 0.12);
+      a[i] += Math.sin(time * 0.7 + i) * dt * 0.3;
+      if (a[i + 1] < -12) a[i + 1] += 24;
+    }
+    snowfall.geometry.attributes.position.needsUpdate = true;
+    snowfall.position.set(c.x, c.y, c.z);
+  }
+  // Powder spraying up behind the skis.
+  powderTimer -= dt;
+  if (player.skiing && powderTimer <= 0) {
+    powderTimer = 0.05;
+    effects.powder(player.pos.x, player.pos.y + 0.1, player.pos.z, Math.hypot(player.vel.x, player.vel.z) / 20);
+  }
+  // Bubbles in hot tubs nearby.
+  fizzTimer -= dt;
+  if (fizzTimer <= 0) {
+    fizzTimer = 0.12;
+    for (const k of world.lamps) {
+      const [x, y, z] = k.split(',').map(Number);
+      if ((x - c.x) ** 2 + (z - c.z) ** 2 > 400 || !BLOCKS[blockId(world.get(x, y, z))]?.hotTub) continue;
+      effects.fizz(x + 0.2 + Math.random() * 0.6, y + 0.55, z + 0.2 + Math.random() * 0.6);
+    }
+  }
+}
+
+// ---------- Teleporters ----------
+// Not just people: the ball, pets, vehicles and water balloons zoom through them too.
+
+let tpCache = { version: -1, list: [] };
+let ballTele = 0, carTele = 0, petOnTele = 0, petPortal = null;
+
+function teleporters() {
+  if (tpCache.version !== structures.version) tpCache = { version: structures.version, list: structures.ofType('teleporter') };
+  return tpCache.list;
+}
+
+// The teleporter whose lamp `p` is on top of (no higher than `above` over it).
+function teleporterAt(p, above = 0.25) {
+  const x = Math.floor(p.x), z = Math.floor(p.z);
+  return teleporters().find(t => t.x === x && t.z === z && p.y > t.y + 0.9 && p.y < t.y + 1 + above) || null;
+}
+
+// Sparkles where something went in and where it came out (`share`: everyone sees them; things
+// everyone's game moves by itself, like water balloons, don't need to tell anyone).
+function teleportFx(a, b, share = true) {
+  effects.sparkle(a.x, a.y, a.z, 25);
+  effects.sparkle(b.x, b.y, b.z, 35);
+  if (Math.max(loudness(a.x, a.y, a.z, 30), loudness(b.x, b.y, b.z, 30)) > 0) sounds.whoosh();
+  if (!share) return;
+  const r = v => Math.round(v * 100) / 100;
+  for (const q of [a, b]) net.send({ t: 'fx', kind: 'sparkle', x: r(q.x), y: r(q.y), z: r(q.z) });
+}
+
+function teleportThings(dt) {
+  if (teleporters().length < 2) return;
+  ballTele -= dt;
+  carTele -= dt;
+
+  // The ball: it pops out of the next one and rolls off (and a pet fetching it dives in after it).
+  if (ball.active && !ball.carried && ballTele <= 0) {
+    const tp = teleporterAt(ball.pos, 0.6), next = tp && structures.nextTeleporter(tp);
+    if (next) {
+      const from = ball.pos.clone();
+      const a = Math.random() * Math.PI * 2, sp = Math.max(2.5, Math.hypot(ball.vel.x, ball.vel.z));
+      ball.pos.set(next.x + 0.5, next.y + 1.5, next.z + 0.5);
+      ball.vel.set(Math.cos(a) * sp, 3.5, Math.sin(a) * sp);
+      ball.trailPts.length = 0;
+      ball.restTime = 0;
+      ballTele = 1.5;
+      teleportFx(from, ball.pos);
+      const m = myBody.pet?.mover;
+      if (m && myBody.brain?.state === 'fetch' && m.pos.distanceTo(from) < 25) petPortal = { t: 0.8, to: next };
+    }
+  }
+
+  // Our pet: when it walks onto one, or comes along after us (or after the ball).
+  const m = myBody.pet?.mover;
+  if (m && !myBody.seat) {
+    if (petPortal) {
+      petPortal.t -= dt;
+      if (petPortal.t <= 0) {
+        movePetTo(petPortal.to);
+        petPortal = null;
+      }
+    } else {
+      const tp = teleporterAt(m.pos, 0.3);
+      petOnTele = tp ? petOnTele + dt : 0;
+      const next = tp && petOnTele > 0.4 && structures.nextTeleporter(tp);
+      if (next) {
+        petOnTele = 0;
+        movePetTo(next);
+      }
+    }
+  }
+
+  // The vehicle we're driving: drive into one (or land on it) and it comes out of the next one,
+  // still going the same way.
+  if (myCar && carTele <= 0) {
+    const p = myCar.pos;
+    const tp = teleporters().find(t => Math.hypot(t.x + 0.5 - p.x, t.z + 0.5 - p.z) < 2.3 && p.y > t.y - 0.6 && p.y < t.y + 1.8);
+    const next = tp && structures.nextTeleporter(tp);
+    if (next) {
+      const spot = cars.spotNear(myCar, next.x + 0.5, next.y, next.z + 0.5);
+      carTele = 3;
+      if (!spot) hud.toast('🌀 There\'s no room for your vehicle at the next teleporter!');
+      else {
+        const from = p.clone();
+        p.set(...spot);
+        myCar.target.copy(p);
+        myCar.vel.y = 0;
+        teleportFx(from, p);
+        sendCarState();
+      }
+    }
+  }
+
+}
+
+// A water balloon flying into a teleporter comes out of the next one (every game moves water
+// balloons the same way by itself, so nobody needs telling).
+function teleportBalloon(f) {
+  if ((f.tele || 0) > f.age || teleporters().length < 2) return false;
+  const tp = teleporterAt(f.pos, 0.7), next = tp && structures.nextTeleporter(tp);
+  if (!next) return false;
+  const from = f.pos.clone();
+  f.pos.set(next.x + 0.5, next.y + 1.6, next.z + 0.5);
+  f.vel.y = Math.abs(f.vel.y) * 0.6 + 4;
+  f.tele = f.age + 0.6;
+  teleportFx(from, f.pos, false);
+  return true;
+}
+
+// Puts our pet beside a teleporter's lamp (not on it, or it would go straight back).
+function movePetTo(t) {
+  const m = myBody.pet.mover, from = m.pos.clone();
+  const side = Math.random() < 0.5 ? 1 : -1;
+  const spot = new THREE.Vector3(t.x + 0.5 + side, t.y + 1, t.z + 0.5);
+  m.place(spot);
+  myBody.pet.pos.copy(spot);
+  teleportFx(from, spot);
+}
+
 // ---------- Building ----------
 
 let hit = null;
@@ -1630,6 +1906,7 @@ let target = null; // { car } or { pet } when looking at one
 const lookDir = new THREE.Vector3();
 const eye = new THREE.Vector3();
 let hitState = { key: null, count: 0, timer: 0 };
+const GRASS_BLOCK = 1, DIRT_BLOCK = 2;
 let treeTipShown = false;
 
 // Cracks on a block you're hammering (it breaks on the third hit).
@@ -1724,6 +2001,12 @@ function blockGroup(x, y, z, v) {
 
 // Hammer hits: blocks crack on the first two hits and break on the third.
 function hitBlock() {
+  if (hit?.ground && hit.dig) return digGround(...hit.dig);
+  if (hit?.bedrock) {
+    sounds.crack();
+    hud.toast("🪨 That's bedrock, the very bottom of the world. Nothing can break it!");
+    return;
+  }
   if (!hit || hit.ground) {
     sounds.swing();
     return;
@@ -1774,8 +2057,57 @@ function hitBlock() {
   sounds.break();
 }
 
+// The hammer on the ground: three hits dig out the grass, down to the bedrock.
+function digGround(x, z) {
+  if (!canBuildAt(x, z)) {
+    notifyLand(x, z);
+    return;
+  }
+  const key = `ground:${x},${z}`;
+  if (hitState.key !== key) hitState = { key, count: 0, timer: 0 };
+  hitState.count++;
+  hitState.timer = 2.5;
+  const dirt = blockMaterial(materials, DIRT_BLOCK);
+  if (hitState.count < 3) {
+    sounds.crack();
+    particles.burst(x, -1, z, dirt, 3);
+    crack.position.set(x + 0.5, -0.5, z + 0.5);
+    crack.material.opacity = hitState.count === 1 ? 0.45 : 0.9;
+    crack.visible = true;
+    return;
+  }
+  hitState.key = null;
+  crack.visible = false;
+  setHoleHere(x, z, true);
+  net.send({ t: 'dig', x, z });
+  particles.burst(x, -1, z, dirt, 8);
+  sounds.break();
+  if (!digTipShown) {
+    digTipShown = true;
+    hud.toast('🕳️ You dug down to the bedrock! The grass grows back by itself in a couple of minutes (or fill it with Grass or Dirt).');
+  }
+}
+let digTipShown = false;
+
+// A Grass or Dirt block put into a hole fills it back in.
+function fillHole(item, x, z) {
+  if (!world.holes.has(`${x},${z}`)) return;
+  if (item !== GRASS_BLOCK && item !== DIRT_BLOCK) {
+    hud.toast('🕳️ Fill a hole with Grass or Dirt (or just wait: the grass grows back by itself).');
+    return;
+  }
+  if (!canBuildAt(x, z)) {
+    notifyLand(x, z);
+    return;
+  }
+  setHoleHere(x, z, false);
+  net.send({ t: 'fill', x, z });
+  sounds.place();
+}
+
 function placeBlock(item) {
   const def = BLOCKS[item];
+  if (hit.ground && hit.place[1] < 0) return fillHole(item, hit.place[0], hit.place[2]);
   if (def.shape === 'rail') return placeRail();
   if (def.shape === 'picture') return placePicture(item);
   // Furniture turns to face you, speed pads point the way you're looking, and each new
@@ -1889,7 +2221,11 @@ function useItem() {
   if (item === BUBBLES) return blowBubbles(1);
   if (item === CAMERA) return takePhoto();
   if (item === SHOWTIME) return fireworkShow();
-  if (target?.npc || item === JETPACK || item === TRAIL) return;
+  if (target?.npc || item === JETPACK || item === TRAIL || item === SKIS || item === SNEAKERS) return;
+  if (item === GOLDPAINT && !target?.car) {
+    hud.toast('✨ Point it at a car, boat or helicopter to paint it shiny gold!');
+    return;
+  }
   if (item === BALLOON) {
     const p = eye.clone().addScaledVector(lookDir, 0.8);
     letBalloonGo(p.x, p.y + 0.8, p.z, paintHex());
@@ -1901,6 +2237,7 @@ function useItem() {
     if (item === HAMMER) hitVehicle(target);
     else if (item === WRENCH) fixVehicle(target);
     else if (item === BRUSH) paintVehicle(target);
+    else if (item === GOLDPAINT) paintVehicle(target, 'gold');
     else if (item === SCRAPER) hud.toast('🎨 To give it a new color, use the Paint Brush (pick the color in the 🎨 Paint tab)');
     else requestEnter(target.car);
     return;
@@ -1968,6 +2305,8 @@ function interact() {
       if (def?.music) return changeNote(...hit.block, hit.value);
       if (def?.shop) return openShop();
       if (def?.piano) return playPiano(...hit.block);
+      if (def?.oven) return net.send({ t: 'job' });
+      if (def?.lift) return rideLift(...hit.block);
     }
     if (BLOCKS[blockId(hit.value)]?.turns && !floorOf(hit.value)) {
       // Turn a road line (or parking line) to run the other way.
@@ -2421,7 +2760,8 @@ function updateFlying(dt) {
       const steps = Math.max(1, Math.ceil((f.vel.length() * dt) / 0.2));
       for (let s = 0; s < steps && !done; s++) {
         f.pos.addScaledVector(f.vel, dt / steps);
-        if (f.pos.y < 0 || world.isSolid(Math.floor(f.pos.x), Math.floor(f.pos.y), Math.floor(f.pos.z))) done = true;
+        if (teleportBalloon(f)) continue;
+        if (world.isSolid(Math.floor(f.pos.x), Math.floor(f.pos.y), Math.floor(f.pos.z))) done = true;
         else if (f.by !== myId && !riding() && touches(f.pos, player.pos, player.crouching)) {
           done = true;
           splashed(f.by);
@@ -2498,7 +2838,7 @@ wandBox.renderOrder = 6;
 wandBox.visible = false;
 scene.add(wandBox);
 
-const wandCell = () => (hit ? (hit.ground ? hit.place.slice() : hit.block.slice()) : null);
+const wandCell = () => (hit ? (hit.ground ? [hit.place[0], Math.max(0, hit.place[1]), hit.place[2]] : hit.block.slice()) : null);
 
 function resetWand(keepClip = true) {
   wand.a = wand.b = null;
@@ -2990,6 +3330,8 @@ function frame(timestamp) {
     } else if (myRide) {
       player.pos.copy(cars.seat(myRide, mySeat()).position);
       player.vel.set(0, 0, 0);
+    } else if (updateLift(dt, active ? held : noKeys)) {
+      // Riding the ski lift.
     } else if (updateMove(dt)) {
       // Gliding into (or out of) a seat or a bed.
     } else if (seated) {
@@ -3002,7 +3344,14 @@ function frame(timestamp) {
       player.stick = touch?.enabled && active ? touch.stick : null;
       player.balloon = hud.item === BALLOON;
       player.jetpack = hud.item === JETPACK;
+      player.skis = hud.item === SKIS;
+      player.sneakers = hud.item === SNEAKERS;
       player.update(dt, active ? held : noKeys);
+      // (Never inside the ground, even if a hole grew back over us a moment ago.)
+      if (player.pos.y < 0 && world.isSolid(Math.floor(player.pos.x), -1, Math.floor(player.pos.z))) {
+        player.pos.y = 0;
+        player.vel.y = Math.max(0, player.vel.y);
+      }
       if (player.springed) {
         player.springed = false;
         sounds.boing();
@@ -3115,6 +3464,9 @@ function frame(timestamp) {
       else if (def?.speedPad && item !== HAMMER) hint = '⚡ Run (or drive) over it the way the arrows point!';
       else if (def?.shop && !tool) hint = '🛍️ Right-click to open the Luxe Store';
       else if (def?.piano && !tool) hint = '🎹 Right-click to play a tune';
+      else if (def?.oven && !tool) hint = job ? '🍕 You have a pizza to deliver! Follow the 🍕 marker' : '🍕 Right-click to take a pizza out for delivery (earn coins!)';
+      else if (def?.lift && !tool) hint = '🚡 Right-click to ride the ski lift';
+      else if (def?.hotTub && !tool) hint = '🛁 Right-click to sit in the hot tub';
       else if (def?.race === 'start' && item !== HAMMER) hint = '🏁 Start line: step off it to start the clock, then race to a Finish line!';
       else if (def?.race === 'finish' && item !== HAMMER) hint = '🏁 Finish line: cross it after a Start line to set a time';
       else if (s?.type === 'cannon') hint = '💥 Right-click to launch yourself!';
@@ -3125,6 +3477,9 @@ function frame(timestamp) {
       else if (item === BALLOON) hint = player.onGround ? '🎈 Jump off something high and float down! Click to let a balloon go' : '🎈 Wheee!';
       else if (item === CAMERA) hint = '📸 Click (or press P) to take a photo · H hides the HUD';
       else if (item === JETPACK) hint = player.jetting ? '🚀 WHOOSH!' : '🚀 Hold Space to blast off!';
+      else if (item === SKIS) hint = player.skiing ? '⛷️ W: carve where you look · S: slow down · Space: jump' : player.surface() ? '⛷️ Point downhill and go! (W carves, S slows)' : '⛷️ Skis work on snow (up north, past the town)';
+      else if (item === SNEAKERS) hint = '👟 Super fast running, super high jumps!';
+      else if (item === GOLDPAINT) hint = '✨ Point at a car, boat or helicopter and click to paint it gold';
       else if (item === TRAIL) hint = '🌈 Run around to leave a rainbow trail!';
       else if (item === SHOWTIME) hint = '🎇 Click for a fireworks show! (Best at night)';
     }
@@ -3153,6 +3508,9 @@ function frame(timestamp) {
     if (!riding() && (player.onGround || seated)) stepMusic(myId, player.pos);
     for (const a of avatars.list.values()) if (!a.seat) stepMusic(a.id, a.pos);
     updateRace();
+    lifts.update(time);
+    updateJob(dt, time);
+    updateSnow(dt, time);
     updateFlying(dt);
     popBubbles(dt);
     updateWand();
@@ -3172,7 +3530,7 @@ function frame(timestamp) {
       const rot = myCar ? [r(myCar.h), 0] : [r(player.yaw), r(player.pitch)];
       const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
       const balloon = hud.item === BALLOON && !riding() && !sleeping;
-      const flags = (sleeping ? FLAG.sleeping : 0) | (seated ? FLAG.sitting : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
+      const flags = (sleeping ? FLAG.sleeping : 0) | (seated || liftRide ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
         (player.jetting && !riding() ? FLAG.jet : 0) | (hud.item === TRAIL && !riding() ? FLAG.trail : 0) |
         (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
       net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item });
@@ -3204,8 +3562,9 @@ function frame(timestamp) {
     myBody.targetPitch = player.pitch;
     myBody.flying = player.flying;
     myBody.swing = view.swingT;
-    myBody.sitting = !!seated;
+    myBody.sitting = !!seated || !!liftRide;
     myBody.crouching = player.crouching && !riding();
+    myBody.pizza = !!job;
     myBody.balloon = hud.item === BALLOON && !riding() && !sleeping ? paintHex() : null;
     myBody.update(dt, time);
 
@@ -3387,6 +3746,9 @@ window.buildzone = {
   get undoStack() { return undoStack; },
   undo: () => undo(),
   useItem: () => useItem(),
+  respawn: () => respawn(),
+  get liftRide() { return liftRide; },
+  get job() { return job; },
   kickBall: () => kickBall(),
   throwBall: () => throwBall(),
   ballBoxes: r => ballBoxes(r),

@@ -122,6 +122,16 @@ export const BLOCKS = {
   84: { name: 'Disco Ball', shape: 'model', model: 'discoBall', disco: true, light: { color: 0xff7af0, power: 0.9, range: 22, always: true, y: 0.6 }, price: 20 },
   85: { name: 'Golden Trophy', shape: 'model', model: 'trophy', box: [0.3, 0, 0.3, 0.7, 0.8, 0.7], price: 12 },
   86: { name: 'Cash Register', shape: 'model', model: 'register', facing: true, shop: true, box: [0.15, 0, 0.2, 0.85, 0.5, 0.8] },
+  // The snowy country (and its ski resort)
+  87: { name: 'Snow', tex: 'snow' },
+  88: { name: 'Ice', tex: 'ice', glossy: true, slippery: true },
+  89: { name: 'Pine Needles', tex: 'pine', cutout: true },
+  90: { name: 'Ski Lift', shape: 'model', model: 'skiLift', facing: true, lift: true, box: [0.1, 0, 0.1, 0.9, 0.45, 0.9] },
+  91: { name: 'Snowman', shape: 'model', model: 'snowman', facing: true, box: [0.2, 0, 0.2, 0.8, 1, 0.8] },
+  // The pizza place (right-click the oven for a delivery job)
+  92: { name: 'Pizza Oven', shape: 'model', model: 'pizzaOven', facing: true, oven: true, box: [0, 0, 0, 1, 1, 1] },
+  // From the Luxe Store
+  93: { name: 'Hot Tub', shape: 'model', model: 'hotTub', hotTub: true, seat: 0.32, box: [0, 0, 0, 1, 0.55, 1], light: { color: 0x5fd8ff, power: 0.35, range: 6, always: true, y: 0.6 }, price: 60 },
 };
 
 // Furniture that faces you: which quarter turn makes its front (+z in the model) face
@@ -143,10 +153,13 @@ export const SHOP_TOOLS = {
   jetpack: { name: 'Jetpack', price: 40, about: 'Hold Space in the air to blast off with rocket flames!' },
   trail: { name: 'Rainbow Trail', price: 18, about: 'Run and leave a trail of rainbow sparkles behind you.' },
   showtime: { name: 'Firework Show', price: 30, about: 'One click launches a whole fireworks show around you.' },
+  goldpaint: { name: 'Gold Car Paint', price: 75, about: 'Paint any car, boat or helicopter shiny solid gold!' },
+  sneakers: { name: 'Super Sneakers', price: 90, about: 'Hold them to run super fast and jump super high!' },
 };
 export const SHOP_ABOUT = {
   82: 'A sparkling block of pure diamond.', 83: 'Sit like royalty (right-click to sit).',
   84: 'A mirror ball that fills the room with party light.', 85: 'For the champion of BuildZone!',
+  93: 'Warm, glowing and full of bubbles. Right-click to sit in it.',
 };
 // What's for sale, cheapest first: [item, price].
 export const SHOP_ITEMS = [
@@ -323,7 +336,12 @@ export function doorBox(meta, hinge = -1) {
 // ---------- World ----------
 
 // Playable area (block coordinates, inclusive).
-export const WORLD = { min: -128, max: 127, maxY: 63 };
+export const WORLD = { min: -224, max: 223, maxY: 63 };
+// North of this line (smaller z) it's the snowy country: the ground is snow.
+export const SNOW_LINE = -138;
+export const isSnowyAt = (x, z) => z < SNOW_LINE;
+// A hole dug in the ground grows its grass back after this long (if nobody is standing in it).
+export const HOLE_HEAL = 120;
 
 export const SPAWN = { x: 0.5, y: 0, z: 5.5 };
 

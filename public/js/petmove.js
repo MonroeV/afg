@@ -45,7 +45,7 @@ export class PetNav {
   }
 
   inside(x, y, z) {
-    return y >= 0 && y < 63 && x >= WORLD.min && x <= WORLD.max && z >= WORLD.min && z <= WORLD.max;
+    return y >= -1 && y < 63 && x >= WORLD.min && x <= WORLD.max && z >= WORLD.min && z <= WORLD.max;
   }
 
   // Room for a pet's body in the middle of this cell? (An open door or a railing along the
@@ -64,7 +64,7 @@ export class PetNav {
 
   // Something to stand on at the bottom of this cell (the ground, or the top of a block).
   support(x, y, z) {
-    if (y === 0) return true;
+    if (y === 0 && !this.world.holes.has(`${x},${z}`)) return true;
     return this.cached(1, x, y, z, () => {
       const out = this.boxes;
       out.length = 0;
@@ -96,7 +96,7 @@ export class PetNav {
   // The spot a pet would stand on at (or below) a point: where it lands if it falls.
   landing(p, below = 64) {
     const x = Math.floor(p.x), z = Math.floor(p.z), top = Math.min(62, Math.floor(p.y + 0.05));
-    for (let y = top; y >= Math.max(0, top - below); y--) if (this.standable(x, y, z)) return [x, y, z];
+    for (let y = top; y >= Math.max(-1, top - below); y--) if (this.standable(x, y, z)) return [x, y, z]; // (-1: down a hole)
     return null;
   }
 

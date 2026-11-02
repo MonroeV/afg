@@ -23,15 +23,18 @@ export const CAMERA = 'camera';
 export const JETPACK = 'jetpack';
 export const TRAIL = 'trail';
 export const SHOWTIME = 'showtime';
-export const TOOLS = [HAMMER, BRUSH, SCRAPER, WRENCH, BALL, FIREWORKS, CLAIM, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME];
+export const GOLDPAINT = 'goldpaint';
+export const SNEAKERS = 'sneakers';
+export const SKIS = 'skis';
+export const TOOLS = [HAMMER, BRUSH, SCRAPER, WRENCH, BALL, FIREWORKS, CLAIM, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, SKIS, JETPACK, TRAIL, SHOWTIME, GOLDPAINT, SNEAKERS];
 // Things you have to buy at the Luxe Store before you can use them.
 export const fromStore = item => (typeof item === 'number' ? !!BLOCKS[item]?.price : !!SHOP_TOOLS[item]);
 export const ALL_ITEMS = [...TOOLS, ...BLOCK_IDS];
 
 // The tabs of the item menu. Blocks not listed anywhere go under Blocks (or Lights).
-const HOME = [60, 61, 62, 64, 63, 65, 66, 67, 68, 21, 53, 54, 25, 35, 20, 73, 74, 75, 76, 77, 78, 79, 80, 81, 86];
-const TOWN = [22, 23, 56, 24, 58, 27, 36, 1, 7, 8];
-const FUN = [JETPACK, TRAIL, SHOWTIME, 82, 83, 84, 85, BALL, FIREWORKS, WATER_BALLOON, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28];
+const HOME = [60, 61, 62, 64, 63, 65, 66, 67, 68, 21, 53, 54, 25, 35, 20, 73, 74, 75, 76, 77, 78, 79, 80, 81, 86, 92];
+const TOWN = [22, 23, 56, 24, 58, 27, 36, 1, 7, 8, 87, 88, 89, 91, 90];
+const FUN = [SNEAKERS, GOLDPAINT, 93, JETPACK, SHOWTIME, 83, 84, TRAIL, 82, 85, SKIS, BALL, FIREWORKS, WATER_BALLOON, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28];
 const listed = new Set([...HOME, ...TOWN, ...FUN]);
 const visible = i => typeof i !== 'number' || !BLOCKS[i].hidden;
 export const TABS = [
@@ -56,7 +59,9 @@ export const SEARCH_WORDS = {
   68: 'toy bear hug', 69: 'piano song note sound', 73: 'office table', 74: 'office seat sit', 75: 'pc screen office', 76: 'office drawers',
   77: 'office water drink', 78: 'office board chart', 79: 'music play keys', 80: 'aquarium fish', 81: 'gold', 82: 'gem shiny store',
   83: 'gold king queen chair store', 84: 'party light store', 85: 'gold cup winner store', 86: 'shop store buy',
-  [JETPACK]: 'fly rocket store', [TRAIL]: 'rainbow sparkle store', [SHOWTIME]: 'fireworks show store', 70: 'boost fast arrow run', 71: 'race timer go', 72: 'race timer end', 19: 'trampoline jump',
+  [JETPACK]: 'fly rocket store', [SKIS]: 'ski snow winter slope mountain', [GOLDPAINT]: 'gold car paint store vehicle',
+  [SNEAKERS]: 'shoes run fast jump high store', 87: 'winter white cold', 88: 'skate slippery winter cold', 89: 'tree pine christmas snow',
+  90: 'chair lift ride cable ski', 91: 'winter snow', 92: 'pizza job work cook', 93: 'hot tub bath spa bubbles store', [TRAIL]: 'rainbow sparkle store', [SHOWTIME]: 'fireworks show store', 70: 'boost fast arrow run', 71: 'race timer go', 72: 'race timer end', 19: 'trampoline jump',
   36: 'pool lake', 48: 'torch', 45: 'torch', 21: 'garage', 54: 'fence rail',
 };
 // The hammer always lives in slot 1.
@@ -72,6 +77,7 @@ export function itemName(item) {
   if (item === BRUSH) return 'Paint Brush';
   if (item === SCRAPER) return 'Paint Scraper';
   if (item === WRENCH) return 'Wrench';
+  if (item === SKIS) return 'Skis';
   if (item === WATER_BALLOON) return 'Water Balloons';
   if (item === BUBBLES) return 'Bubble Wand';
   if (item === BALLOON) return 'Balloon';
@@ -117,6 +123,66 @@ export function makeIcon(item, textures, paint = 1) {
     return canvas;
   }
 
+  if (item === SKIS) {
+    ctx.translate(32, 32);
+    for (const [x, c] of [[-9, '#e53935'], [9, '#1e88e5']]) {
+      ctx.save();
+      ctx.translate(x, 0);
+      ctx.rotate(0.35);
+      ctx.fillStyle = c;
+      ctx.fillRect(-3.5, -24, 7, 50);
+      ctx.beginPath();
+      ctx.arc(0, -24, 3.5, Math.PI, 0);
+      ctx.fill();
+      ctx.fillStyle = '#222';
+      ctx.fillRect(-4, 2, 8, 6);
+      ctx.restore();
+    }
+    ctx.strokeStyle = '#9aa0a6';
+    ctx.lineWidth = 2;
+    for (const x of [-22, 22]) {
+      ctx.beginPath();
+      ctx.moveTo(x, -26);
+      ctx.lineTo(x * 0.8, 26);
+      ctx.stroke();
+    }
+    return canvas;
+  }
+  if (item === GOLDPAINT) {
+    const g = ctx.createLinearGradient(18, 0, 46, 0);
+    g.addColorStop(0, '#a87a12');
+    g.addColorStop(0.45, '#ffe58a');
+    g.addColorStop(1, '#b8860b');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.roundRect(19, 20, 26, 38, 5);
+    ctx.fill();
+    ctx.fillStyle = '#e8e8e8';
+    ctx.fillRect(25, 12, 14, 9);
+    ctx.fillStyle = '#333';
+    ctx.fillRect(30, 7, 5, 6);
+    ctx.fillStyle = '#fff6c8';
+    for (const [x, y] of [[14, 8], [9, 14], [16, 16]]) {
+      ctx.beginPath();
+      ctx.arc(x, y, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return canvas;
+  }
+  if (item === SNEAKERS) {
+    ctx.translate(32, 36);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(-24, 10, 48, 7); // the sole
+    ctx.fillStyle = '#29b6f6';
+    ctx.beginPath();
+    ctx.moveTo(-24, 10); ctx.lineTo(-22, -6); ctx.lineTo(-6, -10); ctx.lineTo(2, -2); ctx.lineTo(22, 2); ctx.lineTo(24, 10);
+    ctx.fill();
+    ctx.fillStyle = '#fdd835'; // a lightning bolt
+    ctx.beginPath();
+    ctx.moveTo(-6, -6); ctx.lineTo(-12, 3); ctx.lineTo(-7, 3); ctx.lineTo(-11, 10); ctx.lineTo(-1, 0); ctx.lineTo(-6, 0);
+    ctx.fill();
+    return canvas;
+  }
   if (item === WRENCH) {
     ctx.translate(32, 32);
     ctx.rotate(Math.PI / 4);
@@ -545,6 +611,27 @@ export class ViewModel {
       obj.scale.setScalar(0.9);
       obj.position.set(0.04, -0.02, -0.05);
       obj.rotation.set(0.35, 0.5, 0.25);
+    } else if (item === SKIS) {
+      obj = new THREE.Group();
+      [[-0.05, 0xe53935], [0.05, 0x1e88e5]].forEach(([x, c]) => {
+        const ski = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.5, 0.012), new THREE.MeshStandardMaterial({ color: c, roughness: 0.4 }));
+        ski.position.x = x;
+        obj.add(ski);
+      });
+      obj.rotation.set(0.5, 0.3, -0.25);
+    } else if (item === GOLDPAINT) {
+      obj = new THREE.Group();
+      obj.add(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.2, 16), new THREE.MeshStandardMaterial({ color: 0xf2c14e, metalness: 1, roughness: 0.2 })));
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.05, 12), new THREE.MeshStandardMaterial({ color: 0xeeeeee }));
+      cap.position.y = 0.12;
+      obj.add(cap);
+      obj.rotation.set(0.2, 0, -0.2);
+    } else if (item === SNEAKERS) {
+      obj = new THREE.Group();
+      obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.025, 0.26).translate(0, -0.03, 0), new THREE.MeshStandardMaterial({ color: 0xffffff })));
+      obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.07, 0.24).translate(0, 0.02, 0.01), new THREE.MeshStandardMaterial({ color: 0x29b6f6, roughness: 0.6 })));
+      obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.102, 0.02, 0.1).translate(0, 0.03, 0.02), new THREE.MeshStandardMaterial({ color: 0xfdd835 })));
+      obj.rotation.set(0.3, 0.8, 0);
     } else if (item === WATER_BALLOON) {
       obj = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 12).scale(1, 1.15, 1), new THREE.MeshStandardMaterial({ color: 0x42a5f5, roughness: 0.15, transparent: true, opacity: 0.85 }));
       obj.position.y = 0.05;

@@ -1,14 +1,18 @@
 // The game "room": the world, players, vehicles, land claims, growing trees and the clock.
 // The Node server runs one of these for everybody. When there is no server,
 // the browser runs its own copy so single player works exactly the same way.
-import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, isExclusive, DOOR_OPEN, DAY_LENGTH, WORLD, isNightTime, SHOP_ITEMS, BLOCKS, SHOP_TOOLS } from './blocks.js';
+import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, isExclusive, DOOR_OPEN, DOOR_TOP, DAY_LENGTH, WORLD, isNightTime, SHOP_ITEMS, BLOCKS, SHOP_TOOLS, HOLE_HEAL } from './blocks.js';
 import { sanitizeLook, cleanName } from './avatar.js';
 import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines, buildStore, furnishHouses, furnishTowers } from './worldgen.js';
 import { NpcCrew } from './npcs.js';
+import { buildFrontier, buildPizzeria } from './frontier.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot } from './vehicles.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
 
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
+const MAX_HOLES = 3000; // holes in the ground at once
+const JOB_TIP = 2; // extra coins for a quick pizza delivery
+const DOOR = 21;
 const COIN_COUNT = 26; // gold coins lying around the world at once
 const DAILY_BONUS = 10;
 const RACE_PRIZE = 3;
@@ -39,6 +43,8 @@ export class GameRoom {
     this.races = {}; // finish line "x,y,z" -> best times [{ name, key, time }]
     this.places = null; // where the store, the tower lobby and the town square are (for the NPCs)
     this.wallets = {}; // name key -> { coins, owned: [items], day }
+    this.holes = new Map(); // "x,z" -> when the ground there was dug out (it grows back)
+    this.jobs = new Map(); // client id -> the pizza they're delivering: { x, z, reward, par, at }
     this.coins = new Map(); // id -> [x, y, z, value]: gold coins to pick up
     this.coinTimers = []; // when to put new coins out
     this.nextCoin = 1;
@@ -47,11 +53,16 @@ export class GameRoom {
     this.nextVehicleId = 1;
     this.nextHomeId = 1;
     this.time = DAY_LENGTH * 0.08; // start in the morning
-    this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0 };
+    this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0, holes: 5 };
     this.isSolid = (x, y, z) =>
       y < 0 || x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max ||
       blocksVehicles(this.world.get(blockKey(x, y, z)) || 0);
     this.isWater = (x, y, z) => isWaterBlock(this.world.get(blockKey(x, y, z)) || 0);
+  }
+
+  // The ground (y = -1) is solid unless it's been dug out; the bedrock under it always is.
+  groundSolid(x, y, z) {
+    return y < -1 || (y === -1 && !this.holes.has(`${x},${z}`));
   }
 
   // ---------- World data ----------
@@ -59,6 +70,7 @@ export class GameRoom {
   generate() {
     const { blocks, cars, places, claims } = generateWorld();
     this.world.clear();
+    this.holes.clear();
     for (const [x, y, z, v] of blocks) this.world.set(blockKey(x, y, z), v);
     this.setHomes(cars);
     this.places = places;
@@ -87,7 +99,7 @@ export class GameRoom {
     const home = {
       id: id || this.nextHomeId++,
       kind: VEHICLES[kind] ? kind : 'car',
-      color: /^#[0-9a-f]{6}$/i.test(color) ? color : ['#e53935', '#1e88e5', '#fdd835', '#43a047', '#ff7043', '#8e24aa', '#ec407a', '#26c6da'][this.homes.size % 8],
+      color: /^#[0-9a-f]{6}$/i.test(color) || color === 'gold' ? color : ['#e53935', '#1e88e5', '#fdd835', '#43a047', '#ff7043', '#8e24aa', '#ec407a', '#26c6da'][this.homes.size % 8],
       x: num(x), y: num(y), z: num(z), h: num(h),
     };
     this.nextHomeId = Math.max(this.nextHomeId, home.id + 1);
@@ -131,6 +143,7 @@ export class GameRoom {
       this.upgradeTo5();
       this.upgradeTo6();
       this.upgradeTo7();
+      this.upgradeTo8();
       this.populate();
       return true;
     }
@@ -153,11 +166,16 @@ export class GameRoom {
       if (w && Number.isFinite(w.coins)) this.wallets[k] = { coins: Math.max(0, Math.floor(w.coins)), owned: Array.isArray(w.owned) ? w.owned.filter(i => SHOP_ITEMS.some(([s]) => s === i)) : [], day: w.day || '' };
     }
     this.places = data.places && typeof data.places === 'object' ? data.places : null;
+    this.holes = new Map();
+    for (const h of Array.isArray(data.holes) ? data.holes : []) {
+      if (Array.isArray(h) && Number.isInteger(h[0]) && Number.isInteger(h[1])) this.holes.set(`${h[0]},${h[1]}`, Number.isFinite(h[2]) ? h[2] : Date.now());
+    }
     this.expireClaims();
     if (data.version < 4) this.upgradeLamps();
     if (data.version < 5) this.upgradeTo5();
     if (data.version < 6) this.upgradeTo6();
     if (data.version < 7) this.upgradeTo7();
+    if (data.version < 8) this.upgradeTo8();
     this.populate();
     return true;
   }
@@ -181,6 +199,25 @@ export class GameRoom {
     furnishHouses({ each, get, set, canUse });
     const towers = furnishTowers({ each, get, set, canUse });
     this.places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers.find(t => t.lobby)?.lobby || null };
+    this.onDirty();
+  }
+
+  // Worlds saved before version 8 (the bigger map): the Pizza Palace in town, the ski resort up
+  // north, and the woods with their cabins, lake and rocky mountain out west. All of it on empty
+  // land nobody has claimed (out past the old edge of the world, or else only where it's empty).
+  upgradeTo8() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const canUse = this.freeLand();
+    const pizza = buildPizzeria({ get, set, canUse });
+    if (pizza) this.claims.push(pizza.claim);
+    const frontier = buildFrontier({ get, set, canUse, canPave: (x, z) => !claimAt(this.claims, x, z) });
+    this.claims.push(...frontier.claims);
+    for (const c of frontier.cars) this.spawn(this.addHome(c));
+    this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), pizza: pizza?.place || null, lodge: frontier.places.lodge };
+    this.log(`Added the ski resort, the woods and the Pizza Palace (${frontier.count} blocks)`);
     this.onDirty();
   }
 
@@ -230,6 +267,7 @@ export class GameRoom {
       races: Object.fromEntries(Object.entries(this.races).filter(([k]) => this.isFinish(k))),
       places: this.places,
       wallets: this.wallets,
+      holes: [...this.holes].map(([k, t]) => [...k.split(',').map(Number), t]),
     };
   }
 
@@ -238,11 +276,24 @@ export class GameRoom {
     return blockId(itemOf(v)) === RACE_FINISH || blockId(floorOf(v)) === RACE_FINISH;
   }
 
+  // Every block as one long list: x, y, z, value, x, y, z, value… (for saving, and for sending
+  // the world to someone joining). Each block's x, y, z are remembered, so this is quick even on a
+  // little computer like a Raspberry Pi.
   flatBlocks() {
-    const out = [];
+    const out = new Array(this.world.size * 4);
+    const coords = (this.coords ??= new Map());
+    if (coords.size > this.world.size * 2 + 50000) coords.clear();
+    let i = 0;
     for (const [k, v] of this.world) {
-      const [x, y, z] = k.split(',');
-      out.push(+x, +y, +z, v);
+      let c = coords.get(k);
+      if (!c) {
+        c = k.split(',').map(Number);
+        coords.set(k, c);
+      }
+      out[i++] = c[0];
+      out[i++] = c[1];
+      out[i++] = c[2];
+      out[i++] = v;
     }
     return out;
   }
@@ -278,6 +329,7 @@ export class GameRoom {
 
   disconnect(client) {
     this.clients.delete(client.id);
+    this.jobs.delete(client.id);
     if (!client.joined) return;
     this.leaveVehicle(client);
     this.seen(client.name);
@@ -318,6 +370,7 @@ export class GameRoom {
 
   owns(client, v) {
     const owned = this.wallet(client).owned;
+    if (typeof v === 'string') return !SHOP_TOOLS[v] || owned.includes(v);
     return [itemOf(v) & 255, floorOf(v) & 255].every(id => !BLOCKS[id]?.price || owned.includes(id));
   }
 
@@ -371,6 +424,7 @@ export class GameRoom {
       dayLength: DAY_LENGTH,
       world: this.flatBlocks(),
       paints: [...this.paints],
+      holes: [...this.holes.keys()].map(k => k.split(',').map(Number)),
       cars: [...this.vehicles.values()].map(publicVehicle),
       claims: this.claims,
       players: [...this.clients.values()].filter(o => o.joined && o !== client).map(publicPlayer),
@@ -686,7 +740,9 @@ export class GameRoom {
     // The Paint Brush on a vehicle: a new color, for good (it comes back that color, too).
     car_paint(client, msg) {
       const v = this.vehicles.get(msg.id);
-      const color = typeof msg.color === 'string' && /^#[0-9a-f]{6}$/i.test(msg.color) ? msg.color.toLowerCase() : null;
+      // (Shiny gold is from the Luxe Store: only for people who bought the Gold Car Paint.)
+      const gold = msg.color === 'gold' && this.owns(client, 'goldpaint');
+      const color = gold ? 'gold' : typeof msg.color === 'string' && /^#[0-9a-f]{6}$/i.test(msg.color) ? msg.color.toLowerCase() : null;
       if (!v || !color || !this.allow(client, 'carPaint', 4, 6)) return;
       if (!this.nearVehicle(client, v)) return client.send({ t: 'car_color', id: v.id, color: v.color });
       v.color = color;
@@ -760,6 +816,47 @@ export class GameRoom {
       this.onDirty();
     },
 
+    // Right-clicked the pizza oven: take a pizza out for delivery.
+    job(client) {
+      const p = this.places?.pizza;
+      if (!p || !this.allow(client, 'job', 1, 3) || Math.hypot(client.pos[0] - p.x, client.pos[2] - p.z) > 12) return;
+      this.startJob(client);
+    },
+
+    // Got there with the pizza.
+    job_done(client) {
+      const job = this.jobs.get(client.id);
+      if (!job || !this.allow(client, 'job', 1, 3)) return;
+      if (Math.hypot(client.pos[0] - job.x, client.pos[2] - job.z) > 4.5) return;
+      this.jobs.delete(client.id);
+      const fast = (Date.now() - job.at) / 1000 <= job.par;
+      const coins = job.reward + (fast ? JOB_TIP : 0);
+      this.wallet(client).coins += coins;
+      this.sendWallet(client);
+      client.send({ t: 'job_done', coins, fast });
+      this.log(`${client.name} delivered a pizza (+${coins} coins)`);
+      this.onDirty();
+    },
+
+    job_quit(client) {
+      this.jobs.delete(client.id);
+    },
+
+    // The hammer dug out the ground (down to the bedrock), or someone filled a hole back in.
+    dig(client, { x, z }) {
+      if (!this.canDig(client, x, z) || this.holes.has(`${x},${z}`) || this.holes.size >= MAX_HOLES) return client.send({ t: 'hole', x, z, on: this.holes.has(`${x},${z}`) });
+      this.holes.set(`${x},${z}`, Date.now());
+      this.broadcast({ t: 'hole', x, z, on: true });
+      this.onDirty();
+    },
+
+    fill(client, { x, z }) {
+      if (!this.canDig(client, x, z) || !this.holes.has(`${x},${z}`)) return client.send({ t: 'hole', x, z, on: this.holes.has(`${x},${z}`) });
+      this.holes.delete(`${x},${z}`);
+      this.broadcast({ t: 'hole', x, z, on: false });
+      this.onDirty();
+    },
+
     unclaim(client) {
       const key = nameKey(client.name);
       if (!this.claims.some(c => c.key === key)) return;
@@ -775,11 +872,97 @@ export class GameRoom {
     },
   };
 
+  // ---------- Pizza delivery ----------
+  // Chef Rosa (or the oven at the Pizza Palace) gives you a pizza and a house to take it to.
+  // Get it there and you're paid in coins, with a tip if you're quick.
+
+  // Spots just outside the front doors of houses (and cabins, and anywhere else with a door).
+  deliverySpots() {
+    const now = Date.now();
+    if (this.spotsCache && now - this.spotsCache.at < 5 * 60 * 1000) return this.spotsCache.list;
+    const list = [];
+    const covered = (x, z) => {
+      for (let y = 1; y < 10; y++) if (isSolidBlock(this.get(x, y, z))) return true;
+      return false;
+    };
+    for (const [k, v] of this.world) {
+      if (blockId(itemOf(v)) !== DOOR || (itemOf(v) >> 8) & DOOR_TOP) continue; // (bottom halves of doors)
+      const [x, y, z] = k.split(',').map(Number);
+      if (y !== 0) continue;
+      const along = ((itemOf(v) >> 8) & 1) === 0 ? [1, 0] : [0, 1];
+      // Not garage doors (three or more doors side by side).
+      const beside = [-1, 1].filter(s => blockId(itemOf(this.get(x + along[0] * s, 0, z + along[1] * s))) === DOOR).length;
+      if (beside > 1) continue;
+      // Outside is the side that's open to the sky a couple of steps out (a roof can hang over
+      // the doorstep).
+      const open = (cx, cz) => !isSolidBlock(this.get(cx, 0, cz)) && !isSolidBlock(this.get(cx, 1, cz));
+      const out = [[along[1], along[0]], [-along[1], -along[0]]].find(([dx, dz]) =>
+        open(x + dx, z + dz) && open(x + 2 * dx, z + 2 * dz) && !covered(x + 2 * dx, z + 2 * dz));
+      if (out) list.push([x + out[0] + 0.5, z + out[1] + 0.5]);
+    }
+    this.spotsCache = { at: now, list };
+    return list;
+  }
+
+  startJob(client) {
+    const pizza = this.places?.pizza;
+    if (!pizza) return;
+    const job = this.jobs.get(client.id);
+    if (job) {
+      client.send({ t: 'job', ...job, again: true });
+      this.npcs.chefSays(`That pizza's getting cold, ${client.name}! Follow the 🍕 marker!`);
+      return;
+    }
+    const spots = this.deliverySpots().filter(([x, z]) => {
+      const d = Math.hypot(x - pizza.x, z - pizza.z);
+      return d > 25 && d < 170 && !claimAt(this.claims, x, z)?.permanent;
+    });
+    if (!spots.length) return this.npcs.chefSays('No orders right now. Come back soon!');
+    const [x, z] = spots[Math.floor(Math.random() * spots.length)];
+    const d = Math.hypot(x - pizza.x, z - pizza.z);
+    const next = { x, z, reward: 3 + Math.round(d / 35), par: Math.round(d / 4 + 25), at: Date.now() };
+    this.jobs.set(client.id, next);
+    client.send({ t: 'job', ...next });
+    this.npcs.chefSays(`Hot pizza, ${client.name}! Take it to the house with the 🍕 marker. Quick, for a tip!`);
+  }
+
+  // ---------- Holes in the ground ----------
+
+  canDig(client, x, z) {
+    if (!Number.isInteger(x) || !Number.isInteger(z) || !inBounds(x, 0, z)) return false;
+    if (!this.allow(client, 'dig', 4, 8)) return false;
+    if (this.world.has(blockKey(x, 0, z))) return false; // (only bare ground, not under a road or a building)
+    if (Math.hypot(client.pos[0] - x - 0.5, client.pos[2] - z - 0.5) > 12) return false;
+    if (!canBuild(this.claims, client.name, x, z)) {
+      if (this.allow(client, 'claimMsg', 0.2, 1)) client.send({ t: 'chat', system: true, text: `🚧 This land belongs to ${claimAt(this.claims, x, z).owner}. Only they can dig here.` });
+      return false;
+    }
+    return true;
+  }
+
+  // Bare bedrock doesn't stay that way for long: the grass grows back over it (but not while
+  // someone, or a vehicle, is down in the hole).
+  healHoles() {
+    const now = Date.now();
+    for (const [k, t] of this.holes) {
+      if (now - t < HOLE_HEAL * 1000) continue;
+      const [x, z] = k.split(',').map(Number);
+      const inside = p => Math.floor(p[0]) === x && Math.floor(p[2]) === z && p[1] < 0.5;
+      if ([...this.clients.values()].some(c => c.joined && inside(c.pos))) {
+        this.holes.set(k, now - HOLE_HEAL * 1000 + 10000); // try again in a little while
+        continue;
+      }
+      this.holes.delete(k);
+      this.broadcast({ t: 'hole', x, z, on: false, grow: true });
+      this.onDirty();
+    }
+  }
+
   // ---------- Growing trees ----------
 
   // A lone log on the ground (with room above it) is a sapling that grows into a tree.
   maybePlant(x, y, z) {
-    const below = y === 0 ? GRASS : blockId(this.get(x, y - 1, z));
+    const below = y === 0 ? (this.holes.has(`${x},${z}`) ? 0 : GRASS) : blockId(this.get(x, y - 1, z));
     if (below !== GRASS && below !== DIRT) return;
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (isSolidBlock(this.get(x + dx, y, z + dz))) return;
     for (let k = 1; k <= 3; k++) if (this.get(x, y + k, z)) return;
@@ -853,6 +1036,10 @@ export class GameRoom {
     if (t.names <= 0) {
       t.names = 60;
       for (const c of this.clients.values()) if (c.joined) this.seen(c.name);
+    }
+    if (t.holes <= 0) {
+      t.holes = 5;
+      if (this.holes.size) this.healHoles();
     }
     if (t.expire <= 0) {
       t.expire = 600;

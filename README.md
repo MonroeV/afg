@@ -5,6 +5,32 @@ customize your character, drive cars, build anything and play with friends.
 
 - **Towns to explore**: a main town around the spawn square plus four villages, joined by roads,
   with houses you can walk into, shops, parks, playgrounds, a beach and street lamps
+- **A big world beyond the towns** (448 × 448 blocks):
+  - **Up north, the snowy country** (the ground turns to snow and snowflakes start to fall): a
+    **ski resort** with a big snowy mountain and a long ski run, a **ski lift** with chairs going
+    up and down its cable (right-click the chair at the bottom to ride to the top, Space to hop
+    off), a cozy log **lodge** (a crackling fireplace with couches round it, a hot cocoa bar,
+    Coach Frost to give you tips), a slippery **ice rink**, snowy pine trees and snowmen
+  - **Out west, the woods**: four **log cabins** along a forest road (beds, tables, chimneys,
+    woodpiles; nobody owns them, so claim one with the Land Flag and move in!), a campfire, a
+    **big lake** with sandy shores, a dock and boats, and a **rocky mountain** with a snowy top
+  - **Lots of open land** to the east and south, with trees and flowers, for building
+  - Roads lead out to all of it
+- **Skis** (🎉 Fun tab): on snow they glide and pick up speed downhill. Hold W to carve toward
+  where you're looking, A/D to lean, S to snowplough (slow down), Space to jump. Powder sprays up
+  behind you. **Ice** is slippery even without skis
+- **A job at the Pizza Palace**: talk to Chef Rosa (or right-click the pizza oven) and she gives
+  you a hot pizza to deliver. A glowing beam with a 🍕 shows which house it goes to, and a banner
+  shows how far it is and how long you have for a tip. Walk, run or drive there (you carry the
+  pizza box, so everyone can see you're on the job) and get 4 to 8 coins, plus 2 more if you're quick
+- **Dig into the ground**: three hits with the hammer dig out the grass, down to the **bedrock**
+  (which nothing can break). Holes are one block deep. Fill one back in with a Grass or Dirt
+  block, or just wait: after a couple of minutes the grass grows back by itself (never while
+  someone's standing in the hole). Digging on someone else's land isn't allowed
+- **Teleporters carry things too**: the ball (it pops out of the next one and rolls off, and a pet
+  fetching it dives in after it), your pet (it walks in, or comes along when you go through),
+  water balloons in flight, and vehicles: drive into a teleporter (or land the helicopter on it)
+  and you come out of the next one still going the same way
 - **Boats on a lake**: a lake with a wooden dock (railings, lanterns at the end) and three
   motorboats tied up beside it. Boats float on any water, even water you place yourself, so you
   can build your own pond or canal. They drift a little in turns, lift their bow at speed, leave a
@@ -107,11 +133,14 @@ customize your character, drive cars, build anything and play with friends.
   Store**, a fancy shop beside one of the roads out of town: talk to Penny at the counter (or
   right-click the cash register) to see what's for sale. Things you can only get there: the
   **Jetpack** (hold Space to blast off), the **Rainbow Trail**, the **Firework Show** (one click,
-  a whole show), the **Diamond Block**, the **Golden Throne**, the **Disco Ball** and the
-  **Golden Trophy**. What you've bought shows up at the top of the 🎉 Fun tab. Your coins belong to
-  your name, like your land
-- **People in town**: Penny runs the Luxe Store, Rex sits at the tower's reception desk and Mayor
-  Maple strolls around the town square. They say hello when you come near (in a speech bubble),
+  a whole show), the **Diamond Block**, the **Golden Throne**, the **Disco Ball**, the
+  **Golden Trophy**, and the big ones: a bubbling **Hot Tub** (60 coins; right-click to sit in it),
+  **Gold Car Paint** (75; click any vehicle to make it shiny solid gold, for good) and **Super
+  Sneakers** (90; hold them to run super fast and jump super high). What you've bought shows up at
+  the top of the 🎉 Fun tab. Your coins belong to your name, like your land
+- **People in town**: Penny runs the Luxe Store, Rex sits at the tower's reception desk, Mayor
+  Maple strolls around the town square, Chef Rosa runs the Pizza Palace and Coach Frost looks
+  after the ski lodge. They say hello when you come near (in a speech bubble),
   walk over to pet your pet, love your cool stuff ("A JETPACK?!"), cheer at fireworks, gasp at
   exploding cars, dance when you dance, and complain when you hit them with a water balloon.
   Right-click them for tips
@@ -151,8 +180,9 @@ customize your character, drive cars, build anything and play with friends.
   of a build and pastes it somewhere else (scroll to turn it around). Up to 4096 blocks at a time,
   and Z undoes your last Fill or Paste. Plus a Camera (or press P) that saves a photo of what you
   see to your Downloads, and H to hide the HUD for clean photos and videos
-- **86 kinds of blocks** with realistic textures: brick, wood, glass, tinted glass, marble, roads,
-  parking lines, flowers, rainbow, gold, mirrors, lamps, ladders, railings, bookshelves…
+- **93 kinds of blocks** with realistic textures: brick, wood, glass, tinted glass, marble, roads,
+  parking lines, flowers, rainbow, gold, mirrors, lamps, ladders, railings, bookshelves, snow, ice,
+  pine needles, snowmen, ski lifts, pizza ovens…
 - **Sounds that don't get old**: every sound is a little different each time, every vehicle has its
   own engine and horn note, and a steady engine or helicopter hum slowly settles into the
   background (it comes right back when you speed up, slow down or climb)
@@ -174,7 +204,8 @@ customize your character, drive cars, build anything and play with friends.
 | Left click with the Hammer | Break a block: it takes 3 hits (glass and carpet break in 1), so you don't break things by accident |
 | Left click with the Wrench | Fix a damaged vehicle (hold to keep fixing) |
 | Left click a vehicle with the Paint Brush | Paint it your paint color |
-| Right click | Interact: open and close doors, switch lights on and off, turn road lines, get in vehicles, pet pets, sit on chairs and couches, sleep in beds, change pictures and music notes, hug teddy bears, fire cannons |
+| Left click the ground with the Hammer | Dig it out (3 hits), down to the bedrock |
+| Right click | Interact: open and close doors, switch lights on and off, turn road lines, get in vehicles, pet pets, sit on chairs and couches, sleep in beds, change pictures and music notes, hug teddy bears, fire cannons, ride ski lifts, get a pizza delivery job |
 | Middle click | Copy the block you're looking at |
 | 1–9 or mouse wheel | Choose hotbar slot. Slot 1 always holds the Hammer; anything you pick while slot 1 is selected goes in slot 2 |
 | Q | Swap back to the item you were holding before |
@@ -217,6 +248,12 @@ down. Steer with the mouse: the helicopter turns to face wherever you look, and 
 turn (the faster you fly, the wider and swoopier the turn). W/S tilt forward and back (tilting
 moves you, and you keep sliding until you tilt the other way). A/D slide sideways. Land gently, or
 it gets damaged. Don't let the rotor hit anything!
+
+**Skiing:** pick the Skis (🎉 Fun tab) and stand on snow. Point downhill and you're off: W carves
+round toward where you're looking, A/D lean you sideways, S snowploughs to slow down, Space
+jumps. Ride the ski lift back up (right-click the chair at the bottom of it). You can build your
+own ski lift too: put a Ski Lift chair at the bottom of a hill and another at the top (each goes
+with the nearest other one).
 
 **Railings:** pick the Railing, then point near the edge of a floor and click: a white outline
 shows where it will go. Point at the side of a wall to put one along the top of the wall.
@@ -292,6 +329,15 @@ Drawing a 3D world is hard work for a computer, so the game tries not to do more
   only send the particles that are alive to the graphics card.
 - On laptops with two graphics chips, the browser picks the cooler, battery-friendly one.
 - Still hot? **Graphics: Medium** is much lighter than High, and **Low** is lightest of all.
+- Blocks buried inside other blocks (like the inside of a mountain) aren't drawn at all, so the
+  mountains cost about as much to draw as their surface.
+
+### Running the server on a Raspberry Pi
+
+A Raspberry Pi 4 runs the server fine. The world (about 115,000 blocks) takes about 40 MB of
+memory, and the save file is about 1.4 MB. The server saves at most once every 15 seconds (not
+after every block, which would wear out the SD card), and writes the file in the background, so
+nobody's game stutters while it saves.
 
 ## Putting it online so friends can join
 
@@ -319,7 +365,10 @@ helicopter (only where there's empty ground), lamp heads on the town's street la
 turned to run along their roads, the skyscrapers and parking lots, and the lake with its boats
 (built only on empty land that nobody has claimed: the landmarks beside the roads out of town or
 along the ring road, the lake wherever there's room, smaller if it has to be), the Luxe Store
-(on empty land), and furniture: only in houses and towers that are exactly as the town was first
+and the Pizza Palace (on empty land), the ski resort, the woods, the big lake and the mountains
+(out past the old edge of the world, where nobody could build before; the roads out to them only
+go on empty land, and where one meets an old road, just that bit of sidewalk becomes road),
+and furniture: only in houses and towers that are exactly as the town was first
 built (nobody has changed or claimed them), and only in their empty spots. If `world.json` can't be read, or was saved by a newer version of the game,
 the server stops with a message instead of touching it.
 
@@ -355,6 +404,8 @@ public/
     structures.js      Spots Build Book patterns (beds, teleporters…) in the world
     pets.js            What your pet does (follow, wander, fetch) and the ball
     landview.js        Draws land claim borders
+    ground.js          The ground (snowy up north), holes dug in it, the edge of the world
+    lifts.js           Ski lift cables, chairs and rides
     lighting.js        Live reflections and the glow effect
     lightpools.js      Soft pools of light on the ground under every lamp
     models.js          3D models for the lamps and furniture
@@ -375,6 +426,7 @@ public/
       vehicles.js      Vehicle sizes, and finding a free spot to respawn them
       claims.js        Land claim rules
       worldgen.js      Builds the towns (and furnishes them, and the Luxe Store)
+      frontier.js      The ski resort, the woods, cabins, lake and mountains, and the Pizza Palace
 ```
 
 ### Ideas for what to add next
