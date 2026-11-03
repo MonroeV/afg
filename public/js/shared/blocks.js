@@ -131,6 +131,8 @@ export const BLOCKS = {
   // The pizza place (right-click the oven for a delivery job)
   92: { name: 'Pizza Oven', shape: 'model', model: 'pizzaOven', facing: true, oven: true, box: [0, 0, 0, 1, 1, 1] },
   // From the Luxe Store
+  // A sign you can write on (right-click it to change what it says)
+  94: { name: 'Sign', shape: 'picture', art: 'sign' },
   93: { name: 'Hot Tub', shape: 'model', model: 'hotTub', hotTub: true, seat: 0.32, box: [0, 0, 0, 1, 0.55, 1], light: { color: 0x5fd8ff, power: 0.35, range: 6, always: true, y: 0.6 }, price: 60 },
 };
 
@@ -141,10 +143,13 @@ export const BED_FOOT = 4;
 // Notes for the Music Block: two octaves of the major scale, from middle C.
 export const NOTE_NAMES = ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'C²', 'D²', 'E²', 'F²', 'G²', 'A²', 'B²', 'C³', 'D³'];
 export const NOTE_FREQS = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24, 26].map(s => 261.63 * 2 ** (s / 12));
+export const SIGN = 94;
+export const SIGN_LENGTH = 60; // letters a sign can hold
 export const PICTURES = {
   painting: ['Sunset', 'Mountains', 'Flowers', 'Starry Night'],
   poster: ['Cat', 'Puppy', 'Rocket', 'Dinosaur'],
   office: ['Sales Chart', 'Big Ideas', 'World Map', 'Calendar'],
+  sign: ['Wood', 'White', 'Green', 'Blue'],
 };
 
 // ---------- The Luxe Store ----------
@@ -356,4 +361,16 @@ export function inBounds(x, y, z) {
   return Number.isInteger(x) && Number.isInteger(y) && Number.isInteger(z) &&
     x >= WORLD.min && x <= WORLD.max && z >= WORLD.min && z <= WORLD.max &&
     y >= 0 && y <= WORLD.maxY;
+}
+
+// Words that don't belong on a sign in a game for kids (whole words, any capitals). Each letter
+// becomes a heart.
+const RUDE = ['fuck', 'fucking', 'shit', 'bitch', 'bastard', 'ass', 'asshole', 'dick', 'cock', 'pussy', 'cunt', 'damn', 'crap', 'piss', 'slut', 'whore', 'fag', 'retard', 'nigger', 'nigga', 'sex', 'sexy', 'porn', 'kill yourself', 'kys', 'stupid', 'idiot', 'dumb', 'loser', 'hate you'];
+const RUDE_RE = new RegExp(`\\b(${RUDE.map(w => w.replace(/ /g, '\\s+')).join('|')})\\b`, 'gi');
+
+// What a sign says, tidied up: no more than SIGN_LENGTH letters, no odd invisible characters, no
+// rude words.
+export function cleanSignText(text) {
+  return String(text ?? '').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e]/g, ' ').replace(/\s+/g, ' ').trim()
+    .slice(0, SIGN_LENGTH).replace(RUDE_RE, w => '♥'.repeat(w.replace(/\s/g, '').length));
 }

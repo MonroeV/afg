@@ -31,6 +31,7 @@
     <div id="chat">
       <div id="chat-log"></div>
       <input id="chat-input" maxlength="160" autocomplete="off" placeholder="Say something… (Enter to send, Esc to cancel)">
+      <div id="quick-chat"></div>
     </div>
     <div id="banner" class="hidden"></div>
     <div id="race" class="hidden"></div>
@@ -83,6 +84,16 @@
       <button id="go-home" class="secondary">🏠 GO HOME</button>
       <button id="exit-menu" class="secondary">🚪 EXIT TO MENU</button>
       <div class="controls" id="pause-controls"></div>
+    </div>
+  </div>
+
+  <div id="sign-editor" class="screen hidden">
+    <div class="panel sign-panel">
+      <h2>🪧 What should the sign say?</h2>
+      <textarea id="sign-text" rows="3" maxlength="60" placeholder="Mia's House! · Keep out! · Shop open"></textarea>
+      <div id="sign-count" class="hint"></div>
+      <div id="sign-colors" class="sign-colors"></div>
+      <div class="sign-buttons"><button id="sign-cancel" class="secondary">CANCEL</button><button id="sign-done">DONE</button></div>
     </div>
   </div>
 

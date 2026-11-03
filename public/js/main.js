@@ -4,7 +4,7 @@ import {
   BLOCKS, WORLD, inBounds, blockId, blockMeta, shapeOf, isReplaceable, makeBlock, doorFacingFromYaw, paintOf, withPaint,
   railMask, railBoxes, nearestRailEdge, canHoldItem, stack, itemOf, floorOf, turnLine, blockKey, faceIndex, hexToRgb,
   switchable, lightOff, toggleLight, setDoorOpen, isWaterBlock, facingTowards,
-  PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP, BED_FOOT, NOTE_NAMES, NOTE_FREQS, PICTURES, isSnowyAt, SNOW_LINE,
+  PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP, BED_FOOT, NOTE_NAMES, NOTE_FREQS, PICTURES, isSnowyAt, SNOW_LINE, SIGN, SIGN_LENGTH,
 } from './shared/blocks.js';
 import { generateWorld } from './shared/worldgen.js';
 import { randomLook, sanitizeLook } from './shared/avatar.js';
@@ -37,6 +37,7 @@ import { Shop } from './shop.js';
 import { Particles, Fireworks, Sounds, Effects } from './effects.js';
 import { Ground } from './ground.js';
 import { SkiLifts, along } from './lifts.js';
+import { SignTexts } from './signs.js';
 import { TouchControls, IS_TOUCH } from './touch.js';
 
 const $ = id => document.getElementById(id);
@@ -150,11 +151,12 @@ sounds.volume = settings.volume;
 
 // ---------- Game state ----------
 
-let world, player, materials, textures, icons, hud, cars, myBody, editor, gallery, structures, ball, shop, ground, lifts;
+let world, player, materials, textures, icons, hud, cars, myBody, editor, gallery, structures, ball, shop, ground, lifts, signs;
 const npcs = new Map(); // the town's people (run by the server): id -> Avatar
 const coinMap = new Map(); // gold coins lying about: id -> { x, y, z, value, asked }
 let wallet = { coins: 0, owned: [] };
 let shopOpen = false;
+let signOpen = null; // [x, y, z] of the sign being written on
 let claims = [];
 const net = new Network();
 const avatars = new Avatars(scene);
@@ -184,7 +186,11 @@ async function load() {
   world = new World(scene, materials);
   structures = new Structures(world);
   lifts = new SkiLifts(scene, world);
-  world.onChange = (x, y, z) => structures.changed(x, y, z);
+  signs = new SignTexts(scene, world);
+  world.onChange = (x, y, z) => {
+    structures.changed(x, y, z);
+    signs.changed(x, y, z);
+  };
   world.onLoad = () => structures.scan();
   sky.extraLights = structureLights;
   player = new Player(world);
@@ -305,6 +311,7 @@ $('join-form').addEventListener('submit', async e => {
   world.load(welcome.world);
   world.loadPaints(welcome.paints);
   world.setHoles(welcome.holes || []);
+  signs.load(welcome.signs || []);
   ground.set(welcome.holes || []);
   avatars.clear();
   for (const p of welcome.players) avatars.add(p);
@@ -561,7 +568,7 @@ function goFullscreen() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || !!signOpen);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -594,7 +601,7 @@ $('exit-menu').addEventListener('click', () => {
     location.reload();
   }, 150); // a moment for "I got out of the car" to reach the server
 });
-canvas.addEventListener('click', () => inGame && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && lock());
+canvas.addEventListener('click', () => inGame && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && lock());
 $('sensitivity').addEventListener('input', e => {
   settings.sensitivity = Number(e.target.value);
   saveSettings();
@@ -671,6 +678,91 @@ $('inventory-done').addEventListener('click', () => {
 
 // ---------- Chat ----------
 
+// Quick chat: phrases you can say with one tap (no typing needed).
+const QUICK_CHAT = ['👋 Hi!', '😀 Follow me!', '🏠 Nice house!', '🏁 Wanna race?', '🎮 Let\'s play!', '🆘 Help!', '🙏 Thanks!', '👍 Yes', '👎 No', '👋 Bye!'];
+for (const text of QUICK_CHAT) {
+  const b = document.createElement('button');
+  b.textContent = text;
+  // (pointerdown, so the chat box doesn't lose focus and close first)
+  b.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    net.send({ t: 'chat', text });
+    sounds.click();
+    closeChat();
+  });
+  $('quick-chat').append(b);
+}
+
+// ---------- Signs ----------
+
+
+function openSign(x, y, z) {
+  if (!canBuildAt(x, z)) return notifyLand(x, z);
+  signOpen = [x, y, z];
+  keys.clear();
+  unlock();
+  const box = $('sign-text');
+  box.value = signs.get(x, y, z);
+  showSignCount();
+  drawSignColors();
+  $('sign-editor').classList.remove('hidden');
+  updateOverlays();
+  setTimeout(() => box.focus(), 50);
+}
+
+function drawSignColors() {
+  const wrap = $('sign-colors');
+  wrap.textContent = '';
+  const v = world.get(...signOpen), now = (blockMeta(v) >> 2) & 3;
+  ['#c8975a', '#f4f1e8', '#1f7a45', '#2463b8'].forEach((color, i) => {
+    const b = document.createElement('button');
+    b.style.background = color;
+    b.title = PICTURES.sign[i];
+    if (i === now) b.classList.add('on');
+    b.addEventListener('click', () => {
+      const cur = world.get(...signOpen);
+      if (blockId(cur) !== SIGN) return;
+      setBlock(...signOpen, withMeta(cur, (blockMeta(cur) & 3) | (i << 2)));
+      sounds.click();
+      drawSignColors();
+    });
+    wrap.append(b);
+  });
+}
+
+function showSignCount() {
+  const n = $('sign-text').value.length;
+  $('sign-count').textContent = `${n} / ${SIGN_LENGTH} letters`;
+}
+
+function closeSign(save) {
+  if (!signOpen) return;
+  const [x, y, z] = signOpen;
+  if (save && blockId(world.get(x, y, z)) === SIGN) {
+    const text = $('sign-text').value.replace(/\s+/g, ' ').trim().slice(0, SIGN_LENGTH);
+    signs.set(x, y, z, text);
+    net.send({ t: 'sign', x, y, z, text });
+    sounds.place();
+  }
+  signOpen = null;
+  $('sign-editor').classList.add('hidden');
+  $('sign-text').blur();
+  lock();
+  updateOverlays();
+}
+
+$('sign-text').addEventListener('input', showSignCount);
+$('sign-text').addEventListener('keydown', e => {
+  e.stopPropagation();
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    closeSign(true);
+  } else if (e.key === 'Escape') closeSign(false);
+});
+$('sign-done').addEventListener('click', () => closeSign(true));
+$('sign-cancel').addEventListener('click', () => closeSign(false));
+net.on('sign', ({ x, y, z, text }) => signs?.set(x, y, z, text));
+
 function closeChat() {
   hud.closeChat();
   updateOverlays();
@@ -698,7 +790,7 @@ const mouse = new Set();
 let useCooldown = 0;
 
 window.addEventListener('keydown', e => {
-  if (!inGame || hud.chatOpen || editorOpen || galleryOpen) return;
+  if (!inGame || hud.chatOpen || editorOpen || galleryOpen || signOpen) return;
   if (shopOpen) {
     if (e.code === 'Escape' || e.code === 'KeyE') shop.close();
     return;
@@ -1717,7 +1809,10 @@ net.on('job_done', ({ coins, fast }) => {
 
 function updateJob(dt, time) {
   if (!job) return;
-  const ground = groundBelow(job.x, 40, job.z);
+  // The spot is on the ground just outside the door (under any roof that hangs over the step):
+  // the lowest open space there, from the ground up.
+  let ground = 0;
+  while (ground < 60 && (world.isSolid(Math.floor(job.x), ground, Math.floor(job.z)) || world.isSolid(Math.floor(job.x), ground + 1, Math.floor(job.z)))) ground++;
   jobMarker.visible = true;
   jobMarker.position.set(job.x, ground, job.z);
   jobMarker.pizza.position.y = 3.2 + Math.sin(time * 2.5) * 0.25;
@@ -2301,6 +2396,7 @@ function interact() {
     if (hit.part !== 'floor') {
       if (def?.seat) return sitOn(...hit.block, itemOf(hit.value));
       if (def?.hug) return hugTeddy(...hit.block);
+      if (def?.art === 'sign') return openSign(...hit.block);
       if (def?.shape === 'picture') return nextPicture(...hit.block, hit.value);
       if (def?.music) return changeNote(...hit.block, hit.value);
       if (def?.shop) return openShop();
@@ -2580,7 +2676,7 @@ function nextPicture(x, y, z, v) {
 // Pictures hang on the side of a block, like ladders.
 function placePicture(item) {
   if (!hit || hit.ground || hit.normal[1] !== 0 || shapeOf(hit.value) !== 'cube') {
-    hud.toast('🖼️ Pictures go on walls. Point at the side of a block and click!');
+    hud.toast(item === SIGN ? '🪧 Signs go on walls. Point at the side of a block and click!' : '🖼️ Pictures go on walls. Point at the side of a block and click!');
     return;
   }
   const [bx, by, bz] = hit.block, [nx, , nz] = hit.normal;
@@ -2588,6 +2684,13 @@ function placePicture(item) {
   if (!canBuildAt(x, z)) return notifyLand(x, z);
   if (!inBounds(x, by, z) || world.get(x, by, z)) return;
   const facing = nz === 1 ? 0 : nx === 1 ? 1 : nz === -1 ? 2 : 3;
+  if (item === SIGN) {
+    if (setBlock(x, by, z, makeBlock(item, facing))) {
+      sounds.place();
+      openSign(x, by, z);
+    }
+    return;
+  }
   const design = pictureCount++ % 4;
   if (setBlock(x, by, z, makeBlock(item, facing | (design << 2)))) {
     sounds.place();
@@ -2903,6 +3006,7 @@ function applyMany(cells) {
   for (let i = 0; i + 3 < cells.length; i += 4) if (world.set(cells[i], cells[i + 1], cells[i + 2], cells[i + 3])) changed++;
   world.onChange = onChange;
   if (changed) structures.scan();
+  for (let i = 0; i + 3 < cells.length; i += 4) signs.changed(cells[i], cells[i + 1], cells[i + 2]);
   if (player && player.overlapsSomething()) player.unstick();
 }
 
@@ -3282,7 +3386,7 @@ let menuSpin = 0, lastFrame = 0, frameCount = 0, crouchK = 0;
 // menu (nothing much is moving then).
 function frameRateNow() {
   if (!inGame) return 30;
-  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen) return 12;
+  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen) return 12;
   return settings.fps || 1000;
 }
 
@@ -3459,6 +3563,7 @@ function frame(timestamp) {
       else if (s?.type === 'bed') hint = '🛏️ Right-click to sleep · Jump on it to bounce!';
       else if (def?.seat && !tool) hint = '🛋️ Right-click to sit down';
       else if (def?.hug && !tool) hint = '🧸 Right-click for a hug';
+      else if (def?.art === 'sign' && !tool) hint = signs.get(...hit.block) ? `🪧 "${signs.get(...hit.block)}" · Right-click to change it` : '🪧 Right-click to write on it';
       else if (def?.shape === 'picture' && !tool) hint = '🖼️ Right-click to hang a different picture';
       else if (def?.music && !tool) hint = `🎵 ${NOTE_NAMES[blockMeta(hit.value)]} · Walk on it to play · Right-click: next note`;
       else if (def?.speedPad && item !== HAMMER) hint = '⚡ Run (or drive) over it the way the arrows point!';
@@ -3749,6 +3854,7 @@ window.buildzone = {
   respawn: () => respawn(),
   get liftRide() { return liftRide; },
   get job() { return job; },
+  get signs() { return signs; },
   kickBall: () => kickBall(),
   throwBall: () => throwBall(),
   ballBoxes: r => ballBoxes(r),

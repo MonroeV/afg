@@ -1,7 +1,7 @@
 // The game "room": the world, players, vehicles, land claims, growing trees and the clock.
 // The Node server runs one of these for everybody. When there is no server,
 // the browser runs its own copy so single player works exactly the same way.
-import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, isExclusive, DOOR_OPEN, DOOR_TOP, DAY_LENGTH, WORLD, isNightTime, SHOP_ITEMS, BLOCKS, SHOP_TOOLS, HOLE_HEAL } from './blocks.js';
+import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, isExclusive, DOOR_OPEN, DOOR_TOP, DAY_LENGTH, WORLD, isNightTime, SHOP_ITEMS, BLOCKS, SHOP_TOOLS, HOLE_HEAL, SIGN, cleanSignText } from './blocks.js';
 import { sanitizeLook, cleanName } from './avatar.js';
 import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines, buildStore, furnishHouses, furnishTowers } from './worldgen.js';
 import { NpcCrew } from './npcs.js';
@@ -44,6 +44,7 @@ export class GameRoom {
     this.places = null; // where the store, the tower lobby and the town square are (for the NPCs)
     this.wallets = {}; // name key -> { coins, owned: [items], day }
     this.holes = new Map(); // "x,z" -> when the ground there was dug out (it grows back)
+    this.signs = new Map(); // "x,y,z" -> what that sign says
     this.jobs = new Map(); // client id -> the pizza they're delivering: { x, z, reward, par, at }
     this.coins = new Map(); // id -> [x, y, z, value]: gold coins to pick up
     this.coinTimers = []; // when to put new coins out
@@ -71,6 +72,7 @@ export class GameRoom {
     const { blocks, cars, places, claims } = generateWorld();
     this.world.clear();
     this.holes.clear();
+    this.signs.clear();
     for (const [x, y, z, v] of blocks) this.world.set(blockKey(x, y, z), v);
     this.setHomes(cars);
     this.places = places;
@@ -166,6 +168,12 @@ export class GameRoom {
       if (w && Number.isFinite(w.coins)) this.wallets[k] = { coins: Math.max(0, Math.floor(w.coins)), owned: Array.isArray(w.owned) ? w.owned.filter(i => SHOP_ITEMS.some(([s]) => s === i)) : [], day: w.day || '' };
     }
     this.places = data.places && typeof data.places === 'object' ? data.places : null;
+    this.signs = new Map();
+    for (const s of Array.isArray(data.signs) ? data.signs : []) {
+      if (!Array.isArray(s) || !s.slice(0, 3).every(Number.isInteger)) continue;
+      const k = blockKey(s[0], s[1], s[2]), text = cleanSignText(s[3]);
+      if (text && blockId(itemOf(this.world.get(k) || 0)) === SIGN) this.signs.set(k, text);
+    }
     this.holes = new Map();
     for (const h of Array.isArray(data.holes) ? data.holes : []) {
       if (Array.isArray(h) && Number.isInteger(h[0]) && Number.isInteger(h[1])) this.holes.set(`${h[0]},${h[1]}`, Number.isFinite(h[2]) ? h[2] : Date.now());
@@ -268,6 +276,7 @@ export class GameRoom {
       places: this.places,
       wallets: this.wallets,
       holes: [...this.holes].map(([k, t]) => [...k.split(',').map(Number), t]),
+      signs: this.signList(),
     };
   }
 
@@ -425,6 +434,7 @@ export class GameRoom {
       world: this.flatBlocks(),
       paints: [...this.paints],
       holes: [...this.holes.keys()].map(k => k.split(',').map(Number)),
+      signs: this.signList(),
       cars: [...this.vehicles.values()].map(publicVehicle),
       claims: this.claims,
       players: [...this.clients.values()].filter(o => o.joined && o !== client).map(publicPlayer),
@@ -536,6 +546,7 @@ export class GameRoom {
       else this.world.set(k, b);
       // Paint goes with the block: it's gone when the block is broken or replaced.
       carryPaint(this.paints, k, old, b);
+      this.carrySign(k, b);
       this.broadcast({ t: 'set', x, y, z, b }, client);
       if (blockId(b) === LOG && blockId(old) !== LOG) this.maybePlant(x, y, z);
       this.onDirty();
@@ -610,6 +621,7 @@ export class GameRoom {
         if (b === 0) this.world.delete(k);
         else this.world.set(k, b);
         carryPaint(this.paints, k, old, b);
+        this.carrySign(k, b);
         applied.push(x, y, z, b);
       }
       if (applied.length) {
@@ -816,6 +828,22 @@ export class GameRoom {
       this.onDirty();
     },
 
+    // Wrote on a sign.
+    sign(client, { x, y, z, text }) {
+      if (!inBounds(x, y, z) || !this.allow(client, 'sign', 2, 6)) return;
+      const k = blockKey(x, y, z);
+      if (blockId(itemOf(this.world.get(k) || 0)) !== SIGN) return;
+      if (Math.hypot(client.pos[0] - x - 0.5, client.pos[1] - y, client.pos[2] - z - 0.5) > 12) return;
+      if (!canBuild(this.claims, client.name, x, z)) {
+        return client.send({ t: 'sign', x, y, z, text: this.signs.get(k) || '' });
+      }
+      const clean = cleanSignText(text);
+      if (clean) this.signs.set(k, clean);
+      else this.signs.delete(k);
+      this.broadcast({ t: 'sign', x, y, z, text: clean });
+      this.onDirty();
+    },
+
     // Right-clicked the pizza oven: take a pizza out for delivery.
     job(client) {
       const p = this.places?.pizza;
@@ -871,6 +899,19 @@ export class GameRoom {
       this.checkSleep();
     },
   };
+
+  // ---------- Signs ----------
+
+  // A sign's writing goes when the sign does.
+  carrySign(k, b) {
+    if (this.signs.has(k) && blockId(itemOf(b)) !== SIGN) this.signs.delete(k);
+  }
+
+  signList() {
+    const out = [];
+    for (const [k, text] of this.signs) if (blockId(itemOf(this.world.get(k) || 0)) === SIGN) out.push([...k.split(',').map(Number), text]);
+    return out;
+  }
 
   // ---------- Pizza delivery ----------
   // Chef Rosa (or the oven at the Pizza Palace) gives you a pizza and a house to take it to.

@@ -23,6 +23,12 @@ customize your character, drive cars, build anything and play with friends.
   you a hot pizza to deliver. A glowing beam with a 🍕 shows which house it goes to, and a banner
   shows how far it is and how long you have for a tip. Walk, run or drive there (you carry the
   pizza box, so everyone can see you're on the job) and get 4 to 8 coins, plus 2 more if you're quick
+- **Signs you can write on** (🛋️ Home tab): put one on a wall and type what it says ("Mia's
+  House!", "Keep out!", "Shop open"). Up to 60 letters, as big as they fit, on a wood, white,
+  green or blue board. Right-click it later to change it. Everyone sees the same words, and rude
+  words turn into ♥♥♥
+- **Quick chat**: open the chat (T, or 💬 on a phone) and tap a phrase ("👋 Hi!", "😀 Follow
+  me!", "🏠 Nice house!", "🏁 Wanna race?", "🆘 Help!"…) to say it without typing
 - **Dig into the ground**: three hits with the hammer dig out the grass, down to the **bedrock**
   (which nothing can break). Holes are one block deep. Fill one back in with a Grass or Dirt
   block, or just wait: after a couple of minutes the grass grows back by itself (never while
@@ -180,7 +186,7 @@ customize your character, drive cars, build anything and play with friends.
   of a build and pastes it somewhere else (scroll to turn it around). Up to 4096 blocks at a time,
   and Z undoes your last Fill or Paste. Plus a Camera (or press P) that saves a photo of what you
   see to your Downloads, and H to hide the HUD for clean photos and videos
-- **93 kinds of blocks** with realistic textures: brick, wood, glass, tinted glass, marble, roads,
+- **94 kinds of blocks** with realistic textures: brick, wood, glass, tinted glass, marble, roads,
   parking lines, flowers, rainbow, gold, mirrors, lamps, ladders, railings, bookshelves, snow, ice,
   pine needles, snowmen, ski lifts, pizza ovens…
 - **Sounds that don't get old**: every sound is a little different each time, every vehicle has its
@@ -216,7 +222,7 @@ customize your character, drive cars, build anything and play with friends.
 | V | Switch camera: first person, behind you, in front of you |
 | G | Dance! (on a dance floor it starts a party) |
 | B | Wave |
-| T or Enter | Chat |
+| T or Enter | Chat (with quick-chat buttons for common things to say) |
 | R | Go home: your bed, or your land if you have no bed, or else the town square |
 | P | Take a photo (it's saved to your Downloads) |
 | H | Hide or show the HUD |
@@ -406,6 +412,7 @@ public/
     landview.js        Draws land claim borders
     ground.js          The ground (snowy up north), holes dug in it, the edge of the world
     lifts.js           Ski lift cables, chairs and rides
+    signs.js           The writing on signs
     lighting.js        Live reflections and the glow effect
     lightpools.js      Soft pools of light on the ground under every lamp
     models.js          3D models for the lamps and furniture

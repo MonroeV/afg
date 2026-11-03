@@ -32,7 +32,7 @@ export const fromStore = item => (typeof item === 'number' ? !!BLOCKS[item]?.pri
 export const ALL_ITEMS = [...TOOLS, ...BLOCK_IDS];
 
 // The tabs of the item menu. Blocks not listed anywhere go under Blocks (or Lights).
-const HOME = [60, 61, 62, 64, 63, 65, 66, 67, 68, 21, 53, 54, 25, 35, 20, 73, 74, 75, 76, 77, 78, 79, 80, 81, 86, 92];
+const HOME = [94, 60, 61, 62, 64, 63, 65, 66, 67, 68, 21, 53, 54, 25, 35, 20, 73, 74, 75, 76, 77, 78, 79, 80, 81, 86, 92];
 const TOWN = [22, 23, 56, 24, 58, 27, 36, 1, 7, 8, 87, 88, 89, 91, 90];
 const FUN = [SNEAKERS, GOLDPAINT, 93, JETPACK, SHOWTIME, 83, 84, TRAIL, 82, 85, SKIS, BALL, FIREWORKS, WATER_BALLOON, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28];
 const listed = new Set([...HOME, ...TOWN, ...FUN]);
@@ -61,7 +61,7 @@ export const SEARCH_WORDS = {
   83: 'gold king queen chair store', 84: 'party light store', 85: 'gold cup winner store', 86: 'shop store buy',
   [JETPACK]: 'fly rocket store', [SKIS]: 'ski snow winter slope mountain', [GOLDPAINT]: 'gold car paint store vehicle',
   [SNEAKERS]: 'shoes run fast jump high store', 87: 'winter white cold', 88: 'skate slippery winter cold', 89: 'tree pine christmas snow',
-  90: 'chair lift ride cable ski', 91: 'winter snow', 92: 'pizza job work cook', 93: 'hot tub bath spa bubbles store', [TRAIL]: 'rainbow sparkle store', [SHOWTIME]: 'fireworks show store', 70: 'boost fast arrow run', 71: 'race timer go', 72: 'race timer end', 19: 'trampoline jump',
+  90: 'chair lift ride cable ski', 91: 'winter snow', 92: 'pizza job work cook', 94: 'write words text name label board', 93: 'hot tub bath spa bubbles store', [TRAIL]: 'rainbow sparkle store', [SHOWTIME]: 'fireworks show store', 70: 'boost fast arrow run', 71: 'race timer go', 72: 'race timer end', 19: 'trampoline jump',
   36: 'pool lake', 48: 'torch', 45: 'torch', 21: 'garage', 54: 'fence rail',
 };
 // The hammer always lives in slot 1.
@@ -444,7 +444,7 @@ export function makeIcon(item, textures, paint = 1) {
     return canvas;
   }
   if (shape === 'picture') {
-    ctx.drawImage(pictureCanvas(def.art, def.art === 'poster' ? 0 : 1), 2, 10, 60, 45);
+    ctx.drawImage(pictureCanvas(def.art, def.art === 'poster' || def.art === 'sign' ? 0 : 1), 2, 10, 60, 45);
     return canvas;
   }
   if (shape === 'rail') {

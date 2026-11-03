@@ -341,10 +341,28 @@ const OFFICE = [
   },
 ];
 
+// Signs: blank boards (the writing goes on top, see signs.js): wood, white, green and blue.
+const board = (base, grain) => ctx => {
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = grain;
+  ctx.lineWidth = 1;
+  for (let y = 6; y < H; y += 9) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    for (let x = 0; x <= W; x += 16) ctx.lineTo(x, y + Math.sin(x * 0.2 + y) * 1.2);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, W - 4, H - 4);
+};
+const SIGNS = [board('#c8975a', 'rgba(90,55,20,0.35)'), board('#f4f1e8', 'rgba(0,0,0,0.05)'), board('#1f7a45', 'rgba(255,255,255,0.06)'), board('#2463b8', 'rgba(255,255,255,0.06)')];
+
 const cache = {};
 
 // The canvas for picture number `index` (0-3) of a kind ('painting' or 'poster').
 export function pictureCanvas(kind, index) {
   const key = `${kind}:${index}`;
-  return (cache[key] ??= make((kind === 'poster' ? POSTERS : kind === 'office' ? OFFICE : PAINTINGS)[index % 4]));
+  return (cache[key] ??= make((kind === 'poster' ? POSTERS : kind === 'office' ? OFFICE : kind === 'sign' ? SIGNS : PAINTINGS)[index % 4]));
 }

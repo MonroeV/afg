@@ -717,3 +717,18 @@ body.touch .inv-name { display: none; }
 .swatch.own { position: relative; display: inline-grid; place-items: center; cursor: pointer; overflow: hidden; }
 .swatch.own::after { content: "+"; font-weight: 900; font-size: 18px; color: #fff; text-shadow: 0 1px 3px #000; }
 .swatch.own input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+/* Quick chat: tap a phrase to say it. */
+#quick-chat { display: none; flex-wrap: wrap; gap: 5px; margin-top: 6px; pointer-events: auto; }
+#chat.open #quick-chat { display: flex; }
+#quick-chat button { padding: 5px 9px; font-size: 13px; border-radius: 10px; box-shadow: none; background: rgba(0, 0, 0, 0.6); color: #fff; border: 1px solid rgba(255, 255, 255, 0.25); }
+#quick-chat button:active { transform: none; background: var(--accent); }
+body.touch #quick-chat button { padding: 4px 7px; font-size: 12px; }
+
+/* The sign editor. */
+.sign-panel { width: min(420px, 100%); display: flex; flex-direction: column; gap: 10px; }
+#sign-text { width: 100%; font-size: 20px; font-weight: 700; padding: 10px; border-radius: 10px; border: 2px solid rgba(255, 255, 255, 0.2); background: rgba(0, 0, 0, 0.35); color: #fff; resize: none; font-family: inherit; }
+.sign-colors { display: flex; gap: 8px; justify-content: center; }
+.sign-colors button { width: 44px; height: 32px; padding: 0; border-radius: 8px; box-shadow: none; border: 3px solid transparent; }
+.sign-colors button.on { border-color: #fff; }
+.sign-buttons { display: flex; gap: 10px; justify-content: flex-end; }

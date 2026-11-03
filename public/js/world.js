@@ -251,7 +251,7 @@ export function createBlockMaterials(textures) {
     const shape = def.shape || 'cube';
     if (shape === 'picture') {
       // One material set per picture: the picture on the front, the frame color elsewhere.
-      const frame = new THREE.MeshStandardMaterial({ color: def.art === 'poster' ? 0xf4f4f4 : def.art === 'office' ? 0xc0c4c8 : 0x9a7330, roughness: 0.5, metalness: def.art === 'painting' ? 0.4 : 0.1 });
+      const frame = new THREE.MeshStandardMaterial({ color: def.art === 'poster' ? 0xf4f4f4 : def.art === 'office' ? 0xc0c4c8 : def.art === 'sign' ? 0x6b4423 : 0x9a7330, roughness: 0.5, metalness: def.art === 'painting' ? 0.4 : 0.1 });
       for (let i = 0; i < 4; i++) {
         const tex = new THREE.CanvasTexture(pictureCanvas(def.art, i));
         tex.colorSpace = THREE.SRGBColorSpace;
