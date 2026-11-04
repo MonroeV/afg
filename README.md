@@ -28,7 +28,7 @@ customize your character, drive cars, build anything and play with friends.
   green or blue board. Right-click it later to change it. Everyone sees the same words, and rude
   words turn into ♥♥♥
 - **Quick chat**: open the chat (T, or 💬 on a phone) and tap a phrase ("👋 Hi!", "😀 Follow
-  me!", "🏠 Nice house!", "🏁 Wanna race?", "🆘 Help!"…) to say it without typing
+  me!", "🏠 Nice house!", "🏁 Wanna race?", "🆘 Help!"…) to say it without typing. Rude words in the chat turn into ♥♥♥ too
 - **Dig into the ground**: three hits with the hammer dig out the grass, down to the **bedrock**
   (which nothing can break). Holes are one block deep. Fill one back in with a Grass or Dirt
   block, or just wait: after a couple of minutes the grass grows back by itself (never while

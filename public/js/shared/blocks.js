@@ -363,14 +363,16 @@ export function inBounds(x, y, z) {
     y >= 0 && y <= WORLD.maxY;
 }
 
-// Words that don't belong on a sign in a game for kids (whole words, any capitals). Each letter
+// Words that don't belong on a sign (or in the chat) in a game for kids (whole words, any capitals). Each letter
 // becomes a heart.
 const RUDE = ['fuck', 'fucking', 'shit', 'bitch', 'bastard', 'ass', 'asshole', 'dick', 'cock', 'pussy', 'cunt', 'damn', 'crap', 'piss', 'slut', 'whore', 'fag', 'retard', 'nigger', 'nigga', 'sex', 'sexy', 'porn', 'kill yourself', 'kys', 'stupid', 'idiot', 'dumb', 'loser', 'hate you'];
 const RUDE_RE = new RegExp(`\\b(${RUDE.map(w => w.replace(/ /g, '\\s+')).join('|')})\\b`, 'gi');
 
-// What a sign says, tidied up: no more than SIGN_LENGTH letters, no odd invisible characters, no
-// rude words.
-export function cleanSignText(text) {
+// Text people type (signs and chat), tidied up: no more than `max` letters, no odd invisible
+// characters, and no rude words.
+export function cleanWords(text, max) {
   return String(text ?? '').replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e]/g, ' ').replace(/\s+/g, ' ').trim()
-    .slice(0, SIGN_LENGTH).replace(RUDE_RE, w => '♥'.repeat(w.replace(/\s/g, '').length));
+    .slice(0, max).replace(RUDE_RE, w => '♥'.repeat(w.replace(/\s/g, '').length));
 }
+
+export const cleanSignText = text => cleanWords(text, SIGN_LENGTH);
