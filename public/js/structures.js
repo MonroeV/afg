@@ -2,7 +2,8 @@
 // Every player's game spots these patterns by itself, so no server work is needed.
 import { blockId, blockKey, blockMeta, BED_FOOT } from './shared/blocks.js';
 
-const B = { concrete: 13, log: 7, cobble: 4, lamp: 18, rainbow: 28, metal: 11, black: 17, water: 36, marble: 12, tiles: 20, bounce: 19, glass: 9, bed: 64 };
+const B = { concrete: 13, log: 7, cobble: 4, lamp: 18, rainbow: 28, metal: 11, black: 17, water: 36, marble: 12, tiles: 20, bounce: 19, glass: 9, bed: 64, planks: 6, lantern: 45 };
+const TYPES = ['bed', 'trampoline', 'campfire', 'teleporter', 'cannon', 'fountain', 'tv', 'disco', 'swing', 'zipline', 'hoop', 'balloon'];
 const PAINTS = new Set([14, 15, 16, 17, 29, 30, 31, 32, 33, 34]);
 const SIDES = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const AROUND = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
@@ -17,6 +18,10 @@ export const RECIPES = [
   { type: 'fountain', icon: '⛲', name: 'Fountain', grid: [[0, 12, 0], [12, 36, 12], [0, 12, 0]], how: 'Water with Marble on all four sides.', use: 'Sprays water into the air.' },
   { type: 'tv', icon: '📺', name: 'TV', grid: [[17, 9, 9, 17], [0, 17, 17, 0]], side: [[17, 9, 9, 17], [0, 17, 17, 0]], how: 'Glass with Black Paint at both ends and Black Paint under every Glass block. The screen can be 1, 2 or 3 Glass wide.', use: 'Watch cartoons, news, weather and silly commercials! Right-click it to change the channel.' },
   { type: 'disco', icon: '🪩', name: 'Dance Floor', grid: [[20, 20, 20], [20, 18, 20], [20, 20, 20]], how: 'A Lamp in the middle of eight Floor Tiles.', use: 'Flashing party lights. Press G on it to start a dance party!' },
+  { type: 'swing', icon: '🛝', name: 'Swing', grid: [[7, 7, 7]], side: [[7, 7, 7], [7, 0, 7], [7, 0, 7], [7, 0, 7]], how: 'Two Log posts, 3 tall and 2 apart, with 3 Logs across the top.', use: 'A swing hangs from it! Right-click to sit, hold W to swing higher, and press Space to jump off and fly.' },
+  { type: 'zipline', icon: '🧗', name: 'Zip Line', grid: [[11]], side: [[11], [7], [7], [7]], how: 'Three Logs with a Metal Plate on top. Build two: one up high (on a hill or a roof) and one lower down.', use: 'A cable joins them. Right-click the high one and zoom down!' },
+  { type: 'hoop', icon: '🏀', name: 'Basketball Hoop', grid: [[11]], side: [[11], [11], [11]], how: 'Three Metal Plates stacked up.', use: 'A hoop and backboard appear on top. Throw the Pet Ball through the hoop to score!' },
+  { type: 'balloon', icon: '🎈', name: 'Hot Air Balloon', grid: [[6, 6, 6], [6, 45, 6], [6, 6, 6]], how: 'A Lantern in the middle of eight Planks.', use: 'A balloon floats above it. Right-click to fly! Space fires the burner (up), Shift lets air out (down), WASD steers.' },
 ];
 
 export class Structures {
@@ -59,19 +64,51 @@ export class Structures {
         return { type: 'trampoline', x, y, z };
       }
       case B.log:
-        return sides(B.cobble) && this.empty(x, y + 1, z) ? { type: 'campfire', x, y, z } : null;
+        if (sides(B.cobble) && this.empty(x, y + 1, z)) return { type: 'campfire', x, y, z };
+        return this.detectSwing(x, y, z);
+      case B.lantern:
+        return AROUND.every(([dx, dz]) => this.id(x + dx, y, z + dz) === B.planks) ? { type: 'balloon', x, y, z } : null;
       case B.lamp:
         if (sides(B.rainbow) && this.empty(x, y + 1, z) && this.empty(x, y + 2, z)) return { type: 'teleporter', x, y, z };
         if (AROUND.every(([dx, dz]) => this.id(x + dx, y, z + dz) === B.tiles)) return { type: 'disco', x, y, z };
         return null;
       case B.metal:
-        return this.id(x, y + 1, z) === B.black ? { type: 'cannon', x, y, z } : null;
+        if (this.id(x, y + 1, z) === B.black) return { type: 'cannon', x, y, z };
+        // A zip line post: three logs with the metal plate on top.
+        if ([1, 2, 3].every(d => this.id(x, y - d, z) === B.log) && this.empty(x, y + 1, z)) return { type: 'zipline', x, y, z };
+        // A hoop: three metal plates stacked (anchored at the bottom one).
+        if (this.id(x, y - 1, z) !== B.metal && this.id(x, y + 1, z) === B.metal && this.id(x, y + 2, z) === B.metal && this.empty(x, y + 3, z)) return { type: 'hoop', x, y, z, ...this.hoopFacing(x, y, z) };
+        return null;
       case B.water:
         return sides(B.marble) ? { type: 'fountain', x, y, z } : null;
       case B.glass:
         return this.detectTV(x, y, z);
     }
     return null;
+  }
+
+  // A swing frame: this log is the bottom of the first post; the second post is two along (+x or
+  // +z), and three logs join their tops. Nothing in between, so there's room to swing.
+  detectSwing(x, y, z) {
+    for (const [ax, az] of [[1, 0], [0, 1]]) {
+      const at = (i, dy) => this.id(x + ax * i, y + dy, z + az * i);
+      if (at(0, -1) === B.log) continue;
+      const posts = [0, 1, 2, 3].every(dy => at(0, dy) === B.log && at(2, dy) === B.log) && at(1, 3) === B.log;
+      if (!posts || ![0, 1, 2].every(dy => this.empty(x + ax, y + dy, z + az))) continue;
+      return { type: 'swing', x, y, z, ax, az };
+    }
+    return null;
+  }
+
+  // Which way a hoop faces: toward the most open ground around it (where people throw from).
+  hoopFacing(x, y, z) {
+    let best = { fx: 0, fz: 1 }, most = -1;
+    for (const [fx, fz] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) {
+      let open = 0;
+      for (let d = 1; d <= 5; d++) for (let s = -1; s <= 1; s++) if (this.empty(x + fx * d + fz * s, y, z + fz * d + fx * s)) open++;
+      if (open > most) [best, most] = [{ fx, fz }, open];
+    }
+    return best;
   }
 
   // A TV: a row of 1-3 Glass with Black Paint at each end and under each Glass.
@@ -87,7 +124,7 @@ export class Structures {
   }
 
   recheck(x, y, z) {
-    for (const type of ['bed', 'trampoline', 'campfire', 'teleporter', 'disco', 'cannon', 'fountain', 'tv']) this.list.delete(`${type}:${blockKey(x, y, z)}`);
+    for (const type of TYPES) this.list.delete(`${type}:${blockKey(x, y, z)}`);
     const s = this.detect(x, y, z);
     if (s) this.list.set(`${s.type}:${blockKey(x, y, z)}`, s);
   }
@@ -95,8 +132,9 @@ export class Structures {
   // A block changed: look again at everything it could be part of.
   changed(x, y, z) {
     // Wide enough to reach the anchor of a 3-wide TV from its far end.
+    // (and down to the bottom of a swing post from the beam on top).
     for (let dx = -4; dx <= 4; dx++)
-      for (let dy = -2; dy <= 1; dy++)
+      for (let dy = -4; dy <= 3; dy++)
         for (let dz = -4; dz <= 4; dz++) this.recheck(x + dx, y + dy, z + dz);
     this.version = (this.version || 0) + 1;
   }
@@ -104,7 +142,7 @@ export class Structures {
   scan() {
     this.version = (this.version || 0) + 1;
     this.list.clear();
-    const anchors = new Set([B.concrete, B.bounce, B.log, B.lamp, B.metal, B.water, B.glass, B.bed]);
+    const anchors = new Set([B.concrete, B.bounce, B.log, B.lamp, B.metal, B.water, B.glass, B.bed, B.lantern]);
     for (const [k, v] of this.world.blocks) {
       if (!anchors.has(blockId(v))) continue;
       const [x, y, z] = k.split(',').map(Number);
@@ -121,6 +159,15 @@ export class Structures {
     for (const s of this.list.values()) {
       if (s.type === 'bed' && ((s.x === x && s.y === y && s.z === z) || (s.x + s.dx === x && s.y === y && s.z + s.dz === z))) return s;
       if (s.type === 'cannon' && s.x === x && s.z === z && (y === s.y || y === s.y + 1)) return s;
+      if (s.type === 'zipline' && s.x === x && s.z === z && y <= s.y && y >= s.y - 3) return s;
+      if (s.type === 'hoop' && s.x === x && s.z === z && y >= s.y && y <= s.y + 2) return s;
+      if (s.type === 'balloon' && s.y === y && Math.abs(x - s.x) <= 1 && Math.abs(z - s.z) <= 1) return s;
+      if (s.type === 'swing') {
+        for (let i = 0; i <= 2; i++) {
+          const cx = s.x + s.ax * i, cz = s.z + s.az * i;
+          if (x === cx && z === cz && y >= s.y && y <= s.y + 3 && (i !== 1 || y === s.y + 3)) return s;
+        }
+      }
       if (s.type === 'tv' && y >= s.y - 1 && y <= s.y) {
         // Any block of the TV (screen, frame or stand) counts.
         for (let i = -1; i <= s.width; i++) if (x === s.x + s.ax * i && z === s.z + s.az * i) return s;

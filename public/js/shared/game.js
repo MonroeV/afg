@@ -5,11 +5,11 @@ import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId
 import { sanitizeLook, cleanName } from './avatar.js';
 import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines, buildStore, furnishHouses, furnishTowers } from './worldgen.js';
 import { NpcCrew } from './npcs.js';
-import { buildFrontier, buildPizzeria } from './frontier.js';
+import { buildFrontier, buildPizzeria, buildSignposts } from './frontier.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot } from './vehicles.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
 
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
 const DOOR = 21;
@@ -69,7 +69,7 @@ export class GameRoom {
   // ---------- World data ----------
 
   generate() {
-    const { blocks, cars, places, claims } = generateWorld();
+    const { blocks, cars, places, claims, signs } = generateWorld();
     this.world.clear();
     this.holes.clear();
     this.signs.clear();
@@ -77,6 +77,7 @@ export class GameRoom {
     this.setHomes(cars);
     this.places = places;
     this.claims = claims.slice();
+    for (const [x, y, z, text] of signs || []) this.signs.set(blockKey(x, y, z), cleanSignText(text));
     this.populate();
   }
 
@@ -146,6 +147,7 @@ export class GameRoom {
       this.upgradeTo6();
       this.upgradeTo7();
       this.upgradeTo8();
+      this.upgradeTo9();
       this.populate();
       return true;
     }
@@ -184,6 +186,7 @@ export class GameRoom {
     if (data.version < 6) this.upgradeTo6();
     if (data.version < 7) this.upgradeTo7();
     if (data.version < 8) this.upgradeTo8();
+    if (data.version < 9) this.upgradeTo9();
     this.populate();
     return true;
   }
@@ -226,6 +229,18 @@ export class GameRoom {
     for (const c of frontier.cars) this.spawn(this.addHome(c));
     this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), pizza: pizza?.place || null, lodge: frontier.places.lodge };
     this.log(`Added the ski resort, the woods and the Pizza Palace (${frontier.count} blocks)`);
+    this.onDirty();
+  }
+
+  // Worlds saved before version 9: "Build it here!" signposts in a few open spots (for swings,
+  // basketball hoops, hot air balloons and zip lines), only on empty land nobody has claimed.
+  upgradeTo9() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const { signs } = buildSignposts({ get, set, canUse: this.freeLand(), canClimb: (x, z) => !claimAt(this.claims, x, z) });
+    for (const [x, y, z, text] of signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
     this.onDirty();
   }
 

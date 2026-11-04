@@ -38,6 +38,7 @@ import { Particles, Fireworks, Sounds, Effects } from './effects.js';
 import { Ground } from './ground.js';
 import { SkiLifts, along } from './lifts.js';
 import { SignTexts } from './signs.js';
+import { Contraptions } from './contraptions.js';
 import { TouchControls, IS_TOUCH } from './touch.js';
 
 const $ = id => document.getElementById(id);
@@ -151,7 +152,7 @@ sounds.volume = settings.volume;
 
 // ---------- Game state ----------
 
-let world, player, materials, textures, icons, hud, cars, myBody, editor, gallery, structures, ball, shop, ground, lifts, signs;
+let world, player, materials, textures, icons, hud, cars, myBody, editor, gallery, structures, ball, shop, ground, lifts, signs, contraptions;
 const npcs = new Map(); // the town's people (run by the server): id -> Avatar
 const coinMap = new Map(); // gold coins lying about: id -> { x, y, z, value, asked }
 let wallet = { coins: 0, owned: [] };
@@ -186,6 +187,7 @@ async function load() {
   world = new World(scene, materials);
   structures = new Structures(world);
   lifts = new SkiLifts(scene, world);
+  contraptions = new Contraptions({ scene, world, structures, effects, sounds });
   signs = new SignTexts(scene, world);
   world.onChange = (x, y, z) => {
     structures.changed(x, y, z);
@@ -1034,6 +1036,7 @@ function ballBoxes(r) {
   if (ball.age > 0.4 && !riding()) people.push(player.pos);
   for (const p of people) out.push([p.x - 0.3, p.y, p.z - 0.3, p.x + 0.3, p.y + 1.8, p.z + 0.3]);
   for (const b of cars.boxes()) if (b[0] < r[3] && b[3] > r[0] && b[1] < r[4] && b[4] > r[1] && b[2] < r[5] && b[5] > r[2]) out.push(b);
+  out.push(...contraptions.boxes(r)); // (basketball backboards)
   return out;
 }
 
@@ -1075,6 +1078,7 @@ function requestEnter(car) {
 }
 
 function enterCar(car) {
+  contraptions.end();
   if (!car) return;
   wakeUp(true);
   standUp(true);
@@ -1604,6 +1608,7 @@ function respawn(joining = false) {
   standUp(true);
   move = null;
   liftRide = null;
+  contraptions.end();
   getOut();
   const b = settings.bed;
   const bed = b && structures.ofType('bed').find(s => s.x === b.x && s.y === b.y && s.z === b.z);
@@ -1742,6 +1747,29 @@ function updateLift(dt, keys) {
     if (hud.item !== SKIS && isSnowyAt(x, z)) hud.toast('⛷️ Grab the Skis from the 🎉 Fun tab and ski down!');
   }
   return true;
+}
+
+// ---------- Swings, zip lines, balloons and hoops ----------
+
+function startContraption(s) {
+  if (riding() || sleeping || seated || liftRide) return;
+  const msg = contraptions.start(s, player);
+  if (msg) hud.toast(msg);
+}
+
+function rideContraption(dt, keys) {
+  const on = contraptions.updateRide(dt, keys, player);
+  if (contraptions.said) hud.toast(contraptions.said);
+  return on;
+}
+
+// The ball went through a hoop!
+function scored({ item, streak }) {
+  const c = item.center;
+  effects.sparkle(c.x, c.y, c.z, 30);
+  net.send({ t: 'fx', kind: 'sparkle', x: c.x, y: c.y, z: c.z });
+  sounds.score(loudness(c.x, c.y, c.z, 30));
+  hud.toast(streak >= 3 ? `🏀 SWISH! ${streak} in a row! You're on fire! 🔥` : streak === 2 ? '🏀 SWISH! Two in a row!' : '🏀 SWISH! Score!');
 }
 
 // ---------- Pizza delivery ----------
@@ -2413,6 +2441,7 @@ function interact() {
     const s = structures.at(...hit.block);
     if (s?.type === 'bed') return goToBed(s);
     if (s?.type === 'cannon') return fireCannon(s);
+    if (s && ['swing', 'zipline', 'balloon'].includes(s.type)) return startContraption(s);
     if (s?.type === 'tv') {
       const name = tvs.nextChannel(s);
       if (name) {
@@ -3436,6 +3465,8 @@ function frame(timestamp) {
       player.vel.set(0, 0, 0);
     } else if (updateLift(dt, active ? held : noKeys)) {
       // Riding the ski lift.
+    } else if (contraptions.riding && rideContraption(dt, active ? held : noKeys)) {
+      // On a swing, a zip line or up in a balloon.
     } else if (updateMove(dt)) {
       // Gliding into (or out of) a seat or a bed.
     } else if (seated) {
@@ -3575,6 +3606,10 @@ function frame(timestamp) {
       else if (def?.race === 'start' && item !== HAMMER) hint = '🏁 Start line: step off it to start the clock, then race to a Finish line!';
       else if (def?.race === 'finish' && item !== HAMMER) hint = '🏁 Finish line: cross it after a Start line to set a time';
       else if (s?.type === 'cannon') hint = '💥 Right-click to launch yourself!';
+      else if (s?.type === 'swing') hint = '🛝 Right-click to have a swing!';
+      else if (s?.type === 'zipline') hint = '🧗 Right-click to zip down the line!';
+      else if (s?.type === 'balloon') hint = '🎈 Right-click to fly the balloon!';
+      else if (s?.type === 'hoop') hint = '🏀 Throw the Pet Ball through the hoop!';
       else if (s?.type === 'tv') hint = '📺 Right-click to change the channel';
       else if (item === CLAIM) hint = `🚩 Click a corner to start claiming land (max ${CLAIM_MAX}×${CLAIM_MAX})`;
       else if (item === WATER_BALLOON) hint = '💦 Click to throw a water balloon!';
@@ -3614,6 +3649,7 @@ function frame(timestamp) {
     for (const a of avatars.list.values()) if (!a.seat) stepMusic(a.id, a.pos);
     updateRace();
     lifts.update(time);
+    contraptions.update(dt, time, [...avatars.list.values()]);
     updateJob(dt, time);
     updateSnow(dt, time);
     updateFlying(dt);
@@ -3622,7 +3658,12 @@ function frame(timestamp) {
 
     kickBall();
     updateDownwash(dt, time);
+    const ballBefore = ball.pos.clone();
     ball.update(dt, ballBoxes);
+    if (ball.active && !ball.carried) {
+      const goal = contraptions.checkBall(ballBefore, ball.pos, performance.now());
+      if (goal) scored(goal);
+    }
     // No pet to fetch it? It pops back into your hand after a while.
     if (ball.active && !myBody.pet && ball.restTime > 4) ball.active = false;
     fire = updateStructures(dt, time);
@@ -3635,7 +3676,7 @@ function frame(timestamp) {
       const rot = myCar ? [r(myCar.h), 0] : [r(player.yaw), r(player.pitch)];
       const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
       const balloon = hud.item === BALLOON && !riding() && !sleeping;
-      const flags = (sleeping ? FLAG.sleeping : 0) | (seated || liftRide ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
+      const flags = (sleeping ? FLAG.sleeping : 0) | (seated || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
         (player.jetting && !riding() ? FLAG.jet : 0) | (hud.item === TRAIL && !riding() ? FLAG.trail : 0) |
         (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
       net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item });
@@ -3667,7 +3708,8 @@ function frame(timestamp) {
     myBody.targetPitch = player.pitch;
     myBody.flying = player.flying;
     myBody.swing = view.swingT;
-    myBody.sitting = !!seated || !!liftRide;
+    myBody.sitting = !!seated || !!liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip';
+    myBody.hotair = contraptions.riding === 'balloon';
     myBody.crouching = player.crouching && !riding();
     myBody.pizza = !!job;
     myBody.balloon = hud.item === BALLOON && !riding() && !sleeping ? paintHex() : null;
@@ -3855,6 +3897,7 @@ window.buildzone = {
   get liftRide() { return liftRide; },
   get job() { return job; },
   get signs() { return signs; },
+  get contraptions() { return contraptions; },
   kickBall: () => kickBall(),
   throwBall: () => throwBall(),
   ballBoxes: r => ballBoxes(r),

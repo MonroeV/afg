@@ -916,6 +916,15 @@ export class Sounds {
   // ---------- Fun things ----------
 
   crack() { this.noiseHit(2400, 0.06, 0.7); this.tone(300, 200, 0.05, 0.15, 'square'); }
+  // A basket! The swish of the net, then a happy little fanfare.
+  score(volume = 1) {
+    if (volume <= 0) return;
+    this.together(() => {
+      this.noiseHit(5000, 0.18, 0.5 * volume, 'highpass');
+      [523, 659, 784, 1047].forEach((f, i) => this.tone(f, f, 0.12, 0.12 * volume, 'triangle', 0.12 + i * 0.07));
+    });
+  }
+
   // A wrench: the ratchet clicking round, then a clink of metal.
   wrench(volume = 1) {
     this.together(() => {

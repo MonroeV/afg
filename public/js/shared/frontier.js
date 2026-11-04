@@ -7,7 +7,7 @@
 // Everything here only ever goes onto empty land that nobody has claimed, so in a saved world
 // nothing anyone built is touched. (The mountains are solid, but the game doesn't draw blocks
 // buried inside other blocks, so they cost about as much to draw as their surface.)
-import { WORLD, DOOR_TOP, BED_FOOT, makeBlock, stack } from './blocks.js';
+import { WORLD, DOOR_TOP, BED_FOOT, SIGN, makeBlock, stack } from './blocks.js';
 import { exitRoads, makeSite, siteFree } from './worldgen.js';
 
 const B = {
@@ -531,4 +531,93 @@ function pizzeriaAt(site, L, D, set) {
     place: { x: px, y: 0, z: pz, area: [Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz)], face: Math.atan2(fx, fz), oven: [ox, 0, oz], inward },
     claim: { owner: 'Pizza Palace', key: 'pizza palace', x0: rect[0], z0: rect[1], x1: rect[2], z1: rect[3], createdAt: 0, permanent: true },
   };
+}
+
+// ---------- "Build it here!" signposts ----------
+// Out in open spots around the map, a little noticeboard (two posts with lanterns on top and two
+// signs) says what you could build there and how, for the Build Book things you can ride or
+// play with. Some have a spot marked out to build on. Returns the signs' words and the areas used.
+
+const SIGNPOSTS = [
+  { at: [-40, 42], title: '🛝 Build a SWING here!', how: '2 Log posts, 3 tall and 2 apart, with 3 Logs across the top', pad: { w: 7, d: 5, v: B.floor } },
+  { at: [40, -46], title: '🏀 Build a HOOP here!', how: 'Stack 3 Metal Plates. Then throw the Pet Ball in the hoop!', pad: { w: 9, d: 9, v: B.road, edge: B.sidewalk } },
+  { at: [165, 60], title: '🎈 Build a BALLOON here!', how: 'Put a Lantern in the middle of 8 Planks. Then fly away!', ring: 4 },
+  { at: [-186, 141], title: '🧗 Build a ZIP LINE here!', how: '3 Logs, Metal Plate on top. One up high, one down low', summit: [ROCKY.cx + 2, ROCKY.cz] },
+];
+
+// canUse(x, z): may a new thing go on this land; canClimb(x, z): may a little signpost go up on
+// a mountain there (land nobody has claimed).
+export function buildSignposts({ get, set, canUse, canClimb = canUse }) {
+  const signs = [], areas = [];
+  const inWorld = (x, z) => x > WORLD.min + 2 && x < WORLD.max - 2 && z > WORLD.min + 2 && z < WORLD.max - 2;
+  let ok = canUse;
+  const put = (x, y, z, v) => {
+    if (!inWorld(x, z) || !ok(x, z) || get(x, y, z)) return false;
+    set(x, y, z, v);
+    return true;
+  };
+  // Open ground (nothing on it up to head height) for a w x d area with its corner at (x0, z0).
+  const open = (x0, z0, w, d) => {
+    for (let x = x0; x < x0 + w; x++)
+      for (let z = z0; z < z0 + d; z++) {
+        if (!inWorld(x, z) || !canUse(x, z)) return false;
+        for (let y = 0; y < 6; y++) if (get(x, y, z)) return false;
+      }
+    return true;
+  };
+  // The noticeboard: two posts side by side (along x) with the signs on their +z side, facing
+  // whoever walks up from there.
+  const board = (x, z, y, title, how) => {
+    for (const [dx, text] of [[0, title], [1, how]]) {
+      put(x + dx, y, z, B.log);
+      put(x + dx, y + 1, z, B.planks);
+      put(x + dx, y + 2, z, B.lantern);
+      if (put(x + dx, y + 1, z + 1, makeBlock(SIGN, 0))) signs.push([x + dx, y + 1, z + 1, text]);
+    }
+  };
+  for (const p of SIGNPOSTS) {
+    const W = Math.max(p.pad?.w || 0, (p.ring || 0) * 2 + 1, 3) + 2, D = Math.max(p.pad?.d || 0, (p.ring || 0) * 2 + 1, 3) + 4;
+    let spot = null;
+    for (let r = 0; r <= 40 && !spot; r += 2)
+      for (let a = 0; a < 16 && !spot; a++) {
+        const x0 = Math.round(p.at[0] + Math.cos(a * Math.PI / 8) * r) - Math.floor(W / 2), z0 = Math.round(p.at[1] + Math.sin(a * Math.PI / 8) * r) - Math.floor(D / 2);
+        if (open(x0, z0, W, D)) spot = [x0, z0];
+        if (r === 0) break;
+      }
+    if (!spot) continue;
+    const [x0, z0] = spot, cx = x0 + Math.floor(W / 2);
+    // The board at the back (low z), the building spot in front of it.
+    board(cx - 1, z0, 0, p.title, p.how);
+    const bz = z0 + 3;
+    if (p.pad) {
+      const px = cx - Math.floor(p.pad.w / 2);
+      for (let x = px; x < px + p.pad.w; x++)
+        for (let z = bz; z < bz + p.pad.d; z++) {
+          const edge = p.pad.edge && (x === px || x === px + p.pad.w - 1 || z === bz || z === bz + p.pad.d - 1);
+          put(x, 0, z, edge ? p.pad.edge : p.pad.v);
+        }
+    }
+    if (p.ring) {
+      const c = [cx + 0.5, bz + p.ring + 0.5];
+      for (let x = cx - p.ring - 1; x <= cx + p.ring + 1; x++)
+        for (let z = bz; z <= bz + 2 * p.ring + 1; z++) {
+          const d = Math.hypot(x + 0.5 - c[0], z + 0.5 - c[1]);
+          if (Math.abs(d - p.ring) < 0.5) put(x, 0, z, B.flowers);
+        }
+    }
+    areas.push([x0, z0, x0 + W - 1, z0 + D - 1]);
+    // And one up on top of the mountain, for the other end of the zip line.
+    if (p.summit) {
+      const [sx, sz] = p.summit;
+      let top = 0;
+      for (let y = 40; y >= 0; y--) if (get(sx, y, sz)) {
+        top = y + 1;
+        break;
+      }
+      ok = canClimb;
+      if (top > 0) board(sx, sz, top, '🧗 ZIP LINE up here!', 'Build the top post here, and the bottom one down below');
+      ok = canUse;
+    }
+  }
+  return { signs, areas };
 }

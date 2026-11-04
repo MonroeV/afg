@@ -5,6 +5,7 @@ import { SEAT_SCALE } from './cars.js';
 import { PET_HAPPY, PET_CARRYING } from './pets.js';
 import { PetMover } from './petmove.js';
 import { PlayClock, Track } from './smooth.js';
+import { balloonModel } from './contraptions.js';
 
 // Extra bits in a pet's action number (sent to other players): jumping or falling, climbing.
 const PET_AIR = 8, PET_CLIMB = 16;
@@ -36,7 +37,7 @@ function nameTag(name, color) {
 
 // What a player is doing, sent with their position: bits of `flags`. The top 24 bits are
 // the color of the balloon they're holding.
-export const FLAG = { sleeping: 1, sitting: 2, crouching: 4, balloon: 8, jet: 16, trail: 32, pizza: 64 };
+export const FLAG = { sleeping: 1, sitting: 2, crouching: 4, balloon: 8, jet: 16, trail: 32, pizza: 64, hotair: 128 };
 
 // A speech bubble: rounded and white, with up to two lines of text and a little tail.
 function speechBubble(text) {
@@ -326,6 +327,7 @@ export class Avatar {
     this.jet = !!(flags & FLAG.jet);
     this.trail = !!(flags & FLAG.trail);
     this.pizza = !!(flags & FLAG.pizza);
+    this.hotair = !!(flags & FLAG.hotair);
   }
 
   emote(kind) {
@@ -382,6 +384,11 @@ export class Avatar {
     }
     this.updateRemoteBall(dt);
     this.updatePizzaBox();
+    if (this.hotair && !this.hotairModel) {
+      this.hotairModel = balloonModel(this.id, true);
+      this.root.add(this.hotairModel);
+    }
+    if (this.hotairModel) this.hotairModel.visible = !!this.hotair && !this.snap;
     this.updateBalloon(time);
     if (this.bubble) {
       this.bubbleT -= dt;

@@ -90,7 +90,18 @@ customize your character, drive cars, build anything and play with friends.
 - **Logs grow into trees**: put a lone log on the grass and watch it grow
 - **Build Book**: special things you can make out of blocks: beds, trampolines, campfires,
   teleporters, cannons, fountains, dance floors and TVs (with cartoons, news, weather and
-  silly commercials)
+  silly commercials), and four you can ride or play with:
+  - **Swing**: two Log posts, 3 tall and 2 apart, with 3 Logs across the top. A swing hangs
+    from it: right-click to sit, hold W to swing higher, press Space to jump off and fly
+  - **Zip Line**: three Logs with a Metal Plate on top. Build two, one up high (a hill, a roof, a
+    mountain) and one lower down: a cable joins them. Right-click the high one and zoom down
+  - **Basketball Hoop**: three Metal Plates stacked up. A backboard and hoop appear on top:
+    throw the Pet Ball through it for a SWISH (and see how many you can get in a row)
+  - **Hot Air Balloon**: a Lantern in the middle of eight Planks. A striped balloon floats over
+    it: right-click to climb in and fly. Space fires the burner, Shift lets air out, WASD
+    steers, and you land wherever you come down
+  Signposts around the map ("Build a SWING here!", by the playground pad, the basketball court,
+  the balloon field and the rocky mountain) show where's good to build them and how
 - **Doors** that open and close with a right-click (even with the hammer in your hand). Put two
   doors side by side and they become double doors that swing outward; put three or more in a row
   and they become one big garage door that rolls up. A garage door starts 3 blocks tall (so cars
@@ -374,6 +385,7 @@ along the ring road, the lake wherever there's room, smaller if it has to be), t
 and the Pizza Palace (on empty land), the ski resort, the woods, the big lake and the mountains
 (out past the old edge of the world, where nobody could build before; the roads out to them only
 go on empty land, and where one meets an old road, just that bit of sidewalk becomes road),
+the "Build it here!" signposts (on empty land),
 and furniture: only in houses and towers that are exactly as the town was first
 built (nobody has changed or claimed them), and only in their empty spots. If `world.json` can't be read, or was saved by a newer version of the game,
 the server stops with a message instead of touching it.
@@ -413,6 +425,7 @@ public/
     ground.js          The ground (snowy up north), holes dug in it, the edge of the world
     lifts.js           Ski lift cables, chairs and rides
     signs.js           The writing on signs
+    contraptions.js    Swings, zip lines, basketball hoops and hot air balloons
     lighting.js        Live reflections and the glow effect
     lightpools.js      Soft pools of light on the ground under every lamp
     models.js          3D models for the lamps and furniture
@@ -442,6 +455,6 @@ public/
 - Hide and seek, or tag
 - Water you can swim in
 - Trains between the towns
-- More Build Book recipes: a slide, a zipline, a jukebox
+- More Build Book recipes: a slide, a jukebox, a Ferris wheel
 
 Built with [three.js](https://threejs.org) and [ws](https://github.com/websockets/ws).
