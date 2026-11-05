@@ -347,7 +347,7 @@ $('join-form').addEventListener('submit', async e => {
     : 'Tip: right-click a car or the helicopter to drive it. Press E to see the Build Book!' });
 
   inGame = true;
-  respawn(true);
+  respawn(true, welcome.resume);
   $('menu').classList.add('hidden');
   $('hud').classList.remove('hidden');
   lock();
@@ -1703,13 +1703,19 @@ function landSpawn() {
 }
 
 // Back home: your bed if you have one, then your land, then the town square.
-function respawn(joining = false) {
+function respawn(joining = false, resume = null) {
   wakeUp(true);
   standUp(true);
   move = null;
   liftRide = null;
   contraptions.end();
   getOut();
+  // Coming back: right where you were when you left, if there's room for you there.
+  if (joining && resume && resumeAt(resume)) {
+    hud.toast('👋 Welcome back! You\'re right where you left off.');
+    return;
+  }
+  const blocked = joining && resume; // (there was a spot to go back to, but no room there now)
   const b = settings.bed;
   const bed = b && structures.ofType('bed').find(s => s.x === b.x && s.y === b.y && s.z === b.z);
   const land = !bed && landSpawn();
@@ -1722,7 +1728,39 @@ function respawn(joining = false) {
     hud.toast(joining ? '🏠 Welcome back to your land!' : '🏠 Home sweet home: back on your land!');
   } else {
     player.respawn();
+    if (blocked) hud.toast('👋 Welcome back! Something is in the way where you left off, so here you are at the town square.');
   }
+  if (blocked && (bed || land)) hud.toast(`👋 Welcome back! Something is in the way where you left off, so you're ${bed ? 'next to your bed' : 'on your land'}.`);
+}
+
+// Puts you back at a spot you left the game at: on the ground under it (if you left in mid air),
+// and only if you fit there (nothing built in the way, no car parked on it). Returns whether
+// it worked; if not, you go to your usual spawn spot instead.
+function resumeAt([x, y, z, yaw]) {
+  if (![x, y, z, yaw].every(Number.isFinite)) return false;
+  if (x < WORLD.min || x > WORLD.max + 1 || z < WORLD.min || z > WORLD.max + 1 || y < -1 || y > WORLD.maxY) return false;
+  // Find the ground under the spot (up to 40 blocks down).
+  const cx = Math.floor(x), cz = Math.floor(z);
+  let ground = null;
+  for (let gy = Math.floor(y + 0.05); gy >= Math.max(-2, Math.floor(y) - 40); gy--) {
+    if (world.isSolid(cx, gy - 1, cz)) {
+      ground = gy;
+      break;
+    }
+  }
+  if (ground === null) return false;
+  const before = player.pos.clone();
+  // (Standing on something low, like a step or a chair, stays as it was; in mid air, you land.)
+  player.pos.set(x, y - ground <= 0.6 ? Math.max(y, ground) : ground, z);
+  if (player.overlapsSomething()) {
+    player.pos.copy(before);
+    return false;
+  }
+  player.vel.set(0, 0, 0);
+  player.flying = false;
+  player.yaw = yaw;
+  player.pitch = 0;
+  return true;
 }
 
 // Lamps with real flames (tiki torches and candles), refreshed when the world changes.

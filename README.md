@@ -290,6 +290,11 @@ with the nearest other one).
 **Railings:** pick the Railing, then point near the edge of a floor and click: a white outline
 shows where it will go. Point at the side of a wall to put one along the top of the wall.
 
+**Coming back:** when you play again, you start right where you were when you left (on the ground
+under it, if you left in mid air). If something's in the way there now (someone built there, or a
+car is parked on the spot), you start at your bed, your land or the town square instead. The
+server remembers this for each name, so it works from any computer.
+
 **Claiming land:** pick the Land Flag (slot 9), click one corner, click the opposite corner, then
 click once more to claim it. Right-click cancels. With the flag in your hand, right-click twice to
 give your land up. You have one piece of home land: if you already have some and claim somewhere

@@ -40,6 +40,7 @@ export class GameRoom {
     this.clients = new Map(); // id -> client
     this.claims = []; // { owner, key, x0, z0, x1, z1, createdAt }
     this.names = {}; // lowercase name -> last time someone played with it
+    this.spots = {}; // lowercase name -> where they were when they left: [x, y, z, yaw, when]
     this.saplings = []; // logs growing into trees
     this.races = {}; // finish line "x,y,z" -> best times [{ name, key, time }]
     this.places = null; // where the store, the tower lobby and the town square are (for the NPCs)
@@ -161,6 +162,10 @@ export class GameRoom {
     this.claims = (data.claims || []).filter(c => c && c.key);
     this.paints = new Map((data.paints || []).filter(([k, f]) => typeof k === 'string' && this.world.has(k.split('|')[0]) && validFaces(f)));
     this.names = data.names || {};
+    this.spots = {};
+    for (const [k, p] of Object.entries(data.spots && typeof data.spots === 'object' ? data.spots : {})) {
+      if (Array.isArray(p) && p.length >= 5 && p.every(Number.isFinite)) this.spots[k] = p.slice(0, 5);
+    }
     this.saplings = data.saplings || [];
     this.races = {};
     for (const [k, list] of Object.entries(data.races && typeof data.races === 'object' ? data.races : {})) {
@@ -285,6 +290,7 @@ export class GameRoom {
       vehicles: [...this.vehicles.values()].map(({ home, kind, color, x, y, z, h, hp }) => ({ home, kind, color, x, y, z, h, hp: Math.round(hp) })),
       claims: this.claims,
       names: this.names,
+      spots: this.spots,
       saplings: this.saplings,
       paints: [...this.paints],
       // Best race times, for finish lines that are still there.
@@ -356,6 +362,10 @@ export class GameRoom {
     this.clients.delete(client.id);
     this.jobs.delete(client.id);
     if (!client.joined) return;
+    if (client.moved) {
+      this.rememberSpot(client);
+      this.onDirty();
+    }
     this.leaveVehicle(client);
     this.seen(client.name);
     this.broadcast({ t: 'leave', id: client.id });
@@ -467,6 +477,8 @@ export class GameRoom {
       players: [...this.clients.values()].filter(o => o.joined && o !== client).map(publicPlayer),
       npcs: this.npcs.info(),
       news: this.npcs.newsInfo(),
+      // Where you were when you last left (your game puts you back there if there's room).
+      resume: this.spots[nameKey(client.name)]?.slice(0, 4) || null,
       coins: [...this.coins].map(([id, c]) => [id, ...c]),
     });
     // Coins: your wallet, and a little present the first time you play each day.
@@ -538,6 +550,7 @@ export class GameRoom {
       if (Array.isArray(msg.pos) && Array.isArray(msg.rot)) {
         client.pos = msg.pos.slice(0, 3).map(num);
         client.rot = msg.rot.slice(0, 2).map(num);
+        client.moved = true;
       }
       client.pet = numbers(msg.pet, 5);
       client.ball = numbers(msg.ball, 3);
@@ -1099,8 +1112,16 @@ export class GameRoom {
     this.broadcast({ t: 'chat', system: true, text: '☀️ Everyone slept through the night. Good morning!' });
   }
 
+  // Where someone is, so they come back there next time they play.
+  rememberSpot(client) {
+    const [x, y, z] = client.pos, r = v => Math.round(v * 100) / 100;
+    if (![x, y, z].every(Number.isFinite) || !inBounds(Math.floor(x), Math.max(0, Math.floor(y)), Math.floor(z))) return;
+    this.spots[nameKey(client.name)] = [r(x), r(y), r(z), r(client.rot?.[0] || 0), Date.now()];
+  }
+
   expireClaims() {
     const limit = Date.now() - CLAIM_EXPIRE_DAYS * DAY_MS;
+    for (const [k, p] of Object.entries(this.spots)) if (p[4] < limit) delete this.spots[k];
     const before = this.claims.length;
     this.claims = this.claims.filter(c => c.permanent || (this.names[c.key] || c.createdAt) > limit);
     if (this.claims.length !== before) {
@@ -1123,7 +1144,11 @@ export class GameRoom {
     }
     if (t.names <= 0) {
       t.names = 60;
-      for (const c of this.clients.values()) if (c.joined) this.seen(c.name);
+      for (const c of this.clients.values()) {
+        if (!c.joined) continue;
+        this.seen(c.name);
+        if (c.moved) this.rememberSpot(c); // (in case the server stops before they leave)
+      }
     }
     if (t.holes <= 0) {
       t.holes = 5;
