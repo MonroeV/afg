@@ -271,8 +271,13 @@ change the camera with V, but only the driver can drive. Press E to get out.
 
 **Flying the helicopter:** wait for the rotor to spin up, then hold Space to climb and Shift to go
 down. Steer with the mouse: the helicopter turns to face wherever you look, and leans into the
-turn (the faster you fly, the wider and swoopier the turn). W/S tilt forward and back (tilting
-moves you, and you keep sliding until you tilt the other way). A/D slide sideways. Land gently, or
+turn (the faster you fly, the wider and swoopier the turn). W/A/S/D move the stick like a real
+helicopter's: holding a key keeps tilting it further, and it stays tilted when you let go (it
+doesn't spring back), so push the other way to level out ("Tilt" at the top of the screen shows
+how far you're tilted, and 🎯 Level when you're level). Tilting is what moves you: the further
+and the longer you tilt, the faster you go, and you keep drifting until you tilt the other way
+to slow down. Let go of Space and Shift and it holds its height. On the ground it sits still: it
+can't turn or tilt until you've lifted off. Land gently, or
 it gets damaged. Don't let the rotor hit anything!
 
 **Skiing:** pick the Skis (🎉 Fun tab) and stand on snow. Point downhill and you're off: W carves

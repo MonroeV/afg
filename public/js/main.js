@@ -1151,8 +1151,8 @@ function enterCar(car) {
   sounds.spawnCar();
   if (car.spec.flying && settings.heliTip !== 2) { // shown again when the controls change
     hud.addChat({ system: true, text: touch
-      ? '🚁 Wait for the rotor to spin up, then hold ⬆ to lift off and ⬇ to come down. It turns to face where you look (drag on the right side). The joystick tilts it forward and back and slides it sideways. Land gently!'
-      : '🚁 Wait for the rotor to spin up, then hold Space to lift off. Steer with the mouse (it turns to where you look), tilt with W/S, slide sideways with A/D, Shift to go down. Land gently!' });
+      ? '🚁 Wait for the rotor to spin up, then hold ⬆ to lift off and ⬇ to come down. It turns to face where you look (drag on the right side). The joystick tilts it, and it stays tilted until you push the other way. Land gently!'
+      : '🚁 Wait for the rotor to spin up, then hold Space to lift off. Steer with the mouse (it turns to where you look). W/A/S/D tilt it, and it stays tilted until you tilt it back (watch "Tilt" at the top). Shift goes down. Land gently!' });
     settings.heliTip = 2;
     saveSettings();
   }
@@ -3904,8 +3904,13 @@ function frame(timestamp) {
         const health = `❤️ ${Math.max(0, Math.round((myCar.hp / MAX_HP) * 100))}%`;
         let ground = Math.floor(myCar.pos.y);
         while (ground > 0 && !world.isSolid(Math.floor(myCar.pos.x), ground - 1, Math.floor(myCar.pos.z))) ground--;
+        // How the stick is tilted (it stays where you leave it), so you can tell when it's level.
+        const deg = v => Math.round(Math.abs(v) * 180 / Math.PI);
+        const sp = myCar.stickPitch || 0, sr = myCar.stickRoll || 0;
+        const tilt = myCar.onGround ? '🛬 On the ground' : deg(sp) < 2 && deg(sr) < 2 ? '🎯 Level'
+          : [deg(sp) >= 2 ? `${sp < 0 ? '⬆' : '⬇'} ${deg(sp)}°` : '', deg(sr) >= 2 ? `${sr > 0 ? '⬅' : '➡'} ${deg(sr)}°` : ''].filter(Boolean).join(' ');
         hud.setVehicleInfo(myCar.spec.flying
-          ? `⬆️ ${Math.max(0, Math.round(myCar.pos.y - ground))} m · ${kmh} km/h · Rotor ${Math.round(myCar.rotorSpin * 100)}% · ${health}`
+          ? `⬆️ ${Math.max(0, Math.round(myCar.pos.y - ground))} m · ${kmh} km/h · Tilt: ${tilt} · Rotor ${Math.round(myCar.rotorSpin * 100)}% · ${health}`
           : myCar.spec.boat ? `🚤 ${kmh} km/h · ${health}`
             : `Gear ${myCar.gear === 0 ? 'R' : myCar.gear === 3 ? '3 (overdrive)' : myCar.gear} · ${kmh} km/h · ${health}`);
       } else if (myRide) {

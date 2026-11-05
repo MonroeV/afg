@@ -9,6 +9,8 @@ export const CAR_SPECS = VEHICLES;
 
 const GRAVITY = 30;
 const HELI_GRAVITY = 14;
+const TILT_RATE = 0.55; // how fast holding W/S/A/D tilts the helicopter (radians a second)
+const MAX_TILT = 0.5; // how far it can tilt
 export const SEAT_SCALE = 0.85;
 const GOLD = '#d9a21b'; // the color of gold car paint
 
@@ -991,42 +993,62 @@ export class Cars {
     }
   }
 
-  // Helicopter flight. Tilting moves you, but also steals lift, and you keep sliding
-  // until you tilt the other way: easy to learn, tricky to master.
+  // Helicopter flight, a bit like the real thing: W/S/A/D move the stick, and the helicopter
+  // stays tilted however far you've pushed it until you push it back to the middle (it doesn't
+  // spring back by itself). Tilting is what moves you: the further you tilt, and the longer,
+  // the faster you go, and you keep drifting until you tilt the other way. Space and Shift
+  // climb and descend; let go of both and it holds its height. On the ground it sits level
+  // and can't turn or tilt until it lifts off.
   fly(car, dt, keys, aimYaw = car.h) {
     const s = car.spec;
     const events = [];
     const health = 0.6 + 0.4 * (car.hp / MAX_HP);
     car.rotorSpin = Math.min(1, car.rotorSpin + dt / 3.5); // engine spools up when you get in
     const lift = car.rotorSpin ** 2;
+    const grounded = car.onGround;
 
-    const up = keys.has('Space'), down = keys.has('ShiftLeft') || keys.has('ShiftRight');
-    car.collective += ((up ? 1 : down ? 0.2 : 0.5) - car.collective) * Math.min(1, 1.6 * dt);
-    const pitchIn = (keys.has('KeyW') ? -0.45 : 0) + (keys.has('KeyS') ? 0.35 : 0);
-    car.pitch += (pitchIn - car.pitch) * Math.min(1, 1.8 * dt);
-    // Steering follows the mouse: the nose turns smoothly toward where you're looking.
-    // While turning it banks (leans) into the turn like a bird, and the tilted rotor pulls
-    // it sideways into the curve, so faster flight means wider, swoopier turns.
+    // The stick: held keys keep tilting it further (up to a limit); let go and it stays put.
+    car.stickPitch ??= 0;
+    car.stickRoll ??= 0;
+    if (grounded) {
+      car.stickPitch = car.stickRoll = 0;
+    } else {
+      const rate = TILT_RATE * dt;
+      if (keys.has('KeyW')) car.stickPitch -= rate;
+      if (keys.has('KeyS')) car.stickPitch += rate;
+      if (keys.has('KeyA')) car.stickRoll += rate;
+      if (keys.has('KeyD')) car.stickRoll -= rate;
+      car.stickPitch = Math.max(-MAX_TILT, Math.min(MAX_TILT * 0.8, car.stickPitch));
+      car.stickRoll = Math.max(-MAX_TILT, Math.min(MAX_TILT, car.stickRoll));
+    }
+    car.pitch += (car.stickPitch - car.pitch) * Math.min(1, 6 * dt);
+
+    // Steering follows the mouse: the nose turns smoothly toward where you're looking (once
+    // you're off the ground). While turning it also leans into the turn like a bird, and the
+    // tilted rotor pulls it into the curve, so faster flight means wider, swoopier turns.
     const flatSpeed = Math.hypot(car.vel.x, car.vel.z);
     const off = Math.atan2(Math.sin(aimYaw - car.h), Math.cos(aimYaw - car.h));
-    const maxRate = (car.onGround ? 0.6 : 1.5) * lift;
+    const maxRate = grounded ? 0 : 1.5 * lift;
     const wantRate = Math.max(-maxRate, Math.min(maxRate, off * 2.6));
-    car.yawRate += (wantRate - car.yawRate) * Math.min(1, 3 * dt);
+    car.yawRate = grounded ? 0 : car.yawRate + (wantRate - car.yawRate) * Math.min(1, 3 * dt);
     car.h += car.yawRate * dt;
-    const turnBank = car.yawRate * (0.06 + Math.min(flatSpeed, 15) / 15 * 0.2);
-    // A and D slide it sideways (strafe): it leans that way and the rotor pulls it over.
-    const strafeIn = (keys.has('KeyA') ? 1 : 0) - (keys.has('KeyD') ? 1 : 0);
-    const bank = car.onGround ? 0 : (strafeIn * 0.32 + turnBank) * lift;
-    car.roll += (bank - car.roll) * Math.min(1, 2.5 * dt);
+    const turnBank = grounded ? 0 : car.yawRate * (0.06 + Math.min(flatSpeed, 15) / 15 * 0.2) * lift;
+    car.roll += (car.stickRoll + turnBank - car.roll) * Math.min(1, 6 * dt);
 
-    // Forces: lift along the tilted rotor, gravity down, a bit of air drag.
+    // Lift. Space and Shift work the collective as before; with neither held it holds its
+    // height (making up for the tilt, and for any damage), so it only sinks very slowly.
+    const up = keys.has('Space'), down = keys.has('ShiftLeft') || keys.has('ShiftRight');
+    const level = Math.max(0.55, Math.cos(car.pitch) * Math.cos(car.roll));
+    const hover = Math.max(0.2, Math.min(1, (0.5 - car.vel.y * 0.05 - 0.004) / (level * health)));
+    car.collective += ((up ? 1 : down ? 0.2 : hover) - car.collective) * Math.min(1, (up || down ? 1.6 : 4) * dt);
     const thrust = lift * car.collective * 2 * HELI_GRAVITY * health;
     const fwd = new THREE.Vector3(-Math.sin(car.h), 0, -Math.cos(car.h));
     car.vel.addScaledVector(fwd, thrust * Math.sin(-car.pitch) * dt);
     const left = new THREE.Vector3(-Math.cos(car.h), 0, Math.sin(car.h));
     car.vel.addScaledVector(left, thrust * Math.sin(car.roll) * dt);
     car.vel.y += (thrust * Math.cos(car.pitch) * Math.cos(car.roll) - HELI_GRAVITY) * dt;
-    const drag = Math.exp(-0.32 * dt);
+    // Air drag: gentle at low speed (so you coast), stronger the faster you go.
+    const drag = Math.exp(-(0.16 + 0.009 * flatSpeed) * dt);
     car.vel.x *= drag;
     car.vel.z *= drag;
     car.vel.y *= Math.exp(-0.9 * dt);
@@ -1075,6 +1097,8 @@ export class Cars {
       car.vel.x *= Math.exp(-5 * dt);
       car.vel.z *= Math.exp(-5 * dt);
       car.pitch *= Math.exp(-4 * dt);
+      car.roll *= Math.exp(-4 * dt);
+      car.yawRate = 0;
     }
     // Rotor strikes hurt.
     car.strikeTimer -= dt;
