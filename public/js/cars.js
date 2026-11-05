@@ -10,7 +10,9 @@ export const CAR_SPECS = VEHICLES;
 const GRAVITY = 30;
 const HELI_GRAVITY = 14;
 const TILT_RATE = 0.55; // how fast holding W/S/A/D tilts the helicopter (radians a second)
-const MAX_TILT = 0.5; // how far it can tilt
+const MAX_TILT = 0.5; // how far it can tilt forward and back
+const STRAFE_LEAN = 0.32; // how far A/D lean it sideways
+const STRAFE_EASE = 1.25; // how quickly it leans over, and back to level (half as quick as it used to be)
 export const SEAT_SCALE = 0.85;
 const GOLD = '#d9a21b'; // the color of gold car paint
 
@@ -993,9 +995,10 @@ export class Cars {
     }
   }
 
-  // Helicopter flight, a bit like the real thing: W/S/A/D move the stick, and the helicopter
-  // stays tilted however far you've pushed it until you push it back to the middle (it doesn't
-  // spring back by itself). Tilting is what moves you: the further you tilt, and the longer,
+  // Helicopter flight, a bit like the real thing: W/S move the stick forward and back, and the
+  // helicopter stays tilted however far you've pushed it until you push it back to the middle
+  // (it doesn't spring back by itself). A/D lean it sideways to slide, and that does ease back
+  // to level when you let go (gently). Tilting is what moves you: the further you tilt, and the longer,
   // the faster you go, and you keep drifting until you tilt the other way. Space and Shift
   // climb and descend; let go of both and it holds its height. On the ground it sits level
   // and can't turn or tilt until it lifts off.
@@ -1009,18 +1012,16 @@ export class Cars {
 
     // The stick: held keys keep tilting it further (up to a limit); let go and it stays put.
     car.stickPitch ??= 0;
-    car.stickRoll ??= 0;
     if (grounded) {
-      car.stickPitch = car.stickRoll = 0;
+      car.stickPitch = 0;
     } else {
       const rate = TILT_RATE * dt;
       if (keys.has('KeyW')) car.stickPitch -= rate;
       if (keys.has('KeyS')) car.stickPitch += rate;
-      if (keys.has('KeyA')) car.stickRoll += rate;
-      if (keys.has('KeyD')) car.stickRoll -= rate;
       car.stickPitch = Math.max(-MAX_TILT, Math.min(MAX_TILT * 0.8, car.stickPitch));
-      car.stickRoll = Math.max(-MAX_TILT, Math.min(MAX_TILT, car.stickRoll));
     }
+    // A/D: lean that way while held, easing back to level when you let go.
+    const strafeIn = grounded ? 0 : (keys.has('KeyA') ? 1 : 0) - (keys.has('KeyD') ? 1 : 0);
     car.pitch += (car.stickPitch - car.pitch) * Math.min(1, 6 * dt);
 
     // Steering follows the mouse: the nose turns smoothly toward where you're looking (once
@@ -1033,7 +1034,7 @@ export class Cars {
     car.yawRate = grounded ? 0 : car.yawRate + (wantRate - car.yawRate) * Math.min(1, 3 * dt);
     car.h += car.yawRate * dt;
     const turnBank = grounded ? 0 : car.yawRate * (0.06 + Math.min(flatSpeed, 15) / 15 * 0.2) * lift;
-    car.roll += (car.stickRoll + turnBank - car.roll) * Math.min(1, 6 * dt);
+    car.roll += (strafeIn * STRAFE_LEAN * lift + turnBank - car.roll) * Math.min(1, STRAFE_EASE * dt);
 
     // Lift. Space and Shift work the collective as before; with neither held it holds its
     // height (making up for the tilt, and for any damage), so it only sinks very slowly.
