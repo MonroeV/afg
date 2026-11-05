@@ -293,7 +293,11 @@ shows where it will go. Point at the side of a wall to put one along the top of 
 **Coming back:** when you play again, you start right where you were when you left (on the ground
 under it, if you left in mid air). If something's in the way there now (someone built there, or a
 car is parked on the spot), you start at your bed, your land or the town square instead. The
-server remembers this for each name, so it works from any computer.
+server remembers this for each name, so it works from any computer. It doesn't matter how you
+leave: Exit to Menu, closing the tab or the browser, or a tablet that goes to sleep or loses its
+wi-fi. (The server checks every 15 seconds that each player is still there, and hangs up on
+connections that have gone quiet. Coming back while your old page is still "here" picks up from
+it.) In single player the spot is saved in the browser the moment you close the page.
 
 **Claiming land:** pick the Land Flag (slot 9), click one corner, click the opposite corner, then
 click once more to claim it. Right-click cancels. With the flag in your hand, right-click twice to

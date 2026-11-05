@@ -928,6 +928,15 @@ window.addEventListener('beforeunload', e => {
   e.preventDefault();
   e.returnValue = '';
 });
+// Closing the browser (or the tab, or switching away on a tablet): tell the game exactly where
+// we are right now, so next time we start right here.
+function leavingPage() {
+  if (!inGame) return;
+  sendState();
+  net.checkpoint();
+}
+window.addEventListener('pagehide', leavingPage);
+document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && leavingPage());
 window.addEventListener('keyup', e => keys.delete(e.code));
 window.addEventListener('blur', () => {
   keys.clear();
@@ -1739,10 +1748,10 @@ function respawn(joining = false, resume = null) {
 function resumeAt([x, y, z, yaw]) {
   if (![x, y, z, yaw].every(Number.isFinite)) return false;
   if (x < WORLD.min || x > WORLD.max + 1 || z < WORLD.min || z > WORLD.max + 1 || y < -1 || y > WORLD.maxY) return false;
-  // Find the ground under the spot (up to 40 blocks down).
+  // Find the ground under the spot (all the way down, if they left from a helicopter up high).
   const cx = Math.floor(x), cz = Math.floor(z);
   let ground = null;
-  for (let gy = Math.floor(y + 0.05); gy >= Math.max(-2, Math.floor(y) - 40); gy--) {
+  for (let gy = Math.floor(y + 0.05); gy >= -2; gy--) {
     if (world.isSolid(cx, gy - 1, cz)) {
       ground = gy;
       break;
@@ -1761,6 +1770,18 @@ function resumeAt([x, y, z, yaw]) {
   player.yaw = yaw;
   player.pitch = 0;
   return true;
+}
+
+// Where we are and what we're doing, for everyone else (and for picking up here next time).
+function sendState() {
+  const r = v => Math.round(v * 100) / 100;
+  const rot = myCar ? [r(myCar.h), 0] : [r(player.yaw), r(player.pitch)];
+  const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
+  const balloon = hud.item === BALLOON && !riding() && !sleeping;
+  const flags = (sleeping ? FLAG.sleeping : 0) | (seated || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
+    (player.jetting && !riding() ? FLAG.jet : 0) | (hud.item === TRAIL && !riding() ? FLAG.trail : 0) |
+    (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
+  net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item });
 }
 
 // Lamps with real flames (tiki torches and candles), refreshed when the world changes.
@@ -3879,14 +3900,7 @@ function frame(timestamp) {
     if (sendTimer <= 0) {
       // 20 times a second, evenly, each stamped with the time so others can replay it smoothly.
       sendTimer = Math.max(0, sendTimer + 1 / 20);
-      const r = v => Math.round(v * 100) / 100;
-      const rot = myCar ? [r(myCar.h), 0] : [r(player.yaw), r(player.pitch)];
-      const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
-      const balloon = hud.item === BALLOON && !riding() && !sleeping;
-      const flags = (sleeping ? FLAG.sleeping : 0) | (seated || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
-        (player.jetting && !riding() ? FLAG.jet : 0) | (hud.item === TRAIL && !riding() ? FLAG.trail : 0) |
-        (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
-      net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item });
+      sendState();
       sendCarState();
       // Parked cars we knocked (or pushed): tell everyone where they are.
       for (const car of cars.list.values()) {

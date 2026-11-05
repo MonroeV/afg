@@ -119,8 +119,17 @@ export class Network {
   // Leaving the game: say goodbye to the server, or save the single-player world right away.
   leave() {
     this.leaving = true;
-    if (this.local) this.local.save();
+    if (this.local) this.checkpoint();
     else this.ws?.close();
+  }
+
+  // Single player: remember where we are and save now (the page may be about to close).
+  // (A server hears where we are all the time, and keeps it when we go.)
+  checkpoint() {
+    if (!this.local) return;
+    const { room, client } = this.local;
+    if (client.moved) room.rememberSpot(client);
+    this.local.save();
   }
 
   send(msg) {

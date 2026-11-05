@@ -344,14 +344,15 @@ export class GameRoom {
 
   // ---------- Connections ----------
 
-  // `send` is a function that delivers one message object to this client.
-  connect(send) {
+  // `send` delivers one message object to this client; `drop` hangs up on them (used when
+  // they're back on a new page while the server still thinks the old one is here).
+  connect(send, drop = null) {
     if (this.clients.size >= this.maxPlayers) {
       send({ t: 'full' });
       return null;
     }
     const client = {
-      id: this.nextId++, send, joined: false, name: 'Builder', look: sanitizeLook(null),
+      id: this.nextId++, send, drop, heard: Date.now(), joined: false, name: 'Builder', look: sanitizeLook(null),
       pos: [0, 0, 0], rot: [0, 0], pet: 0, ball: 0, flags: 0, car: 0, sleeping: false, buckets: {},
     };
     this.clients.set(client.id, client);
@@ -359,17 +360,19 @@ export class GameRoom {
   }
 
   disconnect(client) {
-    this.clients.delete(client.id);
+    if (!this.clients.delete(client.id)) return; // (already gone)
     this.jobs.delete(client.id);
     if (!client.joined) return;
-    if (client.moved) {
+    // Already back on a new page? Then that one keeps track of where they are.
+    const back = this.sameName(client);
+    if (client.moved && !back) {
       this.rememberSpot(client);
       this.onDirty();
     }
     this.leaveVehicle(client);
     this.seen(client.name);
     this.broadcast({ t: 'leave', id: client.id });
-    this.broadcast({ t: 'chat', system: true, text: `${client.name} left` });
+    if (!back) this.broadcast({ t: 'chat', system: true, text: `${client.name} left` });
     this.log(`${client.name} left (${this.clients.size} online)`);
   }
 
@@ -448,6 +451,7 @@ export class GameRoom {
 
   handle(client, msg) {
     if (!msg || typeof msg !== 'object') return;
+    client.heard = Date.now();
     if (msg.t === 'join') {
       if (!client.joined) this.join(client, msg);
       return;
@@ -461,6 +465,15 @@ export class GameRoom {
     client.name = cleanName(msg.name);
     client.look = sanitizeLook(msg.look);
     client.joined = true;
+    // Still "here" on an old page that's gone quiet? That's them, back after closing the browser
+    // or tablet without the server hearing (a sleeping phone, dropped wi-fi): carry on from where
+    // that page last was, and hang it up.
+    for (const old of this.sameName(client, true)) {
+      if (Date.now() - old.heard < 3000) continue; // (someone actually playing under this name)
+      if (old.moved) this.rememberSpot(old);
+      this.disconnect(old);
+      old.drop?.();
+    }
     this.seen(client.name);
     client.send({
       t: 'welcome',
@@ -1110,6 +1123,17 @@ export class GameRoom {
     this.broadcast({ t: 'time', time: this.time });
     this.broadcast({ t: 'wake' });
     this.broadcast({ t: 'chat', system: true, text: '☀️ Everyone slept through the night. Good morning!' });
+  }
+
+  // Others online under the same name as `client` (the first one, or all of them).
+  sameName(client, all = false) {
+    const key = nameKey(client.name), found = [];
+    for (const c of this.clients.values()) {
+      if (c === client || !c.joined || nameKey(c.name) !== key) continue;
+      if (!all) return c;
+      found.push(c);
+    }
+    return all ? found : null;
   }
 
   // Where someone is, so they come back there next time they play.

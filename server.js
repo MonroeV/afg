@@ -238,12 +238,15 @@ function charactersApi(req, res) {
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 8192 });
 
 wss.on('connection', ws => {
-  const client = room.connect(msg => ws.readyState === ws.OPEN && ws.send(JSON.stringify(msg)));
+  const client = room.connect(msg => ws.readyState === ws.OPEN && ws.send(JSON.stringify(msg)), () => ws.terminate());
   if (!client) {
     ws.close();
     return;
   }
+  ws.alive = true;
+  ws.on('pong', () => (ws.alive = true));
   ws.on('message', raw => {
+    ws.alive = true;
     let msg;
     try {
       msg = JSON.parse(raw);
@@ -254,6 +257,24 @@ wss.on('connection', ws => {
   });
   ws.on('close', () => room.disconnect(client));
 });
+
+// A browser that's closed properly says goodbye, but a tablet put to sleep, a phone that lost
+// its wi-fi or a laptop lid snapped shut just goes quiet, and the connection would hang around
+// for ages (with their player standing there, and not knowing where they left off). So every
+// 15 seconds each connection is asked "still there?"; one that didn't answer the last time is
+// hung up. (Browsers answer by themselves, even from a tab in the background.)
+setInterval(() => {
+  for (const ws of wss.clients) {
+    if (!ws.alive) {
+      ws.terminate();
+      continue;
+    }
+    ws.alive = false;
+    try {
+      ws.ping();
+    } catch { /* already closing */ }
+  }
+}, 15000);
 
 let last = Date.now();
 setInterval(() => {
