@@ -13,6 +13,7 @@ export const SAVE_VERSION = 9;
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
 const DOOR = 21;
+const VACATION = 'vacationflag';
 const COIN_COUNT = 26; // gold coins lying around the world at once
 const DAILY_BONUS = 10;
 const RACE_PRIZE = 3;
@@ -389,7 +390,18 @@ export class GameRoom {
 
   sendWallet(client) {
     const w = this.wallet(client);
-    client.send({ t: 'wallet', coins: w.coins, owned: w.owned });
+    client.send({ t: 'wallet', coins: w.coins, owned: w.owned, vacation: !!this.vacationOf(client) });
+  }
+
+  // Someone's land: their home land, and their vacation land (if they have any).
+  homeOf(client) {
+    const key = nameKey(client.name);
+    return this.claims.find(c => c.key === key && !c.vacation) || null;
+  }
+
+  vacationOf(client) {
+    const key = nameKey(client.name);
+    return this.claims.find(c => c.key === key && c.vacation) || null;
   }
 
   owns(client, v) {
@@ -678,6 +690,7 @@ export class GameRoom {
       const name = typeof item === 'number' ? BLOCKS[item].name : SHOP_TOOLS[item].name;
       const reply = text => client.send({ t: 'chat', system: true, text });
       if (w.owned.includes(item)) return reply(`🛍️ You already have the ${name}!`);
+      if (item === VACATION && this.vacationOf(client)) return reply('🏖️ You already have vacation land! Give it up first if you want to buy a flag for somewhere new.');
       if (w.coins < price) return reply(`🪙 The ${name} costs ${price} coins, and you have ${w.coins}. Find more coins around town!`);
       w.coins -= price;
       w.owned.push(item);
@@ -832,14 +845,28 @@ export class GameRoom {
       const key = nameKey(client.name);
       const reply = text => client.send({ t: 'chat', system: true, text });
       if (!claimSizeOk(rect)) return reply(`🚧 Land can be at most ${CLAIM_MAX} by ${CLAIM_MAX} blocks.`);
-      const clash = this.claims.find(c => c.key !== key && rectsOverlap(c, rect));
-      if (clash) return reply(`🚧 That overlaps ${clash.owner}'s land. Try somewhere else!`);
-      const had = this.claims.some(c => c.key === key);
-      this.claims = this.claims.filter(c => c.key !== key);
-      this.claims.push({ owner: client.name, key, ...rect, createdAt: Date.now() });
+      // (Your two pieces of land can't overlap each other, either.)
+      const vacation = !!msg.vacation;
+      const clash = this.claims.find(c => (c.key !== key || !!c.vacation !== vacation) && rectsOverlap(c, rect));
+      if (clash) return reply(clash.key === key ? `🚧 That overlaps your ${clash.vacation ? 'vacation ' : ''}land. Try somewhere else!` : `🚧 That overlaps ${clash.owner}'s land. Try somewhere else!`);
+      if (vacation) {
+        // Vacation land: a Vacation Flag from the Luxe Store, used up when you plant it. It
+        // can't be moved (but it can be given up).
+        const w = this.wallet(client);
+        if (this.vacationOf(client)) return reply('🏖️ You already have vacation land. It stays where it is (you can give it up, and buy a new flag).');
+        if (!w.owned.includes(VACATION)) return reply('🏖️ You need a Vacation Flag from the Luxe Store to claim vacation land.');
+        w.owned = w.owned.filter(i => i !== VACATION);
+        this.claims.push({ owner: client.name, key, ...rect, createdAt: Date.now(), vacation: true });
+        this.sendWallet(client);
+        reply(`🏖️ Welcome to your vacation land, ${client.name}! Only you can build here. (It stays here for good, unless you give it up.)`);
+      } else {
+        const had = !!this.homeOf(client);
+        this.claims = this.claims.filter(c => c.key !== key || c.vacation);
+        this.claims.push({ owner: client.name, key, ...rect, createdAt: Date.now() });
+        reply(`🏠 This land is now yours, ${client.name}!${had ? ' (Your old land is free again.)' : ''} Only someone named ${client.name} can build here.`);
+      }
       this.seen(client.name);
       this.broadcast({ t: 'claims', claims: this.claims });
-      reply(`🏠 This land is now yours, ${client.name}!${had ? ' (Your old land is free again.)' : ''} Only someone named ${client.name} can build here.`);
       this.onDirty();
     },
 
@@ -900,12 +927,16 @@ export class GameRoom {
       this.onDirty();
     },
 
-    unclaim(client) {
-      const key = nameKey(client.name);
-      if (!this.claims.some(c => c.key === key)) return;
-      this.claims = this.claims.filter(c => c.key !== key);
+    // Giving up your home land, or your vacation land (msg.vacation).
+    unclaim(client, msg = {}) {
+      const land = msg.vacation ? this.vacationOf(client) : this.homeOf(client);
+      if (!land) return;
+      this.claims = this.claims.filter(c => c !== land);
       this.broadcast({ t: 'claims', claims: this.claims });
-      client.send({ t: 'chat', system: true, text: '🏳️ You gave up your land. Anyone can build there now.' });
+      if (land.vacation) this.sendWallet(client);
+      client.send({ t: 'chat', system: true, text: land.vacation
+        ? '🏳️ You gave up your vacation land. Anyone can build there now. (To get vacation land again, buy a new Vacation Flag.)'
+        : '🏳️ You gave up your land. Anyone can build there now.' });
       this.onDirty();
     },
 

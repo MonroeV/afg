@@ -26,7 +26,8 @@ export const SHOWTIME = 'showtime';
 export const GOLDPAINT = 'goldpaint';
 export const SNEAKERS = 'sneakers';
 export const SKIS = 'skis';
-export const TOOLS = [HAMMER, BRUSH, SCRAPER, WRENCH, BALL, FIREWORKS, CLAIM, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, SKIS, JETPACK, TRAIL, SHOWTIME, GOLDPAINT, SNEAKERS];
+export const VACATION = 'vacationflag';
+export const TOOLS = [HAMMER, BRUSH, SCRAPER, WRENCH, BALL, FIREWORKS, CLAIM, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, SKIS, JETPACK, TRAIL, SHOWTIME, GOLDPAINT, SNEAKERS, VACATION];
 // Things you have to buy at the Luxe Store before you can use them.
 export const fromStore = item => (typeof item === 'number' ? !!BLOCKS[item]?.price : !!SHOP_TOOLS[item]);
 export const ALL_ITEMS = [...TOOLS, ...BLOCK_IDS];
@@ -34,7 +35,7 @@ export const ALL_ITEMS = [...TOOLS, ...BLOCK_IDS];
 // The tabs of the item menu. Blocks not listed anywhere go under Blocks (or Lights).
 const HOME = [94, 60, 61, 62, 64, 63, 65, 66, 67, 68, 21, 53, 54, 25, 35, 20, 73, 74, 75, 76, 77, 78, 79, 80, 81, 86, 92];
 const TOWN = [22, 23, 56, 24, 58, 27, 36, 1, 7, 8, 87, 88, 89, 91, 90];
-const FUN = [SNEAKERS, GOLDPAINT, 93, JETPACK, SHOWTIME, 83, 84, TRAIL, 82, 85, SKIS, BALL, FIREWORKS, WATER_BALLOON, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28];
+const FUN = [VACATION, SNEAKERS, GOLDPAINT, 93, JETPACK, SHOWTIME, 83, 84, TRAIL, 82, 85, SKIS, BALL, FIREWORKS, WATER_BALLOON, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28];
 const listed = new Set([...HOME, ...TOWN, ...FUN]);
 const visible = i => typeof i !== 'number' || !BLOCKS[i].hidden;
 export const TABS = [
@@ -60,7 +61,7 @@ export const SEARCH_WORDS = {
   77: 'office water drink', 78: 'office board chart', 79: 'music play keys', 80: 'aquarium fish', 81: 'gold', 82: 'gem shiny store',
   83: 'gold king queen chair store', 84: 'party light store', 85: 'gold cup winner store', 86: 'shop store buy',
   [JETPACK]: 'fly rocket store', [SKIS]: 'ski snow winter slope mountain', [GOLDPAINT]: 'gold car paint store vehicle',
-  [SNEAKERS]: 'shoes run fast jump high store', 87: 'winter white cold', 88: 'skate slippery winter cold', 89: 'tree pine christmas snow',
+  [SNEAKERS]: 'shoes run fast jump high store', [VACATION]: 'land claim second holiday beach store flag', 87: 'winter white cold', 88: 'skate slippery winter cold', 89: 'tree pine christmas snow',
   90: 'chair lift ride cable ski', 91: 'winter snow', 92: 'pizza job work cook', 94: 'write words text name label board', 93: 'hot tub bath spa bubbles store', [TRAIL]: 'rainbow sparkle store', [SHOWTIME]: 'fireworks show store', 70: 'boost fast arrow run', 71: 'race timer go', 72: 'race timer end', 19: 'trampoline jump',
   36: 'pool lake', 48: 'torch', 45: 'torch', 21: 'garage', 54: 'fence rail',
 };
@@ -423,6 +424,23 @@ export function makeIcon(item, textures, paint = 1) {
     }
     return canvas;
   }
+  if (item === VACATION) {
+    // A beachy flag: orange with a sun on it, on a sandy mound.
+    ctx.fillStyle = '#8d6e63';
+    ctx.fillRect(18, 8, 5, 50);
+    ctx.fillStyle = '#ff8f1f';
+    ctx.beginPath();
+    ctx.moveTo(23, 10); ctx.lineTo(56, 21); ctx.lineTo(23, 33); ctx.fill();
+    ctx.fillStyle = '#fff176';
+    ctx.beginPath();
+    ctx.arc(33, 21, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#e8cf8a';
+    ctx.beginPath();
+    ctx.ellipse(21, 58, 15, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    return canvas;
+  }
   if (item === CLAIM) {
     ctx.fillStyle = '#8d6e63';
     ctx.fillRect(18, 8, 5, 50);
@@ -696,10 +714,10 @@ export class ViewModel {
         });
       }
       obj.rotation.set(0.3, 0.4, -0.25);
-    } else if (item === CLAIM) {
+    } else if (item === CLAIM || item === VACATION) {
       obj = new THREE.Group();
       obj.add(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.55, 8), new THREE.MeshStandardMaterial({ color: 0x8d6e63 })));
-      const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.14), new THREE.MeshStandardMaterial({ color: 0x43a047, side: THREE.DoubleSide }));
+      const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.14), new THREE.MeshStandardMaterial({ color: item === VACATION ? 0xff8f1f : 0x43a047, side: THREE.DoubleSide }));
       flag.position.set(0.11, 0.2, 0);
       obj.add(flag);
       obj.rotation.set(0.2, 0.4, -0.2);

@@ -153,7 +153,8 @@ customize your character, drive cars, build anything and play with friends.
   a whole show), the **Diamond Block**, the **Golden Throne**, the **Disco Ball**, the
   **Golden Trophy**, and the big ones: a bubbling **Hot Tub** (60 coins; right-click to sit in it),
   **Gold Car Paint** (75; click any vehicle to make it shiny solid gold, for good) and **Super
-  Sneakers** (90; hold them to run super fast and jump super high). What you've bought shows up at
+  Sneakers** (90; hold them to run super fast and jump super high), and the **Vacation Flag**
+(150; claim a second piece of land, see below). What you've bought shows up at
   the top of the 🎉 Fun tab. Your coins belong to your name, like your land
 - **People in town**: Penny runs the Luxe Store, Rex sits at the tower's reception desk, Mayor
   Maple strolls around the town square, Chef Rosa runs the Pizza Palace and Coach Frost looks
@@ -277,7 +278,16 @@ shows where it will go. Point at the side of a wall to put one along the top of 
 
 **Claiming land:** pick the Land Flag (slot 9), click one corner, click the opposite corner, then
 click once more to claim it. Right-click cancels. With the flag in your hand, right-click twice to
-give your land up. Land belongs to a name: if nobody plays with that name for 30 days, the land
+give your land up. You have one piece of home land: if you already have some and claim somewhere
+else, the game asks first ("Move your land here?"), because your old land is then given up and
+anyone could build there.
+
+**Vacation land:** the **Vacation Flag** (150 coins at the Luxe Store) claims a second piece of land,
+for a vacation home: a beach house by the lake, a cabin up a mountain. Plant it like the Land
+Flag (it asks you to be sure first). It's a one-time thing: the flag is used up, and vacation land
+can't be moved (moving your home land never touches it). You can give it up (stand on it and
+right-click with the Land Flag), but then you'd need to buy a new Vacation Flag to claim
+vacation land again. Land belongs to a name: if nobody plays with that name for 30 days, the land
 becomes free again. Anyone can still walk in and use the doors.
 
 ## Playing on a phone or tablet

@@ -32,9 +32,10 @@ export class Shop {
   }
 
   // The wallet changed (bought something, picked up a coin).
-  update(coins, owned) {
+  update(coins, owned, vacation = false) {
     this.coins = coins;
     this.owned = new Set(owned);
+    this.vacation = vacation; // (has vacation land already, so no new Vacation Flag for now)
     if (this.isOpen) this.render();
   }
 
@@ -57,6 +58,10 @@ export class Shop {
       const owned = this.owned.has(item);
       if (owned) {
         button.textContent = '✓ YOURS';
+        button.disabled = true;
+        card.classList.add('owned');
+      } else if (item === 'vacationflag' && this.vacation) {
+        button.textContent = '🏖️ You have vacation land';
         button.disabled = true;
         card.classList.add('owned');
       } else if (this.coins < price) {

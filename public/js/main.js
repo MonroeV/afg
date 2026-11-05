@@ -28,7 +28,7 @@ import { Editor } from './editor.js';
 import { CharacterClient, Gallery } from './gallery.js';
 import { Hud, renderControls, CUSTOM_PAINT } from './hud.js';
 import {
-  HAMMER, FIREWORKS, BALL, CLAIM, BRUSH, SCRAPER, WRENCH, SKIS, GOLDPAINT, SNEAKERS, LADDER, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME,
+  HAMMER, FIREWORKS, BALL, CLAIM, VACATION, BRUSH, SCRAPER, WRENCH, SKIS, GOLDPAINT, SNEAKERS, LADDER, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME,
   ALL_ITEMS, DEFAULT_HOTBAR, makeIcon, ViewModel,
 } from './items.js';
 import { MAX_MANY } from './shared/game.js';
@@ -158,6 +158,7 @@ const coinMap = new Map(); // gold coins lying about: id -> { x, y, z, value, as
 let wallet = { coins: 0, owned: [] };
 let shopOpen = false;
 let signOpen = null; // [x, y, z] of the sign being written on
+let askOpen = null; // a yes/no question on screen: { yes, no }
 let claims = [];
 const net = new Network();
 const avatars = new Avatars(scene);
@@ -387,11 +388,17 @@ net.on('npc_say', ({ id, text }) => {
 });
 net.on('npc_pet', () => myBody.brain?.cheer()); // somebody petted our pet: it's so happy!
 net.on('shop_open', () => openShop());
-net.on('wallet', ({ coins, owned }) => {
+net.on('wallet', ({ coins, owned, vacation }) => {
   const more = coins > wallet.coins;
   wallet = { coins, owned };
   hud.setOwned(owned);
-  shop.update(coins, owned);
+  shop.update(coins, owned, !!vacation);
+  // A Vacation Flag that's been planted is used up: the Land Flag takes its place.
+  if (!owned.includes(VACATION) && hud.settings.hotbar.includes(VACATION)) {
+    hud.settings.hotbar = hud.settings.hotbar.map(i => (i === VACATION ? CLAIM : i));
+    hud.buildHotbar();
+    saveSettings();
+  }
   const el = $('coins');
   el.textContent = `🪙 ${coins}`;
   if (more) {
@@ -570,7 +577,7 @@ function goFullscreen() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || !!signOpen);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || !!signOpen || !!askOpen);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -603,7 +610,7 @@ $('exit-menu').addEventListener('click', () => {
     location.reload();
   }, 150); // a moment for "I got out of the car" to reach the server
 });
-canvas.addEventListener('click', () => inGame && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && lock());
+canvas.addEventListener('click', () => inGame && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && lock());
 $('sensitivity').addEventListener('input', e => {
   settings.sensitivity = Number(e.target.value);
   saveSettings();
@@ -694,6 +701,38 @@ for (const text of QUICK_CHAT) {
   });
   $('quick-chat').append(b);
 }
+
+// ---------- Yes or no? ----------
+// A question that needs a proper answer (like "move your land here?"), with two big buttons.
+
+function ask(title, text, yesLabel, noLabel, onYes, onNo = () => {}) {
+  askOpen = { yes: onYes, no: onNo };
+  keys.clear();
+  unlock();
+  $('ask-title').textContent = title;
+  $('ask-text').textContent = text;
+  $('ask-yes').textContent = yesLabel;
+  $('ask-no').textContent = noLabel;
+  $('ask').classList.remove('hidden');
+  updateOverlays();
+}
+
+function answer(yes) {
+  if (!askOpen) return;
+  const { yes: onYes, no: onNo } = askOpen;
+  askOpen = null;
+  $('ask').classList.add('hidden');
+  lock();
+  updateOverlays();
+  (yes ? onYes : onNo)();
+}
+$('ask-yes').addEventListener('click', () => answer(true));
+$('ask-no').addEventListener('click', () => answer(false));
+window.addEventListener('keydown', e => {
+  if (!askOpen) return;
+  if (e.key === 'Enter') answer(true);
+  else if (e.key === 'Escape') answer(false);
+});
 
 // ---------- Signs ----------
 
@@ -792,7 +831,7 @@ const mouse = new Set();
 let useCooldown = 0;
 
 window.addEventListener('keydown', e => {
-  if (!inGame || hud.chatOpen || editorOpen || galleryOpen || signOpen) return;
+  if (!inGame || hud.chatOpen || editorOpen || galleryOpen || signOpen || askOpen) return;
   if (shopOpen) {
     if (e.code === 'Escape' || e.code === 'KeyE') shop.close();
     return;
@@ -1401,10 +1440,17 @@ function notifyLand(x, z) {
   hud.toast(`🚧 This is ${claimAt(claims, x, z).owner}'s land. You can visit, but not build.`);
 }
 
-function claimProblem(rect) {
+// The two Land Flags: the plain one (your home land) and the Vacation Flag (a second piece of
+// land, from the Luxe Store).
+const isFlag = item => item === CLAIM || item === VACATION;
+const myLand = (vacation = false) => claims.find(c => c.key === nameKey(settings.name) && !!c.vacation === vacation) || null;
+
+function claimProblem(rect, vacation = false) {
   if (!claimSizeOk(rect)) return `🚩 Too big! Land can be at most ${CLAIM_MAX} × ${CLAIM_MAX} blocks.`;
-  const clash = claims.find(c => c.key !== nameKey(settings.name) && rectsOverlap(c, rect));
-  return clash ? `🚩 That overlaps ${clash.owner}'s land.` : null;
+  const me = nameKey(settings.name);
+  const clash = claims.find(c => (c.key !== me || !!c.vacation !== vacation) && rectsOverlap(c, rect));
+  if (!clash) return null;
+  return clash.key === me ? `🚩 That overlaps your ${clash.vacation ? 'vacation ' : ''}land.` : `🚩 That overlaps ${clash.owner}'s land.`;
 }
 
 function claimCell() {
@@ -1422,15 +1468,23 @@ function resetClaimTool() {
 function claimClick() {
   const cell = claimCell();
   if (!cell) return;
+  const vacation = hud.item === VACATION;
   if (!claimTool.a) {
+    if (vacation && myLand(true)) {
+      hud.toast('🏖️ You already have vacation land. It stays where it is!');
+      return;
+    }
     claimTool.a = cell;
+    claimTool.vacation = vacation;
     sounds.click();
-    hud.toast('🚩 Now click the opposite corner of your land.');
+    hud.toast(vacation ? '🏖️ Now click the opposite corner of your vacation land.'
+      : myLand() ? '🚩 Now click the opposite corner. (You already have land: claiming new land gives the old land up.)'
+        : '🚩 Now click the opposite corner of your land.');
     return;
   }
   if (!claimTool.confirm) {
     const rect = normalizeRect(claimTool.a[0], claimTool.a[1], cell[0], cell[1]);
-    const problem = claimProblem(rect);
+    const problem = claimProblem(rect, claimTool.vacation);
     if (problem) {
       hud.toast(problem);
       return;
@@ -1439,17 +1493,47 @@ function claimClick() {
     claimTool.confirm = true;
     landView.preview(rect, true);
     sounds.click();
-    hud.toast(`🚩 Click once more to claim this ${describeSize(rect)} land! (Right-click to cancel)`);
+    hud.toast(`${claimTool.vacation ? '🏖️' : '🚩'} Click once more to claim this ${describeSize(rect)} land! (Right-click to cancel)`);
     return;
   }
-  net.send({ t: 'claim', ...claimTool.rect });
-  sounds.claim();
-  resetClaimTool();
+  const rect = claimTool.rect, size = describeSize(rect);
+  const send = () => {
+    net.send({ t: 'claim', ...rect, vacation: claimTool.vacation });
+    sounds.claim();
+    resetClaimTool();
+  };
+  if (claimTool.vacation) {
+    ask('🏖️ Claim your vacation land here?',
+      `This ${size} spot becomes your vacation land, and it stays here for good: it can't be moved later. You can give it up, but then you'd need a new Vacation Flag to claim somewhere else.`,
+      '🏖️ Claim it!', 'Not yet', send, resetClaimTool);
+  } else if (myLand()) {
+    // You already have land: this would give it up, for anyone to build on or claim.
+    ask('⚠️ Move your land here?',
+      `You already have land. If you claim this ${size} spot instead, your old land is given up, and anyone could build there or claim it. (Everything you built stays, but it won't be protected any more.)`,
+      '🚩 Move my land here', 'Keep my old land', send, () => {
+        resetClaimTool();
+        hud.toast('🚩 OK! Your land stays where it is.');
+      });
+  } else {
+    send();
+  }
 }
 
 function unclaimClick() {
-  if (!claims.some(c => c.key === nameKey(settings.name))) {
-    hud.toast("🚩 You don't own any land yet. Click two corners to claim some!");
+  // Standing on your vacation land: give that up (with a proper question first).
+  const here = claimAt(claims, Math.floor(player.pos.x), Math.floor(player.pos.z)), trip = myLand(true);
+  if (hud.item === VACATION) {
+    hud.toast('🏖️ Plant your Vacation Flag first: click two corners where you want your vacation land.');
+    return;
+  }
+  if (trip && here === trip) {
+    ask('🏳️ Give up your vacation land?',
+      "Anyone could build there again. To get vacation land again, you'd have to buy a new Vacation Flag at the Luxe Store.",
+      '🏳️ Give it up', 'Keep it', () => net.send({ t: 'unclaim', vacation: true }));
+    return;
+  }
+  if (!myLand()) {
+    hud.toast(trip ? '🚩 To give up your vacation land, stand on it and right-click with the Land Flag.' : "🚩 You don't own any land yet. Click two corners to claim some!");
   } else if (performance.now() - claimTool.unclaimAsk < 4000) {
     net.send({ t: 'unclaim' });
     claimTool.unclaimAsk = 0;
@@ -1586,7 +1670,7 @@ function updateMove(dt) {
 // A safe place to stand on your own land: open ground nearest its middle,
 // or else on top of whatever has been built there.
 function landSpawn() {
-  const mine = claims.find(c => c.key === nameKey(settings.name));
+  const mine = myLand() || myLand(true); // (your home land first)
   if (!mine) return null;
   const cx = (mine.x0 + mine.x1) / 2, cz = (mine.z0 + mine.z1) / 2;
   const cells = [];
@@ -2385,7 +2469,7 @@ function useItem() {
   }
   if (item === FIREWORKS) launchFirework();
   else if (item === BALL) throwBall();
-  else if (item === CLAIM) claimClick();
+  else if (isFlag(item)) claimClick();
   else if (item === FILL) fillClick();
   else if (item === COPY) copyClick();
   else if (!hit) sounds.swing();
@@ -2451,7 +2535,7 @@ function interact() {
       return;
     }
   }
-  if (hud.item === CLAIM) unclaimClick();
+  if (isFlag(hud.item)) unclaimClick();
 }
 
 // ---------- Ladders ----------
@@ -3415,7 +3499,7 @@ let menuSpin = 0, lastFrame = 0, frameCount = 0, crouchK = 0;
 // menu (nothing much is moving then).
 function frameRateNow() {
   if (!inGame) return 30;
-  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen) return 12;
+  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen) return 12;
   return settings.fps || 1000;
 }
 
@@ -3568,7 +3652,7 @@ function frame(timestamp) {
       hint = `🔨 Hit ${hitState.count} of 3`;
     } else if (player.climbing) {
       hint = '🪜 W / Space: up · S: down';
-    } else if (item === CLAIM && claimTool.a) {
+    } else if (isFlag(item) && claimTool.a) {
       hint = claimTool.confirm ? '🚩 Click to claim · Right-click to cancel'
         : `🚩 Click the opposite corner${claimTool.live ? ` (${describeSize(claimTool.live)}, max ${CLAIM_MAX} × ${CLAIM_MAX})` : ''}`;
     } else if (item === FILL) {
@@ -3612,6 +3696,7 @@ function frame(timestamp) {
       else if (s?.type === 'hoop') hint = '🏀 Throw the Pet Ball through the hoop!';
       else if (s?.type === 'tv') hint = '📺 Right-click to change the channel';
       else if (item === CLAIM) hint = `🚩 Click a corner to start claiming land (max ${CLAIM_MAX}×${CLAIM_MAX})`;
+      else if (item === VACATION) hint = myLand(true) ? '🏖️ You have vacation land already' : `🏖️ Click a corner to claim your vacation land (max ${CLAIM_MAX}×${CLAIM_MAX}). It stays put for good!`;
       else if (item === WATER_BALLOON) hint = '💦 Click to throw a water balloon!';
       else if (item === BUBBLES) hint = '🫧 Hold the mouse button to blow bubbles';
       else if (item === BALLOON) hint = player.onGround ? '🎈 Jump off something high and float down! Click to let a balloon go' : '🎈 Wheee!';
@@ -3626,13 +3711,13 @@ function frame(timestamp) {
     hud.setHint(hint);
 
     // Live preview while picking the second corner of a land claim.
-    if (item !== CLAIM && claimTool.a) resetClaimTool();
-    if (item === CLAIM && claimTool.a && !claimTool.confirm) {
+    if (claimTool.a && (!isFlag(item) || (item === VACATION) !== !!claimTool.vacation)) resetClaimTool();
+    if (isFlag(item) && claimTool.a && !claimTool.confirm) {
       const cell = claimCell();
       if (cell) {
         const rect = normalizeRect(claimTool.a[0], claimTool.a[1], cell[0], cell[1]);
         claimTool.live = rect;
-        landView.preview(rect, !claimProblem(rect));
+        landView.preview(rect, !claimProblem(rect, claimTool.vacation));
       }
     }
 
@@ -3723,7 +3808,7 @@ function frame(timestamp) {
       const key = c ? c.key : null;
       if (key !== lastLandKey) {
         lastLandKey = key;
-        if (c) hud.toast(c.key === nameKey(settings.name) ? '🏠 Welcome home! This is your land.' : `🏠 ${c.owner}'s land. You can visit, but not build.`);
+        if (c) hud.toast(c.key === nameKey(settings.name) ? (c.vacation ? '🏖️ Welcome to your vacation land!' : '🏠 Welcome home! This is your land.') : `${c.vacation ? '🏖️' : '🏠'} ${c.owner}'s ${c.vacation ? 'vacation ' : ''}land. You can visit, but not build.`);
       }
     }
 

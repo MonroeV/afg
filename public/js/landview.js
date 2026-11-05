@@ -55,10 +55,10 @@ export class LandView {
     }
     const mine = nameKey(myName);
     for (const c of claims) {
-      const color = c.key === mine ? '#7dff8a' : '#ffb321';
+      const color = c.key === mine ? (c.vacation ? '#4fd2ff' : '#7dff8a') : '#ffb321';
       const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85 });
       this.group.add(new THREE.Mesh(borderGeometry(c, 3), mat));
-      const tag = label(c.key === mine ? `🏠 Your land` : `🏠 ${c.owner}'s land`, color);
+      const tag = label(c.vacation ? (c.key === mine ? '🏖️ Your vacation land' : `🏖️ ${c.owner}'s vacation land`) : c.key === mine ? `🏠 Your land` : `🏠 ${c.owner}'s land`, color);
       tag.position.set((c.x0 + c.x1 + 1) / 2, 3.2, (c.z0 + c.z1 + 1) / 2);
       this.group.add(tag);
     }

@@ -160,6 +160,8 @@ export const SHOP_TOOLS = {
   showtime: { name: 'Firework Show', price: 30, about: 'One click launches a whole fireworks show around you.' },
   goldpaint: { name: 'Gold Car Paint', price: 75, about: 'Paint any car, boat or helicopter shiny solid gold!' },
   sneakers: { name: 'Super Sneakers', price: 90, about: 'Hold them to run super fast and jump super high!' },
+  // Used up when you claim with it: one flag, one vacation spot.
+  vacationflag: { name: 'Vacation Flag', price: 150, about: 'Claim a second piece of land for a vacation home! It stays where you plant it.' },
 };
 export const SHOP_ABOUT = {
   82: 'A sparkling block of pure diamond.', 83: 'Sit like royalty (right-click to sit).',

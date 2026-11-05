@@ -50,7 +50,7 @@ const COOL = {
   showtime: 'A whole fireworks show? Can I watch? 🎇', camera: 'Say cheese! 📸', ball: 'Playing fetch? 🎾',
   82: 'Is that a real diamond?! 💎', 83: 'A throne fit for a king! 👑', 84: 'Party time! 🪩', 85: "A golden trophy! You're a champion! 🏆",
   wrench: 'A wrench! Are you a mechanic? 🔧', skis: 'Off to the slopes? ⛷️', sneakers: 'Whoa, those sneakers! You must be SO fast! 👟',
-  goldpaint: 'Gold paint?! Make my car gold next! ✨', 93: 'A hot tub! So fancy! 🛁', 68: 'Aww, a teddy bear! 🧸', 79: 'A grand piano! Can you play it? 🎹',
+  goldpaint: 'Gold paint?! Make my car gold next! ✨', vacationflag: 'A Vacation Flag! Where are you going on vacation? 🏖️', 93: 'A hot tub! So fancy! 🛁', 68: 'Aww, a teddy bear! 🧸', 79: 'A grand piano! Can you play it? 🎹',
 };
 const PET_WORDS = { dog: 'puppy', cat: 'kitty', bunny: 'bunny', pig: 'piggy', dragon: 'dragon' };
 

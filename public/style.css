@@ -732,3 +732,4 @@ body.touch #quick-chat button { padding: 4px 7px; font-size: 12px; }
 .sign-colors button { width: 44px; height: 32px; padding: 0; border-radius: 8px; box-shadow: none; border: 3px solid transparent; }
 .sign-colors button.on { border-color: #fff; }
 .sign-buttons { display: flex; gap: 10px; justify-content: flex-end; }
+.ask-text { font-size: 16px; line-height: 1.45; margin: 0; }
