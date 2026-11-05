@@ -17,7 +17,7 @@ import { Cars, SEAT_SCALE } from './cars.js';
 import { MAX_HP, FIRE_HP, SMOKE_HP, PERSON_MASS } from './shared/vehicles.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_MAX } from './shared/claims.js';
 import { Structures } from './structures.js';
-import { TVs, CHANNELS } from './tv.js';
+import { TVs, CHANNELS, LIVE_ASPECT } from './tv.js';
 import { Reflections, Glow } from './lighting.js';
 import { LightPools } from './lightpools.js';
 import { LandView, describeSize } from './landview.js';
@@ -145,6 +145,15 @@ const particles = new Particles(scene);
 const effects = new Effects(scene);
 const fireworks = new Fireworks(scene, effects);
 const tvs = new TVs(scene);
+
+// ---------- BZ Live ----------
+// A live camera follows Skye Summers, the roving reporter, and TVs on BZ Live show its picture.
+const REPORTER = -6;
+const newsCam = new THREE.PerspectiveCamera(58, LIVE_ASPECT, 0.1, 300);
+const liveTarget = new THREE.WebGLRenderTarget(320, 180, { type: THREE.HalfFloatType });
+tvs.setLive(liveTarget.texture);
+const news = { on: false, place: '', guest: 0, caption: '', captionT: 0, cut: true };
+let liveTimer = 0;
 const lightPools = new LightPools(scene);
 const landView = new LandView(scene);
 const sounds = new Sounds();
@@ -318,7 +327,12 @@ $('join-form').addEventListener('submit', async e => {
   ground.set(welcome.holes || []);
   avatars.clear();
   for (const p of welcome.players) avatars.add(p);
-  for (const n of welcome.npcs || []) npcs.set(n.id, new Avatar(scene, { id: n.id, name: n.name, look: n.look }));
+  for (const n of welcome.npcs || []) {
+    const a = new Avatar(scene, { id: n.id, name: n.name, look: n.look });
+    a.holdMic = n.id === REPORTER;
+    npcs.set(n.id, a);
+  }
+  Object.assign(news, { on: !!welcome.news, place: welcome.news?.place || '', guest: welcome.news?.guest || 0, caption: '', cut: true });
   for (const [id, x, y, z, value] of welcome.coins || []) coinMap.set(id, { x, y, z, value });
   $('coins').classList.remove('hidden');
   cars.clear();
@@ -380,10 +394,12 @@ net.on('states', ({ list, cars: carStates, npcs: npcStates, ts }) => {
     a.crouching = action === NPC_ACT.pet;
   }
 });
+net.on('news', ({ place, guest }) => Object.assign(news, { on: true, place, guest, caption: '', cut: true }));
 net.on('npc_say', ({ id, text }) => {
   const a = npcs.get(id);
   if (!a) return;
   a.say(text);
+  if (id === REPORTER) Object.assign(news, { on: true, caption: text, captionT: timer.getElapsed() });
   if (a.pos.distanceTo(player.pos) < 16) hud.addChat({ name: a.name, color: '#ffd54f', text });
 });
 net.on('npc_pet', () => myBody.brain?.cheer()); // somebody petted our pet: it's so happy!
@@ -1854,6 +1870,74 @@ function scored({ item, streak }) {
   net.send({ t: 'fx', kind: 'sparkle', x: c.x, y: c.y, z: c.z });
   sounds.score(loudness(c.x, c.y, c.z, 30));
   hud.toast(streak >= 3 ? `🏀 SWISH! ${streak} in a row! You're on fire! 🔥` : streak === 2 ? '🏀 SWISH! Two in a row!' : '🏀 SWISH! Score!');
+}
+
+// ---------- The live camera ----------
+
+// Where the camera stands: in front of Skye (close up, then a wider shot every few seconds), or
+// off to the side when she's talking to someone, so both are in the picture.
+function aimNewsCam(dt, time) {
+  const rep = npcs.get(REPORTER);
+  if (!rep) return;
+  const head = rep.pos.clone().setY(rep.pos.y + 1.5);
+  const fwd = new THREE.Vector3(-Math.sin(rep.yaw), 0, -Math.cos(rep.yaw)), right = new THREE.Vector3(-fwd.z, 0, fwd.x);
+  const guest = news.guest ? (news.guest === myId ? myBody : avatars.list.get(news.guest)) : null;
+  let want, look;
+  if (guest && guest.pos.distanceTo(rep.pos) < 9) {
+    const g = guest.pos.clone().setY(guest.pos.y + 1.5), mid = head.clone().add(g).multiplyScalar(0.5);
+    const across = g.clone().sub(head).setY(0).normalize(), side = new THREE.Vector3(-across.z, 0, across.x);
+    const a = clearShot(mid, mid.clone().addScaledVector(side, 4.2)), b = clearShot(mid, mid.clone().addScaledVector(side, -4.2));
+    want = a.distanceTo(mid) >= b.distanceTo(mid) ? a : b;
+    look = mid;
+  } else {
+    const wide = Math.floor(time / 9) % 2 === 1;
+    want = clearShot(head, head.clone().addScaledVector(fwd, wide ? 4.8 : 2.7).addScaledVector(right, wide ? 1.3 : 0.6).setY(head.y + (wide ? 0.5 : 0.05)));
+    look = head.clone().addScaledVector(right, wide ? 0.9 : 0.3).setY(head.y - (wide ? 0.3 : 0.05));
+  }
+  if (news.cut || newsCam.position.distanceTo(want) > 15) {
+    newsCam.position.copy(want);
+    news.cut = false;
+  } else {
+    newsCam.position.lerp(want, 1 - Math.exp(-2.5 * dt));
+  }
+  // A little hand-held wobble.
+  newsCam.lookAt(look.x + Math.sin(time * 1.3) * 0.03, look.y + Math.sin(time * 1.7) * 0.02, look.z + Math.cos(time * 1.1) * 0.03);
+}
+
+// From a point toward where the camera wants to be, stopping short of any wall in the way.
+function clearShot(from, to) {
+  const d = to.distanceTo(from), dir = to.clone().sub(from).normalize();
+  let ok = 0;
+  for (let s = 0.25; s <= d; s += 0.25) {
+    const p = from.clone().addScaledVector(dir, s);
+    if (world.isSolid(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z))) break;
+    ok = s;
+  }
+  return from.clone().addScaledVector(dir, Math.max(0.8, ok - 0.3));
+}
+
+// Draws the live picture (a dozen times a second, small, and only while a TV nearby shows it).
+function renderLive(dt, time, viewDist) {
+  liveTimer -= dt;
+  if (!tvs.wantsLive || !npcs.has(REPORTER)) return;
+  aimNewsCam(dt, time);
+  if (liveTimer > 0) return;
+  liveTimer = 1 / 12;
+  // What's drawn (and the sky) goes with the news camera for a moment, and so does your own
+  // body, in case you're the one on TV.
+  world.updateVisibility(newsCam.position, 90);
+  sky.sky.position.copy(newsCam.position);
+  const bodyShown = myBody.root.visible;
+  myBody.root.visible = inGame && !riding();
+  tvs.hideLive(true);
+  renderer.setRenderTarget(liveTarget);
+  renderer.clear();
+  renderer.render(scene, newsCam);
+  renderer.setRenderTarget(null);
+  tvs.hideLive(false);
+  myBody.root.visible = bodyShown;
+  sky.sky.position.copy(camera.position);
+  world.updateVisibility(camera.position, viewDist);
 }
 
 // ---------- Pizza delivery ----------
@@ -3882,9 +3966,10 @@ function frame(timestamp) {
     lightPools.update(world, structures.version, sky.lampK || 0);
     tvs.sync(structures);
     const phase = sky.phase;
-    tvs.update(dt, time, camera.position, { players: avatars.list.size + 1, clock: sky.clockText(), night: sky.isNight, dayPhase: phase < 0.62 ? phase / 0.62 : 0 });
+    tvs.update(dt, time, camera.position, { players: avatars.list.size + 1, clock: sky.clockText(), night: sky.isNight, dayPhase: phase < 0.62 ? phase / 0.62 : 0, news: { ...news, on: news.on && npcs.has(REPORTER) } });
   }
-  world.updateVisibility(camera.position, settings.quality === 'low' ? Math.min(140, scene.fog.far) : scene.fog.far);
+  const viewDist = settings.quality === 'low' ? Math.min(140, scene.fog.far) : scene.fog.far;
+  world.updateVisibility(camera.position, viewDist);
   world.update(dt);
   avatars.update(dt, time);
   for (const a of npcs.values()) a.update(dt, time);
@@ -3927,6 +4012,7 @@ function frame(timestamp) {
   if (frameCount % (QUALITY[settings.quality] || QUALITY.high).shadowEvery === 0) renderer.shadowMap.needsUpdate = true;
   reflections.update(dt, camera, [highlight, crack]);
   reflections.refresh(sky.dayK);
+  renderLive(dt, time, viewDist);
   if (glow.enabled) {
     glow.render(sky.dayK);
   } else {
@@ -3951,6 +4037,7 @@ load();
 
 // Handy for poking at the game from the browser console.
 window.buildzone = {
+  tvs, news, newsCam,
   scene, camera, sky, net, avatars, renderer, fireworks, effects, glow, reflections, view, sounds,
   get world() { return world; },
   get player() { return player; },

@@ -1,5 +1,6 @@
 // TVs built from blocks (see the Build Book) show a little broadcast:
-// silly commercials, the weather, a cartoon and the news. Right-click to change channel.
+// silly commercials, the weather, a cartoon, the news, and BZ Live: a live camera following
+// Skye Summers, the town's roving reporter, wherever she is. Right-click to change channel.
 import * as THREE from 'three';
 
 const PX = 128, PY = 96; // canvas pixels per screen block
@@ -221,12 +222,46 @@ function news(ctx, W, H, t, info) {
   ctx.fillText(ticker, tw - off, H - 9);
 }
 
+// BZ Live: the picture is the live camera (drawn by the game, see main.js); this draws what goes
+// over it: the LIVE badge, where she is, what she's saying and the news ticker.
+function live(ctx, W, H, t, info) {
+  ctx.clearRect(0, 0, W, H);
+  const n = info.news || {};
+  if (!n.on) {
+    gradient(ctx, W, H, '#263238', '#37474f');
+    fitText(ctx, 'BZ LIVE', W / 2, H * 0.4, W - 12, H * 0.22, '#fff', 'center');
+    fitText(ctx, 'Skye is on her way to the next story…', W / 2, H * 0.65, W - 16, H * 0.1, '#ffeb3b', 'center');
+    return;
+  }
+  rect(ctx, '#c62828', 4, 4, 40, 14);
+  fitText(ctx, 'BZ LIVE', 24, 11, 36, 10, '#fff', 'center');
+  if (Math.floor(t * 2) % 2) {
+    ctx.fillStyle = '#ff1744';
+    ctx.beginPath();
+    ctx.arc(W - 30, 11, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  fitText(ctx, 'LIVE', W - 22, 11, 30, 10, '#fff');
+  // The lower third: who and where, and what she's saying (typed out as she says it).
+  const y = H - 38;
+  rect(ctx, 'rgba(13,71,161,0.92)', 0, y, W, 20);
+  rect(ctx, '#c62828', 0, y, 6, 20);
+  fitText(ctx, `SKYE SUMMERS · LIVE ${n.place || 'in BuildZone'}`, 10, y + 10, W - 16, 11, '#fff');
+  const said = n.caption || '';
+  const shown = said.slice(0, Math.floor((t - (n.captionT || 0)) * 30));
+  rect(ctx, 'rgba(0,0,0,0.6)', 0, y + 20, W, 18);
+  fitText(ctx, shown, 8, y + 29, W - 14, 11, '#ffeb3b');
+}
+
 export const CHANNELS = [
   { name: 'Commercials', draw: commercials, glow: '#9575cd' },
   { name: 'Weather', draw: weather, glow: '#64b5f6' },
   { name: 'Cartoons', draw: cartoon, glow: '#aed581' },
   { name: 'News', draw: news, glow: '#5c8bd6' },
+  { name: 'BZ Live 🎤', draw: live, glow: '#b0bec5', live: true },
 ];
+// The shape of the live camera's picture (it's cropped to fit each TV).
+export const LIVE_ASPECT = 16 / 9;
 
 function staticNoise(ctx, W, H) {
   const img = ctx.createImageData(W, H);
@@ -243,6 +278,20 @@ export class TVs {
     this.scene = scene;
     this.screens = new Map(); // structure key -> screen
     this.version = -1;
+    this.liveMaterial = null; // shows the live camera (set up by the game with setLive)
+    this.wantsLive = false; // a TV nearby is on BZ Live, so the live camera needs drawing
+  }
+
+  setLive(texture) {
+    this.liveMaterial = new THREE.MeshBasicMaterial({ map: texture });
+  }
+
+  // While the live camera draws, TVs showing it are hidden (a picture can't show itself).
+  hideLive(hide) {
+    for (const sc of this.screens.values()) {
+      if (!CHANNELS[sc.channel].live) continue;
+      for (const m of [...sc.meshes, ...sc.overlays]) m.visible = !hide && sc.shown;
+    }
   }
 
   key(tv) {
@@ -261,10 +310,12 @@ export class TVs {
     }
     for (const [k, sc] of this.screens) {
       if (now.has(k)) continue;
-      for (const m of sc.meshes) this.scene.remove(m);
+      for (const m of [...sc.meshes, ...sc.overlays]) this.scene.remove(m);
       sc.texture.dispose();
       sc.material.dispose();
+      sc.overlayMaterial.dispose();
       sc.meshes[0].geometry.dispose();
+      sc.liveGeometry.dispose();
       this.screens.delete(k);
     }
   }
@@ -277,17 +328,29 @@ export class TVs {
     texture.colorSpace = THREE.SRGBColorSpace;
     // Bright and unaffected by the scene's lighting, so it glows in the dark.
     const material = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false, color: new THREE.Color(1.5, 1.5, 1.5) });
-    const geo = new THREE.PlaneGeometry(tv.width - 0.08, 0.86);
+    const sw = tv.width - 0.08, sh = 0.86;
+    const geo = new THREE.PlaneGeometry(sw, sh);
+    // For the live picture: the same screen, showing the middle of the camera's picture (cropped
+    // to the screen's shape, so it isn't squashed).
+    const liveGeometry = new THREE.PlaneGeometry(sw, sh), uv = liveGeometry.attributes.uv;
+    const a = sw / sh, cu = a < LIVE_ASPECT ? a / LIVE_ASPECT : 1, cv = a > LIVE_ASPECT ? LIVE_ASPECT / a : 1;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.5 + (uv.getX(i) - 0.5) * cu, 0.5 + (uv.getY(i) - 0.5) * cv);
+    const overlayMaterial = new THREE.MeshBasicMaterial({ map: texture, transparent: true, toneMapped: false, depthWrite: false });
     const along = tv.ax === 1;
     const cx = tv.x + (along ? tv.width / 2 : 0.5), cz = tv.z + (along ? 0.5 : tv.width / 2);
-    const meshes = [1, -1].map(side => {
-      const m = new THREE.Mesh(geo, material);
-      m.position.set(cx + (along ? 0 : side * 0.52), tv.y + 0.5, cz + (along ? side * 0.52 : 0));
+    const place = (m, side, out) => {
+      m.position.set(cx + (along ? 0 : side * out), tv.y + 0.5, cz + (along ? side * out : 0));
       m.rotation.y = along ? (side > 0 ? 0 : Math.PI) : (side > 0 ? Math.PI / 2 : -Math.PI / 2);
       this.scene.add(m);
       return m;
-    });
-    return { tv, canvas, ctx: canvas.getContext('2d'), texture, material, meshes, channel: 0, switchT: 1, timer: 0, center: new THREE.Vector3(cx, tv.y + 0.5, cz) };
+    };
+    const meshes = [1, -1].map(side => place(new THREE.Mesh(geo, material), side, 0.52));
+    const overlays = [1, -1].map(side => place(new THREE.Mesh(geo, overlayMaterial), side, 0.525));
+    for (const m of overlays) {
+      m.visible = false;
+      m.renderOrder = 3;
+    }
+    return { tv, canvas, ctx: canvas.getContext('2d'), texture, material, overlayMaterial, meshes, overlays, geo, liveGeometry, channel: 0, switchT: 1, timer: 0, center: new THREE.Vector3(cx, tv.y + 0.5, cz) };
   }
 
   find(tv) {
@@ -304,9 +367,18 @@ export class TVs {
 
   // info: { players, clock, night, dayPhase }
   update(dt, time, cameraPos, info) {
+    this.wantsLive = false;
     for (const sc of this.screens.values()) {
       const d = sc.center.distanceTo(cameraPos);
-      for (const m of sc.meshes) m.visible = d < 90;
+      const ch = CHANNELS[sc.channel], live = !!ch.live && !!this.liveMaterial && sc.switchT >= 0.35 && info.news?.on;
+      sc.shown = d < 90;
+      for (const m of sc.meshes) {
+        m.visible = sc.shown;
+        m.material = live ? this.liveMaterial : sc.material;
+        m.geometry = live ? sc.liveGeometry : sc.geo;
+      }
+      for (const m of sc.overlays) m.visible = sc.shown && !!ch.live;
+      if (live && d < 35) this.wantsLive = true;
       sc.switchT += dt;
       sc.timer -= dt;
       if (d > 35 || sc.timer > 0) continue;
@@ -314,6 +386,7 @@ export class TVs {
       const { ctx, canvas } = sc;
       if (sc.switchT < 0.35) {
         staticNoise(ctx, canvas.width, canvas.height);
+        for (const m of sc.overlays) m.visible = false;
       } else {
         CHANNELS[sc.channel].draw(ctx, canvas.width, canvas.height, time, info);
         if (sc.switchT < 2.5) {

@@ -89,8 +89,8 @@ customize your character, drive cars, build anything and play with friends.
 - **Claim your own land** (up to 18 × 18 blocks) with the Land Flag so only you can build there
 - **Logs grow into trees**: put a lone log on the grass and watch it grow
 - **Build Book**: special things you can make out of blocks: beds, trampolines, campfires,
-  teleporters, cannons, fountains, dance floors and TVs (with cartoons, news, weather and
-  silly commercials), and four you can ride or play with:
+  teleporters, cannons, fountains, dance floors and TVs (with cartoons, news, weather, silly
+  commercials and BZ Live), and four you can ride or play with:
   - **Swing**: two Log posts, 3 tall and 2 apart, with 3 Logs across the top. A swing hangs
     from it: right-click to sit, hold W to swing higher, press Space to jump off and fly
   - **Zip Line**: three Logs with a Metal Plate on top. Build two, one up high (a hill, a roof, a
@@ -162,6 +162,14 @@ customize your character, drive cars, build anything and play with friends.
   walk over to pet your pet, love your cool stuff ("A JETPACK?!"), cheer at fireworks, gasp at
   exploding cars, dance when you dance, and complain when you hit them with a water balloon.
   Right-click them for tips
+- **BZ Live, the news on TV**: Skye Summers, BZ News' roving reporter, travels around town with
+  her microphone: the town square, the Luxe Store, the Pizza Palace, the tower, the ski lodge…
+  and sometimes she drops in on whoever's playing ("Breaking news! I'm here with Mia, one of the
+  best builders in town!"). Turn any TV to **BZ Live** (channel 5) to watch a live camera
+  following her, with a LIVE banner, where she is and what she's saying. If you're the one she's
+  interviewing, you're on TV! She also reports breaking news (exploding cars, fireworks). The
+  live picture is only drawn while a TV showing it is near you, small and a dozen times a second,
+  so it doesn't slow the game down
 - **Furnished towns**: the houses have couches, chairs at the tables, pictures on the walls,
   bookshelves, flower pots and teddy bears; the skyscrapers have offices on every floor (desks,
   computers, office chairs, filing cabinets, water coolers, whiteboards), a reception desk in the

@@ -466,6 +466,7 @@ export class GameRoom {
       claims: this.claims,
       players: [...this.clients.values()].filter(o => o.joined && o !== client).map(publicPlayer),
       npcs: this.npcs.info(),
+      news: this.npcs.newsInfo(),
       coins: [...this.coins].map(([id, c]) => [id, ...c]),
     });
     // Coins: your wallet, and a little present the first time you play each day.

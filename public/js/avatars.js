@@ -404,7 +404,29 @@ export class Avatar {
       dance: this.dance, wave: this.wave, swing: this.swing, sit,
       flying: this.flying, crouch: this.crouching && !sitting,
     });
+    if (this.holdMic) this.updateMic();
     this.updatePet(dt, time);
+  }
+
+  // A reporter's microphone, held up in the right hand (pointing up, toward her chin).
+  updateMic() {
+    const arm = this.character.armR;
+    if (!arm) return;
+    const lift = this.wave > 0 ? arm.rotation.x : 1.5;
+    arm.rotation.set(lift, 0, 0.12);
+    if (!this.mic) {
+      const mic = new THREE.Group();
+      mic.add(new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.022, 0.2, 8), new THREE.MeshStandardMaterial({ color: 0x1d1f24, roughness: 0.5 })));
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), new THREE.MeshStandardMaterial({ color: 0x5f666e, roughness: 0.7 }));
+      head.position.y = 0.13;
+      const flag = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.05, 0.075), new THREE.MeshStandardMaterial({ color: 0xc62828 }));
+      flag.position.y = 0.05;
+      mic.add(head, flag);
+      mic.position.set(0, -0.6, -0.02);
+      mic.rotation.x = -1.5; // (so it points up while the arm is held out in front)
+      this.mic = mic;
+    }
+    if (this.mic.parent !== arm) arm.add(this.mic);
   }
 
   // A pizza box carried in front (out on a delivery).

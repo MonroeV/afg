@@ -36,6 +36,14 @@ const NPCS = [
     tips: ['Right-click me (or the oven) to take a pizza out for delivery. 🍕', 'Deliver it quickly and you get a tip! ⏱️', 'Driving is faster than walking! 🚗', 'Super Sneakers from the Luxe Store make deliveries zoom! 👟'],
   },
   {
+    // BZ News' roving reporter: she goes from place to place around town (and to whoever's
+    // playing) and reports live. Tune a TV to BZ Live to watch her.
+    id: -6, place: 'plaza', name: 'Skye Summers', title: 'Skye Summers 🎤', roam: 2.5, reporter: true,
+    look: { face: 'smile', hair: 'long', hat: 'none', shirt: 'jacket', pants: 'skirt', skin: '#f0c4a0', eyes: '#2e6b4f', hairColor: '#e0b04a', shirtColor: '#c62828', shirtColor2: '#ffffff', pantsColor: '#1d1f24', shoesColor: '#1d1f24' },
+    hello: n => [`Hi ${n}! You're on BZ Live! Wave to everyone at home! 👋📺`, `Look, everybody, it's ${n}! 🎤`, `${n}! Want to be on TV? You just were! 📺`],
+    tips: ['Tune any TV to BZ Live to watch me report! 📺', 'I go wherever the news is! 🎤'],
+  },
+  {
     id: -5, place: 'lodge', name: 'Coach Frost', title: 'Coach Frost ⛷️', roam: 3,
     look: { face: 'cool', hair: 'short', hat: 'beanie', shirt: 'hoodie', pants: 'jeans', skin: '#f2c6a5', hairColor: '#c9b38a', hatColor: '#1e88e5', shirtColor: '#e53935', shirtColor2: '#ffffff', pantsColor: '#283593', shoesColor: '#111111' },
     hello: n => [`Hey ${n}! Ready to hit the slopes? ⛷️`, `Welcome to the lodge, ${n}! Warm up by the fire! 🔥`, `${n}! The snow is perfect today! ❄️`],
@@ -52,6 +60,22 @@ const COOL = {
   wrench: 'A wrench! Are you a mechanic? 🔧', skis: 'Off to the slopes? ⛷️', sneakers: 'Whoa, those sneakers! You must be SO fast! 👟',
   goldpaint: 'Gold paint?! Make my car gold next! ✨', vacationflag: 'A Vacation Flag! Where are you going on vacation? 🏖️', 93: 'A hot tub! So fancy! 🛁', 68: 'Aww, a teddy bear! 🧸', 79: 'A grand piano! Can you play it? 🎹',
 };
+// What Skye says on location (then a sign-off or two), and when she drops in on a player.
+const BEATS = {
+  plaza: { label: 'at the town square', lines: ["Good day, BuildZone! I'm live at the town square!", 'Mayor Maple says the flowers have never looked better!', 'Builders are busy all over town today. Just look at it!', 'Remember: gold coins are hiding all over town! 🪙'] },
+  store: { label: 'at the Luxe Store', lines: ["I'm live at the Luxe Store, the fanciest shop in town! ✨", 'Is that... a real diamond block? Wow! 💎', 'Shoppers say the Jetpack is out of this world! 🚀', 'Penny says there\'s something sparkly for everyone!'] },
+  pizza: { label: 'at the Pizza Palace', lines: ['Live from the Pizza Palace, where the ovens never sleep! 🍕', 'Chef Rosa needs delivery helpers. Coins for pizza!', 'Mmm, can you smell that? Fresh pizza! 😋', 'Pizzas are flying out the door today!'] },
+  tower: { label: 'at the tower', lines: ["I'm here at the tower, the tallest building in town! 🏢", "There's a grand piano all the way up at the top! 🎹", 'The view from the roof is amazing. Take the ladder!'] },
+  lodge: { label: 'at the ski lodge', lines: ['Brrr! Live from the ski lodge, up north! ❄️', 'The slopes are covered in fresh snow today! ⛷️', 'Grab some skis and ride the lift to the top! 🚡', 'Coach Frost says: stay warm by the fire! 🔥'] },
+};
+const SIGN_OFFS = ["This is Skye Summers, BZ News, live! 🎤", "Stay tuned, I'll be back with more news! 📺"];
+const GUEST_LINES = name => [
+  `Breaking news! I'm here with ${name}, one of the best builders in town! 🎤`,
+  `${name}, say hi to everyone watching at home! 👋`,
+  `What are you building today, ${name}? It looks amazing!`,
+  `${name}, you're a star! ⭐ Back to you in the studio!`,
+];
+
 const PET_WORDS = { dog: 'puppy', cat: 'kitty', bunny: 'bunny', pig: 'piggy', dragon: 'dragon' };
 
 const SECOND = 1000;
@@ -155,6 +179,7 @@ export class NpcCrew {
     for (const n of this.list) {
       n.actionT -= dt;
       if (n.actionT <= 0 && n.action !== NPC_ACT.walk) n.action = NPC_ACT.idle;
+      if (n.def.reporter) this.report(n, dt, players);
       this.notice(n, players, now);
       this.move(n, dt, players);
     }
@@ -284,10 +309,12 @@ export class NpcCrew {
 
   onFirework(x, y, z) {
     this.react(x, y, z, 80, NPC_ACT.cheer, ['Wooow! 🎆', 'So pretty! ✨', 'Again! Again! 🎇', 'Ooooh! Aaaah! 🎆'], 'fireworkAt');
+    if (Math.random() < 0.4) this.breaking(pickOne(['This just in: fireworks over BuildZone! Look up! 🎆', 'What a show! Somebody is setting off fireworks! 🎇']));
   }
 
   onExplosion(x, y, z) {
     this.react(x, y, z, 80, NPC_ACT.cheer, ['WHOA!! 💥', 'Yikes! Is everyone okay?! 😱', 'That car went BOOM! 💥'], 'boomAt');
+    this.breaking(pickOne(['BREAKING NEWS: a car just went BOOM! Don\'t worry, everyone is OK! 💥', 'This just in: an explosion in town! A new car is on its way! 🚗', 'BREAKING NEWS: KABOOM! Somebody call the mechanic! 🔧']));
   }
 
   onDance(c) {
@@ -336,6 +363,73 @@ export class NpcCrew {
       this.room.startJob(c);
     } else {
       this.say(n, pickOne(n.def.tips), true);
+    }
+  }
+
+  // ---------- The news ----------
+  // Skye does a "segment" in one place, then cuts to the next one (she's off to her next story):
+  // the town square, the Luxe Store, the Pizza Palace, the tower, the ski lodge, or wherever
+  // someone's playing. She talks to the camera every few seconds.
+
+  report(n, dt, players) {
+    n.beatT = (n.beatT ?? 0) - dt;
+    n.lineT = (n.lineT ?? 3) - dt;
+    if (n.beatT <= 0) return this.nextBeat(n, players);
+    const story = n.story;
+    if (!story) return;
+    if (story.guest) {
+      const c = this.room.clients.get(story.guest);
+      if (c?.joined) this.face(n, c.pos[0], c.pos[2]);
+    }
+    if (n.lineT <= 0 && !n.task) {
+      n.lineT = 6 + Math.random() * 2.5;
+      this.say(n, story.lines[story.i++ % story.lines.length], true);
+      if (story.guest && story.i === 2) this.act(n, NPC_ACT.wave, 1.5);
+    }
+  }
+
+  nextBeat(n, players) {
+    const places = this.room.places || {};
+    const spots = Object.entries(BEATS).map(([key, beat]) => ({ key, beat, p: key === 'plaza' ? { x: 3.5, y: 0, z: 3.5 } : places[key] })).filter(s => s.p);
+    let stand = null, story = null;
+    // Sometimes: drop in on someone who's playing (on foot, out in the open).
+    const guests = players.filter(c => c.pos[1] < 40 && !c.sleeping);
+    if (guests.length && Math.random() < 0.45 && n.story?.guest === 0) {
+      const c = guests[Math.floor(Math.random() * guests.length)];
+      const a = c.rot[0], fx = -Math.sin(a), fz = -Math.cos(a);
+      stand = this.findStand(c.pos[0] + fx * 2.6, Math.floor(c.pos[1] + 0.05), c.pos[2] + fz * 2.6);
+      if (stand) story = { label: `with ${c.name}`, guest: c.id, lines: GUEST_LINES(c.name), i: 0 };
+    }
+    if (!stand) {
+      const choices = spots.filter(s => s.key !== n.story?.key);
+      const s = choices[Math.floor(Math.random() * choices.length)] || spots[0];
+      if (!s) return;
+      stand = this.findStand(s.p.x, s.p.y ?? 0, s.p.z) || [s.p.x, s.p.y ?? 0, s.p.z];
+      story = { key: s.key, label: s.beat.label, guest: 0, lines: [...s.beat.lines, ...SIGN_OFFS], i: 0 };
+    }
+    n.pos = stand.slice();
+    n.home = stand.slice();
+    n.area = [Math.floor(stand[0]) - 3, Math.floor(stand[2]) - 3, Math.floor(stand[0]) + 3, Math.floor(stand[2]) + 3];
+    n.goal = null;
+    n.task = null;
+    n.wait = story.guest ? 99 : 3;
+    n.story = story;
+    n.beatT = story.guest ? 26 : 34;
+    n.lineT = 1.2;
+    this.room.broadcast({ t: 'news', place: story.label, guest: story.guest });
+  }
+
+  newsInfo() {
+    const n = this.list.find(m => m.def.reporter);
+    return n?.story ? { place: n.story.label, guest: n.story.guest } : null;
+  }
+
+  // Big news: Skye reports it wherever she is.
+  breaking(text) {
+    const n = this.list.find(m => m.def.reporter);
+    if (n) {
+      this.say(n, text, true);
+      n.lineT = 7;
     }
   }
 
