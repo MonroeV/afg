@@ -225,8 +225,11 @@ function buildBoatModel(color) {
   add(B(0.06, 0.05, 0.12, -W / 2 + 0.06, 0.58, -0.6), 'tail');
   add(B(0.06, 0.05, 0.12, W / 2 - 0.06, 0.58, -0.6), 'green');
   const meshes = mergeParts(g, parts, mats);
-  // The outboard motor swings when you steer.
+  // The outboard motor swings when you steer: the propeller end goes out the way you're turning
+  // (its push shoves the back of the boat the other way, and the bow comes round), so it turns
+  // the opposite way to a car's front wheels.
   const motor = new THREE.Group();
+  motor.userData.stern = true;
   motor.position.set(0, 0, L / 2);
   motor.add(new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.42, 0.34).translate(0, 0.62, 0.12), mats.dark));
   motor.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.1).translate(0, 0.15, 0.14), mats.dark));
@@ -1150,7 +1153,7 @@ export class Cars {
       }
       car.spin -= (car.speed * dt) / s.wheelR;
       for (const w of car.model.wheels) w.rotation.x = car.spin;
-      for (const p of car.model.steerers) p.rotation.y = car.steer;
+      for (const p of car.model.steerers) p.rotation.y = p.userData.stern ? -car.steer : car.steer;
       // Headlights glow at night or while someone is driving.
       const lit = car.driver ? 0.5 + nightK * 1.5 : 0.15;
       car.model.headMat.emissiveIntensity = lit;
