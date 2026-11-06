@@ -42,6 +42,7 @@ import { SkiLifts, along } from './lifts.js';
 import { SignTexts } from './signs.js';
 import { Contraptions } from './contraptions.js';
 import { TouchControls, IS_TOUCH } from './touch.js';
+import { RVHome, RV_FLOOR } from './rvhome.js';
 
 const $ = id => document.getElementById(id);
 const REACH = 7;
@@ -550,7 +551,7 @@ net.on('car_impulse', ({ id, vx, vz, spin }) => {
 });
 // A vehicle bumped into us.
 net.on('push', ({ vx, vy, vz }) => {
-  if (riding()) return;
+  if (riding() || rv.inside) return;
   wakeUp(true);
   standUp(true);
   player.vel.add(new THREE.Vector3(vx, vy, vz));
@@ -562,6 +563,7 @@ net.on('push', ({ vx, vy, vz }) => {
 net.on('wake', () => {
   wakeUp();
   wakeInVan();
+  rvWake();
 });
 net.on('car_driver', msg => {
   const car = cars.list.get(msg.id);
@@ -912,7 +914,9 @@ window.addEventListener('keydown', e => {
     }
   }
   if (e.code === 'KeyE') {
-    if (riding()) getOut();
+    if (rv.inside) leaveRV();
+    else if (riding()) getOut();
+    else if (target?.car?.kind === 'rv' && locked) enterRV(target.car);
     else if (target?.car && locked) requestEnter(target.car);
     else toggleInventory(!inventoryOpen);
     return;
@@ -947,7 +951,7 @@ window.addEventListener('keydown', e => {
     if (riding()) carView = (carView + 1) % 3;
     else viewMode = (viewMode + 1) % 3;
     danceView = 0;
-  } else if (e.code === 'KeyF' && !riding()) {
+  } else if (e.code === 'KeyF' && !riding() && !rv.inside) {
     player.flying = !player.flying;
     player.vel.y = 0;
   } else if (e.code === 'KeyR') {
@@ -962,6 +966,8 @@ window.addEventListener('keydown', e => {
   } else if (e.code === 'KeyG') {
     if (myCar) carSpecial();
     else if (!myRide) emote('dance');
+  } else if (e.code === 'KeyB' && rv.inside) {
+    rvSleep();
   } else if (e.code === 'KeyB' && !riding()) {
     emote('wave');
   } else if (e.code === 'KeyB' && bedVehicle()) {
@@ -1309,6 +1315,7 @@ function requestEnter(car) {
 function enterCar(car) {
   contraptions.end();
   if (!car) return;
+  rv.leave(); // (from inside the RV, into its driver's seat)
   wakeUp(true);
   standUp(true);
   myCar = car;
@@ -1337,6 +1344,7 @@ function enterRide(car) {
   if (!car) return;
   wakeUp(true);
   standUp(true);
+  rv.leave();
   myRide = car;
   player.flying = false;
   carCam.yaw = 0;
@@ -1368,7 +1376,8 @@ function leaveCar(tell = false) {
   car.driver = 0;
   car.speed = car.steer = car.siren = 0;
   car.braking = car.reversing = false;
-  stepOut(car, -1); // the driver's door is on the left
+  if (car.kind === 'rv' && tell) enterRV(car, 'cab'); // (out of the RV's driver's seat: still inside it)
+  else stepOut(car, -1); // the driver's door is on the left
   hud.setCarHelp(null);
   hud.setVehicleInfo(null);
   sounds.engine(null);
@@ -1866,6 +1875,132 @@ function wakeInVan() {
   net.send({ t: 'sleep', on: false });
 }
 
+// ---------- Inside the RV ----------
+// Right-click the RV to step inside: walk about (WASD), point at things and right-click them:
+// the driver's seat (to drive), the front seat, the dinette and the couch (to sit), the big bed
+// (to sleep, B too), the kitchen, the fridge, the sink, the TV, the table (a game), the bathroom,
+// and the door (or walk out of it, or E) to go back outside.
+
+const rv = new RVHome();
+let rvSpot = null; // what you're pointing at in there
+let rvTV = 0;
+const RV_SHOWS = [['📺 Cartoons!', 0xffb74d], ['📺 A nature show: look, a bear! 🐻', 0x81c784], ['📺 BZ News, with Skye Summers 🎤', 0x5ec8ff], ['📺 A cooking show: pancakes! 🥞', 0xffe082], ['📺 Off', 0x111111]];
+
+function enterRV(car, at = 'door') {
+  if (riding() || sleeping || seated) return;
+  wakeUp(true);
+  standUp(true);
+  contraptions.end();
+  rv.enter(car, at);
+  player.flying = false;
+  player.vel.set(0, 0, 0);
+  player.yaw = rv.turnWith(player.yaw);
+  player.pitch = -0.1;
+  sounds.click();
+  if (at === 'door') hud.toast(`🚐 Welcome aboard! Walk around, and right-click things (the couch, the bed, the kitchen, the TV, the driver's seat…). Walk out the door (or press E) to leave.`);
+}
+
+function leaveRV(instant = false) {
+  if (!rv.inside) return;
+  const car = rv.car;
+  if (rv.bed >= 0) net.send({ t: 'sleep', on: false });
+  const [x, , z] = rv.exitSpot();
+  rv.leave();
+  myBody.lying = false;
+  // Step out by the door (or somewhere else round it, if that's blocked).
+  for (const [dx, dz] of [[0, 0], [0, 1.5], [0, -1.5], [1, 0], [0, 3], [0, -3]]) {
+    player.pos.set(x + dx * Math.cos(car.h) + dz * Math.sin(car.h), car.pos.y, z - dx * Math.sin(car.h) + dz * Math.cos(car.h));
+    if (!player.overlapsSomething()) break;
+  }
+  player.vel.set(0, 0, 0);
+  if (!instant) sounds.land();
+}
+
+function rvAct(spot) {
+  const car = rv.car;
+  if (!spot) return;
+  if (spot.id === 'drive') {
+    if (car.driver) return hud.toast("🚐 Somebody's driving! Sit on the couch and enjoy the ride.");
+    requestEnter(car);
+  } else if (spot.id === 'sit') {
+    rv.sitOn(spot);
+    sounds.land();
+    hud.toast('🛋️ Comfy! (Move to get up)');
+  } else if (spot.id === 'sleep') {
+    rvSleep();
+  } else if (spot.id === 'out') {
+    leaveRV();
+  } else if (spot.id === 'tv') {
+    rvTV = (rvTV + 1) % RV_SHOWS.length;
+    const [show, color] = RV_SHOWS[rvTV];
+    car.model.screen?.color.setHex(color);
+    sounds.click();
+    hud.toast(show);
+  } else if (spot.id === 'cook') {
+    const food = ['🥞 Pancakes! Yum!', '🍳 Fried eggs, sunny side up!', '🌭 Hot dogs for everyone!', '🍪 Fresh cookies!', '🍝 Spaghetti!'][Math.floor(Math.random() * 5)];
+    const [x, y, z] = rv.toWorld(-0.95, RV_FLOOR + 1.1, 0.95);
+    for (let i = 0; i < 6; i++) setTimeout(() => effects.smokePuff(x, y, z, 0.15), i * 150);
+    sounds.noiseHit(5000, 0.9, 0.18, 'highpass');
+    hud.toast(food);
+  } else if (spot.id === 'juice') {
+    sounds.click();
+    hud.toast(['🧃 A juice box! Slurp!', '🥛 A big glass of milk!', '🍦 Ice cream from the freezer!', '🍎 A crunchy apple!'][Math.floor(Math.random() * 4)]);
+  } else if (spot.id === 'wash') {
+    sounds.splash(0.35);
+    hud.toast('💧 You wash your hands. Squeaky clean!');
+  } else if (spot.id === 'game') {
+    sounds.click();
+    hud.toast(`🎲 You rolled a ${1 + Math.floor(Math.random() * 6)}! ${Math.random() < 0.5 ? 'You win! 🎉' : 'So close!'}`);
+  } else if (spot.id === 'bath') {
+    hud.toast('🚿 The bathroom: a shower, a sink, and everything sparkling clean!');
+  }
+}
+
+// Off to bed in the RV: it counts like any bed for sleeping through the night, and if the RV is
+// yours it's your home (Go Home brings you back to it).
+function rvSleep() {
+  if (!rv.inside) return;
+  if (rv.bed >= 0) return rvWake();
+  rv.lieDown(0);
+  myBody.lying = true;
+  net.send({ t: 'sleep', on: true });
+  const car = rv.car, mine = car.owner && nameKey(car.owner) === nameKey(settings.name);
+  if (mine) {
+    settings.bed = { van: true };
+    saveSettings();
+  }
+  hud.toast(sky.isNight ? '😴 Zzz… snug in the big bed. When everyone is asleep, the sun comes up!'
+    : mine ? '🛏️ A nap in your RV! It\'s your home now: Go Home (R) brings you back to it. (Move to get up)' : '🛏️ A nap in the big bed! (Move to get up)');
+}
+
+function rvWake() {
+  if (rv.bed < 0) return;
+  net.send({ t: 'sleep', on: false });
+  myBody.lying = false;
+  rv.standUp();
+}
+
+// Each frame inside: walking (or sitting, or asleep), your view turning with the RV, and what
+// you're pointing at.
+function updateRV(dt, held) {
+  const car = rv.car;
+  if (!cars.list.has(car.id)) return leaveRV(true); // (it blew up, or went back to the town)
+  player.yaw = rv.turnWith(player.yaw);
+  const stick = touch?.enabled ? touch.stick : { x: 0, y: 0 };
+  const fwd = (held.has('KeyW') ? 1 : 0) - (held.has('KeyS') ? 1 : 0) + (stick.y || 0);
+  const right = (held.has('KeyD') ? 1 : 0) - (held.has('KeyA') ? 1 : 0) + (stick.x || 0);
+  if ((rv.sit || rv.bed >= 0) && (Math.abs(fwd) > 0.3 || Math.abs(right) > 0.3 || held.has('Space'))) {
+    if (rv.bed >= 0) rvWake();
+    else rv.standUp();
+  }
+  if (rv.walk(dt, [Math.max(-1, Math.min(1, fwd)), Math.max(-1, Math.min(1, right))], held.has('ShiftLeft') || held.has('ShiftRight')) === 'out') return leaveRV();
+  const [x, y, z] = rv.toWorld(rv.local.x, rv.local.y, rv.local.z);
+  player.pos.set(x, y, z);
+  player.vel.set(0, 0, 0);
+  player.onGround = true;
+  rvSpot = rv.sit || rv.bed >= 0 ? null : rv.aim(eye, lookDir);
+}
+
 // Go Home to your own camper van or RV (the one you last slept in): beside its door.
 function vanHome() {
   if (!settings.bed?.van) return null;
@@ -1930,6 +2065,7 @@ function landSpawn() {
 
 // Back home: your bed if you have one, then your land, then the town square.
 function respawn(joining = false, resume = null) {
+  leaveRV(true);
   wakeUp(true);
   standUp(true);
   move = null;
@@ -2001,7 +2137,7 @@ function sendState() {
   const rot = myCar ? [r(myCar.h), 0] : [r(player.yaw), r(player.pitch)];
   const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
   const balloon = hud.item === BALLOON && !riding() && !sleeping;
-  const flags = (sleeping || vanSleep ? FLAG.sleeping : 0) | (seated || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
+  const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
     (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) |
     (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
   net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item });
@@ -2079,9 +2215,10 @@ function updateStructures(dt, time) {
   if (snoreTimer <= 0) {
     snoreTimer = 1.2;
     for (const a of [myBody, ...avatars.list.values()]) {
-      if (a.lying && !(a === myBody && vanSleep)) effects.snore(a.pos.x + Math.sin(a.yaw) * 1.6, a.pos.y + 0.4, a.pos.z + Math.cos(a.yaw) * 1.6);
+      if (a.lying && !(a === myBody && (vanSleep || rv.inside))) effects.snore(a.pos.x + Math.sin(a.yaw) * 1.6, a.pos.y + 0.4, a.pos.z + Math.cos(a.yaw) * 1.6);
     }
     if (vanSleep) effects.snore(vanSleep.car.pos.x, vanSleep.car.pos.y + vanSleep.car.spec.height + 0.3, vanSleep.car.pos.z);
+    if (rv.bed >= 0) effects.snore(rv.car.pos.x, rv.car.pos.y + rv.car.spec.height + 0.3, rv.car.pos.z);
   }
   if (sleeping && !structures.ofType('bed').some(b => b === sleeping.bed || (b.x === sleeping.bed.x && b.y === sleeping.bed.y && b.z === sleeping.bed.z))) wakeUp(true);
   return fire;
@@ -2790,6 +2927,7 @@ function placeUnder(item) {
 // Left click: use whatever you're holding.
 function useItem() {
   const item = hud.item;
+  if (rv.inside) return rvAct(rvSpot); // (no hammering the RV from inside)
   if (fishingStool()) return fishClick();
   view.swing();
   myBody.swing = 0;
@@ -2844,6 +2982,7 @@ function useItem() {
 
 // Right click: interact with things (never breaks anything).
 function interact() {
+  if (rv.inside) return rvAct(rvSpot);
   // Wands: right-click empties the Fill box, or forgets what was copied.
   if (hud.item === FILL && wand.b) return fillClick(true);
   if ((hud.item === FILL || hud.item === COPY) && (wand.a || wand.clip)) {
@@ -2856,6 +2995,7 @@ function interact() {
     hud.toast('🚩 Claiming cancelled.');
     return;
   }
+  if (target?.car?.kind === 'rv' && !riding()) return enterRV(target.car);
   if (target?.car) return requestEnter(target.car);
   if (target?.pet) return petThePet(target);
   if (target?.npc) {
@@ -3993,9 +4133,19 @@ function avoidWalls(focus, desired) {
   return desired;
 }
 
+// Asleep in a camper van or the RV: the camera looks at it from outside.
+function vanSleepView(car) {
+  const s = car.spec;
+  const focus = car.pos.clone().add(new THREE.Vector3(0, s.height * 0.7, 0));
+  const yaw = car.h + 2.3;
+  const desired = focus.clone().add(new THREE.Vector3(Math.sin(yaw) * (s.length + 3), s.height + 2.5, Math.cos(yaw) * (s.length + 3)));
+  sleepCam.pos.copy(avoidWalls(focus, desired));
+  sleepCam.quat.setFromRotationMatrix(tmpMatrix.lookAt(sleepCam.pos, focus, camera.up));
+}
+
 function updateCamera(dt) {
   const car = riding();
-  camSleepK += ((sleeping || vanSleep ? 1 : 0) - camSleepK) * Math.min(1, dt * 2.4);
+  camSleepK += ((sleeping || vanSleep || rv.bed >= 0 ? 1 : 0) - camSleepK) * Math.min(1, dt * 2.4);
   if (car) {
     const s = car.spec;
     if (carView === 0) {
@@ -4014,11 +4164,7 @@ function updateCamera(dt) {
     }
     if (camSleepK > 0.002 && car.spec.beds) {
       // Asleep in it: a view of the van from outside, the night sky over it.
-      const focus = car.pos.clone().add(new THREE.Vector3(0, s.height * 0.7, 0));
-      const yaw = car.h + 2.3;
-      const desired = focus.clone().add(new THREE.Vector3(Math.sin(yaw) * (s.length + 3), s.height + 2.5, Math.cos(yaw) * (s.length + 3)));
-      sleepCam.pos.copy(avoidWalls(focus, desired));
-      sleepCam.quat.setFromRotationMatrix(tmpMatrix.lookAt(sleepCam.pos, focus, camera.up));
+      vanSleepView(car);
       camera.position.lerp(sleepCam.pos, camSleepK);
       camera.quaternion.slerp(sleepCam.quat, camSleepK);
     }
@@ -4029,7 +4175,10 @@ function updateCamera(dt) {
   player.eye(eye);
   eye.y -= CROUCH_DROP * crouchK;
   lookDir.set(-Math.sin(player.yaw) * Math.cos(player.pitch), Math.sin(player.pitch), -Math.cos(player.yaw) * Math.cos(player.pitch));
-  if (sleeping) {
+  if (rv.bed >= 0) {
+    // Asleep in the RV: a view of it from outside, under the night sky.
+    vanSleepView(rv.car);
+  } else if (sleeping) {
     // Looking down at yourself sleeping, from above the foot of the bed (beds have
     // headboards). Worked out from where you'll be lying, even while you're climbing in.
     const lie = move ? move.to : player.pos, yaw = move ? move.toYaw : player.yaw;
@@ -4038,7 +4187,7 @@ function updateCamera(dt) {
     sleepCam.pos.copy(avoidWalls(above, lie.clone().addScaledVector(dir, -0.7).add(new THREE.Vector3(0, 2.1, 0))));
     sleepCam.quat.setFromRotationMatrix(tmpMatrix.lookAt(sleepCam.pos, tmp.set(lie.x + dir.x * 1.2, lie.y + 0.2, lie.z + dir.z * 1.2), camera.up));
   }
-  if (viewMode === 0) {
+  if (viewMode === 0 || rv.inside) {
     camera.position.copy(eye);
     camera.rotation.set(player.pitch, player.yaw, 0);
   } else if (viewMode === 1) {
@@ -4123,6 +4272,8 @@ function frame(timestamp) {
       player.vel.set(0, 0, 0);
       // (A touch joystick push wakes you up, like a key.)
       if (vanSleep && touch?.enabled && Math.hypot(touch.stick.x, touch.stick.y) > 0.5) wakeInVan();
+    } else if (rv.inside) {
+      updateRV(dt, active ? held : noKeys);
     } else if (updateLift(dt, active ? held : noKeys)) {
       // Riding the ski lift.
     } else if (contraptions.riding && rideContraption(dt, active ? held : noKeys)) {
@@ -4211,7 +4362,9 @@ function frame(timestamp) {
 
     // A hint under the crosshair about what you can do.
     let hint = '';
-    if (rodOut) {
+    if (rv.inside) {
+      hint = rv.bed >= 0 ? '😴 Zzz… (move to get up)' : rv.sit ? '🛋️ Move to get up' : rvSpot?.hint || '🚐 Walk around (WASD) · Right-click things · E: go outside';
+    } else if (rodOut) {
       hint = !fishing ? '🎣 Click to cast · Move to get up' : fishing.phase === 'bite' ? '❗ A bite! Click, quick!' : fishing.phase === 'reel' ? '🎣 Reeling in…' : '🎣 Wait for the bobber to dip…';
     } else if (target?.car) {
       const what = target.car.spec.flying ? '🚁 Right-click or E to fly' : target.car.spec.boat ? '🚤 Right-click or E to drive the boat' : '🚗 Right-click or E to drive';
@@ -4304,7 +4457,7 @@ function frame(timestamp) {
 
     // Holding the mouse button keeps hammering or building.
     useCooldown -= dt;
-    if (locked && !riding() && !rodOut && useCooldown <= 0 && mouse.has(0) && (item === HAMMER || typeof item === 'number' || (item === WRENCH && target?.car))) {
+    if (locked && !riding() && !rodOut && !rv.inside && useCooldown <= 0 && mouse.has(0) && (item === HAMMER || typeof item === 'number' || (item === WRENCH && target?.car))) {
       useItem();
       useCooldown = item === HAMMER ? 0.25 : item === WRENCH ? 0.3 : 0.2;
     }
@@ -4589,6 +4742,10 @@ window.buildzone = {
   get contraptions() { return contraptions; },
   kickBall: () => kickBall(),
   carSpecial: () => carSpecial(),
+  rv,
+  get rvSpot() { return rvSpot; },
+  enterRV: car => enterRV(car),
+  rvAct: spot => rvAct(spot),
   sleepInVan: () => sleepInVan(),
   get vanSleep() { return vanSleep; },
   setCarView: v => (carView = v),

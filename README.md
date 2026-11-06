@@ -90,9 +90,16 @@ customize your character, drive cars, build anything and play with friends.
   **pickup trucks** (two in the cab and one riding in the back), **dump trucks** (G tips the dump
   bed) and the **RV** at the campground, a whole home on wheels: two seats up front, a dinette
   table, a couch, a kitchen, a TV, a bathroom and a big bed at the back, with windows to look in
-  and out of; G rolls its awning out. **Sleep in a camper van or the RV**: park it and press B (or
-  tap 🛏️), and move to get up. It counts like a bed for sleeping through the night, and if the
-  van is yours (see below) it's your home: Go Home (R) takes you back to it. Cars drive right past
+  and out of; G rolls its awning out. **Walk right into the RV**: right-click it (or press E) and
+  you step in through its door. Walk about inside (even while somebody else drives it down the
+  road), and right-click things: sit on the couch, at the dinette or up front, flip through the TV
+  channels over the windshield, cook something in the kitchen, get a snack from the fridge, wash
+  your hands, roll the dice at the table, peek in the bathroom, or lie down in the big bed (B works
+  too). Right-click the driver's seat to drive it (E gets you up and back into the RV), and walk
+  out of the door (or press E) to leave. **Sleep in a camper van or the RV**: park the camper and
+  press B (or tap 🛏️), or get into the RV's big bed, and move to get up. It counts like a bed for
+  sleeping through the night, and if the van is yours (see below) it's your home: Go Home (R)
+  takes you back to it. Cars drive right past
   little things like the lamps and lanterns along the roads, flower pots and traffic cones,
   instead of crashing into them, and hitting something solid only bounces you back a little, so
   you're soon on your way again. **Every kind of vehicle sounds like itself**: ordinary cars hum,
@@ -269,18 +276,18 @@ customize your character, drive cars, build anything and play with friends.
 | Left click with the Wrench | Fix a damaged vehicle (hold to keep fixing) |
 | Left click a vehicle with the Paint Brush | Paint it your paint color |
 | Left click the ground with the Hammer | Dig it out (3 hits), down to the bedrock |
-| Right click | Interact: open and close doors, switch lights on and off, turn road lines, get in vehicles, pet pets, sit on chairs and couches, sleep in beds, change pictures and music notes, hug teddy bears, fire cannons, ride ski lifts, get a pizza delivery job, take skis from the lodge's ski rack, sit on a fishing stool |
+| Right click | Interact: open and close doors, switch lights on and off, turn road lines, get in vehicles (and walk into the RV), pet pets, sit on chairs and couches, sleep in beds, change pictures and music notes, hug teddy bears, fire cannons, ride ski lifts, get a pizza delivery job, take skis from the lodge's ski rack, sit on a fishing stool |
 | Middle click | Copy the block you're looking at |
 | 1–9 or mouse wheel | Choose hotbar slot. Slot 1 always holds the Hammer; anything you pick while slot 1 is selected goes in slot 2 |
 | X | Next style of what you're holding: lamps, chairs, colors, floors, roads… (Shift+X goes back). With the Land Flag and a Vacation Flag, X switches between home and vacation land. On a phone: tap the selected slot again |
 | Q | Swap back to the item you were holding before |
-| E | Open the item menu and the Build Book, or get in/out of a vehicle you're looking at |
+| E | Open the item menu and the Build Book, or get in/out of a vehicle you're looking at (the RV: step inside it, or back out) |
 | Shift | Sprint |
 | Ctrl or C | Crouch: slow, and you won't fall off edges |
 | F | Toggle flying (Space = up, C = down) |
 | V | Switch camera: first person, behind you, in front of you |
 | G | Dance! (on a dance floor it starts a party). Driving: the police car's siren, the camper van's pop-up roof, the dump truck's bed, the RV's awning |
-| B | Wave. In a parked camper van or the RV: sleep (move to get up) |
+| B | Wave. In a parked camper van, or inside the RV: sleep (move to get up) |
 | T or Enter | Chat (with quick-chat buttons for common things to say) |
 | R | Go home: your bed, or your land if you have no bed, or else the town square |
 | P | Take a photo (it's saved to your Downloads) |

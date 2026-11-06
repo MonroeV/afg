@@ -282,9 +282,9 @@ function rvBody(add, B, { length: L, width: W, ride }, g, mats) {
   for (const z of [0.85, 1.1]) add(new THREE.CylinderGeometry(0.08, 0.08, 0.02, 12), 'dark', -0.95, floor + 0.95, z);
   add(B(0.6, 1.75, 0.6), 'white', -0.95, floor + 0.875, 1.65);
   add(B(0.4, 0.5, 1.3), 'wood', -1.05, head - 0.1, 0.65); // cupboards over the counter
-  // The TV, on the wall over the front seats, facing back.
-  add(B(0.9, 0.55, 0.06), 'dark', 0, head - 0.05, -2.6);
-  add(B(0.82, 0.47, 0.01), 'screen', 0, head - 0.05, -2.565);
+  // The TV, up over the windshield (out of everyone's way), facing back.
+  add(B(0.9, 0.5, 0.06), 'dark', 0, top - 0.42, -L / 2 + 0.08);
+  add(B(0.82, 0.42, 0.01), 'screen', 0, top - 0.42, -L / 2 + 0.115);
   // The bathroom (right, by the bed): a little room with a door.
   add(B(0.06, top - floor - 0.1, 1.2), 'cream', 0.25, (floor + top - 0.1) / 2, 1.3);
   add(B(1.05, top - floor - 0.1, 0.06), 'cream', 0.78, (floor + top - 0.1) / 2, 0.7);
@@ -321,7 +321,7 @@ function rvBody(add, B, { length: L, width: W, ride }, g, mats) {
   }
   awning.add(cloth, poles, new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 4.3, 10).rotateX(Math.PI / 2), mats.dark));
   g.add(awning);
-  return { awning: { group: awning, cloth, poles, out: 0, height: top - 0.25 }, lights: mats.lamp };
+  return { awning: { group: awning, cloth, poles, out: 0, height: top - 0.25 }, lights: mats.lamp, screen: mats.screen };
 }
 
 // A sports car: low and sleek, a sloping glass cabin, racing stripes, a spoiler and two exhausts.
@@ -935,6 +935,8 @@ export class Cars {
       const local = person.pos.clone().sub(car.pos).applyAxisAngle(UP, -car.h);
       if (Math.abs(local.x) > s.width / 2 + 0.35 || Math.abs(local.z) > s.length / 2 + 0.35) continue;
       if (local.y < -1.5 || local.y > s.height) continue;
+      // (Not the people walking about inside the RV: they're coming along for the ride.)
+      if (car.kind === 'rv' && local.y > 0.3 && Math.abs(local.x) < s.width / 2 - 0.15 && Math.abs(local.z) < s.length / 2 - 0.15) continue;
       if (now - (car.bumped[person.id] || 0) < 600) continue;
       const n = new THREE.Vector3(person.pos.x - car.pos.x, 0, person.pos.z - car.pos.z).normalize();
       const v = this.velocityOf(car);
