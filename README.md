@@ -81,7 +81,9 @@ customize your character, drive cars, build anything and play with friends.
   Dragons fly, so they go up and over walls instead
 - **Character Gallery**: save your character (with your name) so anyone can pick it later.
   It holds 25 characters in a 5×5 grid; when it's full you choose one to replace, or replace the oldest
-- **Day and night**: the sun sets, the stars and moon come out and the street lamps light up
+- **Day and night**: the sun sets, the stars and moon come out and the street lamps light up.
+  Too dark (or not dark enough)? **Brightness at night** in the pause menu (Esc) makes the nights
+  lighter or darker; the days stay the same
 - **Cars parked around town**: regular cars, a police car with a siren and monster trucks that climb
   blocks, and two **sports cars** on the road down to the campground (low, light and quick). Out in
   the far country: **camper vans** (four seats, G pops the roof up, and you can sleep in them),
@@ -284,7 +286,7 @@ customize your character, drive cars, build anything and play with friends.
 | P | Take a photo (it's saved to your Downloads) |
 | H | Hide or show the HUD |
 | Z | Undo your last Fill or Paste |
-| Esc | Pause menu: settings, character, Go Home, and Exit to Menu |
+| Esc | Pause menu: settings (mouse sensitivity, sound, brightness at night, graphics), character, Go Home, and Exit to Menu |
 
 **The item menu (E):** the tabs along the top sort everything into Tools, Fun, Blocks, Home,
 Town, Paint and the Build Book, so there's no long list to scroll. Things you picked recently are

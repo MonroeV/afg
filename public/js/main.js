@@ -53,7 +53,7 @@ const BED = 64;
 
 // ---------- Saved settings ----------
 
-const settings = { name: '', look: null, sensitivity: 1, volume: 0.4, quality: 'high', fps: 60, paint: 1, customColor: '#ff9ec7', hotbar: DEFAULT_HOTBAR.slice() };
+const settings = { name: '', look: null, sensitivity: 1, volume: 0.4, nightLight: 0.5, quality: 'high', fps: 60, paint: 1, customColor: '#ff9ec7', hotbar: DEFAULT_HOTBAR.slice() };
 let savedSettings = {};
 try {
   savedSettings = JSON.parse(localStorage.getItem('buildzone') || '{}') || {};
@@ -86,6 +86,7 @@ settings.styles = Object.fromEntries(FAMILIES.filter(f => f.items.includes(setti
 settings.gear = Object.fromEntries(GEAR.filter(g => settings.gear?.[g] === true).map(g => [g, true]));
 if (!/^#[0-9a-f]{6}$/i.test(settings.customColor)) settings.customColor = '#ff9ec7';
 if (![0, 30, 60].includes(settings.fps)) settings.fps = 60;
+if (!(settings.nightLight >= 0 && settings.nightLight <= 1)) settings.nightLight = 0.5;
 settings.recent = Array.isArray(settings.recent) ? settings.recent.filter(i => ALL_ITEMS.includes(i)).slice(0, 12) : [];
 // The brush's color: a palette color, or your own.
 const paintHex = () => (settings.paint === CUSTOM_PAINT ? settings.customColor : settings.paint === GOLD_PAINT ? GOLD_HEX : PAINT_COLORS[settings.paint]);
@@ -114,6 +115,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.05, 1000);
 camera.rotation.order = 'YXZ';
 const sky = new DayNight(renderer, scene);
+sky.nightLight = settings.nightLight;
 const reflections = new Reflections(renderer, scene);
 const glow = new Glow(renderer, scene, camera);
 
@@ -291,6 +293,7 @@ async function load() {
   $('name').value = settings.name;
   $('sensitivity').value = settings.sensitivity;
   $('volume').value = settings.volume;
+  $('night-light').value = settings.nightLight;
   $('quality').value = settings.quality;
   $('fps').value = String(settings.fps);
   $('loading').classList.add('hidden');
@@ -670,6 +673,11 @@ $('sensitivity').addEventListener('input', e => {
 $('volume').addEventListener('input', e => {
   settings.volume = sounds.volume = Number(e.target.value);
   if (sounds.master) sounds.master.gain.value = settings.volume;
+  saveSettings();
+});
+// How bright the nights are: darker or lighter than usual (the days stay the same).
+$('night-light').addEventListener('input', e => {
+  settings.nightLight = sky.nightLight = Number(e.target.value);
   saveSettings();
 });
 $('quality').addEventListener('change', e => {

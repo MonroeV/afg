@@ -58,6 +58,11 @@ function moonTexture() {
 export class DayNight {
   constructor(renderer, scene) {
     this.scene = scene;
+    this.renderer = renderer;
+    // How bright the nights are (0..1, "Brightness at night" in the pause menu): 0 is as dark as
+    // nights used to be, 1 nearly as light as dusk. In the middle (the usual) the moon lights
+    // things up a little more and you can see further.
+    this.nightLight = 0.5;
     this.time = DAY_LENGTH * 0.1;
     this.sky = makeSky();
     scene.add(this.sky);
@@ -108,6 +113,7 @@ export class DayNight {
     this.fogDay = new THREE.Color(0xc4d6e6);
     this.fogSunset = new THREE.Color(0xe8a882);
     this.fogNight = new THREE.Color(0x0b1226);
+    this.fogNightLight = new THREE.Color(0x243660); // (the night haze with the brightest nights)
     scene.fog = new THREE.Fog(0xc4d6e6, 60, 230);
   }
 
@@ -150,6 +156,7 @@ export class DayNight {
 
     this.dayK = smooth(-0.1, 0.18, h);
     const nightK = 1 - this.dayK;
+    const lift = this.nightLight * nightK; // (only at night: the days stay the same)
     const sunsetK = (1 - smooth(0.05, 0.35, Math.abs(h))) * smooth(-0.15, 0, h);
 
     // The sky box goes everywhere with you: left in the middle of the world, its far corners
@@ -168,17 +175,19 @@ export class DayNight {
       this.sun.intensity = 3 * smooth(-0.03, 0.15, h);
       this.sun.color.setRGB(1, 0.94 - sunsetK * 0.3, 0.86 - sunsetK * 0.5);
     } else {
-      this.sun.intensity = 0.5 * smooth(0.03, 0.2, -h);
+      this.sun.intensity = 0.5 * (1 + 0.9 * this.nightLight) * smooth(0.03, 0.2, -h);
       this.sun.color.setHex(0x9db4ff);
     }
 
-    this.hemi.intensity = 0.14 + 0.41 * this.dayK;
-    this.hemi.color.setRGB(0.23 + 0.61 * this.dayK, 0.29 + 0.62 * this.dayK, 0.5 + 0.5 * this.dayK);
-    this.hemi.groundColor.setRGB(0.06 + 0.3 * this.dayK, 0.06 + 0.24 * this.dayK, 0.08 + 0.13 * this.dayK);
+    this.hemi.intensity = 0.14 + 0.41 * this.dayK + 0.2 * lift;
+    this.hemi.color.setRGB(0.23 + 0.61 * this.dayK + 0.12 * lift, 0.29 + 0.62 * this.dayK + 0.12 * lift, 0.5 + 0.5 * this.dayK + 0.08 * lift);
+    this.hemi.groundColor.setRGB(0.06 + 0.3 * this.dayK + 0.09 * lift, 0.06 + 0.24 * this.dayK + 0.09 * lift, 0.08 + 0.13 * this.dayK + 0.1 * lift);
     // Live reflections already get darker at night; the plain sky picture doesn't.
-    this.scene.environmentIntensity = this.liveReflections ? 0.3 : 0.04 + 0.26 * this.dayK;
+    this.scene.environmentIntensity = this.liveReflections ? 0.3 : 0.04 + 0.26 * this.dayK + 0.08 * lift;
+    // And a touch more exposure at night (like eyes getting used to the dark).
+    this.renderer.toneMappingExposure = 0.8 * (1 + 0.25 * lift);
 
-    this.scene.fog.color.copy(this.fogNight).lerp(this.fogDay, this.dayK).lerp(this.fogSunset, sunsetK * 0.6);
+    this.scene.fog.color.copy(this.fogNight).lerp(this.fogNightLight, this.nightLight).lerp(this.fogDay, this.dayK).lerp(this.fogSunset, sunsetK * 0.6);
     this.scene.fog.near = 40 + 20 * this.dayK;
     this.scene.fog.far = 170 + 60 * this.dayK;
 
