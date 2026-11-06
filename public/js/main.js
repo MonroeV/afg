@@ -556,7 +556,10 @@ net.on('push', ({ vx, vy, vz }) => {
   player.flying = false;
   sounds.crash(0.3);
 });
-net.on('wake', () => wakeUp());
+net.on('wake', () => {
+  wakeUp();
+  wakeInVan();
+});
 net.on('car_driver', msg => {
   const car = cars.list.get(msg.id);
   if (myCar?.id === msg.id && msg.driver === myId) {
@@ -911,6 +914,11 @@ window.addEventListener('keydown', e => {
   if (['Space', 'Tab', 'ControlLeft', 'ControlRight'].includes(e.code) || e.ctrlKey || e.metaKey) e.preventDefault();
   if (e.repeat) return;
   keys.add(e.code);
+  if (vanSleep && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space'].includes(e.code)) {
+    keys.delete(e.code);
+    wakeInVan();
+    return;
+  }
   if ((sleeping || seated) && ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space'].includes(e.code)) {
     // Get up (once you've finished getting in).
     if (!move) {
@@ -948,6 +956,8 @@ window.addEventListener('keydown', e => {
     else if (!myRide) emote('dance');
   } else if (e.code === 'KeyB' && !riding()) {
     emote('wave');
+  } else if (e.code === 'KeyB' && bedVehicle()) {
+    sleepInVan();
   } else if (e.code === 'KeyQ' && !riding()) {
     hud.select(hud.prevSelected ?? 0);
     saveSettings();
@@ -1038,6 +1048,7 @@ const touch = IS_TOUCH ? new TouchControls({
     hud.openChat();
   },
   dance: () => (myCar ? carSpecial() : !riding() && emote('dance')),
+  sleep: () => sleepInVan(),
 }) : null;
 if (touch) {
   document.body.classList.add('touch');
@@ -1101,6 +1112,7 @@ function carSpecial() {
   myCar.siren = myCar.siren ? 0 : 1;
   sounds.click();
   if (special === 'roof') hud.toast(myCar.siren ? '⛺ Pop! The roof is up.' : '⛺ Roof down. Ready to drive!');
+  if (special === 'awning') hud.toast(myCar.siren ? '⛱️ The awning rolls out. Time to relax!' : '⛱️ Awning rolled up. Ready to drive!');
   if (special === 'tip' && myCar.siren) dumpLoad(myCar);
 }
 
@@ -1322,13 +1334,14 @@ function enterRide(car) {
   carCam.yaw = 0;
   carCam.pitch = car.spec.flying ? -0.25 : -0.15;
   danceView = 0;
-  hud.setCarHelp('passenger');
+  hud.setCarHelp(car.spec.beds ? 'passenger-bed' : 'passenger');
   sounds.spawnCar();
   const driver = avatars.list.get(car.driver);
   hud.toast(`🚗 Riding along${driver ? ` with ${driver.name}` : ''}! Press E to get out.`);
 }
 
 function getOut() {
+  wakeInVan();
   if (myCar) leaveCar(true);
   else if (myRide) leaveRide(true);
 }
@@ -1337,6 +1350,7 @@ function getOut() {
 function leaveCar(tell = false) {
   const car = myCar;
   if (!car) return;
+  wakeInVan();
   if (tell && car.spec.flying && !car.onGround) dropHelicopter(car);
   if (tell) {
     sendCarState();
@@ -1355,6 +1369,7 @@ function leaveCar(tell = false) {
 function leaveRide(tell = false) {
   const car = myRide;
   if (!car) return;
+  wakeInVan();
   const seat = mySeat();
   if (tell) net.send({ t: 'car_exit', id: car.id });
   myRide = null;
@@ -1808,6 +1823,55 @@ function wakeUp(instant = false) {
   }
 }
 
+// ---------- Sleeping in a camper van (or the RV) ----------
+// Parked in one, press B (or tap 🛏️) to lie down in its bed. It counts just like a bed for
+// sleeping through the night, and if it's your own van it's your home: Go Home (R) brings you
+// back to it. Moving (or B again) wakes you up.
+
+let vanSleep = null; // { car } while asleep in one
+const bedVehicle = () => (riding()?.spec.beds ? riding() : null);
+
+function sleepInVan() {
+  const car = bedVehicle();
+  if (!car) return;
+  if (vanSleep) return wakeInVan();
+  if (Math.abs(car.speed) > 0.6) return hud.toast(`🚐 Park the ${car.spec.name} first, then you can sleep in it!`);
+  vanSleep = { car };
+  myBody.lying = true;
+  if (myCar) myCar.speed = myCar.steer = 0;
+  net.send({ t: 'sleep', on: true });
+  const mine = car.owner && nameKey(car.owner) === nameKey(settings.name);
+  if (mine) {
+    settings.bed = { van: true };
+    saveSettings();
+  }
+  sounds.click();
+  hud.toast(sky.isNight ? `😴 Zzz… cozy in the ${car.spec.name}. When everyone is asleep, the sun comes up!`
+    : mine ? `🛏️ A nap in your ${car.spec.name}! It's your home now: Go Home (R) brings you back to it. (Move to wake up)`
+      : `🛏️ A nap in the ${car.spec.name}! (Make it yours with the Land Flag and it can be your home.) Move to wake up.`);
+}
+
+function wakeInVan() {
+  if (!vanSleep) return;
+  vanSleep = null;
+  myBody.lying = false;
+  net.send({ t: 'sleep', on: false });
+}
+
+// Go Home to your own camper van or RV (the one you last slept in): beside its door.
+function vanHome() {
+  if (!settings.bed?.van) return null;
+  const van = myVehicles().filter(c => c.spec.beds).sort((a, b) => b.spec.beds.length - a.spec.beds.length)[0];
+  if (!van) return null;
+  const s = van.spec;
+  for (const [lx, lz] of [[s.width / 2 + 1, 0], [-s.width / 2 - 1, 0], [0, s.length / 2 + 1.2], [0, -s.length / 2 - 1.2]]) {
+    const [x, , z] = toWorld([lx, 0, lz], van.pos.x, van.pos.y, van.pos.z, van.h);
+    player.pos.set(x, van.pos.y, z);
+    if (!player.overlapsSomething()) return van;
+  }
+  return null;
+}
+
 // ---------- Little scripted moves ----------
 // Sitting down, getting up, climbing into bed and out again: you glide there along a gentle
 // curve (eased in and out) while your body bends into the new pose.
@@ -1871,7 +1935,13 @@ function respawn(joining = false, resume = null) {
   }
   const blocked = joining && resume; // (there was a spot to go back to, but no room there now)
   const b = settings.bed;
-  const bed = b && structures.ofType('bed').find(s => s.x === b.x && s.y === b.y && s.z === b.z);
+  const van = vanHome();
+  if (van) {
+    player.vel.set(0, 0, 0);
+    hud.toast(joining ? `🚐 Welcome back! You woke up by your ${van.spec.name}.` : `🚐 Back to your ${van.spec.name}!`);
+    return;
+  }
+  const bed = b && !b.van && structures.ofType('bed').find(s => s.x === b.x && s.y === b.y && s.z === b.z);
   const land = !bed && landSpawn();
   player.vel.set(0, 0, 0);
   if (bed) {
@@ -1923,7 +1993,7 @@ function sendState() {
   const rot = myCar ? [r(myCar.h), 0] : [r(player.yaw), r(player.pitch)];
   const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
   const balloon = hud.item === BALLOON && !riding() && !sleeping;
-  const flags = (sleeping ? FLAG.sleeping : 0) | (seated || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
+  const flags = (sleeping || vanSleep ? FLAG.sleeping : 0) | (seated || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
     (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) |
     (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
   net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item });
@@ -2001,8 +2071,9 @@ function updateStructures(dt, time) {
   if (snoreTimer <= 0) {
     snoreTimer = 1.2;
     for (const a of [myBody, ...avatars.list.values()]) {
-      if (a.lying) effects.snore(a.pos.x + Math.sin(a.yaw) * 1.6, a.pos.y + 0.4, a.pos.z + Math.cos(a.yaw) * 1.6);
+      if (a.lying && !(a === myBody && vanSleep)) effects.snore(a.pos.x + Math.sin(a.yaw) * 1.6, a.pos.y + 0.4, a.pos.z + Math.cos(a.yaw) * 1.6);
     }
+    if (vanSleep) effects.snore(vanSleep.car.pos.x, vanSleep.car.pos.y + vanSleep.car.spec.height + 0.3, vanSleep.car.pos.z);
   }
   if (sleeping && !structures.ofType('bed').some(b => b === sleeping.bed || (b.x === sleeping.bed.x && b.y === sleeping.bed.y && b.z === sleeping.bed.z))) wakeUp(true);
   return fire;
@@ -3916,6 +3987,7 @@ function avoidWalls(focus, desired) {
 
 function updateCamera(dt) {
   const car = riding();
+  camSleepK += ((sleeping || vanSleep ? 1 : 0) - camSleepK) * Math.min(1, dt * 2.4);
   if (car) {
     const s = car.spec;
     if (carView === 0) {
@@ -3931,6 +4003,16 @@ function updateCamera(dt) {
       const desired = focus.clone().add(new THREE.Vector3(Math.sin(yaw) * dist, lift, Math.cos(yaw) * dist));
       camera.position.copy(avoidWalls(focus, desired));
       camera.lookAt(focus);
+    }
+    if (camSleepK > 0.002 && car.spec.beds) {
+      // Asleep in it: a view of the van from outside, the night sky over it.
+      const focus = car.pos.clone().add(new THREE.Vector3(0, s.height * 0.7, 0));
+      const yaw = car.h + 2.3;
+      const desired = focus.clone().add(new THREE.Vector3(Math.sin(yaw) * (s.length + 3), s.height + 2.5, Math.cos(yaw) * (s.length + 3)));
+      sleepCam.pos.copy(avoidWalls(focus, desired));
+      sleepCam.quat.setFromRotationMatrix(tmpMatrix.lookAt(sleepCam.pos, focus, camera.up));
+      camera.position.lerp(sleepCam.pos, camSleepK);
+      camera.quaternion.slerp(sleepCam.quat, camSleepK);
     }
     camera.fov += (BASE_FOV - camera.fov) * Math.min(1, dt * 8);
     camera.updateProjectionMatrix();
@@ -3962,7 +4044,6 @@ function updateCamera(dt) {
     camera.lookAt(eye.x, eye.y - 0.4, eye.z);
   }
   // Glide over to the sleeping view (and back again when you get up).
-  camSleepK += ((sleeping ? 1 : 0) - camSleepK) * Math.min(1, dt * 2.4);
   if (camSleepK > 0.002) {
     camera.position.lerp(sleepCam.pos, camSleepK);
     camera.quaternion.slerp(sleepCam.quat, camSleepK);
@@ -4019,9 +4100,9 @@ function frame(timestamp) {
     if (myCar) {
       // The helicopter turns to face where you're looking, so keep the camera pointing there.
       const aim = myCar.h + carCam.yaw;
-      for (const ev of cars.drive(myCar, dt, active ? held : noKeys, aim)) vehicleEvent(ev, myCar);
+      for (const ev of cars.drive(myCar, dt, active && !vanSleep ? held : noKeys, aim)) vehicleEvent(ev, myCar);
       if (myCar.spec.flying) carCam.yaw = Math.atan2(Math.sin(aim - myCar.h), Math.cos(aim - myCar.h));
-      player.pos.copy(cars.seat(myCar).position);
+      player.pos.copy(vanSleep ? cars.bed(myCar, 0).position : cars.seat(myCar).position);
       player.vel.set(0, 0, 0);
       if (myCar.spec.flying) sounds.engine(null);
       else {
@@ -4030,8 +4111,10 @@ function frame(timestamp) {
         sounds.engine(myCar.rpmShown, myCar.load);
       }
     } else if (myRide) {
-      player.pos.copy(cars.seat(myRide, mySeat()).position);
+      player.pos.copy(vanSleep ? cars.bed(myRide, mySeat()).position : cars.seat(myRide, mySeat()).position);
       player.vel.set(0, 0, 0);
+      // (A touch joystick push wakes you up, like a key.)
+      if (vanSleep && touch?.enabled && Math.hypot(touch.stick.x, touch.stick.y) > 0.5) wakeInVan();
     } else if (updateLift(dt, active ? held : noKeys)) {
       // Riding the ski lift.
     } else if (contraptions.riding && rideContraption(dt, active ? held : noKeys)) {
@@ -4228,6 +4311,7 @@ function frame(timestamp) {
     updateJob(dt, time);
     updateFishing(dt, time);
     updateDumpTruck(dt);
+    touch?.showSleep(!!bedVehicle());
     updateSnow(dt, time);
     updateFlying(dt);
     popBubbles(dt);
@@ -4344,14 +4428,31 @@ function frame(timestamp) {
   for (const car of cars.list.values()) {
     [car.driver, ...car.passengers].forEach((id, seat) => {
       const a = id && id !== myId && avatars.list.get(id);
-      if (a) a.seat = cars.seat(car, seat);
+      if (a) a.seat = a.lying && car.spec.beds ? cars.bed(car, seat) : cars.seat(car, seat);
     });
+  }
+
+  // Other people's vehicles nearby: their engines (the nearest two that are being driven).
+  if (inGame) {
+    const near = [];
+    for (const car of cars.list.values()) {
+      if (!car.driver || car.driver === myId || car === riding() || car.spec.flying) continue;
+      const level = loudness(car.pos.x, car.pos.y, car.pos.z, 45);
+      if (level > 0.02) near.push({ car, level });
+    }
+    near.sort((a, b) => b.level - a.level);
+    sounds.nearbyEngines(near.slice(0, 2).map(({ car, level }) => {
+      // (We don't hear their revs, so they're made up from their speed, a gear at a time.)
+      const k = Math.min(1, Math.abs(car.speed || 0) / car.spec.maxSpeed);
+      const frac = k < 0.3 ? k / 0.3 : k < 0.65 ? (k - 0.3) / 0.35 : (k - 0.65) / 0.35;
+      return { id: car.id, kind: car.kind, seed: car.id, rpm: k < 0.02 ? 0.14 : 0.3 + 0.65 * frac, load: k < 0.02 ? 0 : 0.6, level };
+    }));
   }
 
   // Loudest nearby siren, fire and helicopter.
   let siren = 0, rotor = 0, rotorSpin = 0, rotorEffort = 0.5;
   for (const car of cars.list.values()) {
-    if (car.siren) siren = Math.max(siren, loudness(car.pos.x, car.pos.y, car.pos.z, 70));
+    if (car.siren && car.kind === 'police') siren = Math.max(siren, loudness(car.pos.x, car.pos.y, car.pos.z, 70)); // (G on other vehicles isn't a siren)
     if (car.hp < FIRE_HP) fire = Math.max(fire, loudness(car.pos.x, car.pos.y, car.pos.z, 35));
     if (car.spec.flying && car.rotorSpin > 0.02) {
       const level = car === riding() ? 1 : loudness(car.pos.x, car.pos.y, car.pos.z, 120);
@@ -4480,6 +4581,10 @@ window.buildzone = {
   get contraptions() { return contraptions; },
   kickBall: () => kickBall(),
   carSpecial: () => carSpecial(),
+  sleepInVan: () => sleepInVan(),
+  get vanSleep() { return vanSleep; },
+  setCarView: v => (carView = v),
+  carCam,
   throwBall: () => throwBall(),
   ballBoxes: r => ballBoxes(r),
   interact: () => interact(),

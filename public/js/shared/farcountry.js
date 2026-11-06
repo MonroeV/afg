@@ -26,6 +26,17 @@ export const QUARRY = { x: 272, z: FAR_ROADS.east, floor: 11, rim: 28 };
 export const CHUTE = { x: QUARRY.x + 4, y: 4.6, z: QUARRY.z };
 const FARM = { x: -302, z: FAR_ROADS.west }; // the road runs along the front of the farm to here
 
+// Vehicles that came a little later (version 12 of the save): the RV, parked by the campground's
+// big campfire (its door and awning toward the fire), and two sports cars parked on the road
+// down to the campground. (New worlds get them too.)
+export function moreVehicles() {
+  return [
+    { kind: 'rv', color: '#4f7cac', x: CAMP.x + 0.5, y: 0, z: 273.5, h: Math.PI / 2, landmark: true },
+    { kind: 'sports', color: '#ff1744', x: SX + 2.5, y: 0, z: 120.5, h: 0, landmark: true },
+    { kind: 'sports', color: '#ffd600', x: SX - 1.5, y: 0, z: 180.5, h: Math.PI, landmark: true },
+  ];
+}
+
 // Where the sea's shore is along the south edge (it curves round into a bay).
 const seaShore = x => 296 + Math.round(2 * Math.sin(x * 0.045) + 1.5 * Math.sin(x * 0.11 + 1) + Math.max(0, Math.abs(x - SX) - 95) * 0.9);
 

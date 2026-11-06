@@ -2,7 +2,7 @@
 // roads joining them, parks, playgrounds, trees, flowers and parked cars.
 import { WORLD, DOOR_TOP, BED_FOOT, makeBlock, blockId, turnLine, stack, itemOf, floorOf, shapeOf } from './blocks.js';
 import { buildFrontier, buildPizzeria, buildSignposts, addFishingSpots } from './frontier.js';
-import { buildFarCountry } from './farcountry.js';
+import { buildFarCountry, moreVehicles } from './farcountry.js';
 
 const B = {
   grass: 1, dirt: 2, stone: 3, cobble: 4, brick: 5, planks: 6, log: 7, leaves: 8, glass: 9,
@@ -471,7 +471,7 @@ export function generateWorld(seed = 2024) {
   // The far country: the beach and campground, the quarry, the farm and the snowy north.
   const far = buildFarCountry({ get: getB, set: put, canUse: free, canPave: () => true });
   for (const a of far.areas) markUsed(...a);
-  cars.push(...far.cars);
+  cars.push(...far.cars, ...moreVehicles());
   const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null, pizza: pizza?.place || null, lodge: frontier.places.lodge };
 
   // ---------- Countryside ----------

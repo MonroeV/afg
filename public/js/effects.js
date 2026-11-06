@@ -1,5 +1,6 @@
 // Little extras that make the game feel alive: debris, fireworks and sound effects.
 import * as THREE from 'three';
+import { VEHICLES } from './shared/vehicles.js';
 
 export class Particles {
   constructor(scene) {
@@ -568,6 +569,67 @@ export class Effects {
 // fade back a little while nothing changes, the way your ears stop noticing a hum.
 const jitter = k => 1 + (Math.random() * 2 - 1) * k;
 
+// ---------- Engine recordings ----------
+// The engines are recordings (in sounds/, made by tools/make-engine-sounds.py): each kind of
+// engine (ordinary, sports, big V8, diesel, outboard) at five engine speeds, each a seamless loop.
+// One engine plays all five at once, each sped up or slowed down to the revs it should be at, and
+// only the two recorded nearest the revs are heard, blended. Coasting it's muffled; on the gas
+// it's bright.
+
+const IDLE = 0.14; // the game's revs (0..1 through each gear) when idling (see cars.js)
+// Each car of a kind sounds a little different (ordinary cars and trucks the most).
+const variety = (seed, name) => 1 + (((Math.sin(seed * 12.9898) * 43758.5453) % 1 + 1) % 1 - 0.5) * (name === 'normal' || name === 'big' ? 0.12 : 0.05);
+
+class EngineSampler {
+  constructor(ctx, out, info, buffers, period) {
+    this.ctx = ctx;
+    this.info = info;
+    this.filter = ctx.createBiquadFilter();
+    this.filter.type = 'lowpass';
+    this.filter.Q.value = 0.5;
+    this.gain = ctx.createGain();
+    this.gain.gain.value = 0;
+    this.filter.connect(this.gain).connect(out);
+    this.layers = buffers.map((buffer, i) => {
+      const src = ctx.createBufferSource();
+      src.buffer = buffer;
+      src.loop = true;
+      src.loopStart = period / 2;
+      src.loopEnd = period * 1.5;
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      src.connect(g).connect(this.filter);
+      src.start(0, period / 2 + Math.random() * period); // (each loop starts somewhere different)
+      return { src, g, rpm: info.layers[i].rpm };
+    });
+  }
+
+  // rpm: the game's revs (0..1 through the gear); load: on the gas (0..1); pitch: this engine's
+  // own (a little higher or lower than others of its kind); level: how loud.
+  set(rpm, load, pitch, level) {
+    const t = this.ctx.currentTime, { idle, max } = this.info;
+    const real = (idle + (max - idle) * Math.max(0, Math.min(1, (rpm - IDLE) / (1 - IDLE)))) * pitch;
+    const L = this.layers;
+    // The two recordings either side of the revs, and how much of each (an even blend).
+    let i = 0;
+    while (i < L.length - 2 && real > L[i + 1].rpm) i++;
+    const k = Math.max(0, Math.min(1, Math.log(real / L[i].rpm) / Math.log(L[i + 1].rpm / L[i].rpm)));
+    L.forEach((layer, j) => {
+      const w = j === i ? Math.cos(k * Math.PI / 2) : j === i + 1 ? Math.sin(k * Math.PI / 2) : 0;
+      layer.g.gain.setTargetAtTime(w, t, 0.04);
+      layer.src.playbackRate.setTargetAtTime(Math.max(0.4, Math.min(2.5, real / layer.rpm)), t, 0.03);
+    });
+    this.filter.frequency.setTargetAtTime(2200 + 7500 * (0.15 + 0.85 * load) * (0.6 + 0.4 * rpm), t, 0.05);
+    this.gain.gain.setTargetAtTime(level, t, 0.06);
+  }
+
+  stop() {
+    const t = this.ctx.currentTime;
+    this.gain.gain.setTargetAtTime(0, t, 0.08);
+    for (const { src } of this.layers) src.stop(t + 0.6);
+  }
+}
+
 export class Sounds {
   constructor() {
     this.ctx = null;
@@ -576,6 +638,63 @@ export class Sounds {
     this.engCalm = 0;
     this.rotCalm = 0;
     this.voice = { pitch: 1, q: 1, sub: 0.35 };
+    this.engineName = 'normal'; // which recordings the engine we're driving uses
+    this.enginePitch = 1;
+    this.engineInfo = null; // what's in sounds/engines.json, once it's loaded
+    this.engineBuffers = {}; // voice -> its decoded loops (or 'loading')
+    this.others = new Map(); // other people's vehicles we can hear: id -> { sampler, name }
+  }
+
+  // The recordings for an engine voice: ready (an array of buffers), or null (and they start
+  // loading, if they haven't yet).
+  engineVoice(name) {
+    const ctx = this.ensure();
+    if (!ctx || !name) return null;
+    if (!this.engineInfo) {
+      if (!this.engineInfoLoading) {
+        this.engineInfoLoading = fetch('sounds/engines.json').then(r => r.json()).then(info => (this.engineInfo = info)).catch(() => null);
+      }
+      return null;
+    }
+    const got = this.engineBuffers[name];
+    if (Array.isArray(got)) return got;
+    if (got) return null;
+    const info = this.engineInfo.voices[name];
+    if (!info) return null;
+    this.engineBuffers[name] = 'loading';
+    Promise.all(info.layers.map(l => fetch(`sounds/${l.file}`).then(r => r.arrayBuffer()).then(b => ctx.decodeAudioData(b))))
+      .then(buffers => (this.engineBuffers[name] = buffers))
+      .catch(() => delete this.engineBuffers[name]);
+    return null;
+  }
+
+  // Other people's vehicles nearby: their engines too (the nearest couple). list: [{ id, kind,
+  // seed, rpm, load, level }].
+  nearbyEngines(list) {
+    const ctx = this.ensure();
+    if (!ctx || !this.master) return;
+    const keep = new Set();
+    for (const e of list) {
+      const name = VEHICLES[e.kind]?.engine;
+      const buffers = this.engineVoice(name);
+      if (!buffers) continue;
+      let o = this.others.get(e.id);
+      if (o && o.name !== name) {
+        o.sampler.stop();
+        o = null;
+      }
+      if (!o) {
+        o = { name, sampler: new EngineSampler(ctx, this.master, this.engineInfo.voices[name], buffers, this.engineInfo.period) };
+        this.others.set(e.id, o);
+      }
+      o.sampler.set(e.rpm, e.load, (VEHICLES[e.kind].pitch ?? 1) * variety(e.seed, name), e.level * 0.5);
+      keep.add(e.id);
+    }
+    for (const [id, o] of this.others) {
+      if (keep.has(id)) continue;
+      o.sampler.stop();
+      this.others.delete(id);
+    }
   }
 
   // Plays a group of sounds that should stay in tune with each other.
@@ -737,6 +856,14 @@ export class Sounds {
   // Each vehicle sounds a bit different: monster trucks rumble deeper, police cars are
   // higher, and every other car gets its own slightly different engine.
   setEngineVoice(seed, kind) {
+    const name = VEHICLES[kind]?.engine || 'normal';
+    if (name !== this.engineName && this.sampler) {
+      this.sampler.stop();
+      this.sampler = null;
+    }
+    this.engineName = name;
+    this.enginePitch = (VEHICLES[kind]?.pitch ?? 1) * variety(seed, name);
+    this.engineVoice(name); // (start loading it)
     const r = ((Math.sin(seed * 12.9898) * 43758.5453) % 1 + 1) % 1;
     // (A boat's outboard motor is a higher, buzzier engine.)
     // (Big trucks rumble low; the camper van putters along.)
@@ -749,13 +876,30 @@ export class Sounds {
   engine(rpm, load = 0) {
     const ctx = this.ensure();
     if (!ctx) return;
+    const stopSynth = () => {
+      if (!this.eng) return;
+      this.eng.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.1);
+      const e = this.eng;
+      setTimeout(() => e.nodes.forEach(n => n.stop()), 500);
+      this.eng = null;
+    };
     if (rpm === null) {
-      if (this.eng) {
-        this.eng.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.1);
-        const e = this.eng;
-        setTimeout(() => e.nodes.forEach(n => n.stop()), 500);
-        this.eng = null;
-      }
+      stopSynth();
+      this.sampler?.stop();
+      this.sampler = null;
+      return;
+    }
+    // The recordings, once they've loaded (the synth below stands in until then).
+    const buffers = this.engineVoice(this.engineName);
+    if (buffers) {
+      stopSynth();
+      this.sampler ??= new EngineSampler(ctx, this.master, this.engineInfo.voices[this.engineName], buffers, this.engineInfo.period);
+      const t = ctx.currentTime, last = this.samplerState || { t, rpm, load };
+      const dt = Math.min(0.1, Math.max(0, t - last.t));
+      const changing = Math.abs(rpm - last.rpm) > dt * 0.15 || Math.abs(load - last.load) > 0.05;
+      this.engCalm = this.settle(this.engCalm, changing, dt);
+      this.samplerState = { t, rpm, load };
+      this.sampler.set(rpm, load, this.enginePitch, (0.42 + 0.18 * rpm + 0.22 * load) * (1 - this.engCalm * 0.35));
       return;
     }
     if (!this.eng) {

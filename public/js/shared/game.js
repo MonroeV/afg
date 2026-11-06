@@ -6,11 +6,11 @@ import { sanitizeLook, cleanName } from './avatar.js';
 import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines, buildStore, furnishHouses, furnishTowers } from './worldgen.js';
 import { NpcCrew } from './npcs.js';
 import { buildFrontier, buildPizzeria, buildSignposts, refurnish, addFishingSpots } from './frontier.js';
-import { buildFarCountry } from './farcountry.js';
+import { buildFarCountry, moreVehicles } from './farcountry.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot, seatCount } from './vehicles.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
 
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 12;
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
 const DOOR = 21;
@@ -175,6 +175,7 @@ export class GameRoom {
       this.upgradeTo9();
       this.upgradeTo10();
       this.upgradeTo11();
+      this.upgradeTo12();
       this.populate();
       return true;
     }
@@ -225,6 +226,7 @@ export class GameRoom {
     if (data.version < 9) this.upgradeTo9();
     if (data.version < 10) this.upgradeTo10();
     if (data.version < 11) this.upgradeTo11();
+    if (data.version < 12) this.upgradeTo12();
     this.populate();
     return true;
   }
@@ -315,6 +317,14 @@ export class GameRoom {
     for (const [x, y, z, text] of far.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
     this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...far.places };
     this.log(`Added the far country: the beach and campground, the quarry and the farm (${far.count} blocks, ${far.cars.length} vehicles)`);
+    this.onDirty();
+  }
+
+  // Worlds saved before version 12: the RV at the campground and two sports cars (just vehicles,
+  // parked wherever there's room near their spots: no blocks change).
+  upgradeTo12() {
+    for (const c of moreVehicles()) this.spawn(this.addHome(c));
+    this.log('Added the RV and two sports cars');
     this.onDirty();
   }
 

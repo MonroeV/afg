@@ -334,8 +334,12 @@ export function nearestRailEdge(fx, fz) {
   return RAIL_EDGES[d.indexOf(Math.min(...d))];
 }
 
+// Little things (lamps and lanterns by the road, flower pots, traffic cones, pumpkins…) don't stop
+// vehicles: cars just drive on past them. (People still bump into them.)
+const SMALL_PROPS = new Set(Object.entries(BLOCKS).filter(([, d]) => d.shape === 'model' && d.box && d.box[3] - d.box[0] <= 0.65 && d.box[5] - d.box[2] <= 0.65).map(([id]) => Number(id)));
+export const isSmallProp = v => SMALL_PROPS.has(itemOf(v) & 255);
 // Railings stop cars too.
-export const blocksVehicles = v => isSolidBlock(v) || railMask(v) > 0;
+export const blocksVehicles = v => (isSolidBlock(v) && !isSmallProp(v)) || railMask(v) > 0;
 
 // ---------- Doors ----------
 // meta bits: 0-1 facing (quarter turns), 2 open, 3 top half.

@@ -56,9 +56,10 @@ export class TouchControls {
     };
     const minis = div('minis', this.root);
     this.minis = {};
-    for (const [name, label] of [['pause', '⏸'], ['items', '🎒'], ['camera', '🎥'], ['dance', '💃'], ['chat', '💬']]) {
+    for (const [name, label] of [['pause', '⏸'], ['items', '🎒'], ['camera', '🎥'], ['dance', '💃'], ['sleep', '🛏️'], ['chat', '💬']]) {
       const b = div('mini', minis, label);
       this.minis[name] = b;
+      if (name === 'sleep') b.classList.add('hidden');
       b.addEventListener('pointerdown', e => {
         e.preventDefault();
         this.on[name]?.();
@@ -133,6 +134,12 @@ export class TouchControls {
     this.base.style.left = this.base.style.top = '';
     this.knob.style.transform = '';
     for (const p of Object.values(this.pads)) p.classList.remove('pressed');
+  }
+
+  // The 🛏️ button: only there in a camper van or the RV.
+  showSleep(on) {
+    if (this.minis.sleep.classList.contains('hidden') === !on) return;
+    this.minis.sleep.classList.toggle('hidden', !on);
   }
 
   // What the pads mean right now: walking, flying, driving, flying the helicopter, or riding.

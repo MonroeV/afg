@@ -398,7 +398,8 @@ export class Avatar {
     const sitting = !!this.seat || this.sitting;
     // Climbing into bed (or out) your knees bend as you sit on the edge, then straighten as you
     // lie back (or stand up).
-    const sit = this.seat ? 1 : Math.max(this.sitK, Math.sin(Math.PI * Math.min(1, this.lieK)) * 0.9);
+    // (Asleep in a camper van: lying in its bed, not sitting.)
+    const sit = this.seat && !this.lying ? 1 : Math.max(this.sitK, Math.sin(Math.PI * Math.min(1, this.lieK)) * 0.9);
     animateCharacter(this.character, {
       walk: this.walk, speed: sitting || this.lying ? 0 : this.speed, pitch: this.lieK > 0.5 ? 0 : this.pitch, time,
       dance: this.dance, wave: this.wave, swing: this.swing, sit,

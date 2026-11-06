@@ -10,18 +10,40 @@ export const VEHICLES = {
   camper: {
     name: 'Camper Van', mass: 2200, length: 4.6, width: 2.0, ride: 0.32, bodyH: 0.95, cabinH: 0.8, wheelR: 0.38, maxSpeed: 14, accel: 6.5, gears: 3, respawn: 30,
     seats: [[-0.45, 0.62, -1.05], [0.45, 0.62, -1.05], [-0.45, 0.62, 0.55], [0.45, 0.62, 0.55]], special: 'roof',
+    // Where you lie down to sleep in it (B, parked): [x, y, z] of your feet, head toward the front.
+    beds: [[-0.42, 0.86, 1.95], [0.42, 0.86, 1.95]], engine: 'normal', pitch: 0.86,
   },
   // A pickup truck: two in the cab and one riding in the back (in the open truck bed).
   pickup: {
     name: 'Pickup Truck', mass: 1900, length: 4.4, width: 1.95, ride: 0.42, bodyH: 0.6, cabinH: 0.72, wheelR: 0.42, maxSpeed: 18, accel: 9, gears: 3, respawn: 30,
-    seats: [[-0.42, 0.56, -0.55], [0.42, 0.56, -0.55], [0, 1.02, 1.25]],
+    seats: [[-0.42, 0.56, -0.55], [0.42, 0.56, -0.55], [0, 1.02, 1.25]], engine: 'big', pitch: 1.08,
   },
   // A big dump truck: slow and heavy, and G tips the dump bed up (and down again).
   dump: {
     name: 'Dump Truck', mass: 6000, length: 5.4, width: 2.4, ride: 0.55, bodyH: 0.85, cabinH: 0.85, wheelR: 0.62, maxSpeed: 12, accel: 5, gears: 3, respawn: 30,
-    seats: [[-0.5, 0.95, -1.75], [0.5, 0.95, -1.75]], special: 'tip',
+    seats: [[-0.5, 0.95, -1.75], [0.5, 0.95, -1.75]], special: 'tip', engine: 'diesel',
+  },
+  // The RV: a whole home on wheels. Two up front, two at the dinette table (facing each other) and
+  // two on the couch; a kitchen, a TV, a bathroom and a big bed at the back (B: sleep, parked), and
+  // G rolls the awning out. (A seat's 4th number turns you to face across the RV.)
+  rv: {
+    name: 'RV', mass: 7500, length: 8.2, width: 2.6, ride: 0.42, bodyH: 2.5, cabinH: 0, wheelR: 0.5, maxSpeed: 12, accel: 4.5, gears: 3, respawn: 60,
+    seats: [[-0.6, 1.08, -3.15], [0.6, 1.08, -3.15], [-0.78, 1.15, -2.15, Math.PI], [-0.78, 1.15, -0.95, 0], [0.92, 1.15, -1.9, Math.PI / 2], [0.92, 1.15, -1.05, Math.PI / 2]],
+    beds: [[-0.45, 1.22, 3.9], [0.45, 1.22, 3.9], [0.92, 1.18, -0.6]], special: 'awning', lightY: 0.55, engine: 'diesel', pitch: 1.1,
+  },
+  // A sports car: low, light and quick, with a spoiler on the back. Two seats.
+  sports: {
+    name: 'Sports Car', mass: 1100, length: 3.9, width: 1.86, ride: 0.2, bodyH: 0.42, cabinH: 0.5, wheelR: 0.33, maxSpeed: 24, accel: 13, gears: 3, respawn: 30,
+    seats: [[-0.4, 0.34, 0.25], [0.4, 0.34, 0.25]], engine: 'sport',
   },
 };
+// The engine sound of each kind (shared/../sounds): normal cars, sports cars, big V8 trucks, diesels.
+VEHICLES.car.engine = 'normal';
+VEHICLES.police.engine = 'sport';
+VEHICLES.police.pitch = 0.88;
+VEHICLES.monster.engine = 'big';
+VEHICLES.monster.pitch = 0.9;
+VEHICLES.boat.engine = 'outboard';
 for (const s of Object.values(VEHICLES)) s.height ??= s.ride + s.bodyH + s.cabinH;
 // How many people fit (the driver too).
 export const seatCount = spec => spec.seats?.length ?? 3;

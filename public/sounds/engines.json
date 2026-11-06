@@ -1,0 +1,135 @@
+{
+ "period": 1.5,
+ "voices": {
+  "normal": {
+   "layers": [
+    {
+     "file": "engine-normal-0.mp3",
+     "rpm": 800.0
+    },
+    {
+     "file": "engine-normal-1.mp3",
+     "rpm": 1440.0
+    },
+    {
+     "file": "engine-normal-2.mp3",
+     "rpm": 2400.0
+    },
+    {
+     "file": "engine-normal-3.mp3",
+     "rpm": 3840.0
+    },
+    {
+     "file": "engine-normal-4.mp3",
+     "rpm": 5760.0
+    }
+   ],
+   "idle": 800,
+   "max": 6000
+  },
+  "sport": {
+   "layers": [
+    {
+     "file": "engine-sport-0.mp3",
+     "rpm": 960.0
+    },
+    {
+     "file": "engine-sport-1.mp3",
+     "rpm": 1920.0
+    },
+    {
+     "file": "engine-sport-2.mp3",
+     "rpm": 3360.0
+    },
+    {
+     "file": "engine-sport-3.mp3",
+     "rpm": 5600.0
+    },
+    {
+     "file": "engine-sport-4.mp3",
+     "rpm": 8160.0
+    }
+   ],
+   "idle": 1000,
+   "max": 8400
+  },
+  "big": {
+   "layers": [
+    {
+     "file": "engine-big-0.mp3",
+     "rpm": 640.0
+    },
+    {
+     "file": "engine-big-1.mp3",
+     "rpm": 1120.0
+    },
+    {
+     "file": "engine-big-2.mp3",
+     "rpm": 1920.0
+    },
+    {
+     "file": "engine-big-3.mp3",
+     "rpm": 3040.0
+    },
+    {
+     "file": "engine-big-4.mp3",
+     "rpm": 4640.0
+    }
+   ],
+   "idle": 650,
+   "max": 4800
+  },
+  "diesel": {
+   "layers": [
+    {
+     "file": "engine-diesel-0.mp3",
+     "rpm": 640.0
+    },
+    {
+     "file": "engine-diesel-1.mp3",
+     "rpm": 960.0
+    },
+    {
+     "file": "engine-diesel-2.mp3",
+     "rpm": 1440.0
+    },
+    {
+     "file": "engine-diesel-3.mp3",
+     "rpm": 2080.0
+    },
+    {
+     "file": "engine-diesel-4.mp3",
+     "rpm": 2880.0
+    }
+   ],
+   "idle": 600,
+   "max": 3000
+  },
+  "outboard": {
+   "layers": [
+    {
+     "file": "engine-outboard-0.mp3",
+     "rpm": 1120.0
+    },
+    {
+     "file": "engine-outboard-1.mp3",
+     "rpm": 1920.0
+    },
+    {
+     "file": "engine-outboard-2.mp3",
+     "rpm": 3000.0
+    },
+    {
+     "file": "engine-outboard-3.mp3",
+     "rpm": 4400.0
+    },
+    {
+     "file": "engine-outboard-4.mp3",
+     "rpm": 6200.0
+    }
+   ],
+   "idle": 1100,
+   "max": 6400
+  }
+ }
+}

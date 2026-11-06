@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   BLOCKS, WORLD, PAINT_COLORS, blockKey, blockId, blockMeta, paintOf, withPaint, makeBlock, shapeOf, isSolidBlock, doorBox,
-  railBoxes, railMask, itemOf, floorOf, carryPaint, rgbToHex, switchable, lightOff, DOOR_OPEN, DOOR_TOP, BED_FOOT,
+  railBoxes, railMask, isSmallProp, itemOf, floorOf, carryPaint, rgbToHex, switchable, lightOff, DOOR_OPEN, DOOR_TOP, BED_FOOT,
 } from './shared/blocks.js';
 import { modelGeometry, modelMaterials } from './models.js';
 import { pictureCanvas } from './pictures.js';
@@ -579,7 +579,7 @@ export class World {
       const role = this.doorRole(x, y, z);
       return role.kind === 'garage' && role.top;
     }
-    return this.isSolid(x, y, z) || railMask(v) > 0;
+    return (this.isSolid(x, y, z) && !isSmallProp(v)) || railMask(v) > 0; // (cars drive past lamps and such)
   }
 
   // ---------- Ladders ----------

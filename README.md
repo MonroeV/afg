@@ -83,8 +83,21 @@ customize your character, drive cars, build anything and play with friends.
   It holds 25 characters in a 5×5 grid; when it's full you choose one to replace, or replace the oldest
 - **Day and night**: the sun sets, the stars and moon come out and the street lamps light up
 - **Cars parked around town**: regular cars, a police car with a siren and monster trucks that climb
-  blocks. Out in the far country: **camper vans** (four seats, and G pops the roof up), **pickup
-  trucks** (two in the cab and one riding in the back) and **dump trucks** (G tips the dump bed). A 3-speed automatic you can hear: 1st revs up slowly from a stop, 2nd pulls to top speed,
+  blocks, and two **sports cars** on the road down to the campground (low, light and quick). Out in
+  the far country: **camper vans** (four seats, G pops the roof up, and you can sleep in them),
+  **pickup trucks** (two in the cab and one riding in the back), **dump trucks** (G tips the dump
+  bed) and the **RV** at the campground, a whole home on wheels: two seats up front, a dinette
+  table, a couch, a kitchen, a TV, a bathroom and a big bed at the back, with windows to look in
+  and out of; G rolls its awning out. **Sleep in a camper van or the RV**: park it and press B (or
+  tap 🛏️), and move to get up. It counts like a bed for sleeping through the night, and if the
+  van is yours (see below) it's your home: Go Home (R) takes you back to it. Cars drive right past
+  little things like the lamps and lanterns along the roads, flower pots and traffic cones,
+  instead of crashing into them, and hitting something solid only bounces you back a little, so
+  you're soon on your way again. **Every kind of vehicle sounds like itself**: ordinary cars hum,
+  the sports cars and the police car rasp and scream, the monster trucks and pickups burble like
+  big V8s, the dump trucks and the RV clatter and whine like diesels, and the boats buzz like
+  outboard motors. (They're recordings, see `tools/make-engine-sounds.py`; you hear other people's
+  vehicles nearby too.) A 3-speed automatic you can hear: 1st revs up slowly from a stop, 2nd pulls to top speed,
   and 3rd is an overdrive that cruises at medium revs. If a car's corner gets caught on something it
   gently slides itself free. Brake lights come on when you brake (with a third light at the top of
   the back window), and when you hold S to back up the car stops, waits a moment, then switches on
@@ -264,8 +277,8 @@ customize your character, drive cars, build anything and play with friends.
 | Ctrl or C | Crouch: slow, and you won't fall off edges |
 | F | Toggle flying (Space = up, C = down) |
 | V | Switch camera: first person, behind you, in front of you |
-| G | Dance! (on a dance floor it starts a party). Driving: the police car's siren, the camper van's pop-up roof, the dump truck's bed |
-| B | Wave |
+| G | Dance! (on a dance floor it starts a party). Driving: the police car's siren, the camper van's pop-up roof, the dump truck's bed, the RV's awning |
+| B | Wave. In a parked camper van or the RV: sleep (move to get up) |
 | T or Enter | Chat (with quick-chat buttons for common things to say) |
 | R | Go home: your bed, or your land if you have no bed, or else the town square |
 | P | Take a photo (it's saved to your Downloads) |
@@ -539,6 +552,9 @@ public/
       worldgen.js      Builds the towns (and furnishes them, and the Luxe Store)
       frontier.js      The ski resort, the woods, cabins, lake and mountains, and the Pizza Palace
       farcountry.js    The far country: the beach and campground, the quarry and the farm
+  sounds/              The engine recordings (each kind of engine at five speeds, looped)
+tools/
+  make-engine-sounds.py  Makes the engine recordings (needs numpy and ffmpeg; run it after changing a voice)
 ```
 
 ### Ideas for what to add next
