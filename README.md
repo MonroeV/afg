@@ -5,7 +5,7 @@ customize your character, drive cars, build anything and play with friends.
 
 - **Towns to explore**: a main town around the spawn square plus four villages, joined by roads,
   with houses you can walk into, shops, parks, playgrounds, a beach and street lamps
-- **A big world beyond the towns** (448 × 448 blocks):
+- **A big world beyond the towns** (640 × 640 blocks):
   - **Up north, the snowy country** (the ground turns to snow and snowflakes start to fall): a
     **ski resort** with a big snowy mountain and a long ski run, a **ski lift** with chairs going
     up and down its cable (right-click the chair at the bottom to ride to the top, Space to hop
@@ -16,7 +16,17 @@ customize your character, drive cars, build anything and play with friends.
     woodpiles; nobody owns them, so claim one with the Land Flag and move in!), a campfire, a
     **big lake** with sandy shores, a dock (with fishing stools) and boats, and a **rocky mountain**
     with a snowy top
-  - **Lots of open land** to the east and south, with trees and flowers, for building
+  - **Down south, Sunny Shores**: a sandy beach on the sea (beach umbrellas, palm trees, a
+    lifeguard tower, boats, and a pier with fishing stools), and just up from it the **campground**:
+    camper vans parked at their camp sites, tents, campfires, picnic tables and a ranger station
+  - **Out east, Big Rock Quarry**: a stepped stone pit with **dump trucks**. Drive one in under the
+    chute and wait, and it fills up with dirt; drive off and press G to dump a big heap of it
+    wherever you're allowed to build (Z takes it back)
+  - **Out west, past the woods, Happy Acres Farm**: a red barn (with a pickup truck inside and hay
+    bales), a silo, fenced fields of flowers and pumpkins, and more pickups. Nobody owns it: claim
+    it with the Land Flag and move in!
+  - **Up north**, more snowy pine forest past the ski mountain
+  - **Lots of open land** all around, with trees and flowers, for building
   - Roads lead out to all of it
 - **Skis** (take a pair from the rack in the ski lodge; they're yours to keep, and you wear them):
   on snow they glide and pick up speed downhill. Hold W to carve toward where you're looking, A/D
@@ -73,7 +83,8 @@ customize your character, drive cars, build anything and play with friends.
   It holds 25 characters in a 5×5 grid; when it's full you choose one to replace, or replace the oldest
 - **Day and night**: the sun sets, the stars and moon come out and the street lamps light up
 - **Cars parked around town**: regular cars, a police car with a siren and monster trucks that climb
-  blocks. A 3-speed automatic you can hear: 1st revs up slowly from a stop, 2nd pulls to top speed,
+  blocks. Out in the far country: **camper vans** (four seats, and G pops the roof up), **pickup
+  trucks** (two in the cab and one riding in the back) and **dump trucks** (G tips the dump bed). A 3-speed automatic you can hear: 1st revs up slowly from a stop, 2nd pulls to top speed,
   and 3rd is an overdrive that cruises at medium revs. If a car's corner gets caught on something it
   gently slides itself free. Brake lights come on when you brake (with a third light at the top of
   the back window), and when you hold S to back up the car stops, waits a moment, then switches on
@@ -253,7 +264,7 @@ customize your character, drive cars, build anything and play with friends.
 | Ctrl or C | Crouch: slow, and you won't fall off edges |
 | F | Toggle flying (Space = up, C = down) |
 | V | Switch camera: first person, behind you, in front of you |
-| G | Dance! (on a dance floor it starts a party) |
+| G | Dance! (on a dance floor it starts a party). Driving: the police car's siren, the camper van's pop-up roof, the dump truck's bed |
 | B | Wave |
 | T or Enter | Chat (with quick-chat buttons for common things to say) |
 | R | Go home: your bed, or your land if you have no bed, or else the town square |
@@ -336,6 +347,15 @@ click once more to claim it. Right-click cancels. With the flag in your hand, ri
 give your land up. You have one piece of home land: if you already have some and claim somewhere
 else, the game asks first ("Move your land here?"), because your old land is then given up and
 anyone could build there.
+
+**Your own vehicles:** hold the Land Flag and click a car, truck, camper van, boat or helicopter to
+make it yours (it asks first). Up to 3 vehicles can be yours. Only you can drive yours (friends can
+ride along with you), nobody else can bash it with the hammer or paint it, and it stays wherever
+you park it, even when you leave the game. If it ever blows up, it comes back where you last
+parked it. A little sign over it says whose it is, and with the Land Flag in your hand the hint
+tells you where your vehicles are ("Camper Van 85 m north-east"). The town gets a new one of its
+own to replace the one you took. To give yours back, click it with the Land Flag again. Like land,
+if nobody plays with your name for 30 days, your vehicles go back to the town.
 
 **Vacation land:** the **Vacation Flag** (150 coins at the Luxe Store) claims a second piece of land,
 for a vacation home: a beach house by the lake, a cabin up a mountain. Hold the Land Flag and press
@@ -450,7 +470,10 @@ along the ring road, the lake wherever there's room, smaller if it has to be), t
 and the Pizza Palace (on empty land), the ski resort, the woods, the big lake and the mountains
 (out past the old edge of the world, where nobody could build before; the roads out to them only
 go on empty land, and where one meets an old road, just that bit of sidewalk becomes road),
-the "Build it here!" signposts (on empty land), fishing stools on the docks with a noticeboard
+the far country (out past the old edge of the 448 × 448 world, where nobody could build before:
+the beach, the campground, the quarry, the farm and the rest of the ski mountain, with its roads
+out there only on empty land, going round anything built or claimed, and only turning a bit of
+sidewalk into road where one joins an old road), the "Build it here!" signposts (on empty land), fishing stools on the docks with a noticeboard
 by each (only in empty spots, or among a dock's own railings, on land nobody has claimed),
 and furniture: only in houses and towers that are exactly as the town was first
 built (nobody has changed or claimed them), and only in their empty spots, and in the ski lodge
@@ -515,6 +538,7 @@ public/
       claims.js        Land claim rules
       worldgen.js      Builds the towns (and furnishes them, and the Luxe Store)
       frontier.js      The ski resort, the woods, cabins, lake and mountains, and the Pizza Palace
+      farcountry.js    The far country: the beach and campground, the quarry and the farm
 ```
 
 ### Ideas for what to add next

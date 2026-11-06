@@ -280,6 +280,48 @@ export const MODELS = {
     trim: [box(0.06, 0.96, 0.025, 0.455, 0.56, 0.47), box(0.06, 0.96, 0.025, 0.545, 0.56, 0.47)],
     colors: { body: 0x8d5a34, accent: 0xe53935, trim: 0x1e88e5, metal: 0 },
   },
+  // A pup tent: orange canvas, a dark door flap on the front, a ridge pole and pegs.
+  tent: {
+    body: [new THREE.CylinderGeometry(0.62, 0.62, 0.86, 3).rotateX(-Math.PI / 2).scale(0.82, 1, 1).translate(0.5, 0.31, 0.5)],
+    accent: [new THREE.CylinderGeometry(0.3, 0.3, 0.02, 3).rotateX(-Math.PI / 2).scale(0.82, 1, 1).translate(0.5, 0.16, 0.935)],
+    trim: [new THREE.CylinderGeometry(0.02, 0.02, 0.96, 6).rotateX(Math.PI / 2).translate(0.5, 0.93, 0.5), ...[[0.06, 0.06], [0.94, 0.06], [0.06, 0.94], [0.94, 0.94]].map(([x, z]) => cyl(0.015, 0.015, 0.1, x, 0.05, z, 4))],
+    colors: { body: 0xff8a3d, accent: 0x6d3a1c, trim: 0x5d4037, metal: 0 },
+  },
+  // A beach umbrella: a red canopy on a white pole.
+  beachUmbrella: {
+    body: [cyl(0.025, 0.025, 1.45, 0.5, 0.725, 0.5, 8)],
+    accent: [new THREE.ConeGeometry(0.78, 0.32, 10, 1, true).translate(0.5, 1.4, 0.5)],
+    trim: [ball(0.05, 0.5, 1.58, 0.5), new THREE.ConeGeometry(0.4, 0.17, 10, 1, true).translate(0.5, 1.48, 0.5)],
+    colors: { body: 0xf5f5f5, accent: 0xe53935, trim: 0xfafafa, metal: 0 },
+  },
+  // A round hay bale lying on its side, tied with twine.
+  hayBale: {
+    body: [new THREE.CylinderGeometry(0.37, 0.37, 0.86, 14).rotateZ(Math.PI / 2).translate(0.5, 0.37, 0.5)],
+    accent: [-0.22, 0.22].map(x => new THREE.CylinderGeometry(0.375, 0.375, 0.04, 14).rotateZ(Math.PI / 2).translate(0.5 + x, 0.37, 0.5)),
+    colors: { body: 0xe3c565, accent: 0xa1782a, metal: 0 },
+  },
+  // A big orange pumpkin with a stem and a leaf.
+  pumpkin: {
+    body: [0, 1, 2, 3].map(i => new THREE.SphereGeometry(0.2, 10, 8).scale(0.75, 0.9, 1.2).rotateY(i * Math.PI / 4).translate(0.5, 0.23, 0.5)),
+    accent: [cyl(0.03, 0.04, 0.12, 0.5, 0.48, 0.5, 6)],
+    trim: [box(0.16, 0.02, 0.1, 0.6, 0.44, 0.5)],
+    colors: { body: 0xf57c00, accent: 0x6d4c22, trim: 0x43a047, metal: 0 },
+  },
+  // An orange traffic cone with a white stripe.
+  trafficCone: {
+    body: [box(0.42, 0.04, 0.42, 0.5, 0.02, 0.5), cone(0.17, 0.62, 0.5, 0.35, 0.5, 12)],
+    accent: [new THREE.CylinderGeometry(0.098, 0.124, 0.1, 12).translate(0.5, 0.38, 0.5)],
+    colors: { body: 0xff6d00, accent: 0xfafafa, metal: 0 },
+  },
+  // A wooden picnic table with a bench on each side.
+  picnicTable: {
+    body: [
+      box(0.98, 0.06, 0.5, 0.5, 0.73, 0.5),
+      ...[-1, 1].map(z => box(0.98, 0.05, 0.2, 0.5, 0.43, 0.5 + z * 0.37)),
+      ...[0.12, 0.88].flatMap(x => [box(0.06, 0.74, 0.06, x, 0.37, 0.36), box(0.06, 0.74, 0.06, x, 0.37, 0.64), box(0.06, 0.05, 0.86, x, 0.2, 0.5)]),
+    ],
+    colors: { body: 0xa9763f, metal: 0 },
+  },
   hotTub: {
     body: [box(1, 0.55, 0.1, 0.5, 0.275, 0.05), box(1, 0.55, 0.1, 0.5, 0.275, 0.95), box(0.1, 0.55, 0.8, 0.05, 0.275, 0.5), box(0.1, 0.55, 0.8, 0.95, 0.275, 0.5), box(0.8, 0.1, 0.8, 0.5, 0.05, 0.5)],
     glow: [box(0.8, 0.38, 0.8, 0.5, 0.29, 0.5)],

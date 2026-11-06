@@ -2,6 +2,7 @@
 // roads joining them, parks, playgrounds, trees, flowers and parked cars.
 import { WORLD, DOOR_TOP, BED_FOOT, makeBlock, blockId, turnLine, stack, itemOf, floorOf, shapeOf } from './blocks.js';
 import { buildFrontier, buildPizzeria, buildSignposts, addFishingSpots } from './frontier.js';
+import { buildFarCountry } from './farcountry.js';
 
 const B = {
   grass: 1, dirt: 2, stone: 3, cobble: 4, brick: 5, planks: 6, log: 7, leaves: 8, glass: 9,
@@ -467,6 +468,10 @@ export function generateWorld(seed = 2024) {
   for (const a of posts.areas) markUsed(...a);
   // Fishing stools on the docks, and a noticeboard by each.
   const fishing = addFishingSpots({ get: getB, set: put, canUse: () => true });
+  // The far country: the beach and campground, the quarry, the farm and the snowy north.
+  const far = buildFarCountry({ get: getB, set: put, canUse: free, canPave: () => true });
+  for (const a of far.areas) markUsed(...a);
+  cars.push(...far.cars);
   const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null, pizza: pizza?.place || null, lodge: frontier.places.lodge };
 
   // ---------- Countryside ----------
@@ -522,7 +527,7 @@ export function generateWorld(seed = 2024) {
     const [x, y, z] = k.split(',').map(Number);
     blocks.push([x, y, z, v]);
   }
-  return { blocks, cars: placed, places, claims: [store?.claim, pizza?.claim, ...frontier.claims].filter(Boolean), signs: [...posts.signs, ...fishing.signs] };
+  return { blocks, cars: placed, places: { ...places, ...far.places }, claims: [store?.claim, pizza?.claim, ...frontier.claims, ...far.claims].filter(Boolean), signs: [...posts.signs, ...fishing.signs, ...far.signs] };
 }
 
 // Saved worlds from before the new lamps: put proper lamp heads on the town's street lamps

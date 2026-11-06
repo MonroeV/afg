@@ -27,7 +27,7 @@ const NPCS = [
     id: -3, place: 'plaza', name: 'Mayor Maple', title: 'Mayor Maple 🎩', roam: 7,
     look: { face: 'smile', hair: 'none', hat: 'tophat', shirt: 'jacket', pants: 'jeans', skin: '#e8b088', hatColor: '#111111', shirtColor: '#6d4c41', shirtColor2: '#ffd54f', pantsColor: '#424242', shoesColor: '#111111' },
     hello: n => [`Hello ${n}! Welcome to town! 🎩`, `Lovely day, ${n}! Have you found the gold coins yet?`, `${n}! Have you been to the Luxe Store? It's fabulous!`],
-    tips: ['Gold coins pop up all over town. Walk into them to collect them! 🪙', 'Win a race and you get 3 coins! 🏁', 'You get 10 coins every day just for visiting!', 'Spend your coins at the Luxe Store by the road out of town!', 'Need more coins? The Pizza Palace is looking for delivery helpers! 🍕', 'Have you been up north? There\'s a ski resort in the snow! ⛷️', 'Sit on a fishing stool on the dock and catch some fish! 🎣 Every kind is worth coins (well, not the old boots).'],
+    tips: ['Gold coins pop up all over town. Walk into them to collect them! 🪙', 'Win a race and you get 3 coins! 🏁', 'You get 10 coins every day just for visiting!', 'Spend your coins at the Luxe Store by the road out of town!', 'Need more coins? The Pizza Palace is looking for delivery helpers! 🍕', 'Have you been up north? There\'s a ski resort in the snow! ⛷️', 'Sit on a fishing stool on the dock and catch some fish! 🎣 Every kind is worth coins (well, not the old boots).', 'Found a car you love? Click it with the Land Flag and it can be yours! 🔑', 'Out past the edge of the old map: a beach, a campground, a quarry and a farm! 🗺️'],
   },
   {
     id: -4, place: 'pizza', name: 'Chef Rosa', title: 'Chef Rosa 🍕', roam: 2,
@@ -66,6 +66,9 @@ const BEATS = {
   store: { label: 'at the Luxe Store', lines: ["I'm live at the Luxe Store, the fanciest shop in town! ✨", 'Is that... a real diamond block? Wow! 💎', 'Shoppers say the Jetpack is out of this world! 🚀', 'Penny says there\'s something sparkly for everyone!'] },
   pizza: { label: 'at the Pizza Palace', lines: ['Live from the Pizza Palace, where the ovens never sleep! 🍕', 'Chef Rosa needs delivery helpers. Coins for pizza!', 'Mmm, can you smell that? Fresh pizza! 😋', 'Pizzas are flying out the door today!'] },
   tower: { label: 'at the tower', lines: ["I'm here at the tower, the tallest building in town! 🏢", "There's a grand piano all the way up at the top! 🎹", 'The view from the roof is amazing. Take the ladder!'] },
+  camp: { label: 'at Sunny Shores Campground', lines: ['Live from Sunny Shores Campground! The campfires are crackling! 🔥', 'Camper vans as far as the eye can see! 🚐', 'In a camper van, press G and the roof pops up! ⛺', "The beach is just down the path. Surf's up! 🏖️"] },
+  quarry: { label: 'at Big Rock Quarry', lines: ["I'm at Big Rock Quarry, where the dump trucks rumble! 🚚", 'Drive a dump truck under the chute to fill it with dirt! ⛏️', 'Then press G to dump it wherever you like! 🪨', 'Hard hats on, everybody! 👷'] },
+  farm: { label: 'at Happy Acres Farm', lines: ['Live from Happy Acres Farm! Look at all those pumpkins! 🎃', 'The flower fields are in full bloom! 🌸', 'Hop in a pickup truck: a friend can ride in the back! 🛻', 'Nobody lives here yet. Claim it and it could be yours! 🚜'] },
   lodge: { label: 'at the ski lodge', lines: ['Brrr! Live from the ski lodge, up north! ❄️', 'The slopes are covered in fresh snow today! ⛷️', 'Grab some skis from the rack by the door and ride the lift to the top! 🚡', 'Coach Frost says: stay warm by the fire! 🔥'] },
 };
 const SIGN_OFFS = ["This is Skye Summers, BZ News, live! 🎤", "Stay tuned, I'll be back with more news! 📺"];

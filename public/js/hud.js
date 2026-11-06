@@ -12,7 +12,7 @@ export const CONTROLS = [
   ['Right click', 'Doors, cars, pets, beds, sit down'], ['Hammer', '3 hits to break'], ['Middle click', 'Copy block'],
   ['1–9 / Wheel', 'Pick item'], ['X', 'Next style (lamps, chairs, colors…)'], ['Q', 'Swap back to the last item'], ['E', 'Items, gear & Build Book'], ['Shift', 'Sprint'],
   ['Ctrl / C', "Crouch (you won't fall off edges)"], ['F', 'Fly (Space / C)'],
-  ['V', 'Camera view'], ['G', 'Dance!'], ['B', 'Wave'], ['T / Enter', 'Chat'], ['R', 'Go home (bed, your land, or town)'],
+  ['V', 'Camera view'], ['G', 'Dance! (Driving: siren, camper roof, dump bed)'], ['B', 'Wave'], ['T / Enter', 'Chat'], ['R', 'Go home (bed, your land, or town)'],
   ['P', 'Take a photo'], ['H', 'Hide the HUD (for photos)'], ['Z', 'Undo your last Fill or Paste'],
 ];
 
@@ -20,7 +20,7 @@ export const TOUCH_CONTROLS = [
   ['Left thumb', 'Joystick: walk (push it all the way to run)'], ['Right side', 'Drag to look around'],
   ['Tap', 'Use item (keep your finger still to keep hammering)'], ['⬆', 'Jump (tap twice to fly)'], ['⬇', 'Crouch (or fly down)'],
   ['✋', 'Doors, cars, pets, beds'], ['🚪', 'Get out of a vehicle'], ['Hotbar', 'Tap to pick an item (tap it again: next style)'],
-  ['🎒', 'Items & Build Book'], ['🎥', 'Camera view'], ['💃', 'Dance!'], ['💬', 'Chat'], ['⏸', 'Pause, go home, settings'],
+  ['🎒', 'Items & Build Book'], ['🎥', 'Camera view'], ['💃', 'Dance! (Driving, ⭐: siren, pop-up roof, dump bed)'], ['💬', 'Chat'], ['⏸', 'Pause, go home, settings'],
 ];
 
 const isTouch = () => document.body.classList.contains('touch');
@@ -686,7 +686,7 @@ export class Hud {
         : kind === 'heli'
       ? '<kbd>Mouse</kbd> Steer <kbd>Space</kbd> Up <kbd>Shift</kbd> Down <kbd>W</kbd><kbd>S</kbd> Tilt (stays tilted) <kbd>A</kbd><kbd>D</kbd> Slide <kbd>V</kbd> Camera <kbd>E</kbd> Get out'
       : '<kbd>W</kbd><kbd>S</kbd> Drive <kbd>A</kbd><kbd>D</kbd> Steer <kbd>Space</kbd> Brake ' +
-        '<kbd>Shift</kbd> Boost <kbd>H</kbd> Horn ' + (kind === 'police' ? '<kbd>G</kbd> Siren ' : '') +
+        '<kbd>Shift</kbd> Boost <kbd>H</kbd> Horn ' + ({ police: '<kbd>G</kbd> Siren ', camper: '<kbd>G</kbd> Pop-up roof ', dump: '<kbd>G</kbd> Tip the dump bed ' }[kind] || '') +
         '<kbd>V</kbd> Camera <kbd>E</kbd> Get out';
   }
 

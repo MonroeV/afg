@@ -6,8 +6,25 @@ export const VEHICLES = {
   monster: { name: 'Monster Truck', mass: 3000, length: 4.0, width: 2.5, ride: 1.05, bodyH: 0.7, cabinH: 0.85, wheelR: 0.8, maxSpeed: 14, accel: 8, gears: 3, climb: true, respawn: 30 },
   boat: { name: 'Boat', mass: 700, length: 3.8, width: 1.7, ride: 0, bodyH: 0.55, cabinH: 0.4, wheelR: 0.3, height: 0.95, maxSpeed: 13, accel: 5.5, boat: true, respawn: 30 },
   heli: { name: 'Helicopter', mass: 1800, length: 3.4, width: 2.0, tail: 3.0, height: 2.4, rotor: 3.6, flying: true, respawn: 300 },
+  // A camper van: four seats (two up front, two in the back), and G pops the roof up.
+  camper: {
+    name: 'Camper Van', mass: 2200, length: 4.6, width: 2.0, ride: 0.32, bodyH: 0.95, cabinH: 0.8, wheelR: 0.38, maxSpeed: 14, accel: 6.5, gears: 3, respawn: 30,
+    seats: [[-0.45, 0.62, -1.05], [0.45, 0.62, -1.05], [-0.45, 0.62, 0.55], [0.45, 0.62, 0.55]], special: 'roof',
+  },
+  // A pickup truck: two in the cab and one riding in the back (in the open truck bed).
+  pickup: {
+    name: 'Pickup Truck', mass: 1900, length: 4.4, width: 1.95, ride: 0.42, bodyH: 0.6, cabinH: 0.72, wheelR: 0.42, maxSpeed: 18, accel: 9, gears: 3, respawn: 30,
+    seats: [[-0.42, 0.56, -0.55], [0.42, 0.56, -0.55], [0, 1.02, 1.25]],
+  },
+  // A big dump truck: slow and heavy, and G tips the dump bed up (and down again).
+  dump: {
+    name: 'Dump Truck', mass: 6000, length: 5.4, width: 2.4, ride: 0.55, bodyH: 0.85, cabinH: 0.85, wheelR: 0.62, maxSpeed: 12, accel: 5, gears: 3, respawn: 30,
+    seats: [[-0.5, 0.95, -1.75], [0.5, 0.95, -1.75]], special: 'tip',
+  },
 };
 for (const s of Object.values(VEHICLES)) s.height ??= s.ride + s.bodyH + s.cabinH;
+// How many people fit (the driver too).
+export const seatCount = spec => spec.seats?.length ?? 3;
 
 export const VEHICLE_KINDS = Object.keys(VEHICLES);
 export const MAX_HP = 100;

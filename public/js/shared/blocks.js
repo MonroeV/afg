@@ -139,6 +139,14 @@ export const BLOCKS = {
   // At the ski lodge: right-click it for a pair of skis. (Only the lodge has one: `worldOnly`
   // things can't be put down by players.)
   96: { name: 'Ski Rack', shape: 'model', model: 'skiRack', facing: true, skiRack: true, hidden: true, worldOnly: true, box: [0.04, 0, 0.32, 0.96, 1, 0.68] },
+  // Outdoor stuff (the campground, the beach, the farm and the quarry have them): one tile in
+  // the item menu, with these as its styles.
+  97: { name: 'Tent', shape: 'model', model: 'tent', facing: true, box: [0.04, 0, 0.08, 0.96, 0.9, 0.92] },
+  98: { name: 'Beach Umbrella', shape: 'model', model: 'beachUmbrella', box: [0.44, 0, 0.44, 0.56, 1, 0.56] },
+  99: { name: 'Hay Bale', shape: 'model', model: 'hayBale', facing: true, box: [0.06, 0, 0.1, 0.94, 0.74, 0.9] },
+  100: { name: 'Pumpkin', shape: 'model', model: 'pumpkin', box: [0.18, 0, 0.18, 0.82, 0.5, 0.82] },
+  101: { name: 'Traffic Cone', shape: 'model', model: 'trafficCone', box: [0.3, 0, 0.3, 0.7, 0.7, 0.7] },
+  102: { name: 'Picnic Table', shape: 'model', model: 'picnicTable', facing: true, box: [0, 0, 0.04, 1, 0.76, 0.96] },
 };
 
 // Furniture that faces you: which quarter turn makes its front (+z in the model) face
@@ -354,8 +362,9 @@ export function doorBox(meta, hinge = -1) {
 
 // ---------- World ----------
 
-// Playable area (block coordinates, inclusive).
-export const WORLD = { min: -224, max: 223, maxY: 63 };
+// Playable area (block coordinates, inclusive): 640 x 640 blocks. (It was 448 x 448 before the
+// far country came: see farcountry.js.)
+export const WORLD = { min: -320, max: 319, maxY: 63 };
 // North of this line (smaller z) it's the snowy country: the ground is snow.
 export const SNOW_LINE = -138;
 export const isSnowyAt = (x, z) => z < SNOW_LINE;

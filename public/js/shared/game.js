@@ -6,10 +6,11 @@ import { sanitizeLook, cleanName } from './avatar.js';
 import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines, buildStore, furnishHouses, furnishTowers } from './worldgen.js';
 import { NpcCrew } from './npcs.js';
 import { buildFrontier, buildPizzeria, buildSignposts, refurnish, addFishingSpots } from './frontier.js';
-import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot } from './vehicles.js';
+import { buildFarCountry } from './farcountry.js';
+import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot, seatCount } from './vehicles.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
 
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
 const DOOR = 21;
@@ -21,6 +22,7 @@ const FIX_AMOUNT = 8; // health a turn of the wrench puts back (out of 100)
 const TICK_RATE = 15; // how often the town's people's positions go out
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LOG = 7, LEAVES = 8, GRASS = 1, DIRT = 2, RACE_FINISH = 72;
+export const MAX_OWNED_VEHICLES = 3; // vehicles one person can have of their own
 export const MAX_MANY = 4096; // the most blocks one Fill or Paste can change
 
 // What's in the water (sit on a fishing stool by the water and click to cast): name, emoji,
@@ -116,13 +118,16 @@ export class GameRoom {
     }
   }
 
-  addHome({ id, kind, color, x, y, z, h }) {
+  // A vehicle's home: where it's parked when the world starts, and where it comes back after it
+  // blows up. Someone's own vehicle (owner, key) has a home of its own: where they last parked it.
+  addHome({ id, kind, color, x, y, z, h, owner, key }) {
     const home = {
       id: id || this.nextHomeId++,
       kind: VEHICLES[kind] ? kind : 'car',
       color: /^#[0-9a-f]{6}$/i.test(color) || color === 'gold' ? color : ['#e53935', '#1e88e5', '#fdd835', '#43a047', '#ff7043', '#8e24aa', '#ec407a', '#26c6da'][this.homes.size % 8],
       x: num(x), y: num(y), z: num(z), h: num(h),
     };
+    if (typeof key === 'string' && key) Object.assign(home, { owner: cleanName(owner), key: key.slice(0, 32) });
     this.nextHomeId = Math.max(this.nextHomeId, home.id + 1);
     this.homes.set(home.id, home);
     return home;
@@ -136,11 +141,13 @@ export class GameRoom {
   }
 
   addVehicle({ kind, color, x, y, z, h, home, hp }) {
+    const owned = this.homes.get(home);
     const v = {
       id: this.nextVehicleId++, kind, color, home,
       x: clampWorld(x), y: Math.max(0, num(y)), z: clampWorld(z), h: num(h),
       hp: Math.max(1, Math.min(MAX_HP, Number.isFinite(hp) ? hp : MAX_HP)),
       speed: 0, steer: 0, siren: 0, pitch: 0, roll: 0, rotor: 0, flags: 0, driver: 0, passengers: [],
+      owner: owned?.key ? owned.owner : '', key: owned?.key || '', loaded: false,
     };
     this.vehicles.set(v.id, v);
     return v;
@@ -167,6 +174,7 @@ export class GameRoom {
       this.upgradeTo8();
       this.upgradeTo9();
       this.upgradeTo10();
+      this.upgradeTo11();
       this.populate();
       return true;
     }
@@ -216,6 +224,7 @@ export class GameRoom {
     if (data.version < 8) this.upgradeTo8();
     if (data.version < 9) this.upgradeTo9();
     if (data.version < 10) this.upgradeTo10();
+    if (data.version < 11) this.upgradeTo11();
     this.populate();
     return true;
   }
@@ -289,6 +298,23 @@ export class GameRoom {
     const fishing = addFishingSpots({ get, set, canUse: (x, z) => !claimAt(this.claims, x, z) });
     for (const [x, y, z, text] of fishing.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
     this.log(`Furnished the lodge and cabins (${furnished} things), and put out ${fishing.stools} fishing stools`);
+    this.onDirty();
+  }
+
+  // Worlds saved before version 11 (the 640 x 640 map): the far country, out past the old edge of
+  // the world where nobody could build before (the beach and campground, the quarry, the farm, the
+  // snowy north, and the rest of the ski mountain), with roads out to it on empty land only.
+  upgradeTo11() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const far = buildFarCountry({ get, set, canUse: this.freeLand(), canPave: (x, z) => !claimAt(this.claims, x, z), finishMountain: true });
+    this.claims.push(...far.claims);
+    for (const c of far.cars) this.spawn(this.addHome(c));
+    for (const [x, y, z, text] of far.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+    this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...far.places };
+    this.log(`Added the far country: the beach and campground, the quarry and the farm (${far.count} blocks, ${far.cars.length} vehicles)`);
     this.onDirty();
   }
 
@@ -567,6 +593,12 @@ export class GameRoom {
     const v = this.vehicles.get(client.car);
     client.car = 0;
     if (!v) return;
+    // Your own vehicle: wherever you leave it is where it lives now.
+    const home = this.homes.get(v.home);
+    if (home?.key && v.driver === client.id) {
+      Object.assign(home, { x: v.x, y: v.y, z: v.z, h: v.h });
+      this.onDirty();
+    }
     if (v.passengers.includes(client.id)) {
       v.passengers = v.passengers.filter(id => id !== client.id);
       this.broadcast({ t: 'car_driver', ...publicVehicle(v) });
@@ -819,8 +851,13 @@ export class GameRoom {
     car_enter(client, { id }) {
       const v = this.vehicles.get(id);
       if (!v || client.car) return;
-      if (!v.driver) v.driver = client.id;
-      else if (v.passengers.length < 2) v.passengers.push(client.id);
+      if (!v.driver) {
+        // Someone's own vehicle: only they can drive it (anyone can ride along with them).
+        if (v.key && v.key !== nameKey(client.name)) {
+          return client.send({ t: 'chat', system: true, text: `🔑 This ${VEHICLES[v.kind].name} is ${v.owner}'s. Only ${v.owner} can drive it, but you can ride along when they do!` });
+        }
+        v.driver = client.id;
+      } else if (v.passengers.length < seatCount(VEHICLES[v.kind]) - 1) v.passengers.push(client.id);
       else return;
       client.car = id;
       this.broadcast({ t: 'car_driver', ...publicVehicle(v) });
@@ -843,7 +880,8 @@ export class GameRoom {
       v.pitch = num(msg.p);
       v.roll = num(msg.r);
       v.rotor = num(msg.rs);
-      v.flags = num(msg.f) & 3; // brake lights, reverse lights
+      v.flags = num(msg.f) & 7; // brake lights, reverse lights, a load in the dump truck
+      v.loaded = !!(v.flags & 4);
       v.ts = Number.isFinite(msg.ts) ? msg.ts : null;
       v.fresh = true;
     },
@@ -854,6 +892,7 @@ export class GameRoom {
       if (!v || !this.allow(client, 'damage', 8, 12)) return;
       const close = Math.hypot(client.pos[0] - v.x, client.pos[2] - v.z) < 14;
       if (client.car !== v.id && !close) return;
+      if (v.key && v.key !== nameKey(client.name)) return; // (someone's own vehicle: only they can bash it)
       const impact = numbers(msg.impact, 3) || [0, 1, 0];
       this.damageVehicle(v, Math.max(0, Math.min(45, num(msg.amount))), impact);
     },
@@ -866,11 +905,47 @@ export class GameRoom {
       const color = gold ? 'gold' : typeof msg.color === 'string' && /^#[0-9a-f]{6}$/i.test(msg.color) ? msg.color.toLowerCase() : null;
       if (!v || !color || !this.allow(client, 'carPaint', 4, 6)) return;
       if (!this.nearVehicle(client, v)) return client.send({ t: 'car_color', id: v.id, color: v.color });
+      if (v.key && v.key !== nameKey(client.name)) {
+        client.send({ t: 'car_color', id: v.id, color: v.color });
+        return client.send({ t: 'chat', system: true, text: `🔑 That's ${v.owner}'s ${VEHICLES[v.kind].name}: only ${v.owner} can paint it.` });
+      }
       v.color = color;
       const home = this.homes.get(v.home);
       if (home) home.color = color;
       this.broadcast({ t: 'car_color', id: v.id, color });
       this.onDirty();
+    },
+
+    // The Land Flag on a vehicle: make it your own (up to MAX_OWNED_VEHICLES), or give yours back.
+    // Yours: only you can drive it (friends can ride along), nobody else can bash or paint it, it
+    // stays wherever you park it, and if it blows up it comes back there. The town gets a new one
+    // of its own in its place.
+    car_claim(client, { id }) {
+      const v = this.vehicles.get(id);
+      const reply = text => client.send({ t: 'chat', system: true, text });
+      if (!v || !this.allow(client, 'carClaim', 1, 3) || !this.nearVehicle(client, v)) return;
+      const key = nameKey(client.name), name = VEHICLES[v.kind].name;
+      if (v.key === key) return reply(`🔑 This ${name} is already yours!`);
+      if (v.key) return reply(`🔑 This ${name} is ${v.owner}'s.`);
+      if (v.driver && v.driver !== client.id) return reply(`🔑 Someone's driving it right now.`);
+      if (this.ownedVehicles(key).length >= MAX_OWNED_VEHICLES) return reply(`🔑 You have ${MAX_OWNED_VEHICLES} vehicles already! Give one back first (click it with the Land Flag).`);
+      const town = this.homes.get(v.home);
+      const home = this.addHome({ kind: v.kind, color: v.color, x: v.x, y: v.y, z: v.z, h: v.h, owner: client.name, key });
+      v.home = home.id;
+      Object.assign(v, { owner: home.owner, key });
+      if (town && !town.key) this.respawns.push({ home: town.id, at: Date.now() + VEHICLES[v.kind].respawn * 1000 });
+      this.broadcast({ t: 'car_owner', id: v.id, owner: v.owner });
+      reply(`🔑 The ${name} is yours! Only you can drive it, and it stays wherever you park it. (You can have up to ${MAX_OWNED_VEHICLES}.)`);
+      this.log(`${client.name} claimed a ${name}`);
+      this.onDirty();
+    },
+
+    car_unclaim(client, { id }) {
+      const v = this.vehicles.get(id);
+      if (!v || !this.allow(client, 'carClaim', 1, 3) || !this.nearVehicle(client, v) || v.key !== nameKey(client.name)) return;
+      if (v.driver || v.passengers.length) return client.send({ t: 'chat', system: true, text: '🔑 Everybody has to get out first.' });
+      this.giveBack(v);
+      client.send({ t: 'chat', system: true, text: `🔑 You gave the ${VEHICLES[v.kind].name} back to the town. Thanks!` });
     },
 
     // The Wrench: each turn of it fixes a bit of the damage (and can even save a burning one).
@@ -1225,6 +1300,20 @@ export class GameRoom {
     this.broadcast({ t: 'chat', system: true, text: '☀️ Everyone slept through the night. Good morning!' });
   }
 
+  // Someone's own vehicles (their homes, whether or not the vehicle's out in the world right now).
+  ownedVehicles(key) {
+    return [...this.homes.values()].filter(h => h.key === key);
+  }
+
+  // An owned vehicle goes back to the town: it drives off (the town already has its own one).
+  giveBack(v) {
+    this.homes.delete(v.home);
+    this.respawns = this.respawns.filter(r => r.home !== v.home);
+    this.vehicles.delete(v.id);
+    this.broadcast({ t: 'car_gone', id: v.id });
+    this.onDirty();
+  }
+
   // Is there water within a few blocks of (x, y, z), at that height or a little lower?
   waterNear(x, y, z, r = 7) {
     for (let dx = -r; dx <= r; dx++)
@@ -1254,6 +1343,12 @@ export class GameRoom {
   expireClaims() {
     const limit = Date.now() - CLAIM_EXPIRE_DAYS * DAY_MS;
     for (const [k, p] of Object.entries(this.spots)) if (p[4] < limit) delete this.spots[k];
+    for (const home of [...this.homes.values()]) {
+      if (!home.key || (this.names[home.key] || 0) > limit) continue;
+      const v = [...this.vehicles.values()].find(o => o.home === home.id);
+      if (v) this.giveBack(v);
+      else this.homes.delete(home.id);
+    }
     const before = this.claims.length;
     this.claims = this.claims.filter(c => c.permanent || (this.names[c.key] || c.createdAt) > limit);
     if (this.claims.length !== before) {
@@ -1320,6 +1415,9 @@ export class GameRoom {
       else r.at = now + 10000; // no room yet; try again soon
       if (v) {
         this.broadcast({ t: 'car', car: publicVehicle(v) });
+        if (v.key) for (const c of this.clients.values()) {
+          if (c.joined && nameKey(c.name) === v.key) c.send({ t: 'chat', system: true, text: `🔑 Your ${VEHICLES[v.kind].name} is back where you parked it.` });
+        }
         this.onDirty();
       }
     }
@@ -1366,4 +1464,4 @@ function isDoorToggle(old, b) {
 }
 
 const publicPlayer = c => ({ id: c.id, name: c.name, look: c.look, pos: c.pos, rot: c.rot });
-const publicVehicle = ({ id, kind, color, x, y, z, h, driver, passengers, hp }) => ({ id, kind, color, x, y, z, h, driver, passengers, hp: Math.round(hp) });
+const publicVehicle = ({ id, kind, color, x, y, z, h, driver, passengers, hp, owner, loaded }) => ({ id, kind, color, x, y, z, h, driver, passengers, hp: Math.round(hp), owner: owner || '', loaded: !!loaded });

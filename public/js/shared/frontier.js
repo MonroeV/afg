@@ -20,7 +20,7 @@ const B = {
 };
 
 // Which way furniture faces (meta bits 0-1) to look along a world direction.
-const faceDir = (dx, dz) => (dz > 0 ? 0 : dx > 0 ? 1 : dz < 0 ? 2 : 3);
+export const faceDir = (dx, dz) => (dz > 0 ? 0 : dx > 0 ? 1 : dz < 0 ? 2 : 3);
 // The meta for a picture hanging on a wall that's in direction (wx, wz) from its cell.
 const onWall = (wx, wz) => faceDir(-wx, -wz);
 
@@ -31,9 +31,15 @@ const RINK = { x0: -66, z0: -162, x1: -52, z1: -152 };
 const LAKE = { cx: -183, cz: 75, W: 54, D: 40 };
 const ROCKY = { cx: -186, cz: 170, radius: 24, peak: 18 };
 const CABINS = [[-169, -98], [-169, -64], [-169, -30], [-169, 4]];
-const WOODS_ROAD_X = -152;
+export const WOODS_ROAD_X = -152;
+// Where the edge of the world was before the far country came (448 x 448 blocks). The frontier
+// was laid out inside it, and stays exactly as it was.
+export const OLD_EDGE = { min: -224, max: 223 };
+// The roads out to the far country (farcountry.js): the town's south road carried on south to the
+// campground (along x), and the roads east to the quarry and west to the farm (along z).
+export const FAR_ROADS = { south: 11, east: -12, west: -12 };
 
-function rng(seed) {
+export function rng(seed) {
   let s = seed >>> 0;
   return () => {
     s = (s + 0x6d2b79f5) >>> 0;
@@ -45,7 +51,7 @@ function rng(seed) {
 }
 
 // Gentle bumps, the same every time (so the mountains always come out the same shape).
-const bumps = (x, z) => Math.sin(x * 0.21 + z * 0.13) * 0.6 + Math.sin(x * 0.07 - z * 0.17) * 0.8 + Math.cos(z * 0.31 + x * 0.05) * 0.4;
+export const bumps = (x, z) => Math.sin(x * 0.21 + z * 0.13) * 0.6 + Math.sin(x * 0.07 - z * 0.17) * 0.8 + Math.cos(z * 0.31 + x * 0.05) * 0.4;
 
 // How high the ski mountain is at (x, z).
 export function skiHeight(x, z) {
@@ -101,46 +107,14 @@ export function buildFrontier({ get, set, canUse, canPave = canUse }) {
     for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) if (used.has(`${x + dx},${z + dz}`)) return false;
     return true;
   };
+  // (No trees where the roads out to the far country will go.)
+  mark(FAR_ROADS.south - 4, 88, FAR_ROADS.south + 4, OLD_EDGE.max);
+  mark(88, FAR_ROADS.east - 4, OLD_EDGE.max, FAR_ROADS.east + 4);
+  mark(OLD_EDGE.min, FAR_ROADS.west - 4, -153, FAR_ROADS.west + 4);
 
   // ---------- Roads ----------
 
-  // A road 7 wide (sidewalks on the edges, a dashed line down the middle), with lanterns.
-  // Where it meets another road's sidewalk, the sidewalk becomes road so cars drive straight on.
-  const road = (axis, c, from, to) => {
-    for (let a = from; a <= to; a++) {
-      for (let o = -3; o <= 3; o++) {
-        const [x, z] = axis === 'x' ? [a, c + o] : [c + o, a];
-        const edge = Math.abs(o) === 3;
-        if (!edge && inWorld(x, z) && canPave(x, z) && get(x, 0, z) === B.sidewalk) {
-          set(x, 0, z, B.road);
-          continue;
-        }
-        if (!inWorld(x, z) || !canUse(x, z)) continue;
-        let v = edge ? B.sidewalk : B.road;
-        if (o === 0 && ((a % 6) + 6) % 6 < 3) v = axis === 'x' ? B.lineX : B.line;
-        if (edge && ((a % 16) + 16) % 16 === 0) v = stack(B.lantern, B.sidewalk);
-        put(x, 0, z, v);
-      }
-    }
-    const [x0, z0, x1, z1] = axis === 'x' ? [from, c - 3, to, c + 3] : [c - 3, from, c + 3, to];
-    area(x0, z0, x1, z1);
-  };
-  // Of a few places a road could go, the one with the least in the way (only matters in a saved
-  // world, where people might have built things; nothing is ever knocked down for a road).
-  const corridor = (axis, from, to, choices) => {
-    let best = choices[0], bestBad = Infinity;
-    for (const c of choices) {
-      let bad = 0;
-      for (let a = from; a <= to; a++)
-        for (let o = -3; o <= 3; o++) {
-          const [x, z] = axis === 'x' ? [a, c + o] : [c + o, a];
-          if (!canUse(x, z)) bad += 50;
-          else for (let y = 0; y < 3; y++) if (get(x, y, z) && get(x, y, z) !== B.sidewalk) bad += y ? 1 : 10;
-        }
-      if (bad < bestBad) [best, bestBad] = [c, bad];
-    }
-    return best;
-  };
+  const { road, corridor } = makeRoads({ get, set, put, canUse, canPave, inWorld, area });
 
   // North to the ski resort, from the ring road.
   const northX = corridor('z', -142, -88, [-32, -36, -28, -40, -24, -44]);
@@ -211,7 +185,7 @@ export function buildFrontier({ get, set, canUse, canPave = canUse }) {
   };
   let pines = 0, tries = 0;
   while (pines < 70 && tries++ < 3000) {
-    const x = Math.floor(rand() * 440) - 220, z = WORLD.min + 3 + Math.floor(rand() * 80);
+    const x = Math.floor(rand() * 440) - 220, z = OLD_EDGE.min + 3 + Math.floor(rand() * 80);
     const g = skiHeight(x, z);
     if (g > 14 || runSide(x, z) || liftSide(x, z)) continue;
     if (g === 0 && (!free(x, z, 3) || !clearAt(x, z, 8))) continue;
@@ -272,7 +246,7 @@ export function buildFrontier({ get, set, canUse, canPave = canUse }) {
   let trees = 0;
   tries = 0;
   while (trees < 75 && tries++ < 4000) {
-    const x = WORLD.min + 3 + Math.floor(rand() * 64), z = -118 + Math.floor(rand() * 170);
+    const x = OLD_EDGE.min + 3 + Math.floor(rand() * 64), z = -118 + Math.floor(rand() * 170);
     if (!free(x, z, 2) || !clearAt(x, z, 9)) continue;
     tree(put, x, z, 4 + Math.floor(rand() * 3), rand);
     mark(x - 1, z - 1, x + 1, z + 1);
@@ -314,6 +288,51 @@ export function buildFrontier({ get, set, canUse, canPave = canUse }) {
     cars, claims, areas, count,
     places: { lodge },
   };
+}
+
+// Roads for the country beyond the towns: 7 wide (sidewalks on the edges, a dashed line down the
+// middle), with lanterns. Where one meets another road's sidewalk, the sidewalk becomes road so
+// cars drive straight on. `area` marks the land a road takes up.
+export function makeRoads({ get, set, put, canUse, canPave, inWorld, area }) {
+  // A road 7 wide (sidewalks on the edges, a dashed line down the middle), with lanterns.
+  // Where it meets another road's sidewalk, the sidewalk becomes road so cars drive straight on.
+  const road = (axis, c, from, to) => {
+    for (let a = from; a <= to; a++) {
+      for (let o = -3; o <= 3; o++) {
+        const [x, z] = axis === 'x' ? [a, c + o] : [c + o, a];
+        const edge = Math.abs(o) === 3;
+        if (!edge && inWorld(x, z) && canPave(x, z) && get(x, 0, z) === B.sidewalk) {
+          set(x, 0, z, B.road);
+          continue;
+        }
+        if (!inWorld(x, z) || !canUse(x, z)) continue;
+        let v = edge ? B.sidewalk : B.road;
+        if (o === 0 && ((a % 6) + 6) % 6 < 3) v = axis === 'x' ? B.lineX : B.line;
+        if (edge && ((a % 16) + 16) % 16 === 0) v = stack(B.lantern, B.sidewalk);
+        put(x, 0, z, v);
+      }
+    }
+    const [x0, z0, x1, z1] = axis === 'x' ? [from, c - 3, to, c + 3] : [c - 3, from, c + 3, to];
+    area(x0, z0, x1, z1);
+  };
+  // Of a few places a road could go, the one with the least in the way (only matters in a saved
+  // world, where people might have built things; nothing is ever knocked down for a road).
+  const corridor = (axis, from, to, choices) => {
+    let best = choices[0], bestBad = Infinity;
+    for (const c of choices) {
+      let bad = 0;
+      for (let a = from; a <= to; a++)
+        for (let o = -3; o <= 3; o++) {
+          const [x, z] = axis === 'x' ? [a, c + o] : [c + o, a];
+          if (!canUse(x, z)) bad += 50;
+          else for (let y = 0; y < 3; y++) if (get(x, y, z) && get(x, y, z) !== B.sidewalk) bad += y ? 1 : 10;
+        }
+      if (bad < bestBad) [best, bestBad] = [c, bad];
+    }
+    return best;
+  };
+
+  return { road, corridor };
 }
 
 // ---------- Buildings ----------
@@ -532,7 +551,7 @@ export function addFishingSpots({ get, set, canUse }) {
   return { stools, signs };
 }
 
-function tree(put, x, z, h, rand) {
+export function tree(put, x, z, h, rand) {
   for (let dx = -2; dx <= 2; dx++)
     for (let dz = -2; dz <= 2; dz++)
       for (let dy = h - 2; dy <= h + 1; dy++) {
@@ -543,7 +562,7 @@ function tree(put, x, z, h, rand) {
 }
 
 // A pine tree (snowy needles in rings that get smaller toward the top), standing at height `base`.
-function pine(put, x, z, base, h) {
+export function pine(put, x, z, base, h) {
   for (let y = 0; y < h; y++) put(x, base + y, z, B.log);
   for (let dy = 2; dy <= h + 1; dy++) {
     const r = Math.min(2.6, (h + 2 - dy) * 0.55);

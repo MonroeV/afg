@@ -15,7 +15,7 @@ import { Player, EYE_HEIGHT, CROUCH_DROP } from './player.js';
 import { Network } from './network.js';
 import { Avatar, Avatars, FLAG } from './avatars.js';
 import { Cars, SEAT_SCALE } from './cars.js';
-import { MAX_HP, FIRE_HP, SMOKE_HP, PERSON_MASS } from './shared/vehicles.js';
+import { MAX_HP, FIRE_HP, SMOKE_HP, PERSON_MASS, seatCount, toWorld } from './shared/vehicles.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_MAX } from './shared/claims.js';
 import { Structures } from './structures.js';
 import { TVs, CHANNELS, LIVE_ASPECT } from './tv.js';
@@ -32,7 +32,8 @@ import {
   HAMMER, FIREWORKS, BALL, CLAIM, VACATION, BRUSH, SCRAPER, WRENCH, SKIS, GOLDPAINT, SNEAKERS, LADDER, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME,
   ALL_ITEMS, ICON_ITEMS, GEAR, DEFAULT_HOTBAR, FAMILIES, itemName, makeIcon, ViewModel,
 } from './items.js';
-import { MAX_MANY } from './shared/game.js';
+import { MAX_MANY, MAX_OWNED_VEHICLES } from './shared/game.js';
+import { CHUTE } from './shared/farcountry.js';
 import { NPC_ACT } from './shared/npcs.js';
 import { Shop } from './shop.js';
 import { Particles, Fireworks, Sounds, Effects } from './effects.js';
@@ -47,6 +48,7 @@ const REACH = 7;
 const BASE_FOV = 80;
 const FIREWORK_COLORS = ['#ff4d4d', '#ffd84a', '#4dd2ff', '#7dff6a', '#ff7af0', '#ffffff', '#ff9a3c', '#b388ff'];
 const DOOR = 21;
+const DIRT = 2;
 const BED = 64;
 
 // ---------- Saved settings ----------
@@ -942,11 +944,8 @@ window.addEventListener('keydown', e => {
   } else if (e.code === 'KeyH' && myCar) {
     honk();
   } else if (e.code === 'KeyG') {
-    if (myCar) {
-      if (myCar.kind === 'police') myCar.siren = myCar.siren ? 0 : 1;
-    } else if (!myRide) {
-      emote('dance');
-    }
+    if (myCar) carSpecial();
+    else if (!myRide) emote('dance');
   } else if (e.code === 'KeyB' && !riding()) {
     emote('wave');
   } else if (e.code === 'KeyQ' && !riding()) {
@@ -1038,7 +1037,7 @@ const touch = IS_TOUCH ? new TouchControls({
     keys.clear();
     hud.openChat();
   },
-  dance: () => !riding() && emote('dance'),
+  dance: () => (myCar ? carSpecial() : !riding() && emote('dance')),
 }) : null;
 if (touch) {
   document.body.classList.add('touch');
@@ -1092,8 +1091,112 @@ function emote(kind) {
 
 // Every vehicle's horn has its own note.
 function hornPitch(car) {
-  return car.kind === 'police' ? 1.06 : car.kind === 'monster' ? 0.82 : car.kind === 'boat' ? 0.68 : 0.92 + ((car.id * 0.618) % 1) * 0.14;
+  return { police: 1.06, monster: 0.82, dump: 0.7, pickup: 0.86, camper: 1.0, boat: 0.68 }[car.kind] ?? 0.92 + ((car.id * 0.618) % 1) * 0.14;
 }
+
+// G while driving: the police car's siren, the camper van's pop-up roof, the dump truck's bed.
+function carSpecial() {
+  const special = myCar.kind === 'police' ? 'siren' : myCar.spec.special;
+  if (!special) return;
+  myCar.siren = myCar.siren ? 0 : 1;
+  sounds.click();
+  if (special === 'roof') hud.toast(myCar.siren ? '⛺ Pop! The roof is up.' : '⛺ Roof down. Ready to drive!');
+  if (special === 'tip' && myCar.siren) dumpLoad(myCar);
+}
+
+// The dump truck: drive under the chute at Big Rock Quarry to fill it with dirt, then tip it
+// out (G) anywhere you're allowed to build: a big heap of dirt behind the truck. (Z undoes it.)
+let loadTimer = 0;
+function dumpLoad(car) {
+  if (!car.loaded) {
+    hud.toast(underChute(car) ? '🪨 Hold still under the chute to load up!' : '🚚 The bed is empty! Load up under the chute at Big Rock Quarry (out east).');
+    return;
+  }
+  const [bx, , bz] = toWorld([0, 0, car.spec.length / 2 + 1.7], car.pos.x, car.pos.y, car.pos.z, car.h);
+  const cx = Math.floor(bx), cz = Math.floor(bz), base = Math.floor(car.pos.y + 0.3);
+  const changes = [];
+  for (const [dx, dz, h] of [[0, 0, 3], [1, 0, 2], [-1, 0, 2], [0, 1, 2], [0, -1, 2], [1, 1, 1], [-1, -1, 1], [1, -1, 1], [-1, 1, 1], [2, 0, 1], [-2, 0, 1], [0, 2, 1]]) {
+    const x = cx + dx, z = cz + dz;
+    // On whatever's there (the ground, or the top of something low).
+    let y = base + 2;
+    while (y > 0 && !world.isSolid(x, y - 1, z)) y--;
+    if (y > base + 2) continue;
+    for (let k = 0; k < h; k++) {
+      const v = world.get(x, y + k, z);
+      if (v && !isReplaceable(v)) break;
+      changes.push([x, y + k, z, DIRT]);
+    }
+  }
+  if (!changeMany(changes, 'dirt dump')) return;
+  car.loaded = false;
+  for (let i = 0; i < 8; i++) effects.smokePuff(bx + (Math.random() - 0.5) * 2, car.pos.y + 1, bz + (Math.random() - 0.5) * 2, 0.3);
+  sounds.crash(0.4);
+  hud.toast('🚚 Whoosh! A big heap of dirt. (Z takes it back)');
+}
+
+const underChute = car => Math.abs(car.pos.x - CHUTE.x) < 3.5 && Math.abs(car.pos.z - CHUTE.z) < 3.5;
+function updateDumpTruck(dt) {
+  if (myCar?.spec.special !== 'tip' || myCar.loaded || !underChute(myCar) || Math.abs(myCar.speed) > 1 || myCar.siren) {
+    loadTimer = 0;
+    return;
+  }
+  loadTimer += dt;
+  if (Math.random() < dt * 20) effects.splash(CHUTE.x + 0.5 + (Math.random() - 0.5), CHUTE.y, CHUTE.z + 0.5 + (Math.random() - 0.5), [0.45, 0.32, 0.2]);
+  if (loadTimer > 1.5) {
+    myCar.loaded = true;
+    loadTimer = 0;
+    sounds.crash(0.5);
+    hud.toast('🪨 Loaded up with dirt! Drive anywhere you can build and press G to dump it.');
+  }
+}
+
+// ---------- Owning a vehicle ----------
+// Click a vehicle with the Land Flag to make it yours (or, if it's yours, to give it back).
+
+const myVehicles = () => [...cars.list.values()].filter(c => c.owner && nameKey(c.owner) === nameKey(settings.name));
+
+function claimVehicleClick(car) {
+  const name = car.spec.name;
+  if (car.owner && nameKey(car.owner) !== nameKey(settings.name)) return hud.toast(`🔑 That's ${car.owner}'s ${name}.`);
+  if (car.owner) {
+    ask(`🔑 Give your ${name} back?`, `It goes back to the town, and anyone can drive the town's ones. You can claim another vehicle (up to ${MAX_OWNED_VEHICLES}) whenever you like.`,
+      '🔑 Give it back', 'Keep it', () => net.send({ t: 'car_unclaim', id: car.id }));
+    return;
+  }
+  if (myVehicles().length >= MAX_OWNED_VEHICLES) return hud.toast(`🔑 You have ${MAX_OWNED_VEHICLES} vehicles already! Give one back first (click it with the Land Flag).`);
+  ask(`🔑 Make this ${name} yours?`, `Only you can drive it (friends can ride along), nobody else can bash it or paint it, and it stays wherever you park it. If it ever blows up, it comes back there. You can have up to ${MAX_OWNED_VEHICLES}.`,
+    '🔑 Make it mine!', 'Not now', () => net.send({ t: 'car_claim', id: car.id }));
+}
+
+// Where your own vehicles are, from here: "Camper Van 85 m north-east".
+function whereMyVehicles() {
+  const dirs = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+  return myVehicles().map(c => {
+    const dx = c.pos.x - player.pos.x, dz = c.pos.z - player.pos.z, d = Math.hypot(dx, dz);
+    if (d < 6) return `${c.spec.name} right here`;
+    const dir = dirs[(Math.round(Math.atan2(dx, -dz) / (Math.PI / 4)) + 8) % 8];
+    return `${c.spec.name} ${Math.round(d)} m ${dir}`;
+  }).join(' · ');
+}
+
+net.on('car_owner', ({ id, owner }) => {
+  const car = cars.list.get(id);
+  if (!car) return;
+  cars.setOwner(car, owner);
+  if (owner && nameKey(owner) === nameKey(settings.name)) {
+    sounds.coin();
+    effects.sparkle(car.pos.x, car.pos.y + car.spec.height, car.pos.z, 24);
+  }
+});
+
+// Given back to the town: it's off (the town has its own already).
+net.on('car_gone', ({ id }) => {
+  const car = cars.list.get(id);
+  if (!car) return;
+  effects.sparkle(car.pos.x, car.pos.y + 1, car.pos.z, 30);
+  for (let i = 0; i < 6; i++) effects.smokePuff(car.pos.x + (Math.random() - 0.5) * 2, car.pos.y + 0.5, car.pos.z + (Math.random() - 0.5) * 2, 0.3);
+  cars.remove(id);
+});
 
 function honk() {
   sounds.horn(1, hornPitch(myCar));
@@ -1172,8 +1275,12 @@ function petThePet(t) {
 
 // Climb in: you drive if the seat is free, otherwise you ride along (two passengers at most).
 function requestEnter(car) {
-  if (car.driver && car.passengers.length >= 2) {
+  if (car.driver && car.passengers.length >= seatCount(car.spec) - 1) {
     hud.addChat({ system: true, text: "It's full! Every seat is taken." });
+    return;
+  }
+  if (!car.driver && car.owner && nameKey(car.owner) !== nameKey(settings.name)) {
+    hud.toast(`🔑 This ${car.spec.name} is ${car.owner}'s. Only ${car.owner} can drive it, but you can ride along when they do!`);
     return;
   }
   net.send({ t: 'car_enter', id: car.id });
@@ -1312,7 +1419,7 @@ function sendCarState() {
   net.send({
     t: 'car_state', id: myCar.id, ts: Math.round(performance.now()), x: r(myCar.pos.x), y: r(myCar.pos.y), z: r(myCar.pos.z), h: r(myCar.h),
     speed: r(myCar.speed), steer: r(myCar.steer), siren: myCar.siren, p: r(myCar.pitch), r: r(myCar.roll), rs: r(myCar.rotorSpin),
-    f: (myCar.braking ? 1 : 0) | (myCar.reversing ? 2 : 0),
+    f: (myCar.braking ? 1 : 0) | (myCar.reversing ? 2 : 0) | (myCar.loaded ? 4 : 0),
   });
 }
 
@@ -2624,6 +2731,7 @@ function useItem() {
     if (item === HAMMER) hitVehicle(target);
     else if (item === WRENCH) fixVehicle(target);
     else if (item === BRUSH) paintVehicle(target, settings.paint === GOLD_PAINT ? 'gold' : paintHex());
+    else if (isFlag(item)) claimVehicleClick(target.car);
     else if (item === SCRAPER) hud.toast('🎨 To give it a new color, use the Paint Brush (pick the color in the 🎨 Paint tab)');
     else requestEnter(target.car);
     return;
@@ -4016,13 +4124,16 @@ function frame(timestamp) {
       hint = !fishing ? '🎣 Click to cast · Move to get up' : fishing.phase === 'bite' ? '❗ A bite! Click, quick!' : fishing.phase === 'reel' ? '🎣 Reeling in…' : '🎣 Wait for the bobber to dip…';
     } else if (target?.car) {
       const what = target.car.spec.flying ? '🚁 Right-click or E to fly' : target.car.spec.boat ? '🚤 Right-click or E to drive the boat' : '🚗 Right-click or E to drive';
-      const full = target.car.driver && target.car.passengers.length >= 2;
+      const full = target.car.driver && target.car.passengers.length >= seatCount(target.car.spec) - 1;
+      const owner = target.car.owner, mine = owner && nameKey(owner) === nameKey(settings.name);
       const health = Math.max(0, Math.round((target.car.hp / MAX_HP) * 100));
       const state = target.car.hp < FIRE_HP ? '🔥 On fire! ' : target.car.hp < SMOKE_HP ? '💨 Smoking! ' : '';
       if (item === WRENCH) hint = health >= 100 ? '🔧 Good as new!' : `🔧 ${state}Click (or hold) to fix it · ${health}%`;
       else if (item === BRUSH) hint = `🎨 Click to paint it ${paintName()}`;
+      else if (isFlag(item)) hint = mine ? `🔑 Your ${target.car.spec.name} · Click to give it back` : owner ? `🔑 ${owner}'s ${target.car.spec.name}` : `🔑 Click to make this ${target.car.spec.name} yours!`;
+      else if (owner && !mine && !target.car.driver) hint = `🔑 ${owner}'s ${target.car.spec.name} (only ${owner} can drive it)`;
       else if (item === HAMMER && state) hint = `${state}Fix it with the 🔧 Wrench (Tools tab) · Click to whack it`;
-      else hint = full ? "🚗 It's full" : target.car.driver ? '🚗 Right-click or E to ride along' : what + (item === HAMMER ? ' · Click to whack it' : '');
+      else hint = full ? "🚗 It's full" : target.car.driver ? '🚗 Right-click or E to ride along' : (mine ? `🔑 Your ${target.car.spec.name}! ` : '') + what + (item === HAMMER && !owner ? ' · Click to whack it' : '');
     } else if (target?.pet) {
       hint = item === BALL && target.avatar === myBody ? '🎾 Click to throw the ball · Right-click to pet' : '🐾 Right-click to pet';
     } else if (target?.npc) {
@@ -4076,7 +4187,7 @@ function frame(timestamp) {
       else if (s?.type === 'balloon') hint = '🎈 Right-click to fly the balloon!';
       else if (s?.type === 'hoop') hint = '🏀 Throw the Pet Ball through the hoop!';
       else if (s?.type === 'tv') hint = '📺 Right-click to change the channel';
-      else if (item === CLAIM) hint = `🚩 Click a corner to start claiming land (max ${CLAIM_MAX}×${CLAIM_MAX})`;
+      else if (item === CLAIM) hint = `🚩 Click a corner to start claiming land (max ${CLAIM_MAX}×${CLAIM_MAX}), or a vehicle to make it yours` + (myVehicles().length ? ` · 🔑 ${whereMyVehicles()}` : '');
       else if (item === VACATION) hint = myLand(true) ? '🏖️ You have vacation land already' : `🏖️ Click a corner to claim your vacation land (max ${CLAIM_MAX}×${CLAIM_MAX}). It stays put for good!`;
       else if (item === WATER_BALLOON) hint = '💦 Click to throw a water balloon!';
       else if (item === BUBBLES) hint = '🫧 Hold the mouse button to blow bubbles';
@@ -4116,6 +4227,7 @@ function frame(timestamp) {
     contraptions.update(dt, time, [...avatars.list.values()]);
     updateJob(dt, time);
     updateFishing(dt, time);
+    updateDumpTruck(dt);
     updateSnow(dt, time);
     updateFlying(dt);
     popBubbles(dt);
@@ -4367,6 +4479,7 @@ window.buildzone = {
   get signs() { return signs; },
   get contraptions() { return contraptions; },
   kickBall: () => kickBall(),
+  carSpecial: () => carSpecial(),
   throwBall: () => throwBall(),
   ballBoxes: r => ballBoxes(r),
   interact: () => interact(),

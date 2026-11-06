@@ -55,8 +55,10 @@ export class TouchControls {
       use: div('pad use', this.root, '✋'),
     };
     const minis = div('minis', this.root);
+    this.minis = {};
     for (const [name, label] of [['pause', '⏸'], ['items', '🎒'], ['camera', '🎥'], ['dance', '💃'], ['chat', '💬']]) {
       const b = div('mini', minis, label);
+      this.minis[name] = b;
       b.addEventListener('pointerdown', e => {
         e.preventDefault();
         this.on[name]?.();
@@ -141,6 +143,7 @@ export class TouchControls {
     this.pads.jump.classList.toggle('hidden', mode === 'ride');
     this.pads.down.classList.toggle('hidden', mode === 'car' || mode === 'ride'); // walking, it's crouch
     this.pads.use.textContent = mode === 'car' || mode === 'heli' || mode === 'ride' ? '🚪' : '✋';
+    this.minis.dance.textContent = mode === 'car' ? '⭐' : '💃'; // (driving: the siren, the camper's roof, the dump bed)
     this.stickKeys();
   }
 

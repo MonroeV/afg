@@ -33,6 +33,30 @@ function textTexture(text, bg, fg) {
   return t;
 }
 
+// "🔑 Mia's Camper Van": a little sign over someone's own vehicle.
+function ownerTag(text) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 384;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.font = 'bold 30px system-ui, sans-serif';
+  const w = Math.min(376, ctx.measureText(text).width + 30);
+  ctx.fillStyle = 'rgba(40, 28, 0, 0.6)';
+  ctx.beginPath();
+  ctx.roundRect((384 - w) / 2, 10, w, 44, 12);
+  ctx.fill();
+  ctx.fillStyle = '#ffe08a';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 192, 33, 360);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  sprite.scale.set(2.4, 0.4, 1);
+  sprite.renderOrder = 9;
+  return sprite;
+}
+
 export function buildCarModel(kind, color) {
   if (kind === 'heli') return buildHeliModel(color);
   if (kind === 'boat') return buildBoatModel(color);
@@ -40,7 +64,10 @@ export function buildCarModel(kind, color) {
   const g = new THREE.Group();
   const mats = {
     // Car paint with a glossy clear coat on top, so it reflects the world around it.
-    paint: new THREE.MeshPhysicalMaterial({ color, metalness: 0.5, roughness: 0.4, clearcoat: 1, clearcoatRoughness: 0.06 }),
+    // (Vans and trucks have big flat sides: less shiny, so they show their color, not the sky.)
+    paint: ['camper', 'pickup', 'dump'].includes(kind)
+      ? new THREE.MeshPhysicalMaterial({ color, metalness: 0.1, roughness: 0.55, clearcoat: 0.4, clearcoatRoughness: 0.3 })
+      : new THREE.MeshPhysicalMaterial({ color, metalness: 0.5, roughness: 0.4, clearcoat: 1, clearcoatRoughness: 0.06 }),
     dark: new THREE.MeshStandardMaterial({ color: 0x1d1f24, roughness: 0.7 }),
     glass: new THREE.MeshPhysicalMaterial({ color: 0x223344, metalness: 0.2, roughness: 0.02, transparent: true, opacity: 0.5, envMapIntensity: 2 }),
     chrome: new THREE.MeshStandardMaterial({ color: 0xdfe4ea, metalness: 0.95, roughness: 0.2 }),
@@ -51,6 +78,9 @@ export function buildCarModel(kind, color) {
     red: new THREE.MeshStandardMaterial({ color: 0x661111, emissive: 0xff1a1a, emissiveIntensity: 0.2 }),
     blue: new THREE.MeshStandardMaterial({ color: 0x112266, emissive: 0x1a5cff, emissiveIntensity: 0.2 }),
     label: kind === 'police' ? new THREE.MeshStandardMaterial({ map: textTexture('POLICE', '#111111', '#ffffff'), roughness: 0.4 }) : null,
+    cream: new THREE.MeshStandardMaterial({ color: 0xf4efe4, roughness: 0.5 }),
+    canvas: new THREE.MeshStandardMaterial({ color: 0xff8a3d, roughness: 0.9, side: THREE.DoubleSide }),
+    dirt: new THREE.MeshStandardMaterial({ color: 0x7a5534, roughness: 1 }),
   };
   // The body is made of many boxes; boxes with the same material are merged into one mesh
   // so each car only costs a handful of draw calls.
@@ -62,12 +92,18 @@ export function buildCarModel(kind, color) {
   const { length: L, width: W, ride, bodyH, cabinH, wheelR } = s;
   const bodyY = ride + bodyH / 2;
 
-  add(B(W, bodyH, L), 'paint', 0, bodyY, 0);
-  // Cabin: glass all round with a painted roof and pillars.
   const cabinL = L * 0.5, cabinW = W * 0.86, cabinY = ride + bodyH + cabinH / 2;
-  add(B(cabinW, cabinH, cabinL), 'glass', 0, cabinY, 0.15);
-  add(B(cabinW + 0.04, 0.07, cabinL + 0.04), 'paint', 0, ride + bodyH + cabinH, 0.15);
-  for (const x of [-1, 1]) for (const z of [-1, 1]) add(B(0.07, cabinH, 0.07), 'paint', x * cabinW / 2, cabinY, 0.15 + z * cabinL / 2);
+  const extra = {}; // moving parts: the camper's pop-up roof, the dump truck's bed
+  if (kind === 'camper') extra.roof = camperBody(add, B, s, g, mats);
+  else if (kind === 'pickup') pickupBody(add, B, s);
+  else if (kind === 'dump') extra.bed = dumpBody(add, B, s, g, mats);
+  else {
+    add(B(W, bodyH, L), 'paint', 0, bodyY, 0);
+    // Cabin: glass all round with a painted roof and pillars.
+    add(B(cabinW, cabinH, cabinL), 'glass', 0, cabinY, 0.15);
+    add(B(cabinW + 0.04, 0.07, cabinL + 0.04), 'paint', 0, ride + bodyH + cabinH, 0.15);
+    for (const x of [-1, 1]) for (const z of [-1, 1]) add(B(0.07, cabinH, 0.07), 'paint', x * cabinW / 2, cabinY, 0.15 + z * cabinL / 2);
+  }
   // Bumpers, grille, lights, mirrors
   const bumper = kind === 'monster' ? 'chrome' : 'dark';
   add(B(W + 0.04, 0.16, 0.14), bumper, 0, ride + 0.1, -L / 2 - 0.04);
@@ -77,10 +113,11 @@ export function buildCarModel(kind, color) {
     add(B(0.34, 0.14, 0.04), 'head', x * (W / 2 - 0.3), bodyY + 0.08, -L / 2 - 0.01);
     add(B(0.36, 0.16, 0.04), 'tail', x * (W / 2 - 0.3), bodyY + 0.08, L / 2 + 0.01);
     add(B(0.14, 0.08, 0.04), 'reverse', x * (W / 2 - 0.55), bodyY + 0.08, L / 2 + 0.01);
-    add(B(0.08, 0.06, 0.16), 'paint', x * (W / 2 + 0.04), ride + bodyH + 0.02, -0.55);
+    const mirrorZ = kind === 'camper' ? -L / 2 + 0.45 : kind === 'dump' ? -L / 2 + 0.35 : kind === 'pickup' ? -1.2 : -0.55;
+    add(B(0.08, 0.06, 0.16), 'paint', x * (W / 2 + 0.04), ride + bodyH + 0.02, mirrorZ);
   }
   // A third brake light along the top of the back window.
-  add(B(cabinW * 0.4, 0.05, 0.03), 'brake', 0, ride + bodyH + cabinH - 0.09, 0.15 + cabinL / 2 + 0.03);
+  if (!extra.roof && !extra.bed && kind !== 'pickup') add(B(cabinW * 0.4, 0.05, 0.03), 'brake', 0, ride + bodyH + cabinH - 0.09, 0.15 + cabinL / 2 + 0.03);
   const wz = L / 2 - wheelR - (kind === 'monster' ? 0.05 : 0.3);
   if (kind === 'monster') {
     for (const z of [-1, 1]) add(B(W - 0.2, 0.12, 0.12), 'chrome', 0, wheelR, z * wz);
@@ -115,7 +152,81 @@ export function buildCarModel(kind, color) {
   return {
     group: g, wheels, steerers, paint: mats.paint, paintMesh: meshes.paint, baseColor: new THREE.Color(color),
     headMat: mats.head, tailMat: mats.tail, brakeMat: mats.brake, reverseMat: mats.reverse, siren: kind === 'police' ? { red: mats.red, blue: mats.blue } : null,
+    ...extra,
   };
+}
+
+// A camper van: painted below, cream above, windows all round, a spare wheel on the back and a
+// roof that pops up (G) with orange canvas sides. Returns the roof's parts, to lift.
+function camperBody(add, B, { length: L, width: W, ride, bodyH, cabinH }, g, mats) {
+  const top = ride + bodyH;
+  add(B(W, bodyH, L), 'paint', 0, ride + bodyH / 2, 0);
+  add(B(W + 0.02, 0.09, L + 0.02), 'cream', 0, top - 0.05, 0); // the stripe round the middle
+  add(B(W, cabinH, L - 0.35), 'cream', 0, top + cabinH / 2, 0.175);
+  add(B(W * 0.84, cabinH * 0.66, 0.04), 'glass', 0, top + cabinH * 0.48, -L / 2 + 0.33); // the windshield
+  for (const x of [-1, 1]) {
+    add(B(0.04, cabinH * 0.5, 0.75), 'glass', x * (W / 2 + 0.01), top + cabinH * 0.52, -L / 2 + 0.85);
+    add(B(0.04, cabinH * 0.5, L * 0.5), 'glass', x * (W / 2 + 0.01), top + cabinH * 0.52, 0.55);
+  }
+  add(B(W * 0.7, cabinH * 0.45, 0.04), 'glass', 0, top + cabinH * 0.55, L / 2 + 0.01); // the back window
+  // A big cream V on the nose, and the spare wheel on the back.
+  for (const x of [-1, 1]) add(B(0.12, bodyH * 0.85, 0.03).rotateZ(x * 0.5), 'cream', x * 0.2, ride + bodyH * 0.55, -L / 2 - 0.02);
+  add(new THREE.CylinderGeometry(0.3, 0.3, 0.18, 14).rotateX(Math.PI / 2), 'dark', 0, ride + bodyH * 0.55, L / 2 + 0.1);
+  // The pop-up roof: a lid (and the canvas under it, folded away until it's up).
+  const roof = new THREE.Group();
+  roof.position.y = top + cabinH;
+  const lid = new THREE.Mesh(new THREE.BoxGeometry(W * 0.94, 0.12, L * 0.62).translate(0, 0.06, 0.2), mats.paint);
+  lid.castShadow = true;
+  const canvas = new THREE.Mesh(new THREE.BoxGeometry(W * 0.9, 1, L * 0.58).translate(0, 0.5, 0.2), mats.canvas);
+  canvas.scale.y = 0.001;
+  canvas.visible = false;
+  roof.add(lid);
+  g.add(roof, canvas);
+  canvas.position.y = top + cabinH;
+  return { lid, canvas, base: top + cabinH, lift: 0 };
+}
+
+// A pickup truck: a cab up front and an open bed at the back (someone can ride in it).
+function pickupBody(add, B, { length: L, width: W, ride, bodyH, cabinH }) {
+  const top = ride + bodyH, cabL = 1.55, cabZ = -0.45, bedZ0 = cabZ + cabL / 2 + 0.05;
+  add(B(W, bodyH, L), 'paint', 0, ride + bodyH / 2, 0);
+  add(B(W * 0.86, cabinH, cabL), 'glass', 0, top + cabinH / 2, cabZ);
+  add(B(W * 0.86 + 0.04, 0.07, cabL + 0.04), 'paint', 0, top + cabinH, cabZ);
+  for (const x of [-1, 1]) for (const z of [-1, 1]) add(B(0.08, cabinH, 0.08), 'paint', x * W * 0.43, top + cabinH / 2, cabZ + z * cabL / 2);
+  // The bed's walls and tailgate.
+  const bedL = L / 2 - bedZ0;
+  for (const x of [-1, 1]) add(B(0.08, 0.42, bedL), 'paint', x * (W / 2 - 0.04), top + 0.21, bedZ0 + bedL / 2);
+  add(B(W, 0.42, 0.08), 'paint', 0, top + 0.21, bedZ0);
+  add(B(W, 0.42, 0.08), 'paint', 0, top + 0.21, L / 2 - 0.04);
+  add(B(W - 0.16, 0.02, bedL - 0.1), 'dark', 0, top + 0.01, bedZ0 + bedL / 2); // the bed liner
+  add(B(W * 0.5, 0.2, 0.03), 'chrome', 0, ride + bodyH * 0.6, -L / 2 - 0.02); // a shiny grille
+}
+
+// A dump truck: a tall cab up front and a big dump bed (with a load of dirt in it) that tips up
+// from the back (G). Returns the bed, to tip.
+function dumpBody(add, B, { length: L, width: W, ride, bodyH, cabinH }, g, mats) {
+  const cabL = 1.55, cabZ = -L / 2 + cabL / 2;
+  add(B(W * 0.78, 0.32, L - 0.2), 'dark', 0, ride + 0.16, 0.05); // the chassis
+  add(B(W, bodyH, cabL), 'paint', 0, ride + bodyH / 2 + 0.1, cabZ);
+  add(B(W * 0.92, cabinH * 0.7, cabL - 0.2), 'glass', 0, ride + bodyH + 0.1 + cabinH * 0.35, cabZ);
+  add(B(W + 0.02, 0.12, cabL + 0.02), 'paint', 0, ride + bodyH + 0.1 + cabinH * 0.72, cabZ);
+  add(B(W * 0.5, 0.3, 0.03), 'chrome', 0, ride + bodyH * 0.5, -L / 2 - 0.02);
+  // The bed: its own group, turning on a hinge at the back.
+  const bedL = L - cabL - 0.25, back = L / 2 - 0.05, y0 = ride + 0.36;
+  const bed = new THREE.Group();
+  bed.position.set(0, y0, back);
+  const parts = {};
+  const put = (geo, mat, x, y, z) => (parts[mat] ??= []).push(geo.translate(x, y, z));
+  put(B(W, 0.12, bedL), 'paint', 0, 0.06, -bedL / 2);
+  for (const x of [-1, 1]) put(B(0.1, 0.85, bedL), 'paint', x * (W / 2 - 0.05), 0.48, -bedL / 2);
+  put(B(W, 1.15, 0.12), 'paint', 0, 0.62, -bedL + 0.06);
+  put(B(W, 0.08, 0.6), 'paint', 0, 1.2, -bedL - 0.2); // a lip that sticks out over the cab
+  put(B(W - 0.25, 0.08, 0.1), 'dark', 0, 0.9, -0.05);
+  const load = new THREE.Mesh(new THREE.BoxGeometry(W - 0.24, 0.5, bedL - 0.3).translate(0, 0.38, -bedL / 2), mats.dirt);
+  bed.add(load);
+  mergeParts(bed, parts, mats);
+  g.add(bed);
+  return { group: bed, load, tip: 0 };
 }
 
 // Boxes with the same material are merged into one mesh, so each vehicle only costs a few draw calls.
@@ -312,6 +423,7 @@ export class Cars {
     this.list.set(car.id, car);
     if (car.color === 'gold') this.finish(car);
     this.scene.add(model.group);
+    this.setOwner(car, data.owner || '');
     // Shiny paint and windows reflect the world around them.
     model.group.traverse(o => {
       if (o.isMesh && o.material.metalness !== undefined && o.material.roughness < 0.5) this.reflections?.addShiny(o.material, o.material.transparent ? 1.4 : 1);
@@ -321,9 +433,24 @@ export class Cars {
     return car;
   }
 
+  // Someone's own vehicle (or nobody's, with ''): the sign over it.
+  setOwner(car, owner) {
+    car.owner = owner;
+    if (car.tag) {
+      this.scene.remove(car.tag);
+      car.tag.material.map.dispose();
+      car.tag.material.dispose();
+      car.tag = null;
+    }
+    if (!owner) return;
+    car.tag = ownerTag(`🔑 ${owner}'s ${car.spec.name}`);
+    this.scene.add(car.tag);
+  }
+
   remove(id) {
     const car = this.list.get(id);
     if (!car) return;
+    this.setOwner(car, '');
     this.scene.remove(car.model.group);
     car.model.group.traverse(o => {
       if (!o.isMesh) return;
@@ -337,11 +464,12 @@ export class Cars {
     for (const id of [...this.list.keys()]) this.remove(id);
   }
 
-  setDriver({ id, driver, passengers, x, y, z, h }) {
+  setDriver({ id, driver, passengers, x, y, z, h, loaded }) {
     const car = this.list.get(id);
     if (!car) return;
     car.driver = driver;
     car.passengers = passengers || [];
+    if (loaded !== undefined) car.loaded = loaded;
     car.loose = false;
     car.push.set(0, 0, 0);
     car.target.set(x, y, z);
@@ -365,6 +493,7 @@ export class Cars {
       } else car.track.clear();
       car.braking = !!(flags & 1);
       car.reversing = !!(flags & 2);
+      if (car.driver) car.loaded = !!(flags & 4);
       car.target.set(x, y, z);
       car.targetH = h;
       car.speed = speed;
@@ -448,6 +577,11 @@ export class Cars {
   // Seat 0 is the driver (front left), 1 is front right, 2 is in the back.
   seat(car, index = 0) {
     const s = car.spec;
+    if (s.seats) {
+      const [sx, sy, sz] = s.seats[index] || s.seats[0];
+      const local = new THREE.Vector3(sx, sy - 0.72 * SEAT_SCALE, sz).applyEuler(new THREE.Euler(car.pitch, car.h, car.roll, 'YXZ'));
+      return { position: local.add(car.pos), yaw: car.h };
+    }
     if (s.boat) {
       // The driver sits at the back by the motor; a friend beside them and one up front.
       const [sx, sz] = [[-0.35, 0.8], [0.35, 0.8], [0, -0.3]][index];
@@ -1168,6 +1302,10 @@ export class Cars {
 
       const far = this.viewer && car.pos.distanceToSquared(this.viewer) > this.viewDistance ** 2;
       car.model.group.visible = !far;
+      if (car.tag) {
+        car.tag.visible = !car.driver && !!this.viewer && car.pos.distanceToSquared(this.viewer) < 30 * 30;
+        car.tag.position.set(car.pos.x, car.pos.y + s.height + (s.flying ? 0.9 : 0.55), car.pos.z);
+      }
       if (far) continue;
       if (s.flying) {
         car.rotorAngle += car.rotorSpin * 28 * dt;
@@ -1190,6 +1328,20 @@ export class Cars {
         const flash = Math.floor(time * 6) % 2;
         car.model.siren.red.emissiveIntensity = car.siren && flash === 0 ? 5 : 0.2;
         car.model.siren.blue.emissiveIntensity = car.siren && flash === 1 ? 5 : 0.2;
+      }
+      // G: the camper's roof pops up, the dump truck's bed tips.
+      const roof = car.model.roof;
+      if (roof) {
+        roof.lift += ((car.siren ? 0.5 : 0) - roof.lift) * Math.min(1, dt * 3);
+        roof.lid.position.y = roof.lift;
+        roof.canvas.visible = roof.lift > 0.01;
+        roof.canvas.scale.y = Math.max(0.001, roof.lift);
+      }
+      const bed = car.model.bed;
+      if (bed) {
+        bed.tip += ((car.siren ? 0.8 : 0) - bed.tip) * Math.min(1, dt * 2);
+        bed.group.rotation.x = bed.tip;
+        bed.load.visible = !!car.loaded;
       }
     }
   }
