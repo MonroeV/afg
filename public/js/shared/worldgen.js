@@ -1,7 +1,7 @@
 // Builds the starting world: a main town around spawn, villages in each corner,
 // roads joining them, parks, playgrounds, trees, flowers and parked cars.
 import { WORLD, DOOR_TOP, BED_FOOT, makeBlock, blockId, turnLine, stack, itemOf, floorOf, shapeOf } from './blocks.js';
-import { buildFrontier, buildPizzeria, buildSignposts } from './frontier.js';
+import { buildFrontier, buildPizzeria, buildSignposts, addFishingSpots } from './frontier.js';
 
 const B = {
   grass: 1, dirt: 2, stone: 3, cobble: 4, brick: 5, planks: 6, log: 7, leaves: 8, glass: 9,
@@ -465,6 +465,8 @@ export function generateWorld(seed = 2024) {
   // "Build it here!" signposts in open spots, for swings, hoops, balloons and zip lines.
   const posts = buildSignposts({ get: getB, set: put, canUse: free, canClimb: () => true });
   for (const a of posts.areas) markUsed(...a);
+  // Fishing stools on the docks, and a noticeboard by each.
+  const fishing = addFishingSpots({ get: getB, set: put, canUse: () => true });
   const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null, pizza: pizza?.place || null, lodge: frontier.places.lodge };
 
   // ---------- Countryside ----------
@@ -520,7 +522,7 @@ export function generateWorld(seed = 2024) {
     const [x, y, z] = k.split(',').map(Number);
     blocks.push([x, y, z, v]);
   }
-  return { blocks, cars: placed, places, claims: [store?.claim, pizza?.claim, ...frontier.claims].filter(Boolean), signs: posts.signs };
+  return { blocks, cars: placed, places, claims: [store?.claim, pizza?.claim, ...frontier.claims].filter(Boolean), signs: [...posts.signs, ...fishing.signs] };
 }
 
 // Saved worlds from before the new lamps: put proper lamp heads on the town's street lamps

@@ -173,6 +173,48 @@ button:disabled { opacity: 0.6; cursor: wait; }
 .inv-item.recent { background: rgba(120, 180, 255, 0.08); }
 .inv-label { width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); pointer-events: none; }
 .inv-item:hover { border-color: var(--accent); background: rgba(255, 179, 33, 0.1); }
+.inv-item { position: relative; }
+.inv-badge {
+  position: absolute; top: 3px; right: 3px; padding: 1px 5px; border-radius: 8px; font-size: 10px; font-weight: 800;
+  background: rgba(255, 179, 33, 0.85); color: #241600; pointer-events: none;
+}
+/* Every style of what's in the glowing slot (lamps, chairs, colors…). */
+.inv-styles { display: flex; align-items: center; gap: 6px; padding: 6px 0 2px; overflow-x: auto; min-height: 50px; }
+.inv-styles.hidden { display: none; }
+.inv-styles-head { font-weight: 800; color: var(--muted); white-space: nowrap; font-size: 13px; }
+.inv-styles-name { color: var(--text); font-weight: 800; white-space: nowrap; font-size: 13px; margin-left: 4px; }
+.inv-style {
+  flex: none; width: 44px; height: 44px; padding: 2px; margin: 0; border-radius: 8px; cursor: pointer; letter-spacing: 0;
+  border: 2px solid rgba(255, 255, 255, 0.15); background: rgba(255, 255, 255, 0.06); box-shadow: none;
+}
+.inv-style canvas { width: 100%; height: 100%; pointer-events: none; }
+.inv-style:hover { border-color: var(--accent); }
+.inv-style.selected { border-color: var(--accent); background: rgba(255, 179, 33, 0.22); }
+/* Gear you wear (Fun tab), and what you have on, by the hotbar. */
+.gear-row { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 0 6px; }
+.gear {
+  display: flex; flex-direction: column; align-items: center; gap: 3px; width: 118px; padding: 6px 4px; margin: 0;
+  border-radius: 10px; border: 2px solid rgba(255, 255, 255, 0.15); background: rgba(255, 255, 255, 0.06);
+  color: var(--text); font: 700 12px/1.2 inherit; letter-spacing: 0; cursor: pointer; box-shadow: none;
+}
+.gear:active { transform: scale(0.96); box-shadow: none; }
+.gear canvas { width: 40px; height: 40px; pointer-events: none; }
+.gear b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.gear-state { font-weight: 900; font-size: 11px; letter-spacing: 1px; padding: 1px 8px; border-radius: 8px; background: rgba(0, 0, 0, 0.35); color: var(--muted); }
+.gear.on { border-color: #7dff8a; background: rgba(125, 255, 138, 0.12); }
+.gear.on .gear-state { background: #2e9e4f; color: #fff; }
+.gear.locked { opacity: 0.5; }
+#gear-hud {
+  position: absolute; bottom: 84px; left: calc(50% - 272px); padding: 3px 8px; border-radius: 10px;
+  background: rgba(0, 0, 0, 0.45); font-size: 18px; letter-spacing: 2px;
+}
+#gear-hud.hidden { display: none; }
+body.touch #gear-hud { bottom: 54px; left: calc(50% - 206px); font-size: 14px; }
+body.touch .inv-styles { min-height: 40px; }
+body.touch .inv-style { width: 36px; height: 36px; }
+.swatch.gold { background: linear-gradient(135deg, #a87a12, #ffe58a 45%, #b8860b); }
+.swatch.locked { opacity: 0.45; position: relative; }
+.swatch.locked::after { content: "🔒"; position: absolute; inset: 0; display: grid; place-items: center; font-size: 13px; }
 .inv-foot { display: flex; gap: 12px; align-items: flex-end; }
 .inv-bar-wrap { flex: 1; min-width: 0; }
 .inv-name { min-height: 18px; margin-bottom: 5px; font-size: 13px; color: var(--muted); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -152,7 +152,9 @@ export class Player {
     for (const [dx, dz] of [[0, 0], [0.25, 0.25], [-0.25, 0.25], [0.25, -0.25], [-0.25, -0.25]]) {
       const x = Math.floor(this.pos.x + dx), z = Math.floor(this.pos.z + dz);
       if (y === -1) {
-        if (isSnowyAt(x, z) && this.world.isSolid(x, -1, z)) return 'snow';
+        // (Up north the ground is snowy, but not where there's a floor or a road on it.)
+        const on = this.world.get(x, 0, z);
+        if (isSnowyAt(x, z) && this.world.isSolid(x, -1, z) && shapeOf(floorOf(on) || itemOf(on)) !== 'flat') return 'snow';
         continue;
       }
       const id = blockId(itemOf(this.world.get(x, y, z)));

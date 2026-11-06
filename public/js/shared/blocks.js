@@ -41,7 +41,7 @@ export const BLOCKS = {
   15: { name: 'Blue Paint', tex: 'paint_blue' },
   16: { name: 'Yellow Paint', tex: 'paint_yellow' },
   17: { name: 'Black Paint', tex: 'paint_black' },
-  18: { name: 'Lamp', tex: 'lamp', emissive: true, light: { color: warm, power: 1, range: 30 } },
+  18: { name: 'Lamp Block', tex: 'lamp', emissive: true, light: { color: warm, power: 1, range: 30 } },
   19: { name: 'Bounce Pad', tex: 'bounce', bounce: true },
   20: { name: 'Floor Tiles', tex: 'tiles', glossy: true },
   21: { name: 'Door', shape: 'door', tex: { bottom: 'door_bottom', top: 'door_top', edge: 'planks' } },
@@ -134,6 +134,11 @@ export const BLOCKS = {
   // A sign you can write on (right-click it to change what it says)
   94: { name: 'Sign', shape: 'picture', art: 'sign' },
   93: { name: 'Hot Tub', shape: 'model', model: 'hotTub', hotTub: true, seat: 0.32, box: [0, 0, 0, 1, 0.55, 1], light: { color: 0x5fd8ff, power: 0.35, range: 6, always: true, y: 0.6 }, price: 60 },
+  // Sit on it by the water and click to fish (the docks have some; it's one of the Chair styles).
+  95: { name: 'Fishing Stool', shape: 'model', model: 'fishingStool', facing: true, seat: 0.4, fishing: true, box: [0.22, 0, 0.22, 0.78, 0.4, 0.78] },
+  // At the ski lodge: right-click it for a pair of skis. (Only the lodge has one: `worldOnly`
+  // things can't be put down by players.)
+  96: { name: 'Ski Rack', shape: 'model', model: 'skiRack', facing: true, skiRack: true, hidden: true, worldOnly: true, box: [0.04, 0, 0.32, 0.96, 1, 0.68] },
 };
 
 // Furniture that faces you: which quarter turn makes its front (+z in the model) face
@@ -154,15 +159,22 @@ export const PICTURES = {
 
 // ---------- The Luxe Store ----------
 // Things you buy with coins. Blocks have their price in BLOCKS; these are the other things.
+// `got` says where to find it once it's yours. Gear (`gear: true`) is something you wear: you put
+// it on and take it off in the 🎒 Gear part of the item menu, instead of holding it.
 export const SHOP_TOOLS = {
-  jetpack: { name: 'Jetpack', price: 40, about: 'Hold Space in the air to blast off with rocket flames!' },
-  trail: { name: 'Rainbow Trail', price: 18, about: 'Run and leave a trail of rainbow sparkles behind you.' },
-  showtime: { name: 'Firework Show', price: 30, about: 'One click launches a whole fireworks show around you.' },
-  goldpaint: { name: 'Gold Car Paint', price: 75, about: 'Paint any car, boat or helicopter shiny solid gold!' },
-  sneakers: { name: 'Super Sneakers', price: 90, about: 'Hold them to run super fast and jump super high!' },
+  jetpack: { name: 'Jetpack', price: 40, gear: true, about: 'Wear it and hold Space to blast off with rocket flames!', got: 'Put it on in 🎒 Gear (press E, then the 🎉 Fun tab).' },
+  trail: { name: 'Rainbow Trail', price: 18, gear: true, about: 'Wear it and leave a trail of rainbow sparkles behind you.', got: 'Put it on in 🎒 Gear (press E, then the 🎉 Fun tab).' },
+  showtime: { name: 'Firework Show', price: 30, about: 'One click launches a whole fireworks show around you.', got: "It's in your items now (press E, 🎉 Fun tab)." },
+  goldpaint: { name: 'Gold Car Paint', price: 75, about: 'Paint any car, boat or helicopter shiny solid gold!', got: "Gold is a new color in the 🎨 Paint tab: pick it, then paint a car with the Paint Brush." },
+  sneakers: { name: 'Super Sneakers', price: 90, gear: true, about: 'Wear them to run super fast and jump super high!', got: 'Put them on in 🎒 Gear (press E, then the 🎉 Fun tab).' },
   // Used up when you claim with it: one flag, one vacation spot.
-  vacationflag: { name: 'Vacation Flag', price: 150, about: 'Claim a second piece of land for a vacation home! It stays where you plant it.' },
+  vacationflag: { name: 'Vacation Flag', price: 150, about: 'Claim a second piece of land for a vacation home! It stays where you plant it.', got: 'Hold your Land Flag and press X to switch it to vacation land.' },
 };
+// Gear you find in the world instead of buying: [name, where you get it].
+export const FOUND_GEAR = { skis: { name: 'Skis', where: 'Pick up a pair from the rack in the ski lodge, up north.' } };
+// The Paint Brush's gold (once you've bought Gold Car Paint): cars turn shiny gold, blocks gold-colored.
+export const GOLD_PAINT = 17;
+export const GOLD_HEX = '#d9a21b';
 export const SHOP_ABOUT = {
   82: 'A sparkling block of pure diamond.', 83: 'Sit like royalty (right-click to sit).',
   84: 'A mirror ball that fills the room with party light.', 85: 'For the champion of BuildZone!',

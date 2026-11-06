@@ -1,15 +1,15 @@
 // The game "room": the world, players, vehicles, land claims, growing trees and the clock.
 // The Node server runs one of these for everybody. When there is no server,
 // the browser runs its own copy so single player works exactly the same way.
-import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, isExclusive, DOOR_OPEN, DOOR_TOP, DAY_LENGTH, WORLD, isNightTime, SHOP_ITEMS, BLOCKS, SHOP_TOOLS, HOLE_HEAL, SIGN, cleanSignText, cleanWords } from './blocks.js';
+import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, isExclusive, DOOR_OPEN, DOOR_TOP, DAY_LENGTH, WORLD, isNightTime, SHOP_ITEMS, BLOCKS, SHOP_TOOLS, FOUND_GEAR, HOLE_HEAL, SIGN, cleanSignText, cleanWords } from './blocks.js';
 import { sanitizeLook, cleanName } from './avatar.js';
 import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines, buildStore, furnishHouses, furnishTowers } from './worldgen.js';
 import { NpcCrew } from './npcs.js';
-import { buildFrontier, buildPizzeria, buildSignposts } from './frontier.js';
+import { buildFrontier, buildPizzeria, buildSignposts, refurnish, addFishingSpots } from './frontier.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot } from './vehicles.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
 
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
 const DOOR = 21;
@@ -22,6 +22,22 @@ const TICK_RATE = 15; // how often the town's people's positions go out
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LOG = 7, LEAVES = 8, GRASS = 1, DIRT = 2, RACE_FINISH = 72;
 export const MAX_MANY = 4096; // the most blocks one Fill or Paste can change
+
+// What's in the water (sit on a fishing stool by the water and click to cast): name, emoji,
+// coins, and how often it bites (out of all of them added up).
+export const FISH = [
+  { name: 'Minnow', icon: '🐟', coins: 1, chance: 30 },
+  { name: 'Sunfish', icon: '🐠', coins: 1, chance: 22 },
+  { name: 'Perch', icon: '🐟', coins: 2, chance: 15 },
+  { name: 'Old Boot', icon: '👢', coins: 0, chance: 8 },
+  { name: 'Puffer Fish', icon: '🐡', coins: 2, chance: 8 },
+  { name: 'Rainbow Trout', icon: '🌈', coins: 3, chance: 8 },
+  { name: 'Crab', icon: '🦀', coins: 2, chance: 5 },
+  { name: 'Golden Koi', icon: '✨', coins: 8, chance: 3 },
+  { name: 'Giant Catfish', icon: '🐋', coins: 5, chance: 1 },
+];
+const FISH_WAIT = [5000, 12000]; // ms before a bite
+const FISH_BITE = 1800; // ms you have to reel it in once it bites
 
 const num = v => (Number.isFinite(v) ? v : 0);
 const clampWorld = v => Math.max(WORLD.min, Math.min(WORLD.max + 1, num(v)));
@@ -150,6 +166,7 @@ export class GameRoom {
       this.upgradeTo7();
       this.upgradeTo8();
       this.upgradeTo9();
+      this.upgradeTo10();
       this.populate();
       return true;
     }
@@ -173,7 +190,12 @@ export class GameRoom {
     }
     this.wallets = {};
     for (const [k, w] of Object.entries(data.wallets && typeof data.wallets === 'object' ? data.wallets : {})) {
-      if (w && Number.isFinite(w.coins)) this.wallets[k] = { coins: Math.max(0, Math.floor(w.coins)), owned: Array.isArray(w.owned) ? w.owned.filter(i => SHOP_ITEMS.some(([s]) => s === i)) : [], day: w.day || '' };
+      if (!w || !Number.isFinite(w.coins)) continue;
+      this.wallets[k] = {
+        coins: Math.max(0, Math.floor(w.coins)), owned: Array.isArray(w.owned) ? w.owned.filter(i => SHOP_ITEMS.some(([s]) => s === i)) : [], day: w.day || '',
+        found: Array.isArray(w.found) ? w.found.filter(g => FOUND_GEAR[g]) : [], // gear found in the world (the skis)
+        fish: Array.isArray(w.fish) ? w.fish.filter(f => FISH.some(d => d.name === f)) : [], // the kinds of fish they've caught
+      };
     }
     this.places = data.places && typeof data.places === 'object' ? data.places : null;
     this.signs = new Map();
@@ -193,6 +215,7 @@ export class GameRoom {
     if (data.version < 7) this.upgradeTo7();
     if (data.version < 8) this.upgradeTo8();
     if (data.version < 9) this.upgradeTo9();
+    if (data.version < 10) this.upgradeTo10();
     this.populate();
     return true;
   }
@@ -247,6 +270,25 @@ export class GameRoom {
     };
     const { signs } = buildSignposts({ get, set, canUse: this.freeLand(), canClimb: (x, z) => !claimAt(this.claims, x, z) });
     for (const [x, y, z, text] of signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+    this.onDirty();
+  }
+
+  // Worlds saved before version 10: the ski lodge and the log cabins get the furniture they were
+  // meant to have (only onto their own plain floors, and not in cabins someone has claimed), the
+  // lodge gets its ski rack, and the docks get fishing stools and a sign (only in empty spots).
+  upgradeTo10() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const mine = key => (x, z) => {
+      const c = claimAt(this.claims, x, z);
+      return !c || c.key === key;
+    };
+    const furnished = refurnish({ get, set, canUse: mine('ski lodge') });
+    const fishing = addFishingSpots({ get, set, canUse: (x, z) => !claimAt(this.claims, x, z) });
+    for (const [x, y, z, text] of fishing.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+    this.log(`Furnished the lodge and cabins (${furnished} things), and put out ${fishing.stools} fishing stools`);
     this.onDirty();
   }
 
@@ -398,12 +440,24 @@ export class GameRoom {
   // ---------- Coins and the store ----------
 
   wallet(client) {
-    return (this.wallets[nameKey(client.name)] ??= { coins: 0, owned: [], day: '' });
+    const w = (this.wallets[nameKey(client.name)] ??= { coins: 0, owned: [], day: '' });
+    w.found ??= [];
+    w.fish ??= [];
+    return w;
   }
 
   sendWallet(client) {
     const w = this.wallet(client);
-    client.send({ t: 'wallet', coins: w.coins, owned: w.owned, vacation: !!this.vacationOf(client) });
+    client.send({ t: 'wallet', coins: w.coins, owned: w.owned, found: w.found, vacation: !!this.vacationOf(client) });
+  }
+
+  // Can this go down here? (Things from the Luxe Store need buying first; world-only things,
+  // like the lodge's ski rack, are never put down by players: only kept as they are.)
+  mayPlace(client, b, old) {
+    const same = (old & ~(15 << 8)) === (b & ~(15 << 8));
+    if (isExclusive(b) && !this.owns(client, b) && !(isExclusive(old) && same)) return false;
+    const worldOnly = v => BLOCKS[itemOf(v) & 255]?.worldOnly || BLOCKS[floorOf(v) & 255]?.worldOnly;
+    return !worldOnly(b) || (worldOnly(old) && blockId(itemOf(old)) === blockId(itemOf(b)));
   }
 
   // Someone's land: their home land, and their vacation land (if they have any).
@@ -578,7 +632,7 @@ export class GameRoom {
       if (!inBounds(x, y, z) || !isValidBlock(b)) return;
       const old = this.get(x, y, z);
       // Things from the Luxe Store can only be put down by someone who bought them.
-      if (isExclusive(b) && !this.owns(client, b) && !(isExclusive(old) && (old & ~(15 << 8)) === (b & ~(15 << 8)))) {
+      if (!this.mayPlace(client, b, old)) {
         client.send({ t: 'set', x, y, z, b: old });
         return;
       }
@@ -664,7 +718,7 @@ export class GameRoom {
         const [x, y, z, b] = cells.slice(i, i + 4);
         if (!inBounds(x, y, z) || !isValidBlock(b)) continue;
         const old = this.get(x, y, z);
-        if (tooFast || !canBuild(this.claims, client.name, x, z) || (isExclusive(b) && !this.owns(client, b))) {
+        if (tooFast || !canBuild(this.claims, client.name, x, z) || !this.mayPlace(client, b, old)) {
           // Not allowed: put it back the way it was for this player.
           back.push(x, y, z, old);
           if (!tooFast) blocked ??= claimAt(this.claims, x, z);
@@ -723,7 +777,7 @@ export class GameRoom {
       w.owned.push(item);
       this.sendWallet(client);
       this.onDirty();
-      reply(`🛍️ You bought the ${name}! It's in your items now (press E).`);
+      reply(`🛍️ You bought the ${name}! ${SHOP_TOOLS[item]?.got || "It's in your items now (press E, 🎉 Fun tab)."}`);
       this.npcs.onBuy(client, item);
     },
 
@@ -939,6 +993,52 @@ export class GameRoom {
       this.jobs.delete(client.id);
     },
 
+    // The ski rack at the lodge: a pair of skis to keep (they're gear: you wear them).
+    take_skis(client, { x, y, z }) {
+      if (!this.allow(client, 'skis', 1, 3) || !inBounds(x, y, z) || !BLOCKS[blockId(itemOf(this.get(x, y, z)))]?.skiRack) return;
+      if (Math.hypot(client.pos[0] - x - 0.5, client.pos[1] - y, client.pos[2] - z - 0.5) > 6) return;
+      const w = this.wallet(client);
+      if (w.found.includes('skis')) return client.send({ t: 'gear_found', gear: 'skis', again: true });
+      w.found.push('skis');
+      this.sendWallet(client);
+      client.send({ t: 'gear_found', gear: 'skis' });
+      this.onDirty();
+    },
+
+    // Fishing: cast from a fishing stool (the bite comes a little later), then reel in.
+    fish_cast(client, { x, y, z }) {
+      if (!this.allow(client, 'fish', 1, 3) || !inBounds(x, y, z) || !BLOCKS[blockId(itemOf(this.get(x, y, z)))]?.fishing) return;
+      if (Math.hypot(client.pos[0] - x - 0.5, client.pos[2] - z - 0.5) > 2.5) return;
+      if (!this.waterNear(x, y, z)) return client.send({ t: 'fish_gone', why: 'dry' });
+      const [lo, hi] = FISH_WAIT;
+      client.fish = { bite: Date.now() + lo + Math.random() * (hi - lo), bitten: 0, spot: [x, y, z] };
+    },
+
+    fish_reel(client) {
+      const f = client.fish;
+      if (!f) return;
+      client.fish = null;
+      const now = Date.now();
+      if (!f.bitten) return client.send({ t: 'fish_gone', why: 'soon' });
+      if (now > f.bitten + FISH_BITE + 600) return client.send({ t: 'fish_gone', why: 'away' }); // (a little extra for the trip here)
+      let r = Math.random() * FISH.reduce((a, d) => a + d.chance, 0), fish = FISH[0];
+      for (const d of FISH) if ((r -= d.chance) < 0) {
+        fish = d;
+        break;
+      }
+      const w = this.wallet(client), isNew = !w.fish.includes(fish.name);
+      if (isNew) w.fish.push(fish.name);
+      w.coins += fish.coins;
+      this.sendWallet(client);
+      client.send({ t: 'fish_caught', name: fish.name, icon: fish.icon, coins: fish.coins, isNew, kinds: w.fish.length, of: FISH.length, rare: fish.chance <= 3 });
+      if (fish.chance <= 3) this.broadcast({ t: 'chat', system: true, text: `🎣 ${client.name} caught a ${fish.name}! ${fish.icon}` }, client);
+      this.onDirty();
+    },
+
+    fish_stop(client) {
+      client.fish = null;
+    },
+
     // The hammer dug out the ground (down to the bedrock), or someone filled a hole back in.
     dig(client, { x, z }) {
       if (!this.canDig(client, x, z) || this.holes.has(`${x},${z}`) || this.holes.size >= MAX_HOLES) return client.send({ t: 'hole', x, z, on: this.holes.has(`${x},${z}`) });
@@ -1125,6 +1225,14 @@ export class GameRoom {
     this.broadcast({ t: 'chat', system: true, text: '☀️ Everyone slept through the night. Good morning!' });
   }
 
+  // Is there water within a few blocks of (x, y, z), at that height or a little lower?
+  waterNear(x, y, z, r = 7) {
+    for (let dx = -r; dx <= r; dx++)
+      for (let dz = -r; dz <= r; dz++)
+        for (let dy = 0; dy >= -2; dy--) if (isWaterBlock(this.get(x + dx, y + dy, z + dz))) return true;
+    return false;
+  }
+
   // Others online under the same name as `client` (the first one, or all of them).
   sameName(client, all = false) {
     const key = nameKey(client.name), found = [];
@@ -1181,6 +1289,18 @@ export class GameRoom {
     if (t.expire <= 0) {
       t.expire = 600;
       this.expireClaims();
+    }
+    // A fish bites (or, too slow, swims off).
+    for (const c of this.clients.values()) {
+      const f = c.fish;
+      if (!f) continue;
+      if (!f.bitten && now >= f.bite) {
+        f.bitten = now;
+        c.send({ t: 'fish_bite' });
+      } else if (f.bitten && now > f.bitten + FISH_BITE + 1500) {
+        c.fish = null;
+        c.send({ t: 'fish_gone', why: 'away' });
+      }
     }
 
     // Burning vehicles lose health until they blow up.

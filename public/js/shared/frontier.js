@@ -7,7 +7,7 @@
 // Everything here only ever goes onto empty land that nobody has claimed, so in a saved world
 // nothing anyone built is touched. (The mountains are solid, but the game doesn't draw blocks
 // buried inside other blocks, so they cost about as much to draw as their surface.)
-import { WORLD, DOOR_TOP, BED_FOOT, SIGN, makeBlock, stack } from './blocks.js';
+import { WORLD, DOOR_TOP, BED_FOOT, SIGN, SPLIT, makeBlock, stack, blockId, itemOf, floorOf, isWaterBlock } from './blocks.js';
 import { exitRoads, makeSite, siteFree } from './worldgen.js';
 
 const B = {
@@ -16,7 +16,7 @@ const B = {
   floor: 25, roof: 26, flowers: 27, carpet: 35, water: 36, gold: 38, ceilingLight: 41, chandelier: 42,
   candle: 43, lantern: 45, tikiTorch: 48, partyLights: 49, neonPink: 50, lineX: 55, chair: 60, couch: 61,
   table: 62, bookshelf: 63, bed: 64, painting: 65, flowerPot: 67, teddy: 68, desk: 73,
-  snow: 87, ice: 88, pine: 89, skiLift: 90, snowman: 91, oven: 92,
+  snow: 87, ice: 88, pine: 89, skiLift: 90, snowman: 91, oven: 92, railing: 54, fishingStool: 95, skiRack: 96,
 };
 
 // Which way furniture faces (meta bits 0-1) to look along a world direction.
@@ -324,10 +324,7 @@ function buildLodge(put, fill, { x0, z0, L, D }) {
   for (let x = x0; x <= x1; x++)
     for (let z = z0; z <= z1; z++) {
       const wall = x === x0 || x === x1 || z === z0 || z === z1;
-      if (!wall) {
-        put(x, 0, z, B.floor);
-        continue;
-      }
+      if (!wall) continue;
       for (let y = 0; y < H; y++) {
         const corner = (x === x0 || x === x1) && (z === z0 || z === z1);
         const along = z === z0 || z === z1 ? x - x0 : z - z0;
@@ -344,6 +341,17 @@ function buildLodge(put, fill, { x0, z0, L, D }) {
   // A roof with snow on it.
   fill(x0 - 1, H, z0 - 1, x1 + 1, H, z1 + 1, B.roof);
   fill(x0 - 1, H + 1, z0 - 1, x1 + 1, H + 1, z1 + 1, B.snow);
+  const coach = furnishLodge(put, { x0, z0, L, D });
+  // The floor goes in last, under (and around) everything.
+  fill(x0 + 1, 0, z0 + 1, x1 - 1, 0, z1 - 1, B.floor);
+  return coach;
+}
+
+// Inside the lodge. (Also used on saved worlds, whose lodge went in before it had furniture:
+// then `put` only puts things on its plain wooden floor.)
+function furnishLodge(put, { x0, z0, L, D }) {
+  const x1 = x0 + L - 1, z1 = z0 + D - 1;
+  const mid = x0 + Math.floor(L / 2);
   // The fireplace (a campfire in a stone hearth) against the back wall, couches facing it.
   const fz = z0 + 2;
   put(mid, 0, fz, B.log);
@@ -373,6 +381,8 @@ function buildLodge(put, fill, { x0, z0, L, D }) {
   // Lanterns either side of the doors.
   put(mid - 3, 0, z1 + 1, B.lantern);
   put(mid + 2, 0, z1 + 1, B.lantern);
+  // The ski rack, just inside the doors: right-click it for a pair of skis.
+  put(mid - 3, 0, z1 - 1, stack(makeBlock(B.skiRack, faceDir(0, -1)), B.floor));
   // Coach Frost works here, just inside the doors.
   return { x: mid + 1.5, y: 0, z: z1 - 2.5, area: [x0 + 1, z0 + 1, x1 - 1, z1 - 1], face: 0 };
 }
@@ -384,15 +394,13 @@ function cabinFree(x0, z0, clearAt) {
 
 // A little log cabin in the woods, its door facing east toward the road: a bed, a table, a rug,
 // a lantern, a bookshelf, a chimney, a wooden path to the road, and a woodpile.
+const CABIN = { W: 9, D: 8 };
 function buildCabin(put, fill, x0, z0, rand) {
-  const W = 9, D = 8, x1 = x0 + W - 1, z1 = z0 + D - 1, door = z0 + 4;
+  const { W, D } = CABIN, x1 = x0 + W - 1, z1 = z0 + D - 1, door = z0 + 4;
   for (let x = x0; x <= x1; x++)
     for (let z = z0; z <= z1; z++) {
       const wall = x === x0 || x === x1 || z === z0 || z === z1;
-      if (!wall) {
-        put(x, 0, z, B.floor);
-        continue;
-      }
+      if (!wall) continue;
       for (let y = 0; y < 3; y++) {
         if (x === x1 && z === door && y < 2) continue;
         const corner = (x === x0 || x === x1) && (z === z0 || z === z1);
@@ -406,8 +414,18 @@ function buildCabin(put, fill, x0, z0, rand) {
   fill(x0 - 1, 3, z0 - 1, x1 + 1, 3, z1 + 1, B.roof);
   fill(x0 + 1, 4, z0 + 1, x1 - 1, 4, z1 - 1, B.roof);
   fill(x0 + 3, 5, z0 + 3, x1 - 3, 5, z1 - 3, B.roof);
+  furnishCabin(put, fill, x0, z0, rand);
+  fill(x0 + 1, 0, z0 + 1, x1 - 1, 0, z1 - 1, B.floor); // (the floor goes in last, under everything)
+  // Outside: a lantern by the door, a woodpile and a wooden path to the road.
+  put(x1 + 1, 0, door + 1, B.lantern);
+  fill(x0 - 1, 0, z1 - 1, x0 - 1, 1, z1 - 1, B.log);
+  for (let x = x1 + 1; x <= WOODS_ROAD_X - 4; x++) put(x, 0, door, B.floor);
+}
+
+// Inside a cabin (also used on saved worlds, like furnishLodge).
+function furnishCabin(put, fill, x0, z0, rand) {
+  const z1 = z0 + CABIN.D - 1;
   fill(x0 + 1, 0, z0 + 1, x0 + 1, 6, z0 + 1, B.cobble); // the chimney (the stove's in the corner)
-  // Inside.
   const sv = 1;
   put(x0 + 2, 0, z0 + 1, stack(makeBlock(B.bed, faceDir(0, sv)), B.floor));
   put(x0 + 2, 0, z0 + 2, stack(makeBlock(B.bed, faceDir(0, sv) | BED_FOOT), B.floor));
@@ -423,10 +441,95 @@ function buildCabin(put, fill, x0, z0, rand) {
   put(x0 + 6, 0, z0 + 1, stack(B.teddy, B.floor));
   put(x0 + 4, 2, z0 + 4, B.ceilingLight);
   put(x0 + 4, 1, z0 + 1, makeBlock(B.painting, onWall(0, -1) | (Math.floor(rand() * 4) << 2)));
-  // Outside: a lantern by the door, a woodpile and a wooden path to the road.
-  put(x1 + 1, 0, door + 1, B.lantern);
-  fill(x0 - 1, 0, z1 - 1, x0 - 1, 1, z1 - 1, B.log);
-  for (let x = x1 + 1; x <= WOODS_ROAD_X - 4; x++) put(x, 0, door, B.floor);
+}
+
+// Saved worlds: the lodge and the cabins get the furniture they were meant to have. Only onto
+// their own plain wooden floor (or into empty space), and only in cabins nobody has claimed.
+// canUse(x, z): land this may change. Returns how many things went in.
+export function refurnish({ get, set, canUse }) {
+  let count = 0;
+  const put = (x, y, z, v) => {
+    if (!v || !canUse(x, z) || (y === 0 ? get(x, 0, z) !== B.floor : get(x, y, z))) return false;
+    set(x, y, z, v);
+    count++;
+    return true;
+  };
+  const fill = (x0, y0, z0, x1, y1, z1, v) => {
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) put(x, y, z, v);
+  };
+  // Is the building still there, with nobody's claim on it?
+  const standing = (x0, z0, W, D) => {
+    for (let x = x0; x < x0 + W; x++) for (let z = z0; z < z0 + D; z++) if (!canUse(x, z)) return false;
+    return get(x0, 0, z0) === B.log && get(x0 + W - 1, 0, z0 + D - 1) === B.log;
+  };
+  if (standing(LODGE.x0, LODGE.z0, LODGE.L, LODGE.D)) furnishLodge(put, LODGE);
+  for (const [x0, z0] of CABINS) if (standing(x0, z0, CABIN.W, CABIN.D)) furnishCabin(put, fill, x0, z0, () => 0);
+  return count;
+}
+
+// ---------- Fishing ----------
+// Fishing stools on the docks (on both lakes), facing the water, and a noticeboard saying how.
+// Only into empty spots (or a plain dock railing) on land nobody has claimed. Returns how many
+// stools went out, and the signs' words.
+export function addFishingSpots({ get, set, canUse }) {
+  let stools = 0;
+  const signs = [];
+  const empty = (x, y, z) => canUse(x, z) && !get(x, y, z);
+  const stool = (x, y, z, dx, dz) => {
+    const here = get(x, y, z), v = makeBlock(B.fishingStool, faceDir(dx, dz));
+    if (!canUse(x, z) || !isWaterBlock(get(x + dx * 2, 0, z + dz * 2))) return;
+    if (!here) set(x, y, z, v);
+    else if (here < SPLIT && blockId(here) === B.railing) set(x, y, z, stack(v, here)); // (among the railings)
+    else return;
+    stools++;
+  };
+  // Two posts with lanterns on top and the signs on the (sx, sz) side, along the other axis.
+  const board = (x, z, sx, sz) => {
+    const [ax, az] = [Math.abs(sz), Math.abs(sx)];
+    const cells = [[x, z], [x + ax, z + az]];
+    for (const [cx, cz] of cells) {
+      for (let y = 0; y < 3; y++) if (!empty(cx, y, cz)) return false;
+      if (!empty(cx + sx, 1, cz + sz) || get(cx + sx, 0, cz + sz) === B.water) return false;
+    }
+    const facing = sz > 0 ? 0 : sx > 0 ? 1 : sz < 0 ? 2 : 3;
+    cells.forEach(([cx, cz], i) => {
+      set(cx, 0, cz, B.log);
+      set(cx, 1, cz, B.planks);
+      set(cx, 2, cz, B.lantern);
+      set(cx + sx, 1, cz + sz, makeBlock(SIGN, facing));
+      signs.push([cx + sx, 1, cz + sz, i ? 'Click to cast. When the bobber dips: click again, quick!' : '🎣 FISHING! Sit on a stool on the dock']);
+    });
+    return true;
+  };
+  // The town lake: its dock has lanterns on the railings at its far end (and runs along z).
+  const done = new Set();
+  for (let x = -120; x <= 120; x++) { // (where the town lake can be)
+    for (let z = -120; z <= 120; z++) {
+      const v = get(x, 1, z);
+      if (!v || blockId(itemOf(v)) !== B.lantern || blockId(floorOf(v)) !== B.railing || get(x, 0, z) !== B.planks || done.has(`${x},${z}`)) continue;
+      const w = get(x + 1, 1, z);
+      if (!w || blockId(itemOf(w)) !== B.lantern || blockId(floorOf(w)) !== B.railing) continue;
+      done.add(`${x + 1},${z}`);
+      stool(x, 1, z + 2, -1, 0);
+      stool(x + 1, 1, z + 4, 1, 0);
+      stool(x, 1, z + 6, -1, 0);
+      // The noticeboard by the end of the dock, on the shore, facing the way people come.
+      let shore = z;
+      while (get(x, 0, shore + 1) === B.planks) shore++;
+      [3, 5, -4, -6].some(dx => board(x + dx, shore, 0, 1));
+    }
+  }
+  // The big lake: the dock runs along x from its east shore, lanterns at its far (west) end.
+  const shore = LAKE.cx + LAKE.W / 2, end = shore - 9, cz = LAKE.cz;
+  if (blockId(get(end, 1, cz)) === B.lantern && get(end, 0, cz) === B.planks) {
+    stool(end + 2, 1, cz, 0, -1);
+    stool(end + 4, 1, cz + 1, 0, 1);
+    stool(end + 6, 1, cz, 0, -1);
+    stool(end + 8, 1, cz + 1, 0, 1);
+    // (People come down the path from the woods road, then turn onto the dock.)
+    [3, 5, 7].some(dz => board(WOODS_ROAD_X - 1, cz + dz, 0, -1));
+  }
+  return { stools, signs };
 }
 
 function tree(put, x, z, h, rand) {

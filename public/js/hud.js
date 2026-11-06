@@ -1,6 +1,6 @@
 // The on-screen parts of the game: hotbar, item menu, chat and info panels.
-import { ALL_ITEMS, HAMMER, BRUSH, SCRAPER, TABS, SEARCH_WORDS, itemName, fromStore } from './items.js';
-import { BLOCKS, PAINT_COLORS, PAINT_NAMES } from './shared/blocks.js';
+import { ALL_ITEMS, HAMMER, BRUSH, SCRAPER, GOLDPAINT, TABS, SEARCH_WORDS, GEAR, itemName, fromStore, familyOf } from './items.js';
+import { BLOCKS, PAINT_COLORS, PAINT_NAMES, SHOP_TOOLS, FOUND_GEAR, GOLD_PAINT } from './shared/blocks.js';
 import { RECIPES } from './structures.js';
 
 export const CUSTOM_PAINT = 16; // the paint number for "your own color"
@@ -10,7 +10,7 @@ const $ = id => document.getElementById(id);
 export const CONTROLS = [
   ['W A S D', 'Move'], ['Mouse', 'Look'], ['Space', 'Jump'], ['Click', 'Use item'],
   ['Right click', 'Doors, cars, pets, beds, sit down'], ['Hammer', '3 hits to break'], ['Middle click', 'Copy block'],
-  ['1–9 / Wheel', 'Pick item'], ['Q', 'Swap back to the last item'], ['E', 'Items & Build Book'], ['Shift', 'Sprint'],
+  ['1–9 / Wheel', 'Pick item'], ['X', 'Next style (lamps, chairs, colors…)'], ['Q', 'Swap back to the last item'], ['E', 'Items, gear & Build Book'], ['Shift', 'Sprint'],
   ['Ctrl / C', "Crouch (you won't fall off edges)"], ['F', 'Fly (Space / C)'],
   ['V', 'Camera view'], ['G', 'Dance!'], ['B', 'Wave'], ['T / Enter', 'Chat'], ['R', 'Go home (bed, your land, or town)'],
   ['P', 'Take a photo'], ['H', 'Hide the HUD (for photos)'], ['Z', 'Undo your last Fill or Paste'],
@@ -19,7 +19,7 @@ export const CONTROLS = [
 export const TOUCH_CONTROLS = [
   ['Left thumb', 'Joystick: walk (push it all the way to run)'], ['Right side', 'Drag to look around'],
   ['Tap', 'Use item (keep your finger still to keep hammering)'], ['⬆', 'Jump (tap twice to fly)'], ['⬇', 'Crouch (or fly down)'],
-  ['✋', 'Doors, cars, pets, beds'], ['🚪', 'Get out of a vehicle'], ['Hotbar', 'Tap to pick an item'],
+  ['✋', 'Doors, cars, pets, beds'], ['🚪', 'Get out of a vehicle'], ['Hotbar', 'Tap to pick an item (tap it again: next style)'],
   ['🎒', 'Items & Build Book'], ['🎥', 'Camera view'], ['💃', 'Dance!'], ['💬', 'Chat'], ['⏸', 'Pause, go home, settings'],
 ];
 
@@ -51,16 +51,20 @@ export function renderControls(el) {
 }
 
 export class Hud {
-  constructor({ icons, settings, sounds, onChange, onPaint }) {
+  constructor({ icons, settings, sounds, onChange, onPaint, onGear }) {
     this.icons = icons;
     this.settings = settings;
     this.sounds = sounds;
     this.onPaint = onPaint; // called with a paint color number when one is picked
     this.onChange = onChange; // called when the selected item changes
+    this.onGear = onGear; // called with a piece of gear when it's put on or taken off
     this.selected = 0;
     this.itemNameTimer = 0;
     this.chatOpen = false;
     this.owned = new Set(); // things bought at the Luxe Store
+    this.foundGear = new Set(); // gear found out in the world (the skis at the lodge)
+    settings.styles ||= {};
+    settings.gear ||= {};
     this.buildHotbar();
     this.buildInventory();
   }
@@ -72,8 +76,18 @@ export class Hud {
   iconCanvas(item) {
     const c = document.createElement('canvas');
     c.width = c.height = 64;
+    c.dataset.item = String(item);
     c.getContext('2d').drawImage(this.icons[item], 0, 0);
     return c;
+  }
+
+  // Draws an item's picture again everywhere it's shown (the brush, after a new color).
+  refreshIcon(item) {
+    for (const c of document.querySelectorAll(`canvas[data-item="${item}"]`)) {
+      const g = c.getContext('2d');
+      g.clearRect(0, 0, 64, 64);
+      g.drawImage(this.icons[item], 0, 0);
+    }
   }
 
   buildHotbar() {
@@ -89,11 +103,115 @@ export class Hud {
       slot.addEventListener('pointerdown', e => {
         if (e.pointerType === 'mouse') return;
         e.preventDefault();
-        this.select(i);
+        if (i === this.selected && this.styles(this.item).length > 1) this.nextStyle(1);
+        else this.select(i);
       });
       bar.append(slot);
     });
     this.onChange(this.item);
+  }
+
+  // ---------- Styles ----------
+
+  // The styles you can use of something's family (just itself if it isn't in one).
+  styles(item) {
+    const fam = familyOf(item);
+    return fam ? fam.items.filter(i => this.usable(i)) : [item];
+  }
+
+  // The style of a family to show in the menu: the one you used last.
+  styleOf(fam) {
+    const list = fam.items.filter(i => this.usable(i));
+    const last = this.settings.styles[fam.id];
+    return list.includes(last) ? last : list[0] ?? null;
+  }
+
+  // A list of items with each family shown once (as the style you used last).
+  collapse(list) {
+    const out = [], seen = new Set();
+    for (const i of list) {
+      const fam = familyOf(i);
+      if (!fam) {
+        if (!out.includes(i)) out.push(i);
+        continue;
+      }
+      if (seen.has(fam.id)) continue;
+      seen.add(fam.id);
+      const style = this.styleOf(fam);
+      if (style !== null) out.push(style);
+    }
+    return out;
+  }
+
+  // What the selected slot's item is called, and how to change its style.
+  label(item) {
+    const list = this.styles(item);
+    if (list.length < 2) return itemName(item);
+    return `${itemName(item)}  ·  style ${list.indexOf(item) + 1} of ${list.length}  ·  ${isTouch() ? 'tap again' : 'X'}: next style`;
+  }
+
+  // Changes the item in the selected slot to its next (or previous) style.
+  nextStyle(dir = 1) {
+    const list = this.styles(this.item);
+    if (list.length < 2) return null;
+    const next = list[(list.indexOf(this.item) + dir + list.length) % list.length];
+    this.setStyle(next);
+    this.sounds.click();
+    return next;
+  }
+
+  // Puts this style in the selected slot (and remembers it for its family).
+  setStyle(item) {
+    const fam = familyOf(item);
+    if (fam) this.settings.styles[fam.id] = item;
+    if (this.selected === 0 && item !== HAMMER) this.selected = 1;
+    this.settings.hotbar[this.selected] = item;
+    this.remember(item);
+    this.buildHotbar();
+    this.buildInvHotbar();
+    this.select(this.selected);
+    if (!$('inventory').classList.contains('hidden')) this.renderGrid();
+  }
+
+  // Takes something into your hand: the slot it's already in, or a slot with another style of
+  // it (which changes style), or else the selected slot.
+  takeItem(item) {
+    let at = this.settings.hotbar.indexOf(item);
+    const fam = familyOf(item);
+    if (at < 0 && fam) at = this.settings.hotbar.findIndex(i => familyOf(i) === fam);
+    if (at < 0) return this.setSlot(item);
+    this.selected = at;
+    if (this.settings.hotbar[at] !== item) return this.setStyle(item);
+    this.select(at);
+  }
+
+  // The style strip in the item menu: every style of what's in the glowing slot.
+  renderStyles() {
+    const strip = $('inv-styles');
+    if (!strip) return;
+    const item = this.item, list = this.styles(item), fam = familyOf(item);
+    strip.textContent = '';
+    strip.classList.toggle('hidden', list.length < 2);
+    if (list.length < 2) return;
+    const head = document.createElement('span');
+    head.className = 'inv-styles-head';
+    head.textContent = `${fam.name} styles:`;
+    strip.append(head);
+    for (const style of list) {
+      const b = document.createElement('button');
+      b.className = 'inv-style' + (style === item ? ' selected' : '');
+      b.title = itemName(style);
+      b.append(this.iconCanvas(style));
+      b.addEventListener('click', () => {
+        this.setStyle(style);
+        this.sounds.click();
+      });
+      strip.append(b);
+    }
+    const name = document.createElement('span');
+    name.className = 'inv-styles-name';
+    name.textContent = itemName(item);
+    strip.append(name);
   }
 
   select(i) {
@@ -103,9 +221,10 @@ export class Hud {
     [...$('hotbar').children].forEach((s, j) => s.classList.toggle('active', j === this.selected));
     [...($('inv-hotbar')?.children || [])].forEach((s, j) => s.classList.toggle('active', j === this.selected));
     this.onChange(this.item);
-    $('item-name').textContent = itemName(this.item);
+    $('item-name').textContent = this.label(this.item);
     $('item-name').style.opacity = 1;
-    this.itemNameTimer = 1.5;
+    this.itemNameTimer = this.styles(this.item).length > 1 ? 2.5 : 1.5;
+    this.renderStyles();
   }
 
   // Puts an item in the selected slot. The hammer always stays in slot 1, so new
@@ -117,6 +236,8 @@ export class Hud {
     }
     if (this.selected === 0) this.selected = 1;
     this.settings.hotbar[this.selected] = item;
+    const fam = familyOf(item);
+    if (fam) this.settings.styles[fam.id] = item;
     this.buildHotbar();
     this.buildInvHotbar();
     this.select(this.selected);
@@ -170,6 +291,7 @@ export class Hud {
     $('inv-search').value = '';
     for (const b of $('inv-tabs').children) b.classList.toggle('active', b.dataset.tab === id);
     this.renderGrid();
+    this.renderStyles();
   }
 
   // Next or previous tab (Tab key, or the arrow keys).
@@ -184,16 +306,77 @@ export class Hud {
     return !fromStore(item) || this.owned.has(item);
   }
 
-  setOwned(list) {
+  setOwned(list, found = []) {
     this.owned = new Set(list);
+    this.foundGear = new Set(found);
+    this.renderGearHud();
+    this.renderStyles();
     if (!$('inventory').classList.contains('hidden')) this.renderGrid();
   }
 
+  // Search: every single style that matches (a family's name finds all of its styles).
   found() {
     const q = $('inv-search').value.trim().toLowerCase();
     if (!q) return [];
     return ALL_ITEMS.filter(i => !(typeof i === 'number' && BLOCKS[i].hidden) && this.usable(i))
-      .filter(i => `${itemName(i)} ${SEARCH_WORDS[i] || ''}`.toLowerCase().includes(q));
+      .filter(i => `${itemName(i)} ${familyOf(i)?.name || ''} ${SEARCH_WORDS[i] || ''}`.toLowerCase().includes(q));
+  }
+
+  // ---------- Gear ----------
+  // Things you wear rather than hold: put them on or take them off in the Fun tab.
+
+  hasGear(g) {
+    return SHOP_TOOLS[g] ? this.owned.has(g) : this.foundGear.has(g);
+  }
+
+  wearing(g) {
+    return this.hasGear(g) && !!this.settings.gear[g];
+  }
+
+  toggleGear(g) {
+    if (!this.hasGear(g)) return;
+    this.settings.gear[g] = !this.settings.gear[g];
+    this.onGear?.(g, this.settings.gear[g]);
+    this.renderGearHud();
+    if (!$('inventory').classList.contains('hidden')) this.renderGrid();
+  }
+
+  buildGear(grid) {
+    this.section(grid, '🎒 Your gear: click to put it on or take it off');
+    const row = document.createElement('div');
+    row.className = 'gear-row';
+    for (const g of GEAR) {
+      const have = this.hasGear(g), on = this.wearing(g);
+      const card = document.createElement('button');
+      card.className = 'gear' + (on ? ' on' : '') + (have ? '' : ' locked');
+      const name = document.createElement('b');
+      name.textContent = itemName(g);
+      const state = document.createElement('span');
+      state.className = 'gear-state';
+      state.textContent = on ? 'ON' : have ? 'OFF' : SHOP_TOOLS[g] ? `🪙 ${SHOP_TOOLS[g].price}` : '🔍 Find it';
+      card.title = have ? SHOP_TOOLS[g]?.about || '' : SHOP_TOOLS[g] ? `${SHOP_TOOLS[g].about} (At the Luxe Store)` : FOUND_GEAR[g].where;
+      card.append(this.iconCanvas(g), name, state);
+      card.addEventListener('click', () => {
+        if (!have) {
+          this.toast(SHOP_TOOLS[g] ? `🛍️ ${itemName(g)}: 🪙 ${SHOP_TOOLS[g].price} at the Luxe Store.` : `🔍 ${FOUND_GEAR[g].where}`);
+          return;
+        }
+        this.toggleGear(g);
+        this.sounds.click();
+      });
+      row.append(card);
+    }
+    grid.append(row);
+  }
+
+  // The gear you have on, by the hotbar.
+  renderGearHud() {
+    const el = $('gear-hud');
+    if (!el) return;
+    const on = GEAR.filter(g => this.wearing(g));
+    el.classList.toggle('hidden', !on.length);
+    el.textContent = on.map(g => ({ sneakers: '👟', jetpack: '🚀', trail: '🌈', skis: '🎿' })[g]).join(' ');
+    el.title = on.map(itemName).join(', ');
   }
 
   renderGrid() {
@@ -204,13 +387,13 @@ export class Hud {
     if (q) {
       const list = this.found();
       this.section(grid, list.length ? `🔍 ${list.length} found` : '🔍 Nothing found. Try another word!');
-      this.items(grid, list);
+      this.items(grid, list, '', true);
       return;
     }
-    const recent = (this.settings.recent || []).filter(i => ALL_ITEMS.includes(i) && this.usable(i)).slice(0, 8);
+    const recent = this.collapse((this.settings.recent || []).filter(i => ALL_ITEMS.includes(i) && this.usable(i))).slice(0, 8);
     if (this.tab === 'paint') {
       this.buildPaints(grid);
-      this.items(grid, [BRUSH, SCRAPER]);
+      this.items(grid, this.collapse([BRUSH, SCRAPER]));
       return;
     }
     if (this.tab === 'book') {
@@ -223,13 +406,14 @@ export class Hud {
     }
     const tab = TABS.find(t => t.id === this.tab);
     if (tab.id === 'fun') {
-      // Your things from the Luxe Store, first.
+      // Your gear, then your things from the Luxe Store.
+      this.buildGear(grid);
       const mine = tab.items.filter(i => fromStore(i) && this.owned.has(i));
       this.section(grid, mine.length ? '⭐ From the Luxe Store' : '⭐ Collect gold coins around town and buy amazing things at the Luxe Store!');
       this.items(grid, mine, 'store');
     }
     this.section(grid, `${tab.icon} ${tab.name}`);
-    this.items(grid, tab.items.filter(i => !fromStore(i)));
+    this.items(grid, this.collapse(tab.items.filter(i => !fromStore(i) || familyOf(i))));
   }
 
   section(grid, text) {
@@ -239,15 +423,24 @@ export class Hud {
     grid.append(h);
   }
 
-  items(grid, list, extraClass = '') {
+  // One tile each. A family's tile has its name, and a badge with how many styles it has.
+  // (Search results show each style by its own name.)
+  items(grid, list, extraClass = '', own = false) {
     for (const item of list) {
       const el = document.createElement('div');
       el.className = `inv-item ${extraClass}`;
       el.draggable = true;
       const label = document.createElement('div');
       label.className = 'inv-label';
-      label.textContent = itemName(item);
+      const fam = familyOf(item), n = this.styles(item).length;
+      label.textContent = fam && n > 1 && !own ? fam.name : itemName(item);
       el.append(this.iconCanvas(item), label);
+      if (n > 1) {
+        const badge = document.createElement('span');
+        badge.className = 'inv-badge';
+        badge.textContent = `${n} styles`;
+        el.append(badge);
+      }
       el.addEventListener('click', () => this.pick(item));
       el.addEventListener('pointerenter', () => {
         this.hovered = item;
@@ -268,9 +461,10 @@ export class Hud {
   }
 
   showName(item) {
+    const n = item === null ? 0 : this.styles(item).length;
     $('inv-name').textContent = item === null
       ? (isTouch() ? 'Tap an item to put it in the glowing slot. Tap a slot to choose it.' : 'Click an item to put it in the glowing slot · Drag it onto any slot · Or point at it and press 1–9')
-      : `${itemName(item)}${isTouch() ? '' : '  ·  press 1–9 to put it in that slot'}`;
+      : `${itemName(item)}${n > 1 ? ` (${n} styles: pick one below)` : ''}${isTouch() ? '' : '  ·  press 1–9 to put it in that slot'}`;
   }
 
   // Puts an item in a hotbar slot (the selected one if no slot is given).
@@ -303,7 +497,8 @@ export class Hud {
       num.textContent = i + 1;
       slot.append(this.iconCanvas(item), num);
       slot.addEventListener('click', () => {
-        this.select(i);
+        if (i === this.selected && this.styles(item).length > 1) this.nextStyle(1);
+        else this.select(i);
         this.buildInvHotbar();
       });
       slot.addEventListener('dragover', e => {
@@ -387,6 +582,22 @@ export class Hud {
     input.addEventListener('click', choose);
     own.append(input);
     row.append(own);
+    // Gold (from the Luxe Store): shiny gold cars, and gold-colored blocks.
+    const gold = document.createElement('button');
+    const haveGold = this.owned.has(GOLDPAINT);
+    gold.className = 'swatch gold' + (this.settings.paint === GOLD_PAINT && haveGold ? ' selected' : '') + (haveGold ? '' : ' locked');
+    gold.title = haveGold ? 'Gold: paint a car, boat or helicopter shiny gold!' : `Gold Car Paint: 🪙 ${SHOP_TOOLS[GOLDPAINT].price} at the Luxe Store`;
+    gold.addEventListener('click', () => {
+      if (!haveGold) {
+        this.toast(`✨ Gold paint for cars is at the Luxe Store (🪙 ${SHOP_TOOLS[GOLDPAINT].price}).`);
+        return;
+      }
+      this.settings.paint = GOLD_PAINT;
+      [...row.children].forEach(c => c.classList.toggle('selected', c === gold));
+      this.onPaint?.(GOLD_PAINT);
+      this.sounds.click();
+    });
+    row.append(gold);
     grid.append(row);
   }
 

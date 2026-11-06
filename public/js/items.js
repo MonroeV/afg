@@ -27,23 +27,55 @@ export const GOLDPAINT = 'goldpaint';
 export const SNEAKERS = 'sneakers';
 export const SKIS = 'skis';
 export const VACATION = 'vacationflag';
-export const TOOLS = [HAMMER, BRUSH, SCRAPER, WRENCH, BALL, FIREWORKS, CLAIM, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, SKIS, JETPACK, TRAIL, SHOWTIME, GOLDPAINT, SNEAKERS, VACATION];
+export const TOOLS = [HAMMER, BRUSH, SCRAPER, WRENCH, BALL, FIREWORKS, CLAIM, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, SHOWTIME, VACATION];
 // Things you have to buy at the Luxe Store before you can use them.
 export const fromStore = item => (typeof item === 'number' ? !!BLOCKS[item]?.price : !!SHOP_TOOLS[item]);
+// Everything that can go in the hotbar.
 export const ALL_ITEMS = [...TOOLS, ...BLOCK_IDS];
+// Gear isn't held: you wear it (put it on and take it off in the item menu's 🎒 Gear).
+export const GEAR = [SNEAKERS, JETPACK, TRAIL, SKIS];
+// Everything that needs a little picture: the hotbar things, gear, and Gold Car Paint (for the store).
+export const ICON_ITEMS = [...ALL_ITEMS, ...GEAR, GOLDPAINT];
 
-// The tabs of the item menu. Blocks not listed anywhere go under Blocks (or Lights).
-const HOME = [94, 60, 61, 62, 64, 63, 65, 66, 67, 68, 21, 53, 54, 25, 35, 20, 73, 74, 75, 76, 77, 78, 79, 80, 81, 86, 92];
-const TOWN = [22, 23, 56, 24, 58, 27, 36, 1, 7, 8, 87, 88, 89, 91, 90];
-const FUN = [VACATION, SNEAKERS, GOLDPAINT, 93, JETPACK, SHOWTIME, 83, 84, TRAIL, 82, 85, SKIS, BALL, FIREWORKS, WATER_BALLOON, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28];
+// ---------- Styles ----------
+// Look-alikes share one place in the item menu. Pick one, then choose its style: X in the game
+// (or tap its slot again), or the style strip at the bottom of the item menu. The items are
+// all still their own blocks underneath (so every world built before looks just the same).
+export const FAMILIES = [
+  { id: 'color', name: 'Color Block', items: [14, 32, 16, 34, 30, 31, 15, 33, 29, 17] },
+  { id: 'glass', name: 'Glass', items: [9, 59] },
+  { id: 'glow', name: 'Glow Block', items: [18, 50, 51, 52] },
+  { id: 'lamp', name: 'Lamp', items: [39, 40, 41, 42, 44, 43] },
+  { id: 'outdoor', name: 'Outdoor Light', items: [46, 47, 45, 48, 49] },
+  { id: 'chair', name: 'Chair', items: [60, 74, 95] },
+  { id: 'table', name: 'Table', items: [62, 73] },
+  { id: 'picture', name: 'Picture', items: [65, 66, 78] },
+  { id: 'floor', name: 'Floor', items: [25, 35, 20] },
+  { id: 'office', name: 'Office Stuff', items: [75, 76, 77] },
+  { id: 'road', name: 'Road', items: [22, 23, 56] },
+  { id: 'leaves', name: 'Leaves', items: [8, 89] },
+  { id: 'snow', name: 'Snow & Ice', items: [87, 88] },
+  { id: 'race', name: 'Race Line', items: [71, 72] },
+  { id: 'brush', name: 'Paint Brush', items: [BRUSH, SCRAPER] },
+  { id: 'wand', name: 'Builder Wand', items: [FILL, COPY] },
+  // The Vacation Flag (from the Luxe Store) is the Land Flag's other style, until you plant it.
+  { id: 'flag', name: 'Land Flag', items: [CLAIM, VACATION] },
+];
+const FAMILY_OF = new Map(FAMILIES.flatMap(f => f.items.map(i => [i, f])));
+export const familyOf = item => FAMILY_OF.get(item) || null;
+
+// The tabs of the item menu. Blocks not listed anywhere go under Blocks. (Each family of styles
+// shows up once, where its first style is.) Lamps are in Home, outdoor lights in Town.
+const HOME = [94, 60, 74, 95, 61, 62, 73, 64, 63, 65, 66, 78, 67, 68, 39, 40, 41, 42, 44, 43, 21, 53, 54, 25, 35, 20, 75, 76, 77, 79, 80, 81, 86, 92];
+const TOWN = [22, 23, 56, 24, 58, 46, 47, 45, 48, 49, 27, 36, 1, 7, 8, 89, 87, 88, 91, 90];
+const FUN = [93, SHOWTIME, 83, 84, 82, 85, BALL, FIREWORKS, WATER_BALLOON, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28];
 const listed = new Set([...HOME, ...TOWN, ...FUN]);
 const visible = i => typeof i !== 'number' || !BLOCKS[i].hidden;
 export const TABS = [
-  { id: 'tools', icon: '🧰', name: 'Tools', items: [HAMMER, BRUSH, SCRAPER, WRENCH, CLAIM, FILL, COPY, CAMERA] },
+  { id: 'tools', icon: '🧰', name: 'Tools', items: [HAMMER, BRUSH, SCRAPER, WRENCH, CLAIM, VACATION, FILL, COPY, CAMERA] },
   { id: 'fun', icon: '🎉', name: 'Fun', items: FUN },
-  { id: 'blocks', icon: '🧱', name: 'Blocks', items: BLOCK_IDS.filter(i => !listed.has(i) && !BLOCKS[i].light && !BLOCKS[i].shape && visible(i)) },
+  { id: 'blocks', icon: '🧱', name: 'Blocks', items: BLOCK_IDS.filter(i => !listed.has(i) && !BLOCKS[i].shape && visible(i)) },
   { id: 'home', icon: '🛋️', name: 'Home', items: HOME },
-  { id: 'lights', icon: '💡', name: 'Lights', items: BLOCK_IDS.filter(i => BLOCKS[i].light && !BLOCKS[i].price) },
   { id: 'town', icon: '🌳', name: 'Town', items: TOWN },
   { id: 'paint', icon: '🎨', name: 'Paint' },
   { id: 'book', icon: '📖', name: 'Build Book' },
@@ -60,10 +92,12 @@ export const SEARCH_WORDS = {
   68: 'toy bear hug', 69: 'piano song note sound', 73: 'office table', 74: 'office seat sit', 75: 'pc screen office', 76: 'office drawers',
   77: 'office water drink', 78: 'office board chart', 79: 'music play keys', 80: 'aquarium fish', 81: 'gold', 82: 'gem shiny store',
   83: 'gold king queen chair store', 84: 'party light store', 85: 'gold cup winner store', 86: 'shop store buy',
-  [JETPACK]: 'fly rocket store', [SKIS]: 'ski snow winter slope mountain', [GOLDPAINT]: 'gold car paint store vehicle',
-  [SNEAKERS]: 'shoes run fast jump high store', [VACATION]: 'land claim second holiday beach store flag', 87: 'winter white cold', 88: 'skate slippery winter cold', 89: 'tree pine christmas snow',
+  [VACATION]: 'land claim second holiday beach store flag', 95: 'fish fishing rod lake dock stool seat', 18: 'light glow',
+  50: 'glow light', 51: 'glow light', 52: 'glow light', 14: 'color', 15: 'color', 16: 'color', 17: 'color', 29: 'color', 30: 'color',
+  31: 'color', 32: 'color', 33: 'color', 34: 'color', 39: 'light', 40: 'light', 41: 'light', 42: 'light', 43: 'light', 44: 'light',
+  45: 'light torch', 46: 'light', 47: 'light', 48: 'light torch', 49: 'light', 87: 'winter white cold', 88: 'skate slippery winter cold', 89: 'tree pine christmas snow',
   90: 'chair lift ride cable ski', 91: 'winter snow', 92: 'pizza job work cook', 94: 'write words text name label board', 93: 'hot tub bath spa bubbles store', [TRAIL]: 'rainbow sparkle store', [SHOWTIME]: 'fireworks show store', 70: 'boost fast arrow run', 71: 'race timer go', 72: 'race timer end', 19: 'trampoline jump',
-  36: 'pool lake', 48: 'torch', 45: 'torch', 21: 'garage', 54: 'fence rail',
+  36: 'pool lake', 21: 'garage', 54: 'fence rail',
 };
 // The hammer always lives in slot 1.
 export const DEFAULT_HOTBAR = [HAMMER, 5, 6, 9, 21, LADDER, BRUSH, FIREWORKS, CLAIM];
@@ -629,27 +663,20 @@ export class ViewModel {
       obj.scale.setScalar(0.9);
       obj.position.set(0.04, -0.02, -0.05);
       obj.rotation.set(0.35, 0.5, 0.25);
-    } else if (item === SKIS) {
+    } else if (item === 'rod') {
+      // (Not an item: what you hold sitting on a fishing stool.)
       obj = new THREE.Group();
-      [[-0.05, 0xe53935], [0.05, 0x1e88e5]].forEach(([x, c]) => {
-        const ski = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.5, 0.012), new THREE.MeshStandardMaterial({ color: c, roughness: 0.4 }));
-        ski.position.x = x;
-        obj.add(ski);
-      });
-      obj.rotation.set(0.5, 0.3, -0.25);
-    } else if (item === GOLDPAINT) {
-      obj = new THREE.Group();
-      obj.add(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.2, 16), new THREE.MeshStandardMaterial({ color: 0xf2c14e, metalness: 1, roughness: 0.2 })));
-      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.05, 12), new THREE.MeshStandardMaterial({ color: 0xeeeeee }));
-      cap.position.y = 0.12;
-      obj.add(cap);
-      obj.rotation.set(0.2, 0, -0.2);
-    } else if (item === SNEAKERS) {
-      obj = new THREE.Group();
-      obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.025, 0.26).translate(0, -0.03, 0), new THREE.MeshStandardMaterial({ color: 0xffffff })));
-      obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.07, 0.24).translate(0, 0.02, 0.01), new THREE.MeshStandardMaterial({ color: 0x29b6f6, roughness: 0.6 })));
-      obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.102, 0.02, 0.1).translate(0, 0.03, 0.02), new THREE.MeshStandardMaterial({ color: 0xfdd835 })));
-      obj.rotation.set(0.3, 0.8, 0);
+      obj.add(new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.014, 1.1, 6).translate(0, 0.45, 0), new THREE.MeshStandardMaterial({ color: 0x2f3237, roughness: 0.5 })));
+      obj.add(new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.16, 8).translate(0, -0.12, 0), new THREE.MeshStandardMaterial({ color: 0x8d5a34, roughness: 0.8 })));
+      const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.035, 14).rotateZ(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xc0c4c8, metalness: 0.7, roughness: 0.35 }));
+      reel.position.set(0.035, 0, 0);
+      obj.add(reel);
+      this.rodTip = new THREE.Object3D();
+      this.rodTip.position.y = 1.0;
+      obj.add(this.rodTip);
+      obj.scale.setScalar(0.8);
+      obj.position.set(0.02, -0.12, 0);
+      obj.rotation.set(-0.85, 0.1, -0.22);
     } else if (item === WATER_BALLOON) {
       obj = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 12).scale(1, 1.15, 1), new THREE.MeshStandardMaterial({ color: 0x42a5f5, roughness: 0.15, transparent: true, opacity: 0.85 }));
       obj.position.y = 0.05;
@@ -684,35 +711,14 @@ export class ViewModel {
       lens.position.z = -0.06;
       obj.add(lens);
       obj.rotation.set(0.1, 0.2, 0);
-    } else if (item === JETPACK) {
+    } else if (item === SHOWTIME) {
       obj = new THREE.Group();
-      const steel = new THREE.MeshStandardMaterial({ color: 0xc9d0d8, metalness: 0.8, roughness: 0.3 });
-      for (const x of [-0.06, 0.06]) {
-        const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.26, 12), steel);
-        tank.position.x = x;
-        obj.add(tank);
-      }
-      const band = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.04, 0.1), new THREE.MeshStandardMaterial({ color: 0xe53935 }));
-      band.position.y = 0.08;
-      obj.add(band);
-      obj.rotation.set(0.3, 0.6, 0);
-    } else if (item === TRAIL || item === SHOWTIME) {
-      obj = new THREE.Group();
-      if (item === TRAIL) {
-        obj.add(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.016, 0.36, 6), new THREE.MeshStandardMaterial({ color: 0xffffff })));
-        ['#ff4d4d', '#fdd835', '#29b6f6', '#7e57c2'].forEach((c, i) => {
-          const b = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), new THREE.MeshBasicMaterial({ color: c }));
-          b.position.set(Math.cos(i * 1.6) * 0.04, 0.21 + i * 0.012, Math.sin(i * 1.6) * 0.04);
-          obj.add(b);
-        });
-      } else {
-        [0xe53935, 0x1e88e5, 0x43a047].forEach((c, i) => {
-          const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.24, 10), new THREE.MeshStandardMaterial({ color: c }));
-          tube.position.set((i - 1) * 0.075, 0, 0);
-          tube.rotation.z = (i - 1) * -0.2;
-          obj.add(tube);
-        });
-      }
+      [0xe53935, 0x1e88e5, 0x43a047].forEach((c, i) => {
+        const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.24, 10), new THREE.MeshStandardMaterial({ color: c }));
+        tube.position.set((i - 1) * 0.075, 0, 0);
+        tube.rotation.z = (i - 1) * -0.2;
+        obj.add(tube);
+      });
       obj.rotation.set(0.3, 0.4, -0.25);
     } else if (item === CLAIM || item === VACATION) {
       obj = new THREE.Group();

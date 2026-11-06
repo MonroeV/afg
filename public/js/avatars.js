@@ -405,7 +405,33 @@ export class Avatar {
       flying: this.flying, crouch: this.crouching && !sitting,
     });
     if (this.holdMic) this.updateMic();
+    if (this.fishing || this.rod) this.updateRod(time);
     this.updatePet(dt, time);
+  }
+
+  // A fishing rod held out over the water (sitting on a fishing stool). `fishing` is set by the
+  // game each frame.
+  updateRod(time) {
+    const arm = this.character.armR;
+    if (!arm) return;
+    if (!this.rod) {
+      const rod = new THREE.Group();
+      rod.add(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.024, 1.5, 6).translate(0, 0.75, 0), new THREE.MeshStandardMaterial({ color: 0x2f3237, roughness: 0.5 })));
+      const reel = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.05, 10).rotateZ(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xc0c4c8, metalness: 0.6, roughness: 0.4 }));
+      reel.position.set(0.05, 0.12, 0);
+      rod.add(reel);
+      this.rodTip = new THREE.Object3D();
+      this.rodTip.position.y = 1.5;
+      rod.add(this.rodTip);
+      rod.position.set(0, -0.6, -0.02);
+      this.rod = rod;
+    }
+    this.rod.visible = !!this.fishing;
+    if (!this.fishing) return;
+    // The arm held out in front, the rod pointing up and out over the water (bobbing a little).
+    arm.rotation.set(1.05 + Math.sin(time * 1.3) * 0.03, 0, 0.08);
+    this.rod.rotation.x = -2.0;
+    if (this.rod.parent !== arm) arm.add(this.rod);
   }
 
   // A reporter's microphone, held up in the right hand (pointing up, toward her chin).

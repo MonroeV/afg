@@ -9,16 +9,25 @@ customize your character, drive cars, build anything and play with friends.
   - **Up north, the snowy country** (the ground turns to snow and snowflakes start to fall): a
     **ski resort** with a big snowy mountain and a long ski run, a **ski lift** with chairs going
     up and down its cable (right-click the chair at the bottom to ride to the top, Space to hop
-    off), a cozy log **lodge** (a crackling fireplace with couches round it, a hot cocoa bar,
-    Coach Frost to give you tips), a slippery **ice rink**, snowy pine trees and snowmen
+    off), a cozy log **lodge** (a crackling fireplace with couches round it, a hot cocoa bar, a
+    **ski rack** by the door with skis for everyone, Coach Frost to give you tips), a slippery
+    **ice rink**, snowy pine trees and snowmen
   - **Out west, the woods**: four **log cabins** along a forest road (beds, tables, chimneys,
     woodpiles; nobody owns them, so claim one with the Land Flag and move in!), a campfire, a
-    **big lake** with sandy shores, a dock and boats, and a **rocky mountain** with a snowy top
+    **big lake** with sandy shores, a dock (with fishing stools) and boats, and a **rocky mountain**
+    with a snowy top
   - **Lots of open land** to the east and south, with trees and flowers, for building
   - Roads lead out to all of it
-- **Skis** (🎉 Fun tab): on snow they glide and pick up speed downhill. Hold W to carve toward
-  where you're looking, A/D to lean, S to snowplough (slow down), Space to jump. Powder sprays up
-  behind you. **Ice** is slippery even without skis
+- **Skis** (take a pair from the rack in the ski lodge; they're yours to keep, and you wear them):
+  on snow they glide and pick up speed downhill. Hold W to carve toward where you're looking, A/D
+  to lean, S to snowplough (slow down), Space to jump. Powder sprays up behind you. **Ice** is
+  slippery even without skis
+- **Fishing**: the docks (in town and at the big lake) have fishing stools. Sit on one
+  (right-click), face the water and click to cast. Wait for the bobber to dip, then click again,
+  quick! Minnows, sunfish, perch, puffer fish, rainbow trout, crabs, the odd old boot, and (if
+  you're lucky) a Golden Koi or a Giant Catfish. Each kind is worth coins, and the game counts
+  how many kinds you've caught. Fishing Stools are one of the Chair's styles, so you can build
+  your own fishing spot by any water
 - **A job at the Pizza Palace**: talk to Chef Rosa (or right-click the pizza oven) and she gives
   you a hot pizza to deliver. A glowing beam with a 🍕 shows which house it goes to, and a banner
   shows how far it is and how long you have for a tip. Walk, run or drive there (you carry the
@@ -149,13 +158,16 @@ customize your character, drive cars, build anything and play with friends.
   10 coins the first time you play each day and 3 for finishing a race. Spend them at the **Luxe
   Store**, a fancy shop beside one of the roads out of town: talk to Penny at the counter (or
   right-click the cash register) to see what's for sale. Things you can only get there: the
-  **Jetpack** (hold Space to blast off), the **Rainbow Trail**, the **Firework Show** (one click,
-  a whole show), the **Diamond Block**, the **Golden Throne**, the **Disco Ball**, the
+  **Jetpack** (wear it and hold Space to blast off), the **Rainbow Trail**, the **Firework Show**
+  (one click, a whole show), the **Diamond Block**, the **Golden Throne**, the **Disco Ball**, the
   **Golden Trophy**, and the big ones: a bubbling **Hot Tub** (60 coins; right-click to sit in it),
-  **Gold Car Paint** (75; click any vehicle to make it shiny solid gold, for good) and **Super
-  Sneakers** (90; hold them to run super fast and jump super high), and the **Vacation Flag**
-(150; claim a second piece of land, see below). What you've bought shows up at
-  the top of the 🎉 Fun tab. Your coins belong to your name, like your land
+  **Gold Car Paint** (75; a gold color for the Paint Brush that makes any vehicle shiny solid
+  gold), **Super Sneakers** (90; run super fast and jump super high), and the **Vacation Flag**
+  (150; claim a second piece of land, see below). Things you put down show up at the top of the
+  🎉 Fun tab. The Jetpack, the Rainbow Trail, Super Sneakers and Skis are **gear**: you wear them
+  instead of holding them, so they work with anything in your hand. Put them on and take them off
+  in **🎒 Gear**, at the top of the 🎉 Fun tab (what you have on shows by the hotbar). Your coins
+  belong to your name, like your land
 - **People in town**: Penny runs the Luxe Store, Rex sits at the tower's reception desk, Mayor
   Maple strolls around the town square, Chef Rosa runs the Pizza Palace and Coach Frost looks
   after the ski lodge. They say hello when you come near (in a speech bubble),
@@ -231,9 +243,10 @@ customize your character, drive cars, build anything and play with friends.
 | Left click with the Wrench | Fix a damaged vehicle (hold to keep fixing) |
 | Left click a vehicle with the Paint Brush | Paint it your paint color |
 | Left click the ground with the Hammer | Dig it out (3 hits), down to the bedrock |
-| Right click | Interact: open and close doors, switch lights on and off, turn road lines, get in vehicles, pet pets, sit on chairs and couches, sleep in beds, change pictures and music notes, hug teddy bears, fire cannons, ride ski lifts, get a pizza delivery job |
+| Right click | Interact: open and close doors, switch lights on and off, turn road lines, get in vehicles, pet pets, sit on chairs and couches, sleep in beds, change pictures and music notes, hug teddy bears, fire cannons, ride ski lifts, get a pizza delivery job, take skis from the lodge's ski rack, sit on a fishing stool |
 | Middle click | Copy the block you're looking at |
 | 1–9 or mouse wheel | Choose hotbar slot. Slot 1 always holds the Hammer; anything you pick while slot 1 is selected goes in slot 2 |
+| X | Next style of what you're holding: lamps, chairs, colors, floors, roads… (Shift+X goes back). With the Land Flag and a Vacation Flag, X switches between home and vacation land. On a phone: tap the selected slot again |
 | Q | Swap back to the item you were holding before |
 | E | Open the item menu and the Build Book, or get in/out of a vehicle you're looking at |
 | Shift | Sprint |
@@ -250,10 +263,27 @@ customize your character, drive cars, build anything and play with friends.
 | Esc | Pause menu: settings, character, Go Home, and Exit to Menu |
 
 **The item menu (E):** the tabs along the top sort everything into Tools, Fun, Blocks, Home,
-Lights, Town, Paint and the Build Book, so there's no long list to scroll. Things you picked
-recently are at the top of every tab. Click an item to put it in the glowing hotbar slot, drag it
-onto any slot, or point at it and press a number key 1–9 to put it in that slot. Start typing
-(say "couch", "race" or "piano") to search everything. Tab switches tabs, Esc closes the menu.
+Town, Paint and the Build Book, so there's no long list to scroll. Things you picked recently are
+at the top of every tab. Click an item to put it in the glowing hotbar slot, drag it onto any
+slot, or point at it and press a number key 1–9 to put it in that slot. Start typing (say "couch",
+"race" or "chandelier") to search everything. Tab switches tabs, Esc closes the menu.
+
+**Styles:** things that are alike share one place in the menu, with a badge saying how many styles
+it has: the **Lamp** (table lamp, floor lamp, ceiling light, chandelier, lava lamp, candle),
+**Outdoor Light** (street lamp, garden light, lantern, tiki torch, party lights), **Glow Block**
+(the lamp block and the neons), **Color Block** (ten colors), **Glass**, **Chair** (chair, office
+chair, fishing stool), **Table** (table, desk), **Picture** (painting, poster, whiteboard),
+**Floor** (wood floor, red carpet, floor tiles), **Office Stuff**, **Road** (plain, center line,
+parking line), **Leaves**, **Snow & Ice**, **Race Line** (start, finish), the **Paint Brush** (and
+the Paint Scraper), the **Builder Wand** (Fill and Copy) and the **Land Flag** (and the Vacation
+Flag). Pick one, then press **X** for the next style, or click a style in the strip at the bottom
+of the menu. Middle-clicking a block takes its exact style. Everything already built stays exactly
+as it is.
+
+**Adding things to the game:** new things to do go out in the world (a place, a person, a ride, a
+job, something to find), not into the item menu: skis come from the lodge's rack, fishing happens
+on the docks, the pizza job is at the Pizza Palace and the Build Book things are built from blocks.
+New blocks that look like ones already there become another style of them.
 
 > **Careful with Ctrl:** Ctrl+W closes a browser tab, and browsers don't let games stop that.
 > If you crouch-walk with Ctrl held, the game asks before leaving, but **C** is the safer crouch key.
@@ -281,7 +311,9 @@ to slow down. Let go of Space and Shift and it holds its height. On the ground i
 can't turn or tilt until you've lifted off. Land gently, or
 it gets damaged. Don't let the rotor hit anything!
 
-**Skiing:** pick the Skis (🎉 Fun tab) and stand on snow. Point downhill and you're off: W carves
+**Skiing:** take a pair of skis from the rack just inside the ski lodge's doors (right-click it;
+they go straight on, and right-clicking the rack again puts them back), and stand on snow. Point
+downhill and you're off: W carves
 round toward where you're looking, A/D lean you sideways, S snowploughs to slow down, Space
 jumps. Ride the ski lift back up (right-click the chair at the bottom of it). You can build your
 own ski lift too: put a Ski Lift chair at the bottom of a hill and another at the top (each goes
@@ -306,8 +338,8 @@ else, the game asks first ("Move your land here?"), because your old land is the
 anyone could build there.
 
 **Vacation land:** the **Vacation Flag** (150 coins at the Luxe Store) claims a second piece of land,
-for a vacation home: a beach house by the lake, a cabin up a mountain. Plant it like the Land
-Flag (it asks you to be sure first). It's a one-time thing: the flag is used up, and vacation land
+for a vacation home: a beach house by the lake, a cabin up a mountain. Hold the Land Flag and press
+X to switch it to the Vacation Flag, then plant it like the Land Flag (it asks you to be sure first). It's a one-time thing: the flag is used up, and vacation land
 can't be moved (moving your home land never touches it). You can give it up (stand on it and
 right-click with the Land Flag), but then you'd need to buy a new Vacation Flag to claim
 vacation land again. Land belongs to a name: if nobody plays with that name for 30 days, the land
@@ -418,9 +450,12 @@ along the ring road, the lake wherever there's room, smaller if it has to be), t
 and the Pizza Palace (on empty land), the ski resort, the woods, the big lake and the mountains
 (out past the old edge of the world, where nobody could build before; the roads out to them only
 go on empty land, and where one meets an old road, just that bit of sidewalk becomes road),
-the "Build it here!" signposts (on empty land),
+the "Build it here!" signposts (on empty land), fishing stools on the docks with a noticeboard
+by each (only in empty spots, or among a dock's own railings, on land nobody has claimed),
 and furniture: only in houses and towers that are exactly as the town was first
-built (nobody has changed or claimed them), and only in their empty spots. If `world.json` can't be read, or was saved by a newer version of the game,
+built (nobody has changed or claimed them), and only in their empty spots, and in the ski lodge
+and the log cabins (their couches, beds, tables and the lodge's ski rack were missing before):
+only onto their own plain wooden floor, and not in a cabin someone has claimed. If `world.json` can't be read, or was saved by a newer version of the game,
 the server stops with a message instead of touching it.
 
 ## The Character Gallery

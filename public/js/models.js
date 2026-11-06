@@ -259,6 +259,27 @@ export const MODELS = {
     trim: [cyl(0.13, 0.13, 0.02, 0.5, 0.45, 0.98, 14)],
     colors: { body: 0xb5502e, glow: 0xffa040, accent: 0x3a2a22, trim: 0xf2c14e, metal: 0 },
   },
+  // A three-legged stool with a fishing rod in its holder and a little tackle box.
+  fishingStool: {
+    body: [
+      cyl(0.24, 0.24, 0.05, 0.5, 0.4, 0.5, 14),
+      ...[0, 1, 2].map(i => cyl(0.025, 0.03, 0.4, 0.5 + Math.sin(i * 2.094) * 0.16, 0.2, 0.5 + Math.cos(i * 2.094) * 0.16, 6)),
+      cyl(0.03, 0.03, 0.16, 0.82, 0.16, 0.16, 6),
+    ],
+    accent: [new THREE.CylinderGeometry(0.009, 0.016, 1.15, 6).rotateX(0.35).translate(0.82, 0.62, 0.32), cyl(0.035, 0.035, 0.05, 0.82, 0.34, 0.2, 8)],
+    trim: [box(0.22, 0.12, 0.15, 0.22, 0.06, 0.24), box(0.22, 0.03, 0.15, 0.22, 0.135, 0.24)],
+    colors: { body: 0x9c6b3f, accent: 0x2f3237, trim: 0x2e9e4f, metal: 0 },
+  },
+  // Skis standing in a wooden rack (red, blue and red pairs).
+  skiRack: {
+    body: [
+      box(0.92, 0.06, 0.32, 0.5, 0.05, 0.5), box(0.92, 0.06, 0.06, 0.5, 0.76, 0.4),
+      box(0.06, 0.82, 0.06, 0.06, 0.41, 0.4), box(0.06, 0.82, 0.06, 0.94, 0.41, 0.4),
+    ],
+    accent: [0.24, 0.76].flatMap(x => [box(0.06, 0.96, 0.025, x - 0.045, 0.56, 0.47), box(0.06, 0.96, 0.025, x + 0.045, 0.56, 0.47)]),
+    trim: [box(0.06, 0.96, 0.025, 0.455, 0.56, 0.47), box(0.06, 0.96, 0.025, 0.545, 0.56, 0.47)],
+    colors: { body: 0x8d5a34, accent: 0xe53935, trim: 0x1e88e5, metal: 0 },
+  },
   hotTub: {
     body: [box(1, 0.55, 0.1, 0.5, 0.275, 0.05), box(1, 0.55, 0.1, 0.5, 0.275, 0.95), box(0.1, 0.55, 0.8, 0.05, 0.275, 0.5), box(0.1, 0.55, 0.8, 0.95, 0.275, 0.5), box(0.8, 0.1, 0.8, 0.5, 0.05, 0.5)],
     glow: [box(0.8, 0.38, 0.8, 0.5, 0.29, 0.5)],

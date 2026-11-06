@@ -5,6 +5,7 @@ import {
   railMask, railBoxes, nearestRailEdge, canHoldItem, stack, itemOf, floorOf, turnLine, blockKey, faceIndex, hexToRgb,
   switchable, lightOff, toggleLight, setDoorOpen, isWaterBlock, facingTowards,
   PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP, BED_FOOT, NOTE_NAMES, NOTE_FREQS, PICTURES, isSnowyAt, SNOW_LINE, SIGN, SIGN_LENGTH,
+  GOLD_PAINT, GOLD_HEX,
 } from './shared/blocks.js';
 import { generateWorld } from './shared/worldgen.js';
 import { randomLook, sanitizeLook } from './shared/avatar.js';
@@ -29,7 +30,7 @@ import { CharacterClient, Gallery } from './gallery.js';
 import { Hud, renderControls, CUSTOM_PAINT } from './hud.js';
 import {
   HAMMER, FIREWORKS, BALL, CLAIM, VACATION, BRUSH, SCRAPER, WRENCH, SKIS, GOLDPAINT, SNEAKERS, LADDER, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME,
-  ALL_ITEMS, DEFAULT_HOTBAR, makeIcon, ViewModel,
+  ALL_ITEMS, ICON_ITEMS, GEAR, DEFAULT_HOTBAR, FAMILIES, itemName, makeIcon, ViewModel,
 } from './items.js';
 import { MAX_MANY } from './shared/game.js';
 import { NPC_ACT } from './shared/npcs.js';
@@ -57,22 +58,36 @@ try {
 } catch { /* storage unavailable */ }
 Object.assign(settings, savedSettings);
 if (IS_TOUCH && !savedSettings.quality) settings.quality = 'low'; // phones start on the faster graphics
-if (!Array.isArray(settings.hotbar) || settings.hotbar.length !== 9 || !settings.hotbar.every(i => ALL_ITEMS.includes(i))) {
-  settings.hotbar = DEFAULT_HOTBAR.slice();
-}
+if (!Array.isArray(settings.hotbar) || settings.hotbar.length !== 9) settings.hotbar = DEFAULT_HOTBAR.slice();
+// Gear (sneakers, jetpack, rainbow trail, skis) used to be held, and Gold Car Paint was a tool: now
+// gear is worn (🎒 Gear, in the Fun tab) and gold is a Paint Brush color. Slots that had them
+// get the brush, or whatever a new player has there.
+settings.gearMoved = Array.isArray(settings.gearMoved) ? settings.gearMoved : [];
+settings.hotbar = settings.hotbar.map((i, n) => {
+  if (ALL_ITEMS.includes(i)) return i;
+  if (i === GOLDPAINT) {
+    settings.paint = GOLD_PAINT;
+    return settings.hotbar.includes(BRUSH) ? DEFAULT_HOTBAR[n] : BRUSH;
+  }
+  if (GEAR.includes(i) && !settings.gearMoved.includes(i)) settings.gearMoved.push(i);
+  return DEFAULT_HOTBAR[n] === HAMMER ? BRUSH : DEFAULT_HOTBAR[n];
+});
 // The hammer always lives in slot 1.
 if (settings.hotbar[0] !== HAMMER) {
   const at = settings.hotbar.indexOf(HAMMER);
   if (at > 0) settings.hotbar[at] = settings.hotbar[0];
   settings.hotbar[0] = HAMMER;
 }
-if (!PAINT_COLORS[settings.paint] && settings.paint !== CUSTOM_PAINT) settings.paint = 1;
+if (!PAINT_COLORS[settings.paint] && settings.paint !== CUSTOM_PAINT && settings.paint !== GOLD_PAINT) settings.paint = 1;
+// Which style of each family you used last, and the gear you have on.
+settings.styles = Object.fromEntries(FAMILIES.filter(f => f.items.includes(settings.styles?.[f.id])).map(f => [f.id, settings.styles[f.id]]));
+settings.gear = Object.fromEntries(GEAR.filter(g => settings.gear?.[g] === true).map(g => [g, true]));
 if (!/^#[0-9a-f]{6}$/i.test(settings.customColor)) settings.customColor = '#ff9ec7';
 if (![0, 30, 60].includes(settings.fps)) settings.fps = 60;
 settings.recent = Array.isArray(settings.recent) ? settings.recent.filter(i => ALL_ITEMS.includes(i)).slice(0, 12) : [];
 // The brush's color: a palette color, or your own.
-const paintHex = () => (settings.paint === CUSTOM_PAINT ? settings.customColor : PAINT_COLORS[settings.paint]);
-const paintName = () => (settings.paint === CUSTOM_PAINT ? 'your color' : PAINT_NAMES[settings.paint]);
+const paintHex = () => (settings.paint === CUSTOM_PAINT ? settings.customColor : settings.paint === GOLD_PAINT ? GOLD_HEX : PAINT_COLORS[settings.paint]);
+const paintName = () => (settings.paint === CUSTOM_PAINT ? 'your color' : settings.paint === GOLD_PAINT ? 'gold' : PAINT_NAMES[settings.paint]);
 settings.look = settings.look ? sanitizeLook(settings.look) : randomLook();
 function saveSettings() {
   try {
@@ -192,7 +207,7 @@ async function load() {
   // Lamp models' glowing parts get brighter at night (indoor ones stay on all day).
   sky.glowMaterials = Object.entries(BLOCKS).filter(([, d]) => d.shape === 'model').map(([id, d]) => ({ material: materials[id][1], always: !!d.light?.always }));
   view.materials = materials;
-  icons = Object.fromEntries(ALL_ITEMS.map(i => [i, makeIcon(i, textures, paintHex())]));
+  icons = Object.fromEntries(ICON_ITEMS.map(i => [i, makeIcon(i, textures, paintHex())]));
   view.setPaint(paintHex());
   world = new World(scene, materials);
   structures = new Structures(world);
@@ -226,9 +241,9 @@ async function load() {
   preview.cars.forEach((c, i) => cars.add({ ...c, id: -1 - i, driver: 0, color: c.color || FIREWORK_COLORS[i % FIREWORK_COLORS.length] }));
 
   hud = new Hud({
-    icons, settings, sounds, onPaint: choosePaint,
+    icons, settings, sounds, onPaint: choosePaint, onGear: gearChanged,
     onChange: item => {
-      view.setItem(item);
+      view.setItem(rodOut ? 'rod' : item);
       if (fillable(item)) lastBlock = item;
     },
   });
@@ -404,10 +419,26 @@ net.on('npc_say', ({ id, text }) => {
 });
 net.on('npc_pet', () => myBody.brain?.cheer()); // somebody petted our pet: it's so happy!
 net.on('shop_open', () => openShop());
-net.on('wallet', ({ coins, owned, vacation }) => {
+net.on('wallet', ({ coins, owned, vacation, found = [] }) => {
   const more = coins > wallet.coins;
   wallet = { coins, owned };
-  hud.setOwned(owned);
+  hud.setOwned(owned, found);
+  // (Gold paint is only for those who bought it.)
+  if (settings.paint === GOLD_PAINT && !owned.includes(GOLDPAINT)) {
+    settings.paint = 1;
+    icons[BRUSH] = makeIcon(BRUSH, textures, paintHex());
+    view.setPaint(paintHex());
+    hud.refreshIcon(BRUSH);
+  }
+  // Gear that used to be in the hotbar: say where it is now (once).
+  const moved = settings.gearMoved.filter(g => hud.hasGear(g));
+  if (moved.length) {
+    hud.toast(`🎒 Gear is worn now, not held! Put on your ${moved.map(itemName).join(' and ')} in the 🎉 Fun tab (press E).`);
+  }
+  if (settings.gearMoved.length) {
+    settings.gearMoved = [];
+    saveSettings();
+  }
   shop.update(coins, owned, !!vacation);
   // A Vacation Flag that's been planted is used up: the Land Flag takes its place.
   if (!owned.includes(VACATION) && hud.settings.hotbar.includes(VACATION)) {
@@ -692,6 +723,10 @@ $('pause-gallery').addEventListener('click', openGallery);
 
 function toggleInventory(open) {
   inventoryOpen = open;
+  if (open) {
+    hud.renderGrid();
+    hud.renderStyles();
+  }
   if (open) unlock();
   else lock();
   updateOverlays();
@@ -901,6 +936,9 @@ window.addEventListener('keydown', e => {
     respawn();
   } else if (e.code === 'KeyX' && riding()) {
     getOut();
+  } else if (e.code === 'KeyX') {
+    if (hud.nextStyle(e.shiftKey ? -1 : 1) !== null) saveSettings();
+    else if (hud.item === CLAIM) hud.toast('🏖️ With a Vacation Flag from the Luxe Store, X switches the Land Flag to vacation land.');
   } else if (e.code === 'KeyH' && myCar) {
     honk();
   } else if (e.code === 'KeyG') {
@@ -972,7 +1010,7 @@ const touch = IS_TOUCH ? new TouchControls({
   },
   // Holding a finger still keeps hammering.
   hold: () => {
-    if (locked && !riding() && (hud.item === HAMMER || (hud.item === WRENCH && target?.car)) && useCooldown <= 0) {
+    if (locked && !riding() && !rodOut && (hud.item === HAMMER || (hud.item === WRENCH && target?.car)) && useCooldown <= 0) {
       useItem();
       useCooldown = hud.item === WRENCH ? 0.3 : 0.25;
     } else if (locked && !riding() && hud.item === BUBBLES) {
@@ -1779,7 +1817,7 @@ function sendState() {
   const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
   const balloon = hud.item === BALLOON && !riding() && !sleeping;
   const flags = (sleeping ? FLAG.sleeping : 0) | (seated || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
-    (player.jetting && !riding() ? FLAG.jet : 0) | (hud.item === TRAIL && !riding() ? FLAG.trail : 0) |
+    (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) |
     (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
   net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item });
 }
@@ -1903,7 +1941,9 @@ function updateLift(dt, keys) {
       if (!player.overlapsSomething()) break;
     }
     sounds.land();
-    if (hud.item !== SKIS && isSnowyAt(x, z)) hud.toast('⛷️ Grab the Skis from the 🎉 Fun tab and ski down!');
+    if (!hud.wearing(SKIS) && isSnowyAt(x, z)) {
+      hud.toast(hud.hasGear(SKIS) ? '⛷️ Put your skis on (🎒 Gear, in the 🎉 Fun tab) and ski down!' : '⛷️ No skis? Pick up a pair from the rack in the ski lodge!');
+    }
   }
   return true;
 }
@@ -2564,6 +2604,7 @@ function placeUnder(item) {
 // Left click: use whatever you're holding.
 function useItem() {
   const item = hud.item;
+  if (fishingStool()) return fishClick();
   view.swing();
   myBody.swing = 0;
   // Things you throw, blow or point work wherever you're looking.
@@ -2571,11 +2612,7 @@ function useItem() {
   if (item === BUBBLES) return blowBubbles(1);
   if (item === CAMERA) return takePhoto();
   if (item === SHOWTIME) return fireworkShow();
-  if (target?.npc || item === JETPACK || item === TRAIL || item === SKIS || item === SNEAKERS) return;
-  if (item === GOLDPAINT && !target?.car) {
-    hud.toast('✨ Point it at a car, boat or helicopter to paint it shiny gold!');
-    return;
-  }
+  if (target?.npc) return;
   if (item === BALLOON) {
     const p = eye.clone().addScaledVector(lookDir, 0.8);
     letBalloonGo(p.x, p.y + 0.8, p.z, paintHex());
@@ -2586,8 +2623,7 @@ function useItem() {
   if (target?.car) {
     if (item === HAMMER) hitVehicle(target);
     else if (item === WRENCH) fixVehicle(target);
-    else if (item === BRUSH) paintVehicle(target);
-    else if (item === GOLDPAINT) paintVehicle(target, 'gold');
+    else if (item === BRUSH) paintVehicle(target, settings.paint === GOLD_PAINT ? 'gold' : paintHex());
     else if (item === SCRAPER) hud.toast('🎨 To give it a new color, use the Paint Brush (pick the color in the 🎨 Paint tab)');
     else requestEnter(target.car);
     return;
@@ -2658,6 +2694,10 @@ function interact() {
       if (def?.piano) return playPiano(...hit.block);
       if (def?.oven) return net.send({ t: 'job' });
       if (def?.lift) return rideLift(...hit.block);
+      if (def?.skiRack) {
+        const [x, y, z] = hit.block;
+        return net.send({ t: 'take_skis', x, y, z });
+      }
     }
     if (BLOCKS[blockId(hit.value)]?.turns && !floorOf(hit.value)) {
       // Turn a road line (or parking line) to run the other way.
@@ -2778,6 +2818,32 @@ function placeRail() {
   if (setBlock(x, y, z, b)) sounds.place();
 }
 
+// ---------- Gear ----------
+// Things you wear (put on and taken off in the item menu's 🎒 Gear, in the Fun tab).
+
+const GEAR_ON = {
+  sneakers: '👟 Super Sneakers on! Super fast running, super high jumps!',
+  jetpack: '🚀 Jetpack on! Hold Space to blast off.',
+  trail: '🌈 Rainbow Trail on! Run around to leave sparkles.',
+  skis: '⛷️ Skis on! They work on snow: point downhill and go!',
+};
+function gearChanged(g, on) {
+  hud.toast(on ? GEAR_ON[g] : `🎒 ${itemName(g)} off.`);
+  saveSettings();
+}
+
+// Picked up skis at the lodge's ski rack (or, already having some, put them on or off there).
+net.on('gear_found', ({ gear, again }) => {
+  if (again) return hud.toggleGear(gear);
+  settings.gear[gear] = true;
+  hud.foundGear.add(gear);
+  hud.renderGearHud();
+  sounds.coin();
+  effects.sparkle(player.pos.x, player.pos.y + 1, player.pos.z, 20);
+  hud.toast("🎿 You've got skis! They're on: ride the lift and ski down. (They're in 🎒 Gear, in the 🎉 Fun tab.)");
+  saveSettings();
+});
+
 // ---------- Paint ----------
 
 const paintMaterials = {};
@@ -2785,13 +2851,8 @@ function choosePaint(i) {
   settings.paint = i;
   icons[BRUSH] = makeIcon(BRUSH, textures, paintHex());
   view.setPaint(paintHex());
-  const at = settings.hotbar.indexOf(BRUSH);
-  if (at >= 0) {
-    hud.buildHotbar();
-    hud.select(at);
-  } else {
-    hud.setSlot(BRUSH);
-  }
+  hud.refreshIcon(BRUSH);
+  hud.takeItem(BRUSH);
   saveSettings();
 }
 
@@ -2865,11 +2926,14 @@ function paintSide(x, y, z, floor, side, color) {
   return true;
 }
 
+// Middle click: the block you're pointing at, in your hand (another style of it in the hotbar
+// changes to this one).
 function pickBlock() {
   if (!hit?.id) return;
-  const existing = settings.hotbar.indexOf(hit.id);
-  if (existing >= 0) hud.select(existing);
-  else hud.setSlot(hit.id);
+  let id = hit.id;
+  if (BLOCKS[id].hidden) id = BLOCKS[id].turns ?? null; // (a road line turned the other way)
+  if (!id) return;
+  hud.takeItem(id);
   saveSettings();
 }
 
@@ -2883,13 +2947,183 @@ function sitOn(x, y, z, v) {
   if (riding() || sleeping || seated) return;
   const def = BLOCKS[blockId(v)], a = (blockMeta(v) & 3) * Math.PI / 2;
   const fx = Math.sin(a), fz = Math.cos(a);
-  seated = { x, y, z, standAt: [x + 0.5 + Math.round(fx), y, z + 0.5 + Math.round(fz)] };
+  // Get up in front of it, or else behind or beside it: somewhere with ground (not water) to
+  // stand on. (A fishing stool on a dock faces the water.)
+  const dx = Math.round(fx), dz = Math.round(fz);
+  const ground = (cx, cz) => !world.isSolid(cx, y, cz) && !world.isSolid(cx, y + 1, cz) && world.isSolid(cx, y - 1, cz) && !isWaterBlock(world.get(cx, y - 1, cz)) && !isWaterBlock(world.get(cx, y, cz));
+  const [sx, sz] = [[dx, dz], [-dx, -dz], [dz, -dx], [-dz, dx]].find(([ox, oz]) => ground(x + ox, z + oz)) || [dx, dz];
+  seated = { x, y, z, standAt: [x + 0.5 + sx, y, z + 0.5 + sz] };
   player.vel.set(0, 0, 0);
   player.flying = false;
   // Turn round and lower yourself onto the seat (hips on the seat).
   scriptMove([x + 0.5 - fx * 0.06, y + def.seat - 0.72, z + 0.5 - fz * 0.06], a + Math.PI, 0.55, { arc: 0.06, then: () => sounds.land() });
   player.pitch = Math.max(player.pitch, -0.3);
-  hud.toast('🛋️ Comfy! Move or jump to get up.');
+  hud.toast(def.fishing ? '🎣 Click to cast your line! (Move or jump to get up)' : '🛋️ Comfy! Move or jump to get up.');
+}
+
+// ---------- Fishing ----------
+// Sit on a fishing stool by the water and click to cast. When the bobber dips, click again
+// (quick!) to reel the fish in. The server decides when they bite and what's on the line.
+
+let fishing = null; // { phase: 'fly' | 'wait' | 'bite' | 'reel', from, to, t, sent }
+let caught = null; // a fish (or a boot) flying out of the water to you: { mesh, from, t }
+let rodOut = false; // holding the rod (sitting on a fishing stool)
+let bobber = null, fishLine = null;
+const LINE_POINTS = 14;
+
+// The fishing stool we're sitting on, if we are.
+function fishingStool() {
+  if (!seated) return null;
+  return BLOCKS[blockId(itemOf(world.get(seated.x, seated.y, seated.z)))]?.fishing ? seated : null;
+}
+
+// Where the end of the rod is, in the world (the one in your hand, or your body's in 3rd person).
+function rodTip(out) {
+  if (viewMode === 0 && view.rodTip && view.item === 'rod') {
+    view.holder.updateMatrixWorld(true);
+    view.rodTip.getWorldPosition(out).project(view.camera);
+    return out.set(out.x, out.y, 0.5).unproject(camera).sub(camera.position).normalize().multiplyScalar(1.4).add(camera.position);
+  }
+  if (myBody.rodTip) return myBody.rodTip.getWorldPosition(out);
+  return out.copy(player.pos).add(new THREE.Vector3(lookDir.x, 0, lookDir.z).setLength(1.5)).setY(player.pos.y + 2.2);
+}
+
+function fishBits() {
+  if (bobber) return;
+  bobber = new THREE.Group();
+  const top = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xe53935, roughness: 0.4 }));
+  const bottom = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.4 }));
+  bobber.add(top, bottom);
+  fishLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(Array.from({ length: LINE_POINTS }, () => new THREE.Vector3())),
+    new THREE.LineBasicMaterial({ color: 0xeeeeee, transparent: true, opacity: 0.75 }));
+  fishLine.frustumCulled = false;
+  bobber.visible = fishLine.visible = false;
+  scene.add(bobber, fishLine);
+}
+
+function fishClick() {
+  if (!fishing) return castLine();
+  if (fishing.phase === 'reel') return;
+  // Reeling in: right after a bite, you've got it! (Before it, too soon: the server says so.)
+  fishing.phase = 'reel';
+  fishing.sent = performance.now();
+  sounds.click();
+  net.send({ t: 'fish_reel' });
+}
+
+function castLine() {
+  const s = fishingStool();
+  // It lands on the water out in front, as far out as there's water (up to 6 blocks).
+  const dir = new THREE.Vector3(lookDir.x, 0, lookDir.z);
+  if (dir.lengthSq() < 1e-4) return;
+  dir.normalize();
+  let to = null;
+  for (let d = 6; d >= 1.5 && !to; d -= 0.5) {
+    const x = player.pos.x + dir.x * d, z = player.pos.z + dir.z * d;
+    for (let y = s.y; y >= s.y - 2 && !to; y--) if (isWaterBlock(world.get(Math.floor(x), y, Math.floor(z)))) to = new THREE.Vector3(x, y + 0.06, z);
+  }
+  if (!to) return hud.toast('🎣 Turn to face the water, then click to cast!');
+  fishBits();
+  fishing = { phase: 'fly', from: rodTip(new THREE.Vector3()), to, t: 0 };
+  sounds.swing();
+  net.send({ t: 'fish_cast', x: s.x, y: s.y, z: s.z });
+}
+
+function stopFishing(tell = false) {
+  if (fishing && tell) net.send({ t: 'fish_stop' });
+  fishing = null;
+  if (bobber) bobber.visible = fishLine.visible = false;
+}
+
+net.on('fish_bite', () => {
+  if (!fishing || fishing.phase === 'reel') return;
+  fishing.phase = 'bite';
+  const p = fishing.to;
+  sounds.splash(0.5);
+  effects.splash(p.x, p.y, p.z);
+  hud.toast('❗ A bite! Click, quick!');
+});
+
+net.on('fish_caught', ({ name, icon, coins, isNew, kinds, of }) => {
+  const from = (fishing?.to || player.pos).clone();
+  stopFishing();
+  // It flies up out of the water to you.
+  const boot = name === 'Old Boot';
+  const mesh = new THREE.Group();
+  const color = { 'Golden Koi': 0xffc83d, 'Rainbow Trout': 0x7ec8e3, Sunfish: 0xffa726, 'Puffer Fish': 0xf3d27a, Crab: 0xe5533d, 'Giant Catfish': 0x6d7a84 }[name] || 0x9fb4c0;
+  if (boot) mesh.add(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.26, 0.12).translate(0, 0.13, 0), new THREE.MeshStandardMaterial({ color: 0x5d4037 })), new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 0.3).translate(0, 0.04, 0.09), new THREE.MeshStandardMaterial({ color: 0x5d4037 })));
+  else {
+    const size = name === 'Giant Catfish' ? 1.8 : name === 'Minnow' ? 0.7 : 1;
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: name === 'Golden Koi' ? 0.6 : 0.1 });
+    mesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8).scale(0.6, 0.8, 1.6), mat));
+    mesh.add(new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.16, 6).rotateX(-Math.PI / 2).translate(0, 0, -0.25), mat));
+    mesh.scale.setScalar(size);
+  }
+  mesh.position.copy(from);
+  scene.add(mesh);
+  caught = { mesh, from, t: 0 };
+  sounds.splash(0.6);
+  effects.splash(from.x, from.y, from.z);
+  if (coins) sounds.coin();
+  const a = /^[AEIOU]/.test(name) ? 'an' : 'a';
+  hud.toast(boot ? '👢 An old boot! Better luck next time. Click to cast again.'
+    : `${icon} You caught ${a} ${name}! +${coins} 🪙${isNew ? `  ·  New! ${kinds} of ${of} kinds caught` : ''}`);
+});
+
+net.on('fish_gone', ({ why }) => {
+  stopFishing();
+  hud.toast(why === 'soon' ? '🎣 Too soon! Wait until the bobber dips, then click.'
+    : why === 'dry' ? "🎣 There's no water near this stool!" : '💨 It got away! Click to cast again.');
+});
+
+const tmpTip = new THREE.Vector3(), tmpBob = new THREE.Vector3();
+function updateFishing(dt, time) {
+  // The rod comes out when you sit on a fishing stool (and goes away when you get up).
+  const stool = !!fishingStool();
+  if (stool !== rodOut) {
+    rodOut = stool;
+    view.setItem(rodOut ? 'rod' : hud.item);
+    if (!rodOut) stopFishing(true);
+  }
+  myBody.fishing = rodOut;
+  if (caught) {
+    caught.t += dt / 0.7;
+    const k = Math.min(1, caught.t);
+    caught.mesh.position.lerpVectors(caught.from, eye, k).setY(caught.from.y + (eye.y - caught.from.y) * k + Math.sin(k * Math.PI) * 1.4);
+    caught.mesh.rotation.set(Math.sin(time * 20) * 0.4, time * 4, 0);
+    if (k >= 1) {
+      scene.remove(caught.mesh);
+      effects.sparkle(eye.x, eye.y - 0.3, eye.z, 14);
+      caught = null;
+    }
+  }
+  if (!fishing) return;
+  if (fishing.phase === 'reel' && performance.now() - fishing.sent > 4000) return stopFishing(); // (no answer)
+  rodTip(tmpTip);
+  const p = fishing.to;
+  if (fishing.phase === 'fly') {
+    fishing.t += dt / 0.6;
+    const k = Math.min(1, fishing.t);
+    tmpBob.lerpVectors(fishing.from, p, k).setY(fishing.from.y + (p.y - fishing.from.y) * k + Math.sin(k * Math.PI) * 1.2);
+    if (k >= 1) {
+      fishing.phase = 'wait';
+      sounds.splash(0.3);
+      effects.splash(p.x, p.y, p.z);
+    }
+  } else if (fishing.phase === 'bite' || fishing.phase === 'reel') {
+    tmpBob.copy(p).setY(p.y - 0.05 - Math.abs(Math.sin(time * 16)) * 0.05); // tugging under!
+  } else {
+    tmpBob.copy(p).setY(p.y + Math.sin(time * 2.5) * 0.015);
+  }
+  bobber.position.copy(tmpBob);
+  bobber.visible = fishLine.visible = true;
+  // The line, sagging a little between the rod and the bobber.
+  const pos = fishLine.geometry.attributes.position, sag = fishing.phase === 'fly' ? 0 : 0.35;
+  for (let i = 0; i < LINE_POINTS; i++) {
+    const k = i / (LINE_POINTS - 1);
+    pos.setXYZ(i, tmpTip.x + (tmpBob.x - tmpTip.x) * k, tmpTip.y + (tmpBob.y - tmpTip.y) * k - Math.sin(k * Math.PI) * sag, tmpTip.z + (tmpBob.z - tmpTip.z) * k);
+  }
+  pos.needsUpdate = true;
 }
 
 function standUp(instant = false) {
@@ -3499,7 +3733,7 @@ function updateSparkly(dt, time) {
       sounds.jet();
     }
   }
-  if (trailNow && hud.item === TRAIL && !riding() && Math.hypot(player.vel.x, player.vel.z) > 1) effects.trail(player.pos.x, player.pos.y, player.pos.z, time * 0.5);
+  if (trailNow && hud.wearing(TRAIL) && !riding() && Math.hypot(player.vel.x, player.vel.z) > 1) effects.trail(player.pos.x, player.pos.y, player.pos.z, time * 0.5);
   for (const a of avatars.list.values()) {
     if (a.seat) continue;
     if (a.jet) effects.jet(a.pos.x, a.pos.y + 0.35, a.pos.z);
@@ -3705,9 +3939,9 @@ function frame(timestamp) {
       const vyBefore = player.vel.y;
       player.stick = touch?.enabled && active ? touch.stick : null;
       player.balloon = hud.item === BALLOON;
-      player.jetpack = hud.item === JETPACK;
-      player.skis = hud.item === SKIS;
-      player.sneakers = hud.item === SNEAKERS;
+      player.jetpack = hud.wearing(JETPACK);
+      player.skis = hud.wearing(SKIS);
+      player.sneakers = hud.wearing(SNEAKERS);
       player.update(dt, active ? held : noKeys);
       // (Never inside the ground, even if a hole grew back over us a moment ago.)
       if (player.pos.y < 0 && world.isSolid(Math.floor(player.pos.x), -1, Math.floor(player.pos.z))) {
@@ -3778,7 +4012,9 @@ function frame(timestamp) {
 
     // A hint under the crosshair about what you can do.
     let hint = '';
-    if (target?.car) {
+    if (rodOut) {
+      hint = !fishing ? '🎣 Click to cast · Move to get up' : fishing.phase === 'bite' ? '❗ A bite! Click, quick!' : fishing.phase === 'reel' ? '🎣 Reeling in…' : '🎣 Wait for the bobber to dip…';
+    } else if (target?.car) {
       const what = target.car.spec.flying ? '🚁 Right-click or E to fly' : target.car.spec.boat ? '🚤 Right-click or E to drive the boat' : '🚗 Right-click or E to drive';
       const full = target.car.driver && target.car.passengers.length >= 2;
       const health = Math.max(0, Math.round((target.car.hp / MAX_HP) * 100));
@@ -3819,6 +4055,8 @@ function frame(timestamp) {
       else if (hit && shapeOf(hit.value) === 'ladder' && item !== HAMMER) hint = '🪜 Walk into it and hold W or Space to climb';
       else if (item === RAILING && hit) hint = railPreview && withRail(railPreview) ? '🚧 Click to add a railing here' : '🚧 Point near the edge of a floor, or at the side of a block';
       else if (s?.type === 'bed') hint = '🛏️ Right-click to sleep · Jump on it to bounce!';
+      else if (def?.fishing && !tool) hint = '🎣 Right-click to sit and fish';
+      else if (def?.skiRack && !tool) hint = hud.wearing(SKIS) ? '🎿 Right-click to put your skis back' : hud.hasGear(SKIS) ? '🎿 Right-click to put your skis on' : '🎿 Right-click to take a pair of skis';
       else if (def?.seat && !tool) hint = '🛋️ Right-click to sit down';
       else if (def?.hug && !tool) hint = '🧸 Right-click for a hug';
       else if (def?.art === 'sign' && !tool) hint = signs.get(...hit.block) ? `🪧 "${signs.get(...hit.block)}" · Right-click to change it` : '🪧 Right-click to write on it';
@@ -3844,12 +4082,10 @@ function frame(timestamp) {
       else if (item === BUBBLES) hint = '🫧 Hold the mouse button to blow bubbles';
       else if (item === BALLOON) hint = player.onGround ? '🎈 Jump off something high and float down! Click to let a balloon go' : '🎈 Wheee!';
       else if (item === CAMERA) hint = '📸 Click (or press P) to take a photo · H hides the HUD';
-      else if (item === JETPACK) hint = player.jetting ? '🚀 WHOOSH!' : '🚀 Hold Space to blast off!';
-      else if (item === SKIS) hint = player.skiing ? '⛷️ W: carve where you look · S: slow down · Space: jump' : player.surface() ? '⛷️ Point downhill and go! (W carves, S slows)' : '⛷️ Skis work on snow (up north, past the town)';
-      else if (item === SNEAKERS) hint = '👟 Super fast running, super high jumps!';
-      else if (item === GOLDPAINT) hint = '✨ Point at a car, boat or helicopter and click to paint it gold';
-      else if (item === TRAIL) hint = '🌈 Run around to leave a rainbow trail!';
       else if (item === SHOWTIME) hint = '🎇 Click for a fireworks show! (Best at night)';
+      else if (player.jetting) hint = '🚀 WHOOSH!';
+      else if (hud.wearing(SKIS) && player.skiing) hint = '⛷️ W: carve where you look · S: slow down · Space: jump';
+      else if (hud.wearing(SKIS) && player.onGround && player.surface()) hint = '⛷️ Point downhill and go! (W carves, S slows)';
     }
     hud.setHint(hint);
 
@@ -3866,7 +4102,7 @@ function frame(timestamp) {
 
     // Holding the mouse button keeps hammering or building.
     useCooldown -= dt;
-    if (locked && !riding() && useCooldown <= 0 && mouse.has(0) && (item === HAMMER || typeof item === 'number' || (item === WRENCH && target?.car))) {
+    if (locked && !riding() && !rodOut && useCooldown <= 0 && mouse.has(0) && (item === HAMMER || typeof item === 'number' || (item === WRENCH && target?.car))) {
       useItem();
       useCooldown = item === HAMMER ? 0.25 : item === WRENCH ? 0.3 : 0.2;
     }
@@ -3879,6 +4115,7 @@ function frame(timestamp) {
     lifts.update(time);
     contraptions.update(dt, time, [...avatars.list.values()]);
     updateJob(dt, time);
+    updateFishing(dt, time);
     updateSnow(dt, time);
     updateFlying(dt);
     popBubbles(dt);
@@ -3903,6 +4140,7 @@ function frame(timestamp) {
       sendState();
       sendCarState();
       // Parked cars we knocked (or pushed): tell everyone where they are.
+      const r = v => Math.round(v * 100) / 100;
       for (const car of cars.list.values()) {
         if (!car.loose && !car.settled) continue;
         car.settled = false;
@@ -4028,6 +4266,7 @@ function frame(timestamp) {
   const viewDist = settings.quality === 'low' ? Math.min(140, scene.fog.far) : scene.fog.far;
   world.updateVisibility(camera.position, viewDist);
   world.update(dt);
+  for (const a of avatars.list.values()) a.fishing = a.sitting && !!BLOCKS[blockId(itemOf(world.get(Math.floor(a.pos.x), Math.floor(a.pos.y + 0.5), Math.floor(a.pos.z))))]?.fishing;
   avatars.update(dt, time);
   for (const a of npcs.values()) a.update(dt, time);
   if (inGame) {
@@ -4132,4 +4371,8 @@ window.buildzone = {
   ballBoxes: r => ballBoxes(r),
   interact: () => interact(),
   setView: v => (viewMode = v),
+  toggleInventory: open => toggleInventory(open),
+  get fishing() { return fishing; },
+  get rodOut() { return rodOut; },
+  get settings() { return settings; },
 };
