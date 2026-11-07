@@ -247,7 +247,7 @@ customize your character, drive cars, build anything and play with friends.
     battery lasts a couple of minutes, its signal reaches 180 blocks, and at night it has a spotlight
   - the **laser hall**: red lasers that blink on and off. Touch one and the alarm goes off and
     you're back at the start; time it right to reach the **gadget vault** at the end, with
-    **night-vision goggles** (gear: wear them and the night glows bright green) and a big red
+    **night-vision goggles** (gear: wear them at night and you can see in the dark, all in green) and a big red
     button that says **DO NOT PRESS**. (Press it.)
 - **BZ Live, the news on TV**: Skye Summers, BZ News' roving reporter, travels around town with
   her microphone: the town square, the Luxe Store, the Pizza Palace, the tower, the ski lodge…

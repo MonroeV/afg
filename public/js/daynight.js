@@ -72,6 +72,7 @@ export class DayNight {
     // nights used to be, 1 nearly as light as dusk. In the middle (the usual) the moon lights
     // things up a little more and you can see further.
     this.nightLight = 0.5;
+    this.nightVision = 0; // wearing night-vision goggles (0..1)
     this.time = DAY_LENGTH * 0.1;
     this.sky = makeSky();
     scene.add(this.sky);
@@ -124,6 +125,9 @@ export class DayNight {
     this.fogNight = new THREE.Color(0x0b1226);
     this.fogNightLight = new THREE.Color(0x243660); // (the night haze with the brightest nights)
     this.fogRain = new THREE.Color(); // (grey, when it rains)
+    this.nvWhite = new THREE.Color(1, 1, 1); // (night vision: light from everywhere)
+    this.nvGround = new THREE.Color(0.75, 0.75, 0.75);
+    this.nvFog = new THREE.Color(0.05, 0.07, 0.06);
     scene.fog = new THREE.Fog(0xc4d6e6, 60, 230);
   }
 
@@ -209,6 +213,20 @@ export class DayNight {
       this.scene.fog.color.lerp(this.fogRain.setRGB(0.2 * this.dayK + 0.012, 0.225 * this.dayK + 0.014, 0.25 * this.dayK + 0.018), 0.8 * wet); // (a rainy grey: these are linear colors)
       this.scene.fog.near *= 1 - 0.55 * wet;
       this.scene.fog.far *= 1 - 0.45 * wet;
+    }
+    // Night-vision goggles (0..1, set by the game while you wear them): at night, everything is
+    // lit up all round as if by an invisible light, the shadows and the dark corners too, and
+    // the dark haze far off thins out, so you can see in the dark. (The game turns it green.)
+    const nv = (this.nightVision || 0) * nightK;
+    if (nv > 0) {
+      this.hemi.intensity += (1.15 - this.hemi.intensity) * nv;
+      this.hemi.color.lerp(this.nvWhite, nv);
+      this.hemi.groundColor.lerp(this.nvGround, nv);
+      this.scene.environmentIntensity += (0.45 - this.scene.environmentIntensity) * nv;
+      this.renderer.toneMappingExposure *= 1 + 0.35 * nv;
+      this.scene.fog.color.lerp(this.nvFog, nv);
+      this.scene.fog.near += (70 - this.scene.fog.near) * nv;
+      this.scene.fog.far += (240 - this.scene.fog.far) * nv;
     }
     const u = this.sky.material.uniforms;
     u.turbidity.value = 3 + 9 * wet;

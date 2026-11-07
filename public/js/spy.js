@@ -123,7 +123,8 @@ export class SecretAgency {
     if (level === this.nvLevel) return;
     this.nvLevel = level;
     const canvas = document.getElementById('game');
-    canvas.style.filter = level < 2 ? '' : `brightness(${(1 + 1.25 * k).toFixed(2)}) saturate(0) sepia(1) hue-rotate(60deg) saturate(${(1.6 + 1.6 * k).toFixed(1)}) contrast(1.1)`;
+    // (The lighting does the seeing-in-the-dark, see daynight.js; this just makes it green.)
+    canvas.style.filter = level < 2 ? '' : `brightness(${(1 + 0.25 * k).toFixed(2)}) saturate(0) sepia(1) hue-rotate(60deg) saturate(${(1.4 + 1.2 * k).toFixed(1)}) contrast(1.15)`;
   }
 
   // ---------- Using things (spy cameras, radar, drones, the button) ----------

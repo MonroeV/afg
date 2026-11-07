@@ -4534,6 +4534,7 @@ function frame(timestamp) {
     crouchK += ((player.crouching && !riding() ? 1 : 0) - crouchK) * Math.min(1, dt * 12);
     agency.frame(dt, time, player, !!riding() || elevators.riding);
     agency.nightVision(hud.wearing(GOGGLES));
+    sky.nightVision += ((hud.wearing(GOGGLES) ? 1 : 0) - (sky.nightVision || 0)) * Math.min(1, dt * 3); // (the goggles light up the dark)
     updateCamera(dt);
 
     // What are we looking at? Vehicles and pets count if they're closer than the nearest block.
