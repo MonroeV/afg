@@ -2,7 +2,7 @@
 // block, jumping down a few, climbing ladders), and move along it with gravity and
 // collisions, so they never walk through walls, railings, closed doors or cars.
 import * as THREE from 'three';
-import { WORLD, shapeOf, itemOf, railMask } from './shared/blocks.js';
+import { WORLD, BLOCKS, blockId, shapeOf, itemOf, railMask } from './shared/blocks.js';
 
 const HW = 0.2; // half the pet's width
 const HEIGHT = 0.6;
@@ -13,9 +13,11 @@ const MAX_DROP = 3; // the furthest a pet will jump down (any higher and it look
 const MAX_NODES = 2500; // how hard it looks for a route before settling for the closest spot
 const WINDUP = 0.1; // the little crouch before a jump
 
-// A cell packed into one number: x and z from -128 to 127, y from 0 to 63.
-const pack = (x, y, z) => ((x + 128) * 64 + y) * 256 + (z + 128);
-const unpack = k => [Math.floor(k / 16384) - 128, Math.floor(k / 256) % 64, (k % 256) - 128];
+// A cell packed into one number: x and z from -512 to 511 (the whole world, with room to grow),
+// y from -1 (down a hole) to 126.
+const pack = (x, y, z) => ((x + 512) * 128 + (y + 1)) * 1024 + (z + 512);
+const unpack = k => [Math.floor(k / 131072) - 512, (Math.floor(k / 1024) % 128) - 1, (k % 1024) - 512];
+const TRAPPED = 40; // a pet that can only get to fewer cells than this (and not to you) is trapped
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
 // Answers "can a pet be here?" questions about the blocks, and finds routes.
@@ -177,7 +179,47 @@ export class PetNav {
     }
     const path = [];
     for (let k = best; k !== sk; k = from.get(k)) path.unshift(unpack(k));
-    return { path, reached: best === gk };
+    // trapped: it looked everywhere it could get to, and that's only a tiny space (shut in a
+    // hole, or walled in).
+    return { path, reached: best === gk, trapped: best !== gk && !heap.length && closed.size < TRAPPED };
+  }
+
+  // The pet's body is inside something solid (a block, or the ground)?
+  inSolid(p) {
+    const r = [p.x - HW + 0.04, p.y + 0.08, p.z - HW + 0.04, p.x + HW - 0.04, p.y + HEIGHT - 0.08, p.z + HW - 0.04];
+    if (p.y < -1.05) return true; // under the bedrock!
+    const out = this.boxes;
+    out.length = 0;
+    for (let x = Math.floor(r[0]); x <= Math.floor(r[3]); x++)
+      for (let y = Math.floor(r[1]); y <= Math.floor(r[4]); y++)
+        for (let z = Math.floor(r[2]); z <= Math.floor(r[5]); z++) this.world.cellBoxes(x, y, z, out);
+    return out.some(b => b[0] < r[3] && b[3] > r[0] && b[1] < r[4] && b[4] > r[1] && b[2] < r[5] && b[5] > r[2]);
+  }
+
+  // A good spot for a pet to pop back in, close to you: above ground, out of the water, not
+  // inside a vehicle, about level with you, and (if there is one) somewhere it can walk to you
+  // from. Returns a point (or null if there's nowhere at all).
+  spotNear(p, boxes = []) {
+    const ox = Math.floor(p.x), oz = Math.floor(p.z), oy = Math.floor(p.y + 0.05);
+    const goal = this.landing(p);
+    const wet = (x, y, z) => BLOCKS[blockId(this.world.get(x, y, z))]?.water;
+    const inVehicle = (x, y, z) => boxes.some(b => b[0] < x + 0.75 && b[3] > x + 0.25 && b[1] < y + 0.6 && b[4] > y && b[2] < z + 0.75 && b[5] > z + 0.25);
+    const spots = [];
+    for (let r = 1; r <= 6 && spots.length < 16; r++) {
+      for (let dx = -r; dx <= r; dx++) {
+        for (let dz = -r; dz <= r; dz++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+          const x = ox + dx, z = oz + dz;
+          for (let y = Math.min(62, oy + 2); y >= Math.max(0, oy - 8); y--) {
+            if (this.standable(x, y, z) && !wet(x, y, z) && !inVehicle(x, y, z)) spots.push({ c: [x, y, z], score: Math.abs(y - (goal ? goal[1] : oy)) * 3 + r });
+          }
+        }
+      }
+    }
+    spots.sort((a, b) => a.score - b.score);
+    // (Looking for routes is hard work: only try a few.)
+    const best = spots.slice(0, 5).find(s => goal && this.find(s.c, goal).reached) || spots[0];
+    return best ? new THREE.Vector3(best.c[0] + 0.5, best.c[1], best.c[2] + 0.5) : null;
   }
 
   // Can a pet walk straight from a point to a cell on the same level (for cutting corners
@@ -250,9 +292,13 @@ export class PetMover {
     this.stuck = 0;
     this.best = Infinity;
     this.lift = 0;
+    this.trapped = false; // shut in somewhere tiny, with no way out to you
+    this.nowhere = false; // not standing anywhere a pet can stand (stuck in something)
   }
 
   place(p) {
+    this.trapped = false;
+    this.nowhere = false;
     this.pos.copy(p);
     this.vel.set(0, 0, 0);
     this.path = [];
@@ -283,6 +329,7 @@ export class PetMover {
     if (this.flying) return this.fly(dt, goal, speed, boxes);
     const [cx, cy, cz] = this.cell();
     const start = this.startCell(cx, cy, cz);
+    this.nowhere = !start && this.onGround;
 
     // Find (or refresh) the route now and then, and whenever the goal moves to another cell.
     this.repath -= dt;
@@ -297,6 +344,7 @@ export class PetMover {
         const r = g ? nav.find(start, g) : { path: [], reached: false };
         this.path = r.path;
         this.reachable = r.reached;
+        this.trapped = !!r.trapped;
         // (Looking for a way that isn't there is hard work: don't keep trying so often.)
         this.repath = r.reached ? 0.6 : 2;
         this.best = Infinity;
@@ -304,6 +352,7 @@ export class PetMover {
     } else {
       this.path = [];
       this.reachable = true;
+      this.trapped = false;
     }
 
     // Tick off the steps we've reached, and skip ahead where a straight run is clear.

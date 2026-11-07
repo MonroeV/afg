@@ -9,6 +9,7 @@ import { balloonModel } from './contraptions.js';
 
 // Extra bits in a pet's action number (sent to other players): jumping or falling, climbing.
 const PET_AIR = 8, PET_CLIMB = 16;
+const PET_RANGE = 30; // farther from you than this (in blocks), and your pet pops back in beside you
 
 function nameTag(name, color) {
   const canvas = document.createElement('canvas');
@@ -196,10 +197,11 @@ export class Avatar {
   updatePet(dt, time) {
     const pet = this.pet;
     if (!pet) return;
-    pet.group.visible = !this.seat;
-    if (this.seat) {
+    pet.group.visible = !this.seat && !this.petAboard;
+    if (this.seat || this.petAboard) {
       pet.pos.copy(this.pos);
       pet.mover?.place(this.pos);
+      this.petRode = true; // (it comes along for the ride)
       return;
     }
     let moving = 0;
@@ -212,10 +214,26 @@ export class Avatar {
         pet.mover.yaw = pet.yaw;
       }
       const m = pet.mover;
-      if (m.pos.distanceTo(this.pos) > 40) {
-        // We flew or drove far away: it catches up (it can't really, but it finds us).
-        const spot = this.petNav.landing(this.pos);
-        m.place(spot ? new THREE.Vector3(spot[0] + 0.5, spot[1], spot[2] + 0.5) : this.pos);
+      // It pops back in beside us when it can't get to us otherwise: just out of a vehicle
+      // (it rode along with us), more than 30 blocks away (we flew, or went through a
+      // teleporter), or stuck (in a block, underground, or shut in somewhere with no way out).
+      const far = Math.hypot(m.pos.x - this.pos.x, m.pos.z - this.pos.z) > PET_RANGE;
+      const stuck = this.petNav.inSolid(m.pos) || m.trapped || m.nowhere;
+      this.petStuck = stuck ? (this.petStuck || 0) + dt : 0;
+      this.petRespawnWait = Math.max(0, (this.petRespawnWait || 0) - dt);
+      if ((this.petRode || far || this.petStuck > 1) && this.petRespawnWait <= 0) {
+        const why = this.petRode ? 'ride' : far ? 'far' : 'stuck';
+        this.petRode = false;
+        this.petStuck = 0;
+        this.petRespawnWait = 1.5;
+        const spot = this.petNav.spotNear(this.pos, (this.petBoxes || (() => []))());
+        const landing = !spot && this.petNav.landing(this.pos);
+        const to = spot || (landing ? new THREE.Vector3(landing[0] + 0.5, landing[1], landing[2] + 0.5) : this.pos.clone());
+        const from = m.pos.clone();
+        m.place(to);
+        m.onGround = true;
+        pet.pos.copy(to);
+        if (why !== 'ride') this.onPetEvent?.('respawn', from);
       }
       const plan = this.brain.think(dt, { pos: this.pos, yaw: this.yaw, speed: this.speed }, m.pos, this.ball, m.reachable);
       pet.action = plan.action;

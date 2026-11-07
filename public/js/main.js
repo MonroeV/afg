@@ -164,6 +164,7 @@ const tmpColor = new THREE.Color();
 const particles = new Particles(scene);
 const effects = new Effects(scene);
 const fireworks = new Fireworks(scene, effects);
+fireworks.viewer = camera.position;
 const tvs = new TVs(scene);
 
 // ---------- BZ Live ----------
@@ -277,6 +278,11 @@ async function load() {
       sounds.pet(pet.kind);
       effects.heartsAt(pet.pos.x, pet.pos.y + 0.6, pet.pos.z);
     } else if (kind === 'whine') {
+      sounds.pet(pet.kind);
+    } else if (kind === 'respawn') {
+      // It was stuck (or left far behind): it pops back in beside you, with a little sparkle.
+      effects.sparkle(what.x, what.y + 0.4, what.z, 10);
+      effects.sparkle(pet.pos.x, pet.pos.y + 0.4, pet.pos.z, 16);
       sounds.pet(pet.kind);
     } else if (kind === 'giveup') {
       // It couldn't get to the ball (or back to you): the ball pops back into your hand.
@@ -580,7 +586,12 @@ net.on('horn', ({ id }) => {
   const car = cars.list.get(id);
   if (car) sounds.horn(loudness(car.pos.x, car.pos.y, car.pos.z, 60), hornPitch(car));
 });
-net.on('time', ({ time }) => (sky.time = time));
+net.on('time', ({ time }) => {
+  // (A big jump, like everyone sleeping through the night: retake the reflections right away,
+  // instead of the world snapping brighter a few seconds later.)
+  if (Math.abs(time - sky.time) > 5) reflections.timer = 0;
+  sky.time = time;
+});
 net.on('disconnect', () => {
   online = false;
   avatars.clear();
@@ -1757,12 +1768,15 @@ function structureLights() {
   const t = performance.now() / 1000;
   for (const s of structures.near(camera.position, 60)) {
     if (s.type === 'campfire') out.push({ x: s.x, y: s.y + 1, z: s.z, color: new THREE.Color(0xff8a3c), intensity: 10 });
-    if (s.type === 'disco') out.push({ x: s.x, y: s.y + 2.5, z: s.z, color: new THREE.Color().setHSL((t * 0.7) % 1, 1, 0.55), intensity: 30, always: true });
+    if (s.type === 'disco') {
+      // (live: the color goes round the rainbow smoothly, frame by frame.)
+      const color = new THREE.Color().setHSL((t * 0.7) % 1, 1, 0.55);
+      out.push({ x: s.x, y: s.y + 2.5, z: s.z, color, intensity: 30, always: true, live: now => (color.setHSL((now * 0.7) % 1, 1, 0.55), 1) });
+    }
     if (s.type === 'tv') {
-      // The screen softly lights up a dark room in the color of the show.
+      // The screen softly lights up a dark room in the color of the show, flickering a little.
       const sc = tvs.find(s);
-      const flicker = 0.85 + Math.sin(t * 7) * 0.1 + Math.sin(t * 13) * 0.05;
-      out.push({ x: s.x + s.ax * s.width / 2 - 0.5 * s.ax, y: s.y, z: s.z + s.az * s.width / 2 - 0.5 * s.az, color: new THREE.Color(CHANNELS[sc?.channel || 0].glow), intensity: 7 * flicker });
+      out.push({ x: s.x + s.ax * s.width / 2 - 0.5 * s.ax, y: s.y, z: s.z + s.az * s.width / 2 - 0.5 * s.az, color: new THREE.Color(CHANNELS[sc?.channel || 0].glow), intensity: 7, live: now => 0.85 + Math.sin(now * 7) * 0.1 + Math.sin(now * 13) * 0.05 });
     }
   }
   return out;
@@ -2352,10 +2366,16 @@ function renderLive(dt, time, viewDist) {
   const bodyShown = myBody.root.visible;
   myBody.root.visible = inGame && !riding();
   tvs.hideLive(true);
+  // (The TV camera's picture mustn't redraw the shadows: with only the blocks round the
+  // reporter showing, the shadows round you would vanish for a moment, and the whole picture
+  // flash brighter. Your own picture redraws them, right after.)
+  const shadowsDue = renderer.shadowMap.needsUpdate;
+  renderer.shadowMap.needsUpdate = false;
   renderer.setRenderTarget(liveTarget);
   renderer.clear();
   renderer.render(scene, newsCam);
   renderer.setRenderTarget(null);
+  renderer.shadowMap.needsUpdate = shadowsDue;
   tvs.hideLive(false);
   myBody.root.visible = bodyShown;
   sky.sky.position.copy(camera.position);
@@ -4519,6 +4539,7 @@ function frame(timestamp) {
     // (Getting into bed, you see yourself once the camera has pulled back out of your head.)
     myBody.root.visible = riding() ? carView !== 0 : viewMode !== 0 || camSleepK > 0.3;
     myBody.seat = riding() ? cars.seat(riding(), mySeat()) : null;
+    myBody.petAboard = rv.inside && !!rv.car.driver; // (your pet comes along in the RV while it's driven)
     myBody.target.copy(player.pos);
     myBody.targetYaw = player.yaw;
     myBody.targetPitch = player.pitch;
@@ -4680,7 +4701,7 @@ function frame(timestamp) {
 
   // Shadows only need redrawing every couple of frames.
   if (frameCount % (QUALITY[settings.quality] || QUALITY.high).shadowEvery === 0) renderer.shadowMap.needsUpdate = true;
-  reflections.update(dt, camera, [highlight, crack]);
+  reflections.update(dt, camera, [highlight, crack], fireworks.flash * nightK > 0.03);
   reflections.refresh(sky.dayK);
   renderLive(dt, time, viewDist);
   if (glow.enabled) {

@@ -87,6 +87,7 @@ export class Fireworks {
     }
     this.flash = 0; // 0..1, how much the whole sky is lit up right now
     this.flashColor = new THREE.Color();
+    this.viewer = null; // where you are (the game sets it): far-off fireworks don't light up your sky
   }
 
   get active() {
@@ -187,8 +188,14 @@ export class Fireworks {
     slot.light.color.copy(slot.color);
     slot.halo.position.copy(r.pos);
     slot.halo.material.color.copy(slot.color);
-    this.flash = Math.min(1.5, this.flash + 1);
-    this.flashColor.copy(slot.color);
+    // The sky lights up for fireworks near you, less for ones farther off, and not at all
+    // for ones right across the map (before, any firework anywhere flashed everyone's sky).
+    const d = this.viewer ? Math.hypot(r.pos.x - this.viewer.x, r.pos.z - this.viewer.z) : 0;
+    const near = 1 - Math.min(1, Math.max(0, (d - 60) / 140));
+    if (near > 0) {
+      this.flash = Math.min(1.5, this.flash + near * near);
+      this.flashColor.copy(slot.color);
+    }
   }
 
   // Crossette stars split into little bursts of their own.

@@ -69,9 +69,12 @@ export class Reflections {
     return this.size > 0;
   }
 
-  update(dt, camera, hide = []) {
+  // hold: don't take a picture just now (fireworks are lighting up the sky: a picture taken
+  // then would keep everything tinted and bright for seconds after the flash had gone).
+  update(dt, camera, hide = [], hold = false) {
     if (!this.size) return;
     this.timer -= dt;
+    if (hold) return;
     // Retake the picture every so often, or sooner after moving a good way (but not more
     // than about once a second, even when driving fast: it's six extra pictures each time).
     const moved = camera.position.distanceTo(this.lastPos) > 8 && this.timer < this.interval - 1;

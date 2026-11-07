@@ -78,7 +78,11 @@ customize your character, drive cars, build anything and play with friends.
   ladders paw over paw, so a ball thrown off a roof means a trip down the ladder and back up.
   If there's no way to reach you, your pet waits as close as it can get, looking up and whining;
   if the ball lands somewhere it can't reach, it gives up and the ball comes back to your hand.
-  Dragons fly, so they go up and over walls instead
+  Dragons fly, so they go up and over walls instead. Your pet comes along when you ride in a
+  vehicle (or in the RV while somebody drives it) and hops out right beside you when you get
+  out. If it ever gets stuck (in a block, underground, or shut in somewhere with no way out) or
+  ends up more than 30 blocks away, it pops back in beside you with a little sparkle, on the
+  ground where it can get to you
 - **Character Gallery**: save your character (with your name) so anyone can pick it later.
   It holds 25 characters in a 5×5 grid; when it's full you choose one to replace, or replace the oldest
 - **Day and night**: the sun sets, the stars and moon come out and the street lamps light up.
@@ -173,7 +177,8 @@ customize your character, drive cars, build anything and play with friends.
   shine in their new color). The Paint Scraper takes the paint off one side
 - **Dancing** and **waving**
 - **Fireworks** in 8 styles (including hearts and smiley faces) that light up the whole night sky
-  and everything around them in their own color (a red one turns the whole town red)
+  and everything around them in their own color (a red one turns the whole town red). Ones set
+  off far away across the map light up your sky less, or not at all
 - **Fancy lighting** (Graphics: High or Medium): shiny things like cars, glass, water, metal, gold
   and mirrors reflect the world around them, lamps and fireworks glow softly (no harsh glare),
   and shadows are soft

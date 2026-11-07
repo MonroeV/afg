@@ -55,6 +55,15 @@ function moonTexture() {
   return tex;
 }
 
+// Moves one of the real lights to another lamp (or nowhere), starting dark there.
+function moveLight(l, n) {
+  l.userData.lamp = n || null;
+  l.userData.key = n?.key;
+  l.userData.leaving = false;
+  l.userData.next = null;
+  l.intensity = 0;
+}
+
 export class DayNight {
   constructor(renderer, scene) {
     this.scene = scene;
@@ -237,43 +246,53 @@ export class DayNight {
       for (const e of this.extraLights?.() || []) {
         const d = dist(e.x, e.y, e.z);
         if (d < 60 * 60 && (lampK > 0 || e.always)) {
-          near.push({ key: `extra:${e.x},${e.y},${e.z}`, d: d - 400, x: e.x + 0.5, y: e.y + 0.3, z: e.z + 0.5, def: { color: e.color, power: (e.intensity || 14) / 14 * 1.4, range: 30, always: e.always }, extra: true });
+          near.push({ key: `extra:${e.x},${e.y},${e.z}`, d: d - 400, x: e.x + 0.5, y: e.y + 0.3, z: e.z + 0.5, def: { color: e.color, power: (e.intensity || 14) / 14 * 1.4, range: 30, always: e.always, live: e.live }, extra: true });
         }
       }
-      // Brighter, farther-reaching lamps (like street lamps) win the real lights first.
-      near.sort((a, b) => a.d / a.def.power ** 2 - b.d / b.def.power ** 2);
+      // Brighter, farther-reaching lamps (like street lamps) win the real lights first. A lamp
+      // that has a light keeps it unless another is clearly nearer, so two lamps about as near
+      // as each other (one each side of a street) don't keep swapping it as you walk.
+      const held = new Set(this.lampLights.map(l => l.userData.key).filter(Boolean));
+      const score = n => (n.d / n.def.power ** 2) * (held.has(n.key) ? 0.6 : 1);
+      near.sort((a, b) => score(a) - score(b));
       const chosen = new Map(near.slice(0, this.lampLights.length).map(n => [n.key, n]));
       const free = [];
       for (const l of this.lampLights) {
         const n = chosen.get(l.userData.key);
         if (n) {
           l.userData.lamp = n; // still close: keep it (extras may have moved or changed color)
+          l.userData.leaving = false; // (and if it was about to move away, it stays after all)
           chosen.delete(n.key);
         } else free.push(l);
       }
+      // A light that's wanted somewhere else fades out where it is first, then moves and fades
+      // in there. (Switching off in an instant made the ground round a lamp flash dark.)
       for (const l of free) {
-        const n = chosen.values().next().value;
-        l.userData.lamp = n || null;
-        l.userData.key = n?.key;
-        if (n) {
-          chosen.delete(n.key);
-          l.intensity = 0; // fade in from dark
+        const n = chosen.values().next().value || null;
+        if (n) chosen.delete(n.key);
+        if (!l.userData.lamp) moveLight(l, n);
+        else {
+          l.userData.leaving = true;
+          l.userData.next = n;
         }
       }
     }
     const t = performance.now() / 1000;
     for (const l of this.lampLights) {
-      const n = l.userData.lamp;
+      if (l.userData.leaving && l.intensity < LAMP_BRIGHTNESS * 0.04) moveLight(l, l.userData.next);
+      const n = l.userData.lamp, leaving = l.userData.leaving;
       let target = 0;
-      if (n) {
+      if (n && !leaving) {
         const def = n.def;
+        // (Dance floors and TVs change color and flicker all the time: follow them smoothly.)
+        const live = def.live ? def.live(t) : 1;
         l.position.set(n.x, n.y, n.z);
         l.color.set(def.color);
         l.distance = def.range;
         const flicker = def.flicker ? 1 - def.flicker * (0.5 + 0.5 * Math.sin(t * 13 + l.userData.phase) * Math.sin(t * 7.3 + l.userData.phase * 2)) : 1;
-        target = LAMP_BRIGHTNESS * def.power * (def.always ? 1 : lampK) * flicker;
+        target = LAMP_BRIGHTNESS * def.power * (def.always ? 1 : lampK) * flicker * live;
       }
-      l.intensity += (target - l.intensity) * Math.min(1, dt * (n?.def.flicker ? 20 : 4));
+      l.intensity += (target - l.intensity) * Math.min(1, dt * (leaving ? 8 : n?.def.flicker ? 20 : 4));
     }
   }
 }
