@@ -215,8 +215,15 @@ customize your character, drive cars, build anything and play with friends.
   (one click, a whole show), the **Diamond Block**, the **Golden Throne**, the **Disco Ball**, the
   **Golden Trophy**, and the big ones: a bubbling **Hot Tub** (60 coins; right-click to sit in it),
   **Gold Car Paint** (75; a gold color for the Paint Brush that makes any vehicle shiny solid
-  gold), **Super Sneakers** (90; run super fast and jump super high), and the **Vacation Flag**
-  (150; claim a second piece of land, see below). Things you put down show up at the top of the
+  gold), **Super Sneakers** (90; run super fast and jump super high), the **Vacation Flag**
+  (150; claim a second piece of land, see below), and the most expensive thing in the store,
+  **Bodyguards** (300, and only for Secret Agency agents with Top Secret clearance): two guards in
+  black suits and sunglasses who stand either side of the front door of your land (your home
+  land) and don't let anybody else on it, just like the guards at the secret base. Players who
+  aren't on your guest list get walked straight back off it, the town's people (and other
+  people's pets) can't step onto it, and the guards say so ("🛑 Sorry Bo, you're not on Mia's
+  guest list"). Right-click one of your bodyguards for your **guest list**: tick the names saved
+  in the Character Gallery (or type in anyone's) and they're let in. Things you put down show up at the top of the
   🎉 Fun tab. The Jetpack, the Rainbow Trail, Super Sneakers and Skis are **gear**: you wear them
   instead of holding them, so they work with anything in your hand. Put them on and take them off
   in **🎒 Gear**, at the top of the 🎉 Fun tab (what you have on shows by the hotbar). Your coins

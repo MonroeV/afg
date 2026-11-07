@@ -27,6 +27,7 @@ export const GOLDPAINT = 'goldpaint';
 export const SNEAKERS = 'sneakers';
 export const SKIS = 'skis';
 export const GOGGLES = 'goggles'; // night-vision goggles (from the Secret Agency's vault)
+export const BODYGUARDS = 'bodyguards'; // (a Luxe Store thing: they guard your land)
 export const VACATION = 'vacationflag';
 export const TOOLS = [HAMMER, BRUSH, SCRAPER, WRENCH, BALL, FIREWORKS, CLAIM, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, SHOWTIME, VACATION];
 // Things you have to buy at the Luxe Store before you can use them.
@@ -36,7 +37,7 @@ export const ALL_ITEMS = [...TOOLS, ...BLOCK_IDS];
 // Gear isn't held: you wear it (put it on and take it off in the item menu's 🎒 Gear).
 export const GEAR = [SNEAKERS, JETPACK, TRAIL, SKIS, GOGGLES];
 // Everything that needs a little picture: the hotbar things, gear, and Gold Car Paint (for the store).
-export const ICON_ITEMS = [...ALL_ITEMS, ...GEAR, GOLDPAINT];
+export const ICON_ITEMS = [...ALL_ITEMS, ...GEAR, GOLDPAINT, BODYGUARDS];
 
 // ---------- Styles ----------
 // Look-alikes share one place in the item menu. Pick one, then choose its style: X in the game
@@ -117,6 +118,7 @@ export function itemName(item) {
   if (item === WRENCH) return 'Wrench';
   if (item === SKIS) return 'Skis';
   if (item === GOGGLES) return 'Night-Vision Goggles';
+  if (item === BODYGUARDS) return 'Bodyguards';
   if (item === WATER_BALLOON) return 'Water Balloons';
   if (item === BUBBLES) return 'Bubble Wand';
   if (item === BALLOON) return 'Balloon';
@@ -162,6 +164,26 @@ export function makeIcon(item, textures, paint = 1) {
     return canvas;
   }
 
+  if (item === BODYGUARDS) {
+    // Two guards in black suits and sunglasses.
+    for (const [x, skin] of [[20, '#6b4226'], [44, '#e8b088']]) {
+      ctx.fillStyle = '#111316';
+      ctx.fillRect(x - 12, 34, 24, 28);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x - 3, 34, 6, 10);
+      ctx.fillStyle = '#111316';
+      ctx.fillRect(x - 1, 36, 2, 10);
+      ctx.fillStyle = skin;
+      ctx.fillRect(x - 9, 12, 18, 20);
+      ctx.fillStyle = '#1b1209';
+      ctx.fillRect(x - 9, 10, 18, 5);
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(x - 8, 19, 7, 4);
+      ctx.fillRect(x + 1, 19, 7, 4);
+      ctx.fillRect(x - 1, 20, 2, 2);
+    }
+    return canvas;
+  }
   if (item === GOGGLES) {
     // Two big green lenses on a black strap.
     ctx.fillStyle = '#212121';

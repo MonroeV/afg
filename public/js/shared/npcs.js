@@ -4,12 +4,13 @@
 // come near, pet your pet, love your cool stuff, and react to fireworks, explosions,
 // dancing and water balloons.
 import { sanitizeLook } from './avatar.js';
-import { BLOCKS, isSolidBlock, blockId, itemOf, SHOP_TOOLS } from './blocks.js';
+import { BLOCKS, isSolidBlock, blockId, itemOf, shapeOf, blockMeta, DOOR_TOP, SHOP_TOOLS } from './blocks.js';
 import { inZone } from './secretbase.js';
 
 export const NPC_ACT = { idle: 0, walk: 1, wave: 2, dance: 3, pet: 4, cheer: 5 };
 
 const pickOne = list => list[Math.floor(Math.random() * list.length)];
+const nameKey = name => String(name || '').trim().toLowerCase();
 
 const NPCS = [
   {
@@ -127,6 +128,7 @@ export class NpcCrew {
   // Puts everyone where they work (if that place is in this world).
   setup(places) {
     this.list = [];
+    this.lands = []; // land with bodyguards: nobody but its own guards (and guests) goes in
     this.zone = places?.base?.zone || null; // the Secret Agency's base: clearance only
     for (const def of NPCS) {
       const place = def.place === 'plaza' ? { x: 4.5, y: 0, z: 6.5, face: 0, area: [-7, -7, 7, 7] } : places?.[def.place];
@@ -162,6 +164,7 @@ export class NpcCrew {
   // def: who's asking (the base is only for the Agency's own people).
   standable(x, y, z, def = null) {
     if (this.zone && !def?.clearance && inZone(this.zone, x + 0.5, y, z + 0.5)) return false;
+    for (const l of this.lands) if (def?.land !== l.key && x >= l.rect[0] && x <= l.rect[2] && z >= l.rect[1] && z <= l.rect[3]) return false;
     const v = this.room.get(x, y, z);
     return !this.solid(x, y, z) && !this.solid(x, y + 1, z) && this.solid(x, y - 1, z) && blockId(itemOf(v)) !== 36 && blockId(v >> 16) !== 36;
   }
@@ -229,6 +232,7 @@ export class NpcCrew {
   notice(n, players, now) {
     if (n.task || n.actionT > 0) return;
     if (n.def.guard) return this.guardWatch(n, players, now);
+    if (n.def.land) return this.bodyguardWatch(n, players, now);
     for (const c of players) {
       const [x, y, z] = c.pos;
       if (!this.near(n, x, y, z, 5)) continue;
@@ -402,6 +406,13 @@ export class NpcCrew {
       c.send({ t: 'shop_open' });
     } else if (n.def.place === 'pizza') {
       this.room.startJob(c);
+    } else if (n.def.land) {
+      const land = this.lands.find(l => l.key === n.def.land);
+      if (land && land.key === nameKey(c.name)) {
+        this.say(n, pickOne(['Yes, boss! Who gets in? 📋', 'Your guest list, boss! 🕶️']), true);
+        c.send({ t: 'guests_open', guests: land.guests });
+      } else if (land && this.room.welcomeOn(land, c)) this.say(n, pickOne([`${c.name}! You're on the list. Come on in! ✅`, `Welcome, ${c.name}! ${land.owner} said you're a guest. 🫡`]), true);
+      else this.say(n, pickOne([`🛑 Sorry ${c.name}, this is ${n.def.owner}'s house. Guests only!`, `🛑 You're not on the list, ${c.name}. Ask ${n.def.owner}!`]), true);
     } else if (n.def.agent) {
       this.say(n, this.mission(c), true);
     } else if (n.def.guard) {
@@ -435,6 +446,91 @@ export class NpcCrew {
       this.act(n, NPC_ACT.wave, 1.5);
       this.say(n, clear ? pickOne([`Welcome, Agent ${c.name}! 🫡`, `Agent ${c.name}! Go right in. 🫡`, `Badge checked. Good to see you, Agent ${c.name}! 🕶️`])
         : pickOne([`🛑 Halt, ${c.name}! This is a TOP SECRET area. No clearance, no entry!`, `🛑 Stop right there, ${c.name}! Secret Agency agents only.`, `🛑 Sorry ${c.name}, Top Secret clearance only! Ask Agent Shadow on the town square. 🕶️`]), true);
+      return;
+    }
+  }
+
+  // ---------- Bodyguards (from the Luxe Store) ----------
+
+  // Two bodyguards for each guarded land: they come and go with it (and look the part).
+  syncGuards(lands) {
+    this.lands = lands;
+    const want = new Set(lands.map(l => l.key));
+    this.list = this.list.filter(n => !n.def.land || want.has(n.def.land));
+    this.guardIds ??= new Map();
+    for (const land of lands) {
+      if (this.list.some(n => n.def.land === land.key)) continue;
+      if (!this.guardIds.has(land.key)) this.guardIds.set(land.key, -100 - this.guardIds.size * 2);
+      const id0 = this.guardIds.get(land.key);
+      const spots = this.guardSpots(land);
+      ['Max', 'Jo'].forEach((who, i) => {
+        const def = {
+          id: id0 - i, name: who, title: `${who} 🛡️ ${land.owner}'s bodyguard`, roam: 0.6, land: land.key, owner: land.owner,
+          look: { face: 'cool', hair: i ? 'buns' : 'short', hat: 'none', shirt: 'jacket', pants: 'jeans', skin: i ? '#e8b088' : '#6b4226', hairColor: '#1b1209', shirtColor: '#111316', shirtColor2: '#ffffff', pantsColor: '#111316', shoesColor: '#111111' },
+          hello: () => [], tips: [],
+        };
+        const [x, y, z, face] = spots[i];
+        const home = this.findStand(x, y, z, def) || [x, y, z];
+        this.list.push({
+          def, id: def.id, home, area: [Math.floor(home[0]) - 1, Math.floor(home[2]) - 1, Math.floor(home[0]) + 1, Math.floor(home[2]) + 1], face,
+          pos: home.slice(), yaw: face, goal: null, wait: 3, action: NPC_ACT.idle, actionT: 0, saidAt: 0, look: sanitizeLook(def.look),
+          seen: new Map(), noticed: new Map(), petted: new Map(), task: null,
+        });
+      });
+    }
+  }
+
+  // Where a land's bodyguards stand: either side of its front door (outside it), or, with no
+  // door, either side of the middle of the edge that's nearest the middle of town.
+  guardSpots(land) {
+    const [x0, z0, x1, z1] = land.rect, room = this.room;
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+    const covered = (x, z) => {
+      for (let y = 2; y < 14; y++) if (this.solid(x, y, z)) return 1;
+      return 0;
+    };
+    // A front door: of the two sides you can walk through it from, the outside is the one with
+    // less roof over the next few steps (and, if that's even, the one farther from the middle).
+    let best = null;
+    for (let x = x0; x <= x1; x++)
+      for (let z = z0; z <= z1; z++) {
+        const v = room.get(x, 0, z);
+        if (shapeOf(itemOf(v)) !== 'door' || blockMeta(itemOf(v)) & DOOR_TOP) continue;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const ox = x + dx, oz = z + dz;
+          if (this.solid(ox, 0, oz) || this.solid(ox, 1, oz)) continue;
+          const roof = covered(ox, oz) + covered(ox + dx, oz + dz) + covered(ox + 2 * dx, oz + 2 * dz);
+          const score = roof * 10 - Math.hypot(ox - cx, oz - cz);
+          if (!best || score < best.score) best = { score, ox, oz, dx, dz };
+        }
+      }
+    if (best) {
+      const { ox, oz, dx, dz } = best;
+      const face = Math.atan2(-dx, -dz); // (looking out, away from the door)
+      return [[ox + dx + 0.5 + dz * 1.5, 0, oz + dz + 0.5 - dx * 1.5, face], [ox + dx + 0.5 - dz * 1.5, 0, oz + dz + 0.5 + dx * 1.5, face]];
+    }
+    const edges = [[(x0 + x1) / 2, z0 - 0.5, 0, 1], [(x0 + x1) / 2, z1 + 1.5, 0, -1], [x0 - 0.5, (z0 + z1) / 2, 1, 0], [x1 + 1.5, (z0 + z1) / 2, -1, 0]];
+    edges.sort((a, b) => Math.hypot(a[0], a[1]) - Math.hypot(b[0], b[1]));
+    const [ex, ez, ix, iz] = edges[0];
+    const face = Math.atan2(ix, iz); // (looking out, away from the land)
+    return [[ex + 0.5 + iz * 1.5, 0, ez + 0.5 - ix * 1.5, face], [ex + 0.5 - iz * 1.5, 0, ez + 0.5 + ix * 1.5, face]];
+  }
+
+  // A bodyguard: stops anyone who isn't the owner or a guest, says hi to the boss and the guests.
+  bodyguardWatch(n, players, now) {
+    const land = this.lands.find(l => l.key === n.def.land);
+    if (!land) return;
+    for (const c of players) {
+      const [x, y, z] = c.pos;
+      if (!this.near(n, x, y, z, 5)) continue;
+      const boss = nameKey(c.name) === land.key, ok = this.room.welcomeOn(land, c);
+      const key = `${c.id}:${ok}`;
+      if (now - (n.seen.get(key) || 0) < (ok ? 120 : 25) * SECOND) continue;
+      n.seen.set(key, now);
+      this.face(n, x, z);
+      this.act(n, NPC_ACT.wave, 1.5);
+      this.say(n, boss ? pickOne([`Welcome home, boss! 🫡`, `All quiet here, boss. 🕶️`]) : ok ? `Welcome, ${c.name}! You're on the list. ✅`
+        : pickOne([`🛑 Halt, ${c.name}! This is ${land.owner}'s house. Guests only!`, `🛑 Sorry ${c.name}, you're not on ${land.owner}'s guest list.`]), true);
       return;
     }
   }

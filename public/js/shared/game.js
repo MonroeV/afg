@@ -212,6 +212,7 @@ export class GameRoom {
         fish: Array.isArray(w.fish) ? w.fish.filter(f => FISH.some(d => d.name === f)) : [], // the kinds of fish they've caught
         // The Secret Agency: which TOP SECRET files they've found, and whether they've got clearance.
         agent: { files: Array.isArray(w.agent?.files) ? w.agent.files.filter(k => typeof k === 'string').slice(0, 8) : [], clear: !!w.agent?.clear },
+        guests: Array.isArray(w.guests) ? w.guests.filter(k => typeof k === 'string').map(nameKey).slice(0, 40) : [], // who their bodyguards let in
       };
     }
     this.places = data.places && typeof data.places === 'object' ? data.places : null;
@@ -335,6 +336,36 @@ export class GameRoom {
     for (const c of moreVehicles()) this.spawn(this.addHome(c));
     this.log('Added the RV and two sports cars');
     this.onDirty();
+  }
+
+  // ---------- Bodyguards ----------
+
+  // Everybody's land that has bodyguards: [{ owner, key, rect: [x0, z0, x1, z1], guests }].
+  guardedLands() {
+    const out = [];
+    for (const [key, w] of Object.entries(this.wallets)) {
+      if (!w.owned?.includes('bodyguards')) continue;
+      const land = this.claims.find(c => c.key === key && !c.vacation && !c.permanent);
+      if (land) out.push({ owner: land.owner, key, rect: [land.x0, land.z0, land.x1, land.z1], guests: w.guests || [] });
+    }
+    return out;
+  }
+
+  // (Called whenever someone buys them, changes their guest list, or their land changes.)
+  updateGuards() {
+    const lands = this.guardedLands();
+    const sig = JSON.stringify(lands);
+    if (sig === this.guardSig) return;
+    this.guardSig = sig;
+    this.npcs.syncGuards(lands);
+    this.broadcast({ t: 'guards', lands });
+    this.broadcast({ t: 'npcs', list: this.npcs.info() });
+  }
+
+  // Is this player allowed on this guarded land?
+  welcomeOn(land, client) {
+    const k = nameKey(client.name);
+    return k === land.key || land.guests.includes(k);
   }
 
   // ---------- The weather ----------
@@ -549,6 +580,7 @@ export class GameRoom {
     w.found ??= [];
     w.fish ??= [];
     w.agent ??= { files: [], clear: false };
+    w.guests ??= [];
     return w;
   }
 
@@ -671,6 +703,7 @@ export class GameRoom {
       resume: this.spots[nameKey(client.name)]?.slice(0, 4) || null,
       coins: [...this.coins].map(([id, c]) => [id, ...c]),
       rain: this.weather?.rain || 0, // (raining right now?)
+      guards: this.guardedLands(), // land with bodyguards (and who may go in)
       // The Secret Agency's base (its inside, its lasers) and where the TOP SECRET files are.
       base: this.places?.base || null,
       files: (this.places?.files || []).map(f => f.slice(0, 3)),
@@ -913,13 +946,15 @@ export class GameRoom {
       const reply = text => client.send({ t: 'chat', system: true, text });
       if (w.owned.includes(item)) return reply(`🛍️ You already have the ${name}!`);
       if (item === VACATION && this.vacationOf(client)) return reply('🏖️ You already have vacation land! Give it up first if you want to buy a flag for somewhere new.');
+      if (SHOP_TOOLS[item]?.clearance && !this.cleared(client)) return reply(`🕶️ The ${name} are for Secret Agency agents only! Get Top Secret clearance first (Agent Shadow on the town square knows how).`);
       if (w.coins < price) return reply(`🪙 The ${name} costs ${price} coins, and you have ${w.coins}. Find more coins around town!`);
       w.coins -= price;
       w.owned.push(item);
       this.sendWallet(client);
       this.onDirty();
-      reply(`🛍️ You bought the ${name}! ${SHOP_TOOLS[item]?.got || "It's in your items now (press E, 🎉 Fun tab)."}`);
+      reply(`🛍️ You bought the ${name}! ${item === 'bodyguards' && !this.homeOf(client) ? 'Plant your Land Flag somewhere and they\'ll guard it!' : SHOP_TOOLS[item]?.got || "It's in your items now (press E, 🎉 Fun tab)."}`);
       this.npcs.onBuy(client, item);
+      if (item === 'bodyguards') this.updateGuards();
     },
 
     // Right-clicking one of the town's people.
@@ -1206,6 +1241,18 @@ export class GameRoom {
         this.npcs.breaking('Rumor has it there\'s a brand new secret agent in BuildZone... but that\'s TOP SECRET! 🕵️');
       }
       this.onDirty();
+    },
+
+    // Who your bodyguards let onto your land (names from the Character Gallery, or anyone's).
+    guests(client, { names }) {
+      if (!Array.isArray(names) || !this.allow(client, 'guests', 1, 3)) return;
+      const w = this.wallet(client);
+      if (!w.owned.includes('bodyguards')) return;
+      const me = nameKey(client.name);
+      w.guests = [...new Set(names.filter(n => typeof n === 'string').map(n => nameKey(cleanName(n))).filter(k => k && k !== me))].slice(0, 40);
+      client.send({ t: 'chat', system: true, text: w.guests.length ? `🛡️ Your bodyguards will let in: ${names.filter(n => typeof n === 'string').map(cleanName).filter(n => nameKey(n) !== me).slice(0, 40).join(', ')}.` : '🛡️ Your bodyguards won\'t let anybody in but you.' });
+      this.onDirty();
+      this.updateGuards();
     },
 
     // Night-vision goggles from the gadget vault (agents only: you'd have to be inside!).
@@ -1525,6 +1572,10 @@ export class GameRoom {
     if (t.expire <= 0) {
       t.expire = 600;
       this.expireClaims();
+    }
+    if (!(t.guards > 0)) {
+      t.guards = 2; // (land claimed, moved or given up: the bodyguards go with it)
+      this.updateGuards();
     }
     // A fish bites (or, too slow, swims off).
     for (const c of this.clients.values()) {

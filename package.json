@@ -1,6 +1,6 @@
 {
   "name": "buildzone",
-  "version": "0.24.1",
+  "version": "0.25.0",
   "description": "A first-person multiplayer creative sandbox that runs in the browser",
   "type": "module",
   "main": "server.js",

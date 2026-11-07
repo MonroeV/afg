@@ -32,7 +32,8 @@ export class Shop {
   }
 
   // The wallet changed (bought something, picked up a coin).
-  update(coins, owned, vacation = false) {
+  update(coins, owned, vacation = false, agent = false) {
+    this.agent = agent; // (has Top Secret clearance: the bodyguards are for agents only)
     this.coins = coins;
     this.owned = new Set(owned);
     this.vacation = vacation; // (has vacation land already, so no new Vacation Flag for now)
@@ -64,6 +65,10 @@ export class Shop {
         button.textContent = '🏖️ You have vacation land';
         button.disabled = true;
         card.classList.add('owned');
+      } else if (SHOP_TOOLS[item]?.clearance && !this.agent) {
+        button.textContent = '🕶️ Agents only';
+        button.disabled = true;
+        button.title = 'You need Top Secret clearance (Agent Shadow on the town square knows how)';
       } else if (this.coins < price) {
         button.textContent = `🪙 ${price}`;
         button.disabled = true;

@@ -294,7 +294,7 @@ async function load() {
   myBody.ball = ball;
   myBody.petNav = new PetNav(world);
   // Your pet doesn't go into the Secret Agency's base unless you've got clearance.
-  myBody.petNav.forbid = (x, y, z) => !!agency?.base && !agency.clear && agency.inside({ x: x + 0.5, y, z: z + 0.5 });
+  myBody.petNav.forbid = (x, y, z) => (!!agency?.base && !agency.clear && agency.inside({ x: x + 0.5, y, z: z + 0.5 })) || !!agency?.keptOut(x + 0.5, z + 0.5);
   myBody.petBoxes = () => cars.boxes(); // pets bump into cars too
   myBody.onPetEvent = (kind, what) => {
     const pet = myBody.pet;
@@ -392,6 +392,7 @@ $('join-form').addEventListener('submit', async e => {
   setClaims(welcome.claims || []);
   agency.setWorld({ base: welcome.base, files: welcome.files, landmarks: welcome.landmarks });
   weather.set(welcome.rain || 0);
+  agency.setGuards(welcome.guards);
   weather.rain = weather.target; // (if it's raining when you arrive, it already is)
   sky.time = welcome.time;
   hud.addChat({ system: true, text: online
@@ -459,6 +460,20 @@ net.on('npc_say', ({ id, text }) => {
 });
 net.on('npc_pet', () => myBody.brain?.cheer()); // somebody petted our pet: it's so happy!
 net.on('weather', ({ rain }) => weather.set(rain));
+// Bodyguards: whose land they guard (and who may go in), and the town's people coming and going.
+net.on('guards', ({ lands }) => {
+  agency.setGuards(lands);
+  myBody.petNav?.cache.clear();
+});
+net.on('npcs', ({ list }) => {
+  const ids = new Set(list.map(n => n.id));
+  for (const [id, a] of npcs) if (!ids.has(id)) {
+    a.dispose();
+    npcs.delete(id);
+  }
+  for (const n of list) if (!npcs.has(n.id)) npcs.set(n.id, new Avatar(scene, { id: n.id, name: n.name, look: n.look }));
+});
+net.on('guests_open', ({ guests }) => openGuestList(guests));
 // A TOP SECRET file (and maybe Top Secret clearance).
 net.on('secret_file', ({ again, found, need, clear, left = [] }) => {
   if (again) return hud.toast(clear ? '🗂️ You\'ve read this one, agent. Your clearance is good!' : `🗂️ You've already found this one (${found} of ${need}). ${need - found} to go!`);
@@ -498,7 +513,7 @@ net.on('wallet', ({ coins, owned, vacation, found = [], agent }) => {
     settings.gearMoved = [];
     saveSettings();
   }
-  shop.update(coins, owned, !!vacation);
+  shop.update(coins, owned, !!vacation, !!agent?.clear);
   // A Vacation Flag that's been planted is used up: the Land Flag takes its place.
   if (!owned.includes(VACATION) && hud.settings.hotbar.includes(VACATION)) {
     hud.settings.hotbar = hud.settings.hotbar.map(i => (i === VACATION ? CLAIM : i));
@@ -692,7 +707,7 @@ function goFullscreen() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || !!signOpen || !!askOpen || !!elevators?.panel);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -725,7 +740,7 @@ $('exit-menu').addEventListener('click', () => {
     location.reload();
   }, 150); // a moment for "I got out of the car" to reach the server
 });
-canvas.addEventListener('click', () => inGame && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && lock());
+canvas.addEventListener('click', () => inGame && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && lock());
 $('sensitivity').addEventListener('input', e => {
   settings.sensitivity = Number(e.target.value);
   saveSettings();
@@ -962,6 +977,10 @@ let useCooldown = 0;
 
 window.addEventListener('keydown', e => {
   if (!inGame || hud.chatOpen || editorOpen || galleryOpen || signOpen || askOpen) return;
+  if (guestPanel) {
+    if (e.code === 'Escape') closeGuestList(false);
+    return;
+  }
   if (elevators.panel) {
     elevators.panelKey(e);
     return;
@@ -3203,6 +3222,75 @@ function spyTargets() {
   return out;
 }
 
+// ---------- Bodyguards' guest list ----------
+// Right-click one of your bodyguards: tick who may come onto your land (the names saved in the
+// Character Gallery, plus anyone else you type in).
+
+let guestPanel = null; // { names: Set } while it's open
+const guestClient = new CharacterClient();
+
+async function openGuestList(guests) {
+  keys.clear();
+  unlock();
+  guestPanel = { picked: new Set(guests) };
+  const list = $('guest-names');
+  list.textContent = 'Loading…';
+  $('guest-panel').classList.remove('hidden');
+  updateOverlays();
+  let names = [];
+  try {
+    names = (await guestClient.list()).map(c => c.name);
+  } catch { /* no gallery */ }
+  const me = nameKey(settings.name);
+  showGuestNames([...new Set([...names, ...guests.map(k => names.find(n => nameKey(n) === k) || k)])].filter(n => nameKey(n) !== me));
+}
+
+function showGuestNames(names) {
+  const list = $('guest-names');
+  list.textContent = '';
+  if (!names.length) {
+    const none = document.createElement('div');
+    none.className = 'none';
+    none.textContent = 'Nobody in the Character Gallery yet: type a name below to add someone.';
+    list.append(none);
+  }
+  for (const name of names.sort((a, b) => a.localeCompare(b))) {
+    const label = document.createElement('label');
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.checked = guestPanel.picked.has(nameKey(name));
+    box.addEventListener('change', () => (box.checked ? guestPanel.picked.add(nameKey(name)) : guestPanel.picked.delete(nameKey(name))));
+    label.append(box, name);
+    label.dataset.name = name;
+    list.append(label);
+  }
+}
+
+function closeGuestList(save) {
+  if (!guestPanel) return;
+  if (save) {
+    const labels = [...$('guest-names').querySelectorAll('label')];
+    const names = labels.filter(l => guestPanel.picked.has(nameKey(l.dataset.name))).map(l => l.dataset.name);
+    net.send({ t: 'guests', names });
+    sounds.click();
+  }
+  guestPanel = null;
+  $('guest-panel').classList.add('hidden');
+  lock();
+  updateOverlays();
+}
+$('guest-save').addEventListener('click', () => closeGuestList(true));
+$('guest-cancel').addEventListener('click', () => closeGuestList(false));
+$('guest-add').addEventListener('click', () => {
+  const name = $('guest-other').value.replace(/[^\w \-.]/g, '').trim().slice(0, 16);
+  if (!name || !guestPanel) return;
+  guestPanel.picked.add(nameKey(name));
+  const names = [...$('guest-names').querySelectorAll('label')].map(l => l.dataset.name);
+  if (!names.some(n => nameKey(n) === nameKey(name))) names.push(name);
+  showGuestNames(names);
+  $('guest-other').value = '';
+});
+
 // ---------- Elevators ----------
 
 // An elevator goes against a wall, like a ladder, and its shaft runs from the bottom of the wall
@@ -4431,7 +4519,7 @@ let menuSpin = 0, lastFrame = 0, frameCount = 0, crouchK = 0;
 // menu (nothing much is moving then).
 function frameRateNow() {
   if (!inGame) return 30;
-  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel) return 12;
+  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel) return 12;
   return settings.fps || 1000;
 }
 
@@ -4532,7 +4620,7 @@ function frame(timestamp) {
       if (danceView <= 0 && viewMode === 2) viewMode = 0;
     }
     crouchK += ((player.crouching && !riding() ? 1 : 0) - crouchK) * Math.min(1, dt * 12);
-    agency.frame(dt, time, player, !!riding() || elevators.riding);
+    agency.frame(dt, time, player, !!riding() || elevators.riding || rv.inside);
     agency.nightVision(hud.wearing(GOGGLES));
     sky.nightVision += ((hud.wearing(GOGGLES) ? 1 : 0) - (sky.nightVision || 0)) * Math.min(1, dt * 3); // (the goggles light up the dark)
     updateCamera(dt);

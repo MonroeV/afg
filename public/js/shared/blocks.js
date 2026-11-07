@@ -203,6 +203,9 @@ export const SHOP_TOOLS = {
   goldpaint: { name: 'Gold Car Paint', price: 75, about: 'Paint any car, boat or helicopter shiny solid gold!', got: "Gold is a new color in the 🎨 Paint tab: pick it, then paint a car with the Paint Brush." },
   sneakers: { name: 'Super Sneakers', price: 90, gear: true, about: 'Wear them to run super fast and jump super high!', got: 'Put them on in 🎒 Gear (press E, then the 🎉 Fun tab).' },
   // Used up when you claim with it: one flag, one vacation spot.
+  // The most expensive thing in the store, and only for Secret Agency agents: two bodyguards who
+  // guard your land (home land) and only let in you and the guests on your list.
+  bodyguards: { name: 'Bodyguards', price: 300, clearance: true, about: 'Two bodyguards guard your land: nobody gets in but you and the guests on your list! (Agents with Top Secret clearance only.)', got: 'They\'re on duty at your land now! Right-click one of them to choose who\'s allowed in.' },
   vacationflag: { name: 'Vacation Flag', price: 150, about: 'Claim a second piece of land for a vacation home! It stays where you plant it.', got: 'Hold your Land Flag and press X to switch it to vacation land.' },
 };
 // Gear you find in the world instead of buying: [name, where you get it].
