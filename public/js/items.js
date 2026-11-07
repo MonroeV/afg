@@ -44,7 +44,7 @@ export const ICON_ITEMS = [...ALL_ITEMS, ...GEAR, GOLDPAINT];
 // all still their own blocks underneath (so every world built before looks just the same).
 export const FAMILIES = [
   { id: 'color', name: 'Color Block', items: [14, 32, 16, 34, 30, 31, 15, 33, 29, 17] },
-  { id: 'glass', name: 'Glass', items: [9, 59] },
+  { id: 'glass', name: 'Glass', items: [9, 59, 112] },
   { id: 'glow', name: 'Glow Block', items: [18, 50, 51, 52] },
   { id: 'lamp', name: 'Lamp', items: [39, 40, 41, 42, 44, 43] },
   { id: 'outdoor', name: 'Outdoor Light', items: [46, 47, 45, 48, 49] },
@@ -100,7 +100,7 @@ export const SEARCH_WORDS = {
   31: 'color', 32: 'color', 33: 'color', 34: 'color', 39: 'light', 40: 'light', 41: 'light', 42: 'light', 43: 'light', 44: 'light',
   45: 'light torch', 46: 'light', 47: 'light', 48: 'light torch', 49: 'light', 87: 'winter white cold', 88: 'skate slippery winter cold', 89: 'tree pine christmas snow',
   90: 'chair lift ride cable ski', 91: 'winter snow', 92: 'pizza job work cook', 94: 'write words text name label board', 93: 'hot tub bath spa bubbles store', [TRAIL]: 'rainbow sparkle store', [SHOWTIME]: 'fireworks show store', 70: 'boost fast arrow run', 71: 'race timer go', 72: 'race timer end', 19: 'trampoline jump',
-  36: 'pool lake', 21: 'garage', 54: 'fence rail', 103: 'lift up down floors building tower',
+  36: 'pool lake', 21: 'garage', 54: 'fence rail', 103: 'lift up down floors building tower', 112: 'window see through transparent clear', 9: 'window', 59: 'window',
 };
 // The hammer always lives in slot 1.
 export const DEFAULT_HOTBAR = [HAMMER, 5, 6, 9, 21, LADDER, BRUSH, FIREWORKS, CLAIM];

@@ -85,6 +85,12 @@ customize your character, drive cars, build anything and play with friends.
   ground where it can get to you
 - **Character Gallery**: save your character (with your name) so anyone can pick it later.
   It holds 25 characters in a 5×5 grid; when it's full you choose one to replace, or replace the oldest
+- **Rain, now and then**: not often (about one shower an hour, for a few minutes). The sky clouds
+  over, the fog closes in and rain streaks down with little splashes (and you can hear it,
+  muffled when you're indoors). It never rains inside: it stops at the roof (or a vehicle's roof),
+  even over a hole in a roof like a skyscraper's shaft or a roof hatch. Skye reports it on BZ
+  News, and when it stops there's a rainbow. (Up north it snows instead, and the snow stays out
+  of the lodge and cabins now too)
 - **Day and night**: the sun sets, the stars and moon come out and the street lamps light up.
   Too dark (or not dark enough)? **Brightness at night** in the pause menu (Esc) makes the nights
   lighter or darker; the days stay the same
@@ -246,7 +252,8 @@ customize your character, drive cars, build anything and play with friends.
 - **BZ Live, the news on TV**: Skye Summers, BZ News' roving reporter, travels around town with
   her microphone: the town square, the Luxe Store, the Pizza Palace, the tower, the ski lodge…
   and sometimes she drops in on whoever's playing ("Breaking news! I'm here with Mia, one of the
-  best builders in town!"). Turn any TV to **BZ Live** (channel 5) to watch a live camera
+  best builders in town!"), standing a few steps off to one side so she's not in the way of
+  what you're building. Turn any TV to **BZ Live** (channel 5) to watch a live camera
   following her, with a LIVE banner, where she is and what she's saying. If you're the one she's
   interviewing, you're on TV! She also reports breaking news (exploding cars, fireworks). The
   live picture is only drawn while a TV showing it is near you, small and a dozen times a second,
@@ -287,7 +294,7 @@ customize your character, drive cars, build anything and play with friends.
   of a build and pastes it somewhere else (scroll to turn it around). Up to 4096 blocks at a time,
   and Z undoes your last Fill or Paste. Plus a Camera (or press P) that saves a photo of what you
   see to your Downloads, and H to hide the HUD for clean photos and videos
-- **94 kinds of blocks** with realistic textures: brick, wood, glass, tinted glass, marble, roads,
+- **94 kinds of blocks** with realistic textures: brick, wood, glass, tinted glass, super clear glass (you can only just tell it's there), marble, roads,
   parking lines, flowers, rainbow, gold, mirrors, lamps, ladders, railings, bookshelves, snow, ice,
   pine needles, snowmen, ski lifts, pizza ovens…
 - **Sounds that don't get old**: every sound is a little different each time, every vehicle has its

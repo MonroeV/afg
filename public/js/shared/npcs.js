@@ -481,8 +481,7 @@ export class NpcCrew {
     const guests = players.filter(c => c.pos[1] < 40 && !c.sleeping && !inZone(this.zone, ...c.pos));
     if (guests.length && Math.random() < 0.45 && n.story?.guest === 0) {
       const c = guests[Math.floor(Math.random() * guests.length)];
-      const a = c.rot[0], fx = -Math.sin(a), fz = -Math.cos(a);
-      stand = this.findStand(c.pos[0] + fx * 2.6, Math.floor(c.pos[1] + 0.05), c.pos[2] + fz * 2.6);
+      stand = this.besideGuest(c);
       if (stand) story = { label: `with ${c.name}`, guest: c.id, lines: GUEST_LINES(c.name), i: 0 };
     }
     if (!stand) {
@@ -502,6 +501,26 @@ export class NpcCrew {
     n.beatT = story.guest ? 26 : 34;
     n.lineT = 1.2;
     this.room.broadcast({ t: 'news', place: story.label, guest: story.guest });
+  }
+
+  // Where Skye stands to interview someone: a few blocks away and off to one side of where
+  // they're looking, so she's in view but never in the way of what they're building.
+  besideGuest(c) {
+    const a = c.rot[0], y = Math.floor(c.pos[1] + 0.05);
+    const side = Math.random() < 0.5 ? 1 : -1;
+    for (const turn of [55, 40, 70, 90, 30]) {
+      for (const s of [side, -side]) {
+        for (const d of [3.8, 4.5, 3.4]) {
+          const b = a + s * turn * Math.PI / 180;
+          const x = c.pos[0] - Math.sin(b) * d, z = c.pos[2] - Math.cos(b) * d;
+          const cx = Math.floor(x), cz = Math.floor(z);
+          if (!this.standable(cx, y, cz)) continue;
+          const spot = [cx + 0.5, y, cz + 0.5];
+          if (Math.hypot(spot[0] - c.pos[0], spot[2] - c.pos[2]) >= 3.2) return spot;
+        }
+      }
+    }
+    return null;
   }
 
   newsInfo() {

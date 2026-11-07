@@ -46,6 +46,7 @@ import { RVHome, RV_FLOOR } from './rvhome.js';
 import { Elevators } from './elevator.js';
 import { liftDoors } from './shared/elevator.js';
 import { SecretAgency } from './spy.js';
+import { Weather } from './weather.js';
 
 const $ = id => document.getElementById(id);
 const REACH = 7;
@@ -123,6 +124,8 @@ sky.nightLight = settings.nightLight;
 const reflections = new Reflections(renderer, scene);
 const glow = new Glow(renderer, scene, camera);
 
+let weather; // the rain (made once the world is)
+
 // Graphics settings. Live reflections and glow look great but need a good graphics card.
 // shadowEvery: shadows are redrawn every this many frames (they barely change between two).
 const QUALITY = {
@@ -147,7 +150,10 @@ function applyQuality() {
     sky.sun.shadow.map = null;
   }
   if (sky.lampLights.length !== q.lamps) sky.setLampLightCount(q.lamps);
+  weather?.setQuality(RAINDROPS[settings.quality] || RAINDROPS.high);
 }
+// How many raindrops there are at most, for each graphics setting.
+const RAINDROPS = { high: 1400, medium: 1000, low: 500 };
 applyQuality();
 
 // Block highlight under the crosshair.
@@ -267,6 +273,8 @@ async function load() {
     },
   });
   elevators = new Elevators(scene, world, sounds);
+  weather = new Weather(scene, world, sounds, () => cars.boxes());
+  weather.setQuality(RAINDROPS[settings.quality] || RAINDROPS.high);
   agency = new SecretAgency({
     scene, world, sounds, effects, hud, net, headlight,
     others: () => [...avatars.list.values()],
@@ -383,6 +391,8 @@ $('join-form').addEventListener('submit', async e => {
   for (const c of welcome.cars) cars.add(c);
   setClaims(welcome.claims || []);
   agency.setWorld({ base: welcome.base, files: welcome.files, landmarks: welcome.landmarks });
+  weather.set(welcome.rain || 0);
+  weather.rain = weather.target; // (if it's raining when you arrive, it already is)
   sky.time = welcome.time;
   hud.addChat({ system: true, text: online
     ? `Welcome, ${settings.name}! ${welcome.players.length} other builder(s) online.`
@@ -448,6 +458,7 @@ net.on('npc_say', ({ id, text }) => {
   if (a.pos.distanceTo(player.pos) < 16) hud.addChat({ name: a.name, color: '#ffd54f', text });
 });
 net.on('npc_pet', () => myBody.brain?.cheer()); // somebody petted our pet: it's so happy!
+net.on('weather', ({ rain }) => weather.set(rain));
 // A TOP SECRET file (and maybe Top Secret clearance).
 net.on('secret_file', ({ again, found, need, clear, left = [] }) => {
   if (again) return hud.toast(clear ? '🗂️ You\'ve read this one, agent. Your clearance is good!' : `🗂️ You've already found this one (${found} of ${need}). ${need - found} to go!`);
@@ -2545,7 +2556,8 @@ function updateSnow(dt, time) {
     for (let i = 0; i < a.length; i += 3) {
       a[i + 1] -= dt * (1.2 + (i % 7) * 0.12);
       a[i] += Math.sin(time * 0.7 + i) * dt * 0.3;
-      if (a[i + 1] < -12) a[i + 1] += 24;
+      // (Not indoors: a flake that's under a roof goes back up to the sky.)
+      if (a[i + 1] < -12 || weather?.sheltered(c.x + a[i], c.y + a[i + 1], c.z + a[i + 2])) a[i + 1] = 12 - Math.random() * 2;
     }
     snowfall.geometry.attributes.position.needsUpdate = true;
     snowfall.position.set(c.x, c.y, c.z);
@@ -4844,6 +4856,10 @@ function frame(timestamp) {
     sounds.rotor(rotor * Math.min(1, rotorSpin * 3), rotorSpin, rotorEffort);
   }
 
+  if (weather) {
+    weather.dayK = sky.dayK;
+    sky.rain = weather.update(dt, camera);
+  }
   sky.update(dt, camera, world, materials);
   if (structures) {
     lightPools.update(world, structures.version, sky.lampK || 0);
@@ -4959,6 +4975,7 @@ window.buildzone = {
   rv,
   get elevators() { return elevators; },
   get agency() { return agency; },
+  get weather() { return weather; },
   callElevator: (x, y, z) => callElevator(x, y, z),
   get rvSpot() { return rvSpot; },
   enterRV: car => enterRV(car),

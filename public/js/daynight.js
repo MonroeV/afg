@@ -123,6 +123,7 @@ export class DayNight {
     this.fogSunset = new THREE.Color(0xe8a882);
     this.fogNight = new THREE.Color(0x0b1226);
     this.fogNightLight = new THREE.Color(0x243660); // (the night haze with the brightest nights)
+    this.fogRain = new THREE.Color(); // (grey, when it rains)
     scene.fog = new THREE.Fog(0xc4d6e6, 60, 230);
   }
 
@@ -199,12 +200,27 @@ export class DayNight {
     this.scene.fog.color.copy(this.fogNight).lerp(this.fogNightLight, this.nightLight).lerp(this.fogDay, this.dayK).lerp(this.fogSunset, sunsetK * 0.6);
     this.scene.fog.near = 40 + 20 * this.dayK;
     this.scene.fog.far = 170 + 60 * this.dayK;
+    // Rain (0..1, set by the game): grey clouds over the sun and moon, a dimmer, hazier day, and
+    // the fog closing in.
+    const wet = this.rain || 0;
+    if (wet > 0) {
+      this.sun.intensity *= 1 - 0.65 * wet;
+      this.hemi.intensity *= 1 - 0.18 * wet;
+      this.scene.fog.color.lerp(this.fogRain.setRGB(0.2 * this.dayK + 0.012, 0.225 * this.dayK + 0.014, 0.25 * this.dayK + 0.018), 0.8 * wet); // (a rainy grey: these are linear colors)
+      this.scene.fog.near *= 1 - 0.55 * wet;
+      this.scene.fog.far *= 1 - 0.45 * wet;
+    }
+    const u = this.sky.material.uniforms;
+    u.turbidity.value = 3 + 9 * wet;
+    u.rayleigh.value = 1.2 - 0.9 * wet;
+    u.cloudCoverage.value = 0.4 + 0.58 * wet; // (clouded right over)
+    u.cloudDensity.value = 0.4 + 0.55 * wet;
 
     this.stars.position.copy(camera.position);
-    this.stars.material.opacity = smooth(0.3, 0.9, nightK);
+    this.stars.material.opacity = smooth(0.3, 0.9, nightK) * (1 - wet); // (behind the clouds when it rains)
     this.stars.rotation.y = this.time * 0.002;
     this.moon.position.copy(camera.position).addScaledVector(this.moonDir, 700);
-    this.moon.material.opacity = smooth(-0.1, 0.05, this.moonDir.y);
+    this.moon.material.opacity = smooth(-0.1, 0.05, this.moonDir.y) * (1 - 0.85 * wet);
 
     // Lamps glow at night (indoor ones all the time) and light up their surroundings.
     const lampK = smooth(0.25, 0.85, nightK);

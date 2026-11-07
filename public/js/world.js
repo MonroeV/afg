@@ -229,7 +229,7 @@ export function createBlockMaterials(textures) {
     if (def.water) m.normalScale.set(1.6, 1.6);
     // How strongly it reflects its surroundings (see lighting.js).
     // (Windows only reflect a little, so you can still see in and out through them.)
-    m.userData.shine = def.mirror ? 1.6 : def.gold ? 1.3 : def.water ? 1.4 : def.transparent ? 0.5 : def.metal ? 1 : def.glossy ? 0.6 : 0;
+    m.userData.shine = def.mirror ? 1.6 : def.gold ? 1.3 : def.water ? 1.4 : def.clear ? 0.18 : def.transparent ? 0.5 : def.metal ? 1 : def.glossy ? 0.6 : 0;
     paintable(m);
     if (def.cutout) m.alphaTest = 0.5;
     if (def.transparent) {

@@ -193,6 +193,15 @@ function glass(u, v) {
   return { c: [0.72, 0.86, 0.95], h: 0.5, a: streak ? 0.24 : 0.1 };
 }
 
+// Clear glass: almost completely see-through, with just a thin, faint edge and a little streak
+// of shine, so you can tell it's there.
+function clearGlass(u, v) {
+  const border = Math.min(u, v, 1 - u, 1 - v);
+  if (border < 0.018) return { c: [0.9, 0.95, 0.98], h: 1, a: 0.42 };
+  const streak = Math.abs(((u + v) % 0.7) - 0.22) < 0.014;
+  return { c: [0.9, 0.96, 1], h: 0.5, a: streak ? 0.11 : 0.03 };
+}
+
 function sand(u, v) {
   const n = fbm(u, v, 8, 5, 90);
   const ripple = Math.sin((v * 10 + fbm(u, v, 3, 3, 91) * 3) * Math.PI * 2) * 0.5 + 0.5;
@@ -616,6 +625,7 @@ const GENERATORS = {
   parking_line_turned: parkingLineTurned,
   parking_sign: parkingSign,
   tinted_glass: tintedGlass,
+  clear_glass: clearGlass,
   sidewalk,
   roof: roofTiles,
   flowers,

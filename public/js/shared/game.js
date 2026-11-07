@@ -22,6 +22,10 @@ const RACE_PRIZE = 3;
 const FIX_AMOUNT = 8; // health a turn of the wrench puts back (out of 100)
 const TICK_RATE = 15; // how often the town's people's positions go out
 const DAY_MS = 24 * 60 * 60 * 1000;
+// Rain: now and then, not often. Between showers it stays dry for 30 to 75 minutes; a shower lasts
+// 1½ to 3½ minutes (so it rains about once an hour, and about one minute in twenty-five).
+const RAIN_CALM = [30 * 60, 75 * 60], RAIN_SHOWER = [90, 210];
+const between = ([a, b]) => a + Math.random() * (b - a);
 const LOG = 7, LEAVES = 8, GRASS = 1, DIRT = 2, RACE_FINISH = 72;
 export const MAX_OWNED_VEHICLES = 3; // vehicles one person can have of their own
 export const MAX_MANY = 4096; // the most blocks one Fill or Paste can change
@@ -333,6 +337,30 @@ export class GameRoom {
     this.onDirty();
   }
 
+  // ---------- The weather ----------
+
+  // Now and then a shower of rain (everyone gets the same weather). rain: how hard (0 when dry).
+  updateWeather(dt) {
+    const w = (this.weather ??= { rain: 0, left: between(RAIN_CALM) });
+    w.left -= dt;
+    if (w.left > 0) return;
+    this.setRain(w.rain ? 0 : 0.55 + Math.random() * 0.45);
+  }
+
+  setRain(rain) {
+    const w = (this.weather ??= { rain: 0, left: 0 });
+    const was = w.rain;
+    w.rain = rain;
+    w.left = between(rain ? RAIN_SHOWER : RAIN_CALM);
+    this.broadcast({ t: 'weather', rain });
+    if (rain && !was) {
+      this.log('It\'s raining');
+      this.npcs.breaking(rain > 0.85 ? 'BREAKING NEWS: a big rainstorm over BuildZone! Head indoors, everybody! ⛈️' : 'This just in: it\'s raining in BuildZone! Don\'t forget your umbrella! ☔');
+    } else if (!rain && was) {
+      this.npcs.breaking('The rain has stopped! Look up: is that a rainbow? 🌈');
+    }
+  }
+
   // Worlds saved before version 13: elevators in the skyscrapers (instead of their ladders, where
   // they're just as they were built and nobody's claimed them), the Secret Agency's base out in
   // the south-east (on empty land nobody's claimed), its three TOP SECRET files (in empty spots),
@@ -642,6 +670,7 @@ export class GameRoom {
       // Where you were when you last left (your game puts you back there if there's room).
       resume: this.spots[nameKey(client.name)]?.slice(0, 4) || null,
       coins: [...this.coins].map(([id, c]) => [id, ...c]),
+      rain: this.weather?.rain || 0, // (raining right now?)
       // The Secret Agency's base (its inside, its lasers) and where the TOP SECRET files are.
       base: this.places?.base || null,
       files: (this.places?.files || []).map(f => f.slice(0, 3)),
@@ -1473,6 +1502,7 @@ export class GameRoom {
   tick(dt) {
     const now = Date.now();
     this.time = (this.time + dt) % DAY_LENGTH;
+    this.updateWeather(dt);
     const t = this.timers;
     for (const k in t) t[k] -= dt;
 

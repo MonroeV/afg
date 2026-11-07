@@ -168,6 +168,8 @@ export const BLOCKS = {
   110: { name: 'Gadget Shelf', shape: 'model', model: 'gogglesRack', facing: true, spy: 'goggles', hidden: true, worldOnly: true, box: [0.04, 0, 0.3, 0.96, 1, 0.7] },
   // A radar dish on the roof.
   111: { name: 'Radar Dish', shape: 'model', model: 'radarDish', hidden: true, worldOnly: true, box: [0.35, 0, 0.35, 0.65, 1, 0.65] },
+  // Super clear glass: you can only just see it's there (a thin, faint edge and a little shine).
+  112: { name: 'Clear Glass', tex: 'clear_glass', transparent: true, fragile: true, clear: true },
 };
 // Elevator shaft parts (in the meta, above the facing bits).
 export const ELEVATOR = 103;
