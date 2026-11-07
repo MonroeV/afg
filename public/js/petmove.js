@@ -54,6 +54,7 @@ export class PetNav {
   // edge leaves room; a block, a closed door or a couch doesn't.)
   passable(x, y, z) {
     if (!this.inside(x, y, z)) return false;
+    if (this.forbid?.(x, y, z)) return false; // (the Secret Agency's base, without clearance)
     return this.cached(0, x, y, z, () => {
       const out = this.boxes;
       out.length = 0;

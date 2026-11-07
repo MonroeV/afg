@@ -5,6 +5,7 @@
 // dancing and water balloons.
 import { sanitizeLook } from './avatar.js';
 import { BLOCKS, isSolidBlock, blockId, itemOf, SHOP_TOOLS } from './blocks.js';
+import { inZone } from './secretbase.js';
 
 export const NPC_ACT = { idle: 0, walk: 1, wave: 2, dance: 3, pet: 4, cheer: 5 };
 
@@ -20,8 +21,8 @@ const NPCS = [
   {
     id: -2, place: 'tower', name: 'Rex', title: 'Rex 💼', roam: 2,
     look: { face: 'cool', hair: 'short', shirt: 'jacket', pants: 'jeans', skin: '#8d5a34', hairColor: '#1b1209', shirtColor: '#424242', shirtColor2: '#ffffff', pantsColor: '#111111', shoesColor: '#111111' },
-    hello: n => [`Welcome to the tower, ${n}! 💼`, `Hi ${n}! The penthouse is at the top. Take the ladder!`, `Good to see you, ${n}!`],
-    tips: ['Every floor has offices. The top floor has a grand piano! 🎹', 'The ladder in the corner goes all the way up to the roof.', 'You can sit in the office chairs. Very comfy!'],
+    hello: n => [`Welcome to the tower, ${n}! 💼`, `Hi ${n}! The penthouse is at the top. Take the elevator! 🛗`, `Good to see you, ${n}!`],
+    tips: ['Every floor has offices. The top floor has a grand piano! 🎹', 'The elevator in the corner goes all the way up to the roof. Right-click its doors and pick a floor! 🛗', 'You can sit in the office chairs. Very comfy!'],
   },
   {
     id: -3, place: 'plaza', name: 'Mayor Maple', title: 'Mayor Maple 🎩', roam: 7,
@@ -49,6 +50,39 @@ const NPCS = [
     hello: n => [`Hey ${n}! Ready to hit the slopes? ⛷️`, `Welcome to the lodge, ${n}! Warm up by the fire! 🔥`, `${n}! The snow is perfect today! ❄️`],
     tips: ['Grab a pair of skis from the rack by the door, then ride down the slope! ⛷️', 'Right-click the chair at the bottom of the ski lift to ride up to the top! 🚡', 'On skis: hold W to carve toward where you look, S to slow down.', 'The ice rink is super slippery. Have fun skating! ⛸️', 'Try a jump on skis! Press Space! 🏂'],
   },
+  // ---------- The Secret Agency ----------
+  // Agent Shadow, on the town square: talk to him to join the Agency (find the three TOP SECRET
+  // files for Top Secret clearance).
+  {
+    id: -7, place: 'agent', name: 'Agent Shadow', title: 'Agent Shadow 🕶️', roam: 1.2, agent: true,
+    look: { face: 'cool', hair: 'short', hat: 'none', shirt: 'jacket', pants: 'jeans', skin: '#d39a6a', hairColor: '#1b1209', shirtColor: '#1d1f24', shirtColor2: '#ffffff', pantsColor: '#1d1f24', shoesColor: '#111111' },
+    hello: n => [`Psst... ${n}! Over here! 🕶️`, `Psst! ${n}! Want to be a secret agent? Talk to me...`, `Keep it down, ${n}... 🤫 Right-click me.`],
+    tips: ['🤫'],
+  },
+  // The guards at the base's door: only agents with Top Secret clearance get in.
+  {
+    id: -8, place: 'guard1', name: 'Guard Bruno', title: 'Guard Bruno 💂', roam: 0.6, guard: true, clearance: true,
+    look: { face: 'cool', hair: 'short', hat: 'cap', shirt: 'jacket', pants: 'jeans', skin: '#b07548', hairColor: '#1b1209', hatColor: '#263238', shirtColor: '#37474f', shirtColor2: '#ffd54f', pantsColor: '#263238', shoesColor: '#111111' },
+    hello: n => [`Halt, ${n}! 🛑`], tips: [],
+  },
+  {
+    id: -9, place: 'guard2', name: 'Guard Tess', title: 'Guard Tess 💂', roam: 0.6, guard: true, clearance: true,
+    look: { face: 'cool', hair: 'ponytail', hat: 'cap', shirt: 'jacket', pants: 'jeans', skin: '#f5c9a0', hairColor: '#6b3e1f', hatColor: '#263238', shirtColor: '#37474f', shirtColor2: '#ffd54f', pantsColor: '#263238', shoesColor: '#111111' },
+    hello: n => [`Halt, ${n}! 🛑`], tips: [],
+  },
+  // Inside: Agent Byte watches the spy screens, Dr. Gizmo looks after the drones.
+  {
+    id: -10, place: 'spyroom', name: 'Agent Byte', title: 'Agent Byte 💻', roam: 2.5, clearance: true,
+    look: { face: 'grin', hair: 'spiky', hat: 'none', shirt: 'hoodie', pants: 'jeans', skin: '#ffe0c4', hairColor: '#4fc3f7', shirtColor: '#263238', shirtColor2: '#66ffa6', pantsColor: '#1d1f24', shoesColor: '#111111' },
+    hello: n => [`Agent ${n}! Welcome to the spy room! 💻`, `Hey ${n}! The screens are all yours. 🕵️`],
+    tips: ['Right-click a console to watch anyone, anywhere, on the spy cameras! (◀ ▶ to switch) 📹', 'The radar table shows where everybody is, right now! 📡', 'Psst: the big red button in the vault? Please don\'t press it. 😬', 'Try the laser hall! Wait for the lasers to blink off, then GO! 🔴'],
+  },
+  {
+    id: -11, place: 'dronebay', name: 'Dr. Gizmo', title: 'Dr. Gizmo 🔬', roam: 2.5, clearance: true,
+    look: { face: 'surprised', hair: 'afro', hat: 'none', shirt: 'dress', pants: 'jeans', skin: '#8d5a34', hairColor: '#e8e8e8', shirtColor: '#ffffff', shirtColor2: '#40c4ff', pantsColor: '#283593', shoesColor: '#111111' },
+    hello: n => [`Ah, Agent ${n}! Come and see my drones! 🚁`, `${n}! Mind the propellers! 🔬`],
+    tips: ['Right-click a drone to fly it! It goes up through the hatch in the roof. 🚁', 'Flying a drone: WASD to fly, Space up, C down, the mouse to look. E to bring it home!', 'Click while flying to drop a shower of sparkles on whoever\'s below! ✨', 'My night-vision goggles are in the vault, past the lasers. Wear them at night! 🥽'],
+  },
 ];
 
 // Things players hold that the town's people just have to comment on.
@@ -65,7 +99,7 @@ const BEATS = {
   plaza: { label: 'at the town square', lines: ["Good day, BuildZone! I'm live at the town square!", 'Mayor Maple says the flowers have never looked better!', 'Builders are busy all over town today. Just look at it!', 'Remember: gold coins are hiding all over town! 🪙'] },
   store: { label: 'at the Luxe Store', lines: ["I'm live at the Luxe Store, the fanciest shop in town! ✨", 'Is that... a real diamond block? Wow! 💎', 'Shoppers say the Jetpack is out of this world! 🚀', 'Penny says there\'s something sparkly for everyone!'] },
   pizza: { label: 'at the Pizza Palace', lines: ['Live from the Pizza Palace, where the ovens never sleep! 🍕', 'Chef Rosa needs delivery helpers. Coins for pizza!', 'Mmm, can you smell that? Fresh pizza! 😋', 'Pizzas are flying out the door today!'] },
-  tower: { label: 'at the tower', lines: ["I'm here at the tower, the tallest building in town! 🏢", "There's a grand piano all the way up at the top! 🎹", 'The view from the roof is amazing. Take the ladder!'] },
+  tower: { label: 'at the tower', lines: ["I'm here at the tower, the tallest building in town! 🏢", "There's a grand piano all the way up at the top! 🎹", 'The view from the roof is amazing. Take the elevator! 🛗'] },
   camp: { label: 'at Sunny Shores Campground', lines: ['Live from Sunny Shores Campground! The campfires are crackling! 🔥', 'Camper vans as far as the eye can see! 🚐', 'In a camper van, press G and the roof pops up! ⛺', "The beach is just down the path. Surf's up! 🏖️"] },
   quarry: { label: 'at Big Rock Quarry', lines: ["I'm at Big Rock Quarry, where the dump trucks rumble! 🚚", 'Drive a dump truck under the chute to fill it with dirt! ⛏️', 'Then press G to dump it wherever you like! 🪨', 'Hard hats on, everybody! 👷'] },
   farm: { label: 'at Happy Acres Farm', lines: ['Live from Happy Acres Farm! Look at all those pumpkins! 🎃', 'The flower fields are in full bloom! 🌸', 'Hop in a pickup truck: a friend can ride in the back! 🛻', 'Nobody lives here yet. Claim it and it could be yours! 🚜'] },
@@ -93,10 +127,11 @@ export class NpcCrew {
   // Puts everyone where they work (if that place is in this world).
   setup(places) {
     this.list = [];
+    this.zone = places?.base?.zone || null; // the Secret Agency's base: clearance only
     for (const def of NPCS) {
       const place = def.place === 'plaza' ? { x: 4.5, y: 0, z: 6.5, face: 0, area: [-7, -7, 7, 7] } : places?.[def.place];
       if (!place) continue;
-      const home = this.findStand(place.x, place.y ?? 0, place.z) || [place.x, place.y ?? 0, place.z];
+      const home = this.findStand(place.x, place.y ?? 0, place.z, def) || [place.x, place.y ?? 0, place.z];
       this.list.push({
         def, id: def.id, home, area: place.area, face: place.face ?? 0,
         pos: home.slice(), yaw: place.face ?? 0, goal: null, wait: 2 + Math.random() * 4,
@@ -124,28 +159,30 @@ export class NpcCrew {
     return y < 0 ? this.room.groundSolid(x, y, z) : isSolidBlock(itemOf(this.room.get(x, y, z)));
   }
 
-  standable(x, y, z) {
+  // def: who's asking (the base is only for the Agency's own people).
+  standable(x, y, z, def = null) {
+    if (this.zone && !def?.clearance && inZone(this.zone, x + 0.5, y, z + 0.5)) return false;
     const v = this.room.get(x, y, z);
     return !this.solid(x, y, z) && !this.solid(x, y + 1, z) && this.solid(x, y - 1, z) && blockId(itemOf(v)) !== 36 && blockId(v >> 16) !== 36;
   }
 
   // The nearest spot to stand on, near (x, y, z).
-  findStand(x, y, z) {
+  findStand(x, y, z, def = null) {
     for (let r = 0; r <= 3; r++)
       for (let dx = -r; dx <= r; dx++)
         for (let dz = -r; dz <= r; dz++) {
           const cx = Math.floor(x) + dx, cz = Math.floor(z) + dz;
-          if (this.standable(cx, y, cz)) return [cx + 0.5, y, cz + 0.5];
+          if (this.standable(cx, y, cz, def)) return [cx + 0.5, y, cz + 0.5];
         }
     return null;
   }
 
   // Can we walk in a straight line from a to b (on one level)?
-  clearLine(a, b) {
+  clearLine(a, b, def = null) {
     const d = Math.hypot(b[0] - a[0], b[2] - a[2]), steps = Math.ceil(d / 0.3);
     for (let i = 1; i <= steps; i++) {
       const t = i / steps;
-      if (!this.standable(Math.floor(a[0] + (b[0] - a[0]) * t), a[1], Math.floor(a[2] + (b[2] - a[2]) * t))) return false;
+      if (!this.standable(Math.floor(a[0] + (b[0] - a[0]) * t), a[1], Math.floor(a[2] + (b[2] - a[2]) * t), def)) return false;
     }
     return true;
   }
@@ -191,6 +228,7 @@ export class NpcCrew {
   // Say hello, admire things, go and pet pets.
   notice(n, players, now) {
     if (n.task || n.actionT > 0) return;
+    if (n.def.guard) return this.guardWatch(n, players, now);
     for (const c of players) {
       const [x, y, z] = c.pos;
       if (!this.near(n, x, y, z, 5)) continue;
@@ -270,7 +308,7 @@ export class NpcCrew {
     }
     const step = Math.min(d, 1.4 * dt);
     const next = [n.pos[0] + (dx / d) * step, n.pos[1], n.pos[2] + (dz / d) * step];
-    if (!this.standable(Math.floor(next[0]), n.pos[1], Math.floor(next[2]))) {
+    if (!this.standable(Math.floor(next[0]), n.pos[1], Math.floor(next[2]), n.def)) {
       n.goal = null;
       if (n.task) n.task = null;
       n.wait = 1;
@@ -290,7 +328,7 @@ export class NpcCrew {
       const x = n.home[0] + Math.cos(a) * r, z = n.home[2] + Math.sin(a) * r;
       if (n.area && (x < n.area[0] || x > n.area[2] + 1 || z < n.area[1] || z > n.area[3] + 1)) continue;
       const spot = [Math.floor(x) + 0.5, n.home[1], Math.floor(z) + 0.5];
-      if (this.standable(Math.floor(x), n.home[1], Math.floor(z)) && this.clearLine(n.pos, spot)) return spot;
+      if (this.standable(Math.floor(x), n.home[1], Math.floor(z), n.def) && this.clearLine(n.pos, spot, n.def)) return spot;
     }
     return null;
   }
@@ -364,9 +402,53 @@ export class NpcCrew {
       c.send({ t: 'shop_open' });
     } else if (n.def.place === 'pizza') {
       this.room.startJob(c);
+    } else if (n.def.agent) {
+      this.say(n, this.mission(c), true);
+    } else if (n.def.guard) {
+      this.say(n, this.room.cleared(c) ? pickOne([`Welcome back, Agent ${c.name}! 🫡 In you go.`, `Agent ${c.name}! The door's open for you. 🫡`]) : pickOne([`🛑 No clearance, no entry, ${c.name}! Agent Shadow on the town square can tell you how to get some.`, '🛑 This is a TOP SECRET area! Only agents with Top Secret clearance get in.']), true);
     } else {
       this.say(n, pickOne(n.def.tips), true);
     }
+  }
+
+  // ---------- The Secret Agency ----------
+
+  // What Agent Shadow tells you: how to get clearance (and how you're getting on).
+  mission(c) {
+    const w = this.room.wallet(c), need = this.room.filesNeeded(), found = w.agent.files.length;
+    if (w.agent.clear) return pickOne([`Agent ${c.name}! 🕶️ Your clearance is good. The base is hidden out in the south-east, past the campground. Show the guards your badge!`, `Good work, Agent ${c.name}. The drones, the spy cameras and the lasers are waiting for you at the base. Shhh! 🤫`]);
+    const left = this.room.filesLeft(w);
+    if (!found) return `Psst, ${c.name}... 🕶️ The Secret Agency needs new agents. Find our ${need} TOP SECRET files: one is ${left[0]}, one is ${left[1] || 'hidden'}, and one is ${left[2] || 'hidden'}. Right-click each one. Find them all and you'll get Top Secret clearance!`;
+    return `You've found ${found} of ${need} TOP SECRET files, ${c.name}. 🕵️ Still to find: ${left.join(', and ')}.`;
+  }
+
+  // A guard at the base's door: stops anyone without clearance, salutes agents.
+  guardWatch(n, players, now) {
+    for (const c of players) {
+      const [x, y, z] = c.pos;
+      if (!this.near(n, x, y, z, 5)) continue;
+      const clear = this.room.cleared(c);
+      const key = `${c.id}:${clear}`;
+      if (now - (n.seen.get(key) || 0) < (clear ? 90 : 25) * SECOND) continue;
+      n.seen.set(key, now);
+      this.face(n, x, z);
+      this.act(n, NPC_ACT.wave, 1.5);
+      this.say(n, clear ? pickOne([`Welcome, Agent ${c.name}! 🫡`, `Agent ${c.name}! Go right in. 🫡`, `Badge checked. Good to see you, Agent ${c.name}! 🕶️`])
+        : pickOne([`🛑 Halt, ${c.name}! This is a TOP SECRET area. No clearance, no entry!`, `🛑 Stop right there, ${c.name}! Secret Agency agents only.`, `🛑 Sorry ${c.name}, Top Secret clearance only! Ask Agent Shadow on the town square. 🕶️`]), true);
+      return;
+    }
+  }
+
+  // Someone without clearance tried the base's door: the nearest guard tells them.
+  halt(c) {
+    const now = Date.now();
+    if (now - (c.haltedAt || 0) < 4 * SECOND) return;
+    c.haltedAt = now;
+    const guard = this.list.filter(n => n.def.guard).sort((a, b) => Math.hypot(a.pos[0] - c.pos[0], a.pos[2] - c.pos[2]) - Math.hypot(b.pos[0] - c.pos[0], b.pos[2] - c.pos[2]))[0];
+    if (!guard) return;
+    this.face(guard, c.pos[0], c.pos[2]);
+    this.act(guard, NPC_ACT.wave, 1.5);
+    this.say(guard, pickOne([`🛑 Locked! You need Top Secret clearance, ${c.name}.`, `🛑 Nice try, ${c.name}! Clearance only. Talk to Agent Shadow on the town square. 🕶️`]), true);
   }
 
   // ---------- The news ----------
@@ -396,7 +478,7 @@ export class NpcCrew {
     const spots = Object.entries(BEATS).map(([key, beat]) => ({ key, beat, p: key === 'plaza' ? { x: 3.5, y: 0, z: 3.5 } : places[key] })).filter(s => s.p);
     let stand = null, story = null;
     // Sometimes: drop in on someone who's playing (on foot, out in the open).
-    const guests = players.filter(c => c.pos[1] < 40 && !c.sleeping);
+    const guests = players.filter(c => c.pos[1] < 40 && !c.sleeping && !inZone(this.zone, ...c.pos));
     if (guests.length && Math.random() < 0.45 && n.story?.guest === 0) {
       const c = guests[Math.floor(Math.random() * guests.length)];
       const a = c.rot[0], fx = -Math.sin(a), fz = -Math.cos(a);

@@ -26,6 +26,7 @@ export const SHOWTIME = 'showtime';
 export const GOLDPAINT = 'goldpaint';
 export const SNEAKERS = 'sneakers';
 export const SKIS = 'skis';
+export const GOGGLES = 'goggles'; // night-vision goggles (from the Secret Agency's vault)
 export const VACATION = 'vacationflag';
 export const TOOLS = [HAMMER, BRUSH, SCRAPER, WRENCH, BALL, FIREWORKS, CLAIM, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, SHOWTIME, VACATION];
 // Things you have to buy at the Luxe Store before you can use them.
@@ -33,7 +34,7 @@ export const fromStore = item => (typeof item === 'number' ? !!BLOCKS[item]?.pri
 // Everything that can go in the hotbar.
 export const ALL_ITEMS = [...TOOLS, ...BLOCK_IDS];
 // Gear isn't held: you wear it (put it on and take it off in the item menu's 🎒 Gear).
-export const GEAR = [SNEAKERS, JETPACK, TRAIL, SKIS];
+export const GEAR = [SNEAKERS, JETPACK, TRAIL, SKIS, GOGGLES];
 // Everything that needs a little picture: the hotbar things, gear, and Gold Car Paint (for the store).
 export const ICON_ITEMS = [...ALL_ITEMS, ...GEAR, GOLDPAINT];
 
@@ -67,7 +68,7 @@ export const familyOf = item => FAMILY_OF.get(item) || null;
 
 // The tabs of the item menu. Blocks not listed anywhere go under Blocks. (Each family of styles
 // shows up once, where its first style is.) Lamps are in Home, outdoor lights in Town.
-const HOME = [94, 60, 74, 95, 61, 62, 73, 64, 63, 65, 66, 78, 67, 68, 39, 40, 41, 42, 44, 43, 21, 53, 54, 25, 35, 20, 75, 76, 77, 79, 80, 81, 86, 92];
+const HOME = [94, 60, 74, 95, 61, 62, 73, 64, 63, 65, 66, 78, 67, 68, 39, 40, 41, 42, 44, 43, 21, 53, 103, 54, 25, 35, 20, 75, 76, 77, 79, 80, 81, 86, 92];
 const TOWN = [22, 23, 56, 24, 58, 46, 47, 45, 48, 49, 27, 36, 1, 7, 8, 89, 87, 88, 91, 90, 97, 98, 99, 100, 101, 102];
 const FUN = [93, SHOWTIME, 83, 84, 82, 85, BALL, FIREWORKS, WATER_BALLOON, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28];
 const listed = new Set([...HOME, ...TOWN, ...FUN]);
@@ -99,7 +100,7 @@ export const SEARCH_WORDS = {
   31: 'color', 32: 'color', 33: 'color', 34: 'color', 39: 'light', 40: 'light', 41: 'light', 42: 'light', 43: 'light', 44: 'light',
   45: 'light torch', 46: 'light', 47: 'light', 48: 'light torch', 49: 'light', 87: 'winter white cold', 88: 'skate slippery winter cold', 89: 'tree pine christmas snow',
   90: 'chair lift ride cable ski', 91: 'winter snow', 92: 'pizza job work cook', 94: 'write words text name label board', 93: 'hot tub bath spa bubbles store', [TRAIL]: 'rainbow sparkle store', [SHOWTIME]: 'fireworks show store', 70: 'boost fast arrow run', 71: 'race timer go', 72: 'race timer end', 19: 'trampoline jump',
-  36: 'pool lake', 21: 'garage', 54: 'fence rail',
+  36: 'pool lake', 21: 'garage', 54: 'fence rail', 103: 'lift up down floors building tower',
 };
 // The hammer always lives in slot 1.
 export const DEFAULT_HOTBAR = [HAMMER, 5, 6, 9, 21, LADDER, BRUSH, FIREWORKS, CLAIM];
@@ -115,6 +116,7 @@ export function itemName(item) {
   if (item === SCRAPER) return 'Paint Scraper';
   if (item === WRENCH) return 'Wrench';
   if (item === SKIS) return 'Skis';
+  if (item === GOGGLES) return 'Night-Vision Goggles';
   if (item === WATER_BALLOON) return 'Water Balloons';
   if (item === BUBBLES) return 'Bubble Wand';
   if (item === BALLOON) return 'Balloon';
@@ -160,6 +162,26 @@ export function makeIcon(item, textures, paint = 1) {
     return canvas;
   }
 
+  if (item === GOGGLES) {
+    // Two big green lenses on a black strap.
+    ctx.fillStyle = '#212121';
+    ctx.fillRect(4, 26, 56, 8);
+    for (const x of [21, 43]) {
+      ctx.fillStyle = '#37474f';
+      ctx.beginPath();
+      ctx.arc(x, 31, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#76ff03';
+      ctx.beginPath();
+      ctx.arc(x, 31, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.beginPath();
+      ctx.arc(x - 3, 28, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return canvas;
+  }
   if (item === SKIS) {
     ctx.translate(32, 32);
     for (const [x, c] of [[-9, '#e53935'], [9, '#1e88e5']]) {

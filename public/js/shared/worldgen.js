@@ -1,8 +1,10 @@
 // Builds the starting world: a main town around spawn, villages in each corner,
 // roads joining them, parks, playgrounds, trees, flowers and parked cars.
-import { WORLD, DOOR_TOP, BED_FOOT, makeBlock, blockId, turnLine, stack, itemOf, floorOf, shapeOf } from './blocks.js';
+import { WORLD, DOOR_TOP, BED_FOOT, ELEVATOR, makeBlock, blockId, blockMeta, turnLine, stack, itemOf, floorOf, shapeOf, isSolidBlock } from './blocks.js';
+import { liftColumn, liftStops, liftDoors } from './elevator.js';
 import { buildFrontier, buildPizzeria, buildSignposts, addFishingSpots } from './frontier.js';
 import { buildFarCountry, moreVehicles } from './farcountry.js';
+import { buildSecretBase, hideSecretFiles, AGENT_SPOT } from './secretbase.js';
 
 const B = {
   grass: 1, dirt: 2, stone: 3, cobble: 4, brick: 5, planks: 6, log: 7, leaves: 8, glass: 9,
@@ -472,7 +474,12 @@ export function generateWorld(seed = 2024) {
   const far = buildFarCountry({ get: getB, set: put, canUse: free, canPave: () => true });
   for (const a of far.areas) markUsed(...a);
   cars.push(...far.cars, ...moreVehicles());
-  const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null, pizza: pizza?.place || null, lodge: frontier.places.lodge };
+  // The Secret Agency's base, out in the south-east.
+  const base = buildSecretBase({ get: getB, set: put, canUse: free });
+  if (base) markUsed(...base.area);
+  const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null, pizza: pizza?.place || null, lodge: frontier.places.lodge, ...far.places, ...(base?.places || {}), agent: AGENT_SPOT };
+  // The three TOP SECRET files (find them all for Top Secret clearance).
+  places.files = hideSecretFiles({ get: getB, set: put, canUse: () => true, places });
 
   // ---------- Countryside ----------
 
@@ -527,7 +534,7 @@ export function generateWorld(seed = 2024) {
     const [x, y, z] = k.split(',').map(Number);
     blocks.push([x, y, z, v]);
   }
-  return { blocks, cars: placed, places: { ...places, ...far.places }, claims: [store?.claim, pizza?.claim, ...frontier.claims, ...far.claims].filter(Boolean), signs: [...posts.signs, ...fishing.signs, ...far.signs] };
+  return { blocks, cars: placed, places, claims: [store?.claim, pizza?.claim, ...frontier.claims, ...far.claims, base?.claim].filter(Boolean), signs: [...posts.signs, ...fishing.signs, ...far.signs, ...(base?.signs || [])] };
 }
 
 // Saved worlds from before the new lamps: put proper lamp heads on the town's street lamps
@@ -544,6 +551,45 @@ export function upgradeLamps(lampKeys, get, set) {
       set(x, y, z, B.streetLamp);
     }
   }
+}
+
+// ---------- Elevators ----------
+
+// Puts an elevator's doors where it stops (see elevator.js). Returns how many floors it stops at.
+export function fitLiftDoors(get, set, x, y, z) {
+  const col = liftColumn(get, x, y, z);
+  if (!col) return 0;
+  const solid = (a, b, c) => b < 0 || isSolidBlock(itemOf(get(a, b, c)));
+  const stops = liftStops(solid, x, z, col.lo, col.hi, col.facing);
+  for (const [yy, v] of liftDoors(get, x, z, col.lo, col.hi, col.facing, stops)) set(x, yy, z, v);
+  return stops.length;
+}
+
+// Worlds saved before version 13: the skyscrapers' ladders become elevators. Only a tower's own
+// ladder, just as it was built (from the ground to the roof, up its concrete pillar, with the
+// roof's railing round the top) and only where canUse(x, z) says so (nobody's claimed it).
+// Returns how many it changed.
+export function elevatorTowers({ each, get, set, canUse }) {
+  const LADDER = 53, CONCRETE = 13, RAILING = 54;
+  const bottoms = [];
+  each((x, y, z, v) => {
+    if (y === 0 && blockId(v) === LADDER) bottoms.push([x, z, blockMeta(v) & 3]);
+  });
+  let changed = 0;
+  for (const [x, z, facing] of bottoms) {
+    if (!canUse(x, z)) continue;
+    const [dx, dz] = [[0, 1], [1, 0], [0, -1], [-1, 0]][facing];
+    let hi = 0;
+    while (blockId(get(x, hi + 1, z)) === LADDER && (blockMeta(get(x, hi + 1, z)) & 3) === facing) hi++;
+    if (hi < 20 || blockId(get(x, hi + 1, z)) !== RAILING) continue; // (a tower's is 36 or 48 blocks)
+    let pillar = true;
+    for (let y = 0; y <= hi && pillar; y++) pillar = blockId(get(x - dx, y, z - dz)) === CONCRETE;
+    if (!pillar) continue;
+    for (let y = 0; y <= hi; y++) set(x, y, z, makeBlock(ELEVATOR, facing));
+    fitLiftDoors(get, set, x, 0, z);
+    changed++;
+  }
+  return changed;
 }
 
 // ---------- Landmarks: parking lots and skyscrapers ----------
@@ -589,7 +635,7 @@ export function buildLandmarks({ get, set, canUse }) {
           const site = makeSite(road, side, a);
           if (!siteFree(site, L, D, tall, get, canUse)) continue;
           if (wish.kind === 'lot') cars.push(...parkingLot(site, set));
-          else skyscraper(site, wish, set);
+          else skyscraper(site, wish, set, get);
           const [xa, za] = site.at(-1, -1), [xb, zb] = site.at(L, D);
           areas.push([Math.min(xa, xb), Math.min(za, zb), Math.max(xa, xb), Math.max(za, zb)]);
           break search;
@@ -828,11 +874,11 @@ function furnishTower({ x0, x1, z0, z1 }, get, set, canUse) {
   }[front];
   const { at, f, r } = frame;
   for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) if (!canUse(x, z)) return null;
-  // The ladder and the pillar it leans on: keep clear around them.
+  // The ladder (or elevator) and the pillar it's on: keep clear around them.
   const keep = [];
   for (let x = ix0; x <= ix1; x++) for (let z = iz0; z <= iz1; z++) {
     const v = get(x, 1, z);
-    if (blockId(v) === B.ladder || blockId(v) === B.concrete) keep.push([x, z]);
+    if (blockId(v) === B.ladder || blockId(v) === ELEVATOR || blockId(v) === B.concrete) keep.push([x, z]);
   }
   const kept = (x, z) => keep.some(([kx, kz]) => Math.abs(kx - x) <= 1 && Math.abs(kz - z) <= 1);
   // Floors: the marble slabs inside (the top one is the roof).
@@ -840,7 +886,7 @@ function furnishTower({ x0, x1, z0, z1 }, get, set, canUse) {
   for (let y = 1; y < 64; y++) if (blockId(get(ix0 + mid, y, iz0 + mid)) === B.marble) roof = y;
   const floors = [0];
   for (let y = 4; y < roof; y += 4) if (blockId(get(ix0 + mid, y, iz0 + mid)) === B.marble) floors.push(y);
-  const LIGHTS = new Set([B.ceilingLight, B.chandelier, B.ladder, B.concrete]);
+  const LIGHTS = new Set([B.ceilingLight, B.chandelier, B.ladder, ELEVATOR, B.concrete]);
   const untouched = (y0, y1) => {
     for (let x = ix0; x <= ix1; x++) for (let z = iz0; z <= iz1; z++) for (let y = y0; y <= y1; y++) {
       const v = get(x, y, z);
@@ -1050,9 +1096,9 @@ function parkingLot(site, set) {
 }
 
 // A glass skyscraper: a lobby with double doors, a floor every 4 blocks with ceiling lights,
-// a ladder up a shaft in the back corner to the roof, and railings around the roof (the
+// an elevator up a shaft in the back corner to the roof, and railings around the roof (the
 // big one has a helipad on top).
-function skyscraper(site, { size: S, height: H, style }, set) {
+function skyscraper(site, { size: S, height: H, style }, set, get) {
   const trim = style ? B.concrete : B.metal, band = style ? B.marble : B.concrete;
   const put = (i, y, j, b) => {
     const [x, z] = site.at(i + 1, j + 1);
@@ -1060,7 +1106,7 @@ function skyscraper(site, { size: S, height: H, style }, set) {
   };
   // The plaza around it (and the lobby floor).
   for (let u = 0; u < S + 2; u++) for (let v = 0; v < S + 2; v++) put(u - 1, 0, v - 1, B.sidewalk);
-  const Q = [1, S - 2], P = [2, S - 2]; // the pillar the ladder leans on, and the ladder shaft
+  const Q = [1, S - 2], P = [2, S - 2]; // the pillar the elevator runs up, and its shaft
   const ladderFacing = (() => {
     const e = site.edge(P[0] - Q[0], P[1] - Q[1]); // from the pillar toward the ladder
     return e === 4 ? 0 : e === 2 ? 1 : e === 1 ? 2 : 3;
@@ -1073,7 +1119,7 @@ function skyscraper(site, { size: S, height: H, style }, set) {
       for (let j = 0; j < S; j++) {
         const edgeI = i === 0 || i === S - 1, edgeJ = j === 0 || j === S - 1;
         if (i === Q[0] && j === Q[1]) put(i, y, j, B.concrete);
-        else if (i === P[0] && j === P[1]) put(i, y, j, makeBlock(B.ladder, ladderFacing));
+        else if (i === P[0] && j === P[1]) put(i, y, j, makeBlock(ELEVATOR, ladderFacing));
         else if (edgeI && edgeJ) put(i, y, j, trim);
         else if (edgeI || edgeJ) {
           if (slab) put(i, y, j, band);
@@ -1100,6 +1146,11 @@ function skyscraper(site, { size: S, height: H, style }, set) {
       if (mask) put(i, roof, j, makeBlock(B.railing, mask));
     }
   for (const [i, j] of [[0, 0], [S - 1, 0], [0, S - 1], [S - 1, S - 1]]) put(i, roof - 1, j, style ? B.neonBlue : B.neonPink);
+  // Doors on the elevator at every floor (and the roof).
+  if (get) {
+    const [x, z] = site.at(P[0] + 1, P[1] + 1);
+    fitLiftDoors(get, set, x, 0, z);
+  }
   if (S >= 11) {
     // A rooftop helipad: an "H" on the roof.
     for (let i = 2; i <= S - 3; i++)

@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   BLOCKS, WORLD, PAINT_COLORS, blockKey, blockId, blockMeta, paintOf, withPaint, makeBlock, shapeOf, isSolidBlock, doorBox,
-  railBoxes, railMask, isSmallProp, itemOf, floorOf, carryPaint, rgbToHex, switchable, lightOff, DOOR_OPEN, DOOR_TOP, BED_FOOT,
+  railBoxes, railMask, isSmallProp, itemOf, floorOf, carryPaint, rgbToHex, switchable, lightOff, liftRole, DOOR_OPEN, DOOR_TOP, BED_FOOT,
 } from './shared/blocks.js';
 import { modelGeometry, modelMaterials } from './models.js';
 import { pictureCanvas } from './pictures.js';
@@ -75,6 +75,7 @@ function modelName(v, renderKey) {
   const variant = renderKey?.split(':')[1];
   if (def.connects && variant !== undefined) return `couch${variant}`;
   if (blockId(v) === BED) return blockMeta(v) & BED_FOOT ? 'bedFoot' : 'bed';
+  if (def.elevator) return (['elevator', 'elevatorDoor', 'elevatorDoorTop'][liftRole(v)] || 'elevator') + (variant?.endsWith('o') ? 'Open' : '');
   return def.model;
 }
 const BED = 64;
@@ -337,6 +338,7 @@ export class World {
     this.liftsVersion = 0;
     this.paints = new Map(); // painted sides, by spot (see blocks.js)
     this.holes = new Set(); // "x,z" where the ground has been dug out, down to the bedrock
+    this.liftOpen = new Set(); // elevator doors standing open on this screen (someone's getting in or out)
     this.buried = new Set(); // keys of blocks hidden inside other blocks (not drawn)
     this.revision = 0; // goes up whenever anything changes
     this.matrix = new THREE.Matrix4();
@@ -585,11 +587,13 @@ export class World {
   // ---------- Ladders ----------
 
   // The whole ladder (every rung going up and down) that includes (x, y, z).
+  // A whole ladder (or elevator shaft): the cells above and below that are part of it.
   ladderCells(x, y, z) {
     const v = this.get(x, y, z);
+    const lift = BLOCKS[blockId(v)]?.elevator;
     const same = yy => {
       const n = this.get(x, yy, z);
-      return shapeOf(n) === 'ladder' && blockMeta(n) === blockMeta(v);
+      return lift ? blockId(n) === blockId(v) && (blockMeta(n) & 3) === (blockMeta(v) & 3) : shapeOf(n) === 'ladder' && blockMeta(n) === blockMeta(v);
     };
     let lo = y, hi = y;
     while (lo > 0 && same(lo - 1)) lo--;
@@ -611,6 +615,10 @@ export class World {
     if (shapeOf(v) === 'picture') return `${id}:${(blockMeta(v) >> 2) & 3}`;
     if (BLOCKS[id].connects) return `${id}:${x === undefined ? 'ab' : this.couchArms(v, x, y, z)}`;
     if (id === BED) return `${id}:${blockMeta(v) & BED_FOOT ? 'foot' : 'head'}`;
+    if (BLOCKS[id].elevator) {
+      const role = liftRole(v);
+      return `${id}:${role}${role && x !== undefined && this.liftOpen.has(blockKey(x, y, z)) ? 'o' : ''}`;
+    }
     if (lightOff(v)) return `${id}:off`;
     return String(id);
   }

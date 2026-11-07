@@ -89,6 +89,30 @@
     </div>
   </div>
 
+  <!-- An elevator's floor buttons -->
+  <div id="lift-panel" class="screen hidden">
+    <div class="panel lift-panel">
+      <h2>🛗 Elevator</h2>
+      <p id="lift-where" class="ask-text"></p>
+      <div id="lift-buttons"></div>
+      <div class="sign-buttons"><button id="lift-close" class="secondary">Close</button></div>
+    </div>
+  </div>
+
+  <!-- The Secret Agency: spy cameras and the drone's camera, the radar, and the alarm's red flash -->
+  <div id="spy-overlay" class="hidden">
+    <div id="spy-cam"></div>
+    <div id="spy-target"></div>
+    <div id="spy-buttons"><button id="spy-prev">◀</button><button id="spy-stop">✕</button><button id="spy-next">▶</button></div>
+  </div>
+  <div id="radar" class="hidden">
+    <div class="radar-panel">
+      <div class="radar-title">📡 SECRET AGENCY RADAR <button id="radar-close">✕</button></div>
+      <canvas id="radar-map" width="600" height="600"></canvas>
+    </div>
+  </div>
+  <div id="red-flash"></div>
+
   <div id="ask" class="screen hidden">
     <div class="panel sign-panel">
       <h2 id="ask-title"></h2>

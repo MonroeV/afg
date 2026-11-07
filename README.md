@@ -62,7 +62,7 @@ customize your character, drive cars, build anything and play with friends.
   white wake, rock gently when they're parked, and the shore stops them (you can't drive out of
   the water). Getting out puts you on the dock or the shore, not in the water
 - **Skyscrapers and parking lots**: two glass towers (48 and 36 blocks tall) with a lobby, a floor
-  every 4 blocks, a ladder up to the roof and railings around the top (the tall one has a helipad
+  every 4 blocks, an elevator up to the roof and railings around the top (the tall one has a helipad
   on the roof: try landing the helicopter up there!), and two parking lots with lined spaces,
   lamps, a P sign and parked cars
 - **Make your own character**: 10 faces, 8 hairstyles, 9 hats, 7 shirts, 4 kinds of pants,
@@ -156,6 +156,15 @@ customize your character, drive cars, build anything and play with friends.
 - **Ladders**: point at a wall and click once, and the ladder runs from the ground all the way to
   the top of the wall. Walk into it and hold W or Space to climb (S to go down). Breaking any rung
   takes the whole ladder down
+- **Elevators** (in the 🛋️ Home tab, next to the ladder): put one at the bottom of a wall, like a
+  ladder, and its shaft goes all the way up the wall (straight up through your floors: the shaft
+  goes through them). It stops at every floor: every level where there's somewhere to step out in
+  front of its doors (the ground, a floor, or the roof up top), and you can see where by its doors.
+  Right-click its doors and pick a floor on its panel of buttons (G is the ground floor, R the
+  roof): the doors open, you step in, they slide shut, and the cab hums up or down the shaft with
+  the floor counting on its screen, dings, and lets you out. Build more floors later and it stops
+  there too. The skyscrapers have them now (up to the roof, with a stop at every floor), and the
+  hammer takes a whole elevator down at once
 - **Railings and fences**: click near the edge of a floor (a stair step, a balcony, the ground or a
   sidewalk) to put a railing along that edge, or click the side of a wall to run one along its top.
   Click the other edges of the same spot for corners. A railing stops you walking (or falling, or
@@ -212,6 +221,28 @@ customize your character, drive cars, build anything and play with friends.
   walk over to pet your pet, love your cool stuff ("A JETPACK?!"), cheer at fireworks, gasp at
   exploding cars, dance when you dance, and complain when you hit them with a water balloon.
   Right-click them for tips
+- **The Secret Agency** 🕶️: a TOP SECRET base hidden out in the south-east of the far country,
+  past the campground. Only agents with **Top Secret clearance** get in: two guards stand at its
+  door ("🛑 Halt! No clearance, no entry!"), the door won't open for anyone else, and if somebody
+  sneaks in anyway (through a door an agent left open, or down the roof hatch) the guards walk
+  them straight back out. The town's people can't step inside either (only the Agency's own:
+  Agent Byte and Dr. Gizmo work in there), and Skye the reporter never follows anyone in.
+  **How to get clearance:** talk to **Agent Shadow** 🕶️ on the town square. He tells you where to
+  find the Agency's three **TOP SECRET files** (they sparkle): one on the roof of the tallest tower
+  (take the elevator!), one down in Big Rock Quarry, and one in the ski lodge. Right-click each one;
+  find all three and you're an agent (it stays yours, like your coins). **Inside the base:**
+  - the **spy room**: a wall of screens, and **spy cameras** (right-click a console) that follow
+    anyone, anywhere (every player and every one of the town's people), saying what they're doing
+    and where they are; ◀ ▶ (or A and D) switch cameras, E stops. The **radar table** shows a map of
+    where everybody is, right now
+  - the **drone bay**: right-click a drone and fly it up through the roof hatch and all over town
+    (WASD to fly, Space up, C down, the mouse to look, V for the drone's own camera, click to drop a
+    shower of sparkles on whoever's below, E to bring it home). Everyone can see it flying. Its
+    battery lasts a couple of minutes, its signal reaches 180 blocks, and at night it has a spotlight
+  - the **laser hall**: red lasers that blink on and off. Touch one and the alarm goes off and
+    you're back at the start; time it right to reach the **gadget vault** at the end, with
+    **night-vision goggles** (gear: wear them and the night glows bright green) and a big red
+    button that says **DO NOT PRESS**. (Press it.)
 - **BZ Live, the news on TV**: Skye Summers, BZ News' roving reporter, travels around town with
   her microphone: the town square, the Luxe Store, the Pizza Palace, the tower, the ski lodge…
   and sometimes she drops in on whoever's playing ("Breaking news! I'm here with Mia, one of the
@@ -278,6 +309,9 @@ customize your character, drive cars, build anything and play with friends.
 | Space | Jump |
 | Left click | Use the item in your hand (place a block, paint, throw the ball or a water balloon, launch fireworks, take a photo) |
 | Left click with the Hammer | Break a block: it takes 3 hits (glass and carpet break in 1), so you don't break things by accident |
+| Right click an elevator's doors | Pick a floor and ride it (arrows and Enter work on its buttons, G the ground floor, R the roof) |
+| Spy cameras: ◀ ▶ or A / D, E | Switch cameras, stop watching |
+| Flying a drone: WASD, Space, C, mouse, V, click, E | Fly, up, down, look, the drone's camera, sparkles, bring it home |
 | Left click with the Wrench | Fix a damaged vehicle (hold to keep fixing) |
 | Left click a vehicle with the Paint Brush | Paint it your paint color |
 | Left click the ground with the Hammer | Dig it out (3 hits), down to the bedrock |
@@ -505,7 +539,11 @@ by each (only in empty spots, or among a dock's own railings, on land nobody has
 and furniture: only in houses and towers that are exactly as the town was first
 built (nobody has changed or claimed them), and only in their empty spots, and in the ski lodge
 and the log cabins (their couches, beds, tables and the lodge's ski rack were missing before):
-only onto their own plain wooden floor, and not in a cabin someone has claimed. If `world.json` can't be read, or was saved by a newer version of the game,
+only onto their own plain wooden floor, and not in a cabin someone has claimed. The skyscrapers'
+ladders become elevators, but only a tower's own ladder, exactly as it was built (from the ground
+to the roof, up its concrete pillar) and only if nobody has claimed it; the Secret Agency's base
+goes on empty land nobody has claimed, and its three TOP SECRET files only into empty spots (on a
+floor, if there's one there) in the town's own places. If `world.json` can't be read, or was saved by a newer version of the game,
 the server stops with a message instead of touching it.
 
 ## The Character Gallery
@@ -549,6 +587,8 @@ public/
     models.js          3D models for the lamps and furniture
     pictures.js        The paintings, posters and whiteboards (drawn in code)
     petmove.js         How pets find their way around and move (jumps, ladders, no walls)
+    elevator.js        Riding elevators: the cab, the ride, and the panel of floor buttons
+    spy.js             The Secret Agency on your screen: spy cameras, radar, drones, lasers, goggles
     shop.js            The Luxe Store's window
     tv.js              The TV shows
     daynight.js        Sky, sun, moon, stars and night lighting
@@ -566,6 +606,8 @@ public/
       worldgen.js      Builds the towns (and furnishes them, and the Luxe Store)
       frontier.js      The ski resort, the woods, cabins, lake and mountains, and the Pizza Palace
       farcountry.js    The far country: the beach and campground, the quarry and the farm
+      elevator.js      Elevators: their shafts, where they stop, their doors and floor names
+      secretbase.js    The Secret Agency's base, its TOP SECRET files, and who may be inside
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/
   make-engine-sounds.py  Makes the engine recordings (needs numpy and ffmpeg; run it after changing a voice)

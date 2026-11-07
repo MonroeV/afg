@@ -565,9 +565,10 @@ export class Avatars {
   }
 
   applyStates(list, myId) {
-    for (const [id, x, y, z, yaw, pitch, pet, ball, flags, ts] of list) {
+    for (const [id, x, y, z, yaw, pitch, pet, ball, flags, ts, drone] of list) {
       const a = this.list.get(id);
       if (id === myId || !a) continue;
+      a.drone = Array.isArray(drone) ? drone : 0; // a Secret Agency drone they're flying
       const when = Number.isFinite(ts) ? ts : null;
       a.setState(x, y, z, yaw, pitch, when, flags);
       a.setPetState(pet, when);

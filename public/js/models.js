@@ -163,6 +163,125 @@ export const MODELS = {
     trim: [box(0.05, 0.05, 0.05, 0.42, 0.42, 0.72), box(0.05, 0.05, 0.05, 0.58, 0.42, 0.72), box(0.3, 0.02, 0.1, 0.5, 0.3, 0.74)],
     colors: { body: 0xf2f2f0, glow: 0x9fd8ff, trim: 0x4a90d9, metal: 0 },
   },
+  // ---------- Elevators ----------
+  // A plain bit of the shaft (brushed steel, with the guide rails showing), the doors at a floor
+  // it stops at (with the call button), and the top of the doors (with the floor light).
+  elevator: {
+    body: [box(1, 1, 1, 0.5, 0.5, 0.5)],
+    trim: [box(0.05, 1, 0.012, 0.15, 0.5, 1.004), box(0.05, 1, 0.012, 0.85, 0.5, 1.004)],
+    colors: { body: 0x9aa3ad, glow: 0xffc24d, accent: 0xc9ced4, trim: 0x3b4048, metal: 0.6 },
+  },
+  elevatorDoor: {
+    body: [box(1, 1, 0.92, 0.5, 0.5, 0.46), box(0.1, 1, 0.08, 0.05, 0.5, 0.96), box(0.1, 1, 0.08, 0.95, 0.5, 0.96)],
+    accent: [box(0.4, 1, 0.04, 0.3, 0.5, 0.95), box(0.4, 1, 0.04, 0.7, 0.5, 0.95)],
+    trim: [box(0.012, 1, 0.046, 0.5, 0.5, 0.952), box(0.8, 0.02, 0.07, 0.5, 0.01, 0.965)],
+    glow: [box(0.05, 0.1, 0.02, 0.95, 0.55, 1.006)],
+    colors: { body: 0x9aa3ad, glow: 0xffc24d, accent: 0xc9ced4, trim: 0x3b4048, metal: 0.6 },
+  },
+  elevatorDoorTop: {
+    body: [box(1, 1, 0.92, 0.5, 0.5, 0.46), box(0.1, 1, 0.08, 0.05, 0.5, 0.96), box(0.1, 1, 0.08, 0.95, 0.5, 0.96), box(0.8, 0.3, 0.08, 0.5, 0.85, 0.96)],
+    accent: [box(0.4, 0.7, 0.04, 0.3, 0.35, 0.95), box(0.4, 0.7, 0.04, 0.7, 0.35, 0.95)],
+    trim: [box(0.012, 0.7, 0.046, 0.5, 0.35, 0.952)],
+    glow: [box(0.34, 0.09, 0.02, 0.5, 0.86, 1.006)],
+    colors: { body: 0x9aa3ad, glow: 0xffc24d, accent: 0xc9ced4, trim: 0x3b4048, metal: 0.6 },
+  },
+  // The doors slid open (while someone gets in or out): you can see into the cab.
+  elevatorDoorOpen: {
+    body: [box(1, 1, 0.04, 0.5, 0.5, 0.02), box(0.04, 1, 1, 0.02, 0.5, 0.5), box(0.04, 1, 1, 0.98, 0.5, 0.5), box(0.1, 1, 0.08, 0.05, 0.5, 0.96), box(0.1, 1, 0.08, 0.95, 0.5, 0.96)],
+    accent: [box(0.08, 1, 0.04, 0.14, 0.5, 0.95), box(0.08, 1, 0.04, 0.86, 0.5, 0.95)],
+    trim: [box(0.8, 0.02, 0.07, 0.5, 0.01, 0.965)],
+    glow: [box(0.05, 0.1, 0.02, 0.95, 0.55, 1.006)],
+    colors: { body: 0x9aa3ad, glow: 0xffc24d, accent: 0xc9ced4, trim: 0x3b4048, metal: 0.6 },
+  },
+  elevatorDoorTopOpen: {
+    body: [box(1, 1, 0.04, 0.5, 0.5, 0.02), box(0.04, 1, 1, 0.02, 0.5, 0.5), box(0.04, 1, 1, 0.98, 0.5, 0.5), box(0.1, 1, 0.08, 0.05, 0.5, 0.96), box(0.1, 1, 0.08, 0.95, 0.5, 0.96), box(1, 0.3, 1, 0.5, 0.85, 0.5)],
+    accent: [box(0.08, 0.7, 0.04, 0.14, 0.35, 0.95), box(0.08, 0.7, 0.04, 0.86, 0.35, 0.95)],
+    glow: [box(0.34, 0.09, 0.02, 0.5, 0.86, 1.006)],
+    colors: { body: 0x9aa3ad, glow: 0xffc24d, accent: 0xc9ced4, trim: 0x3b4048, metal: 0.6 },
+  },
+  // ---------- The Secret Agency ----------
+  // A TOP SECRET folder on a little stand (find all three!).
+  secretFile: {
+    body: [cyl(0.2, 0.25, 0.5, 0.5, 0.25, 0.5, 14)],
+    accent: [box(0.42, 0.32, 0.04, 0.5, 0.67, 0.5), box(0.12, 0.04, 0.04, 0.36, 0.85, 0.5)],
+    trim: [box(0.3, 0.07, 0.046, 0.5, 0.69, 0.5)],
+    glow: [cyl(0.22, 0.22, 0.02, 0.5, 0.505, 0.5, 14)],
+    colors: { body: 0x37474f, glow: 0xffd54f, accent: 0xe8c77a, trim: 0xd32f2f, metal: 0.5 },
+  },
+  // A desk with three screens: the spy cameras.
+  spyConsole: {
+    body: [box(1, 0.06, 0.62, 0.5, 0.72, 0.48), box(0.06, 0.72, 0.62, 0.04, 0.36, 0.48), box(0.06, 0.72, 0.62, 0.96, 0.36, 0.48)],
+    accent: [
+      ...[0.18, 0.5, 0.82].map(x => box(0.31, 0.24, 0.03, x, 0.98, 0.27)),
+      ...[0.18, 0.5, 0.82].map(x => box(0.04, 0.12, 0.04, x, 0.81, 0.27)),
+      box(0.4, 0.02, 0.14, 0.5, 0.76, 0.62),
+    ],
+    glow: [0.18, 0.5, 0.82].map(x => box(0.27, 0.2, 0.012, x, 0.98, 0.29)),
+    glowColors: [0x66ffa6, 0x40c4ff, 0xff8a80],
+    trim: [box(0.05, 0.03, 0.05, 0.86, 0.765, 0.62)],
+    colors: { body: 0x263238, glow: 0x66ffa6, accent: 0x111316, trim: 0xff1744, metal: 0.3 },
+  },
+  // A launch pad with a little white quadcopter on it.
+  dronePad: {
+    body: [box(0.9, 0.06, 0.9, 0.5, 0.03, 0.5)],
+    trim: [box(0.7, 0.012, 0.06, 0.5, 0.066, 0.5), box(0.06, 0.012, 0.7, 0.5, 0.066, 0.5), new THREE.TorusGeometry(0.33, 0.02, 4, 24).rotateX(Math.PI / 2).translate(0.5, 0.066, 0.5)],
+    accent: [
+      box(0.2, 0.07, 0.2, 0.5, 0.17, 0.5),
+      new THREE.BoxGeometry(0.56, 0.025, 0.04).rotateY(Math.PI / 4).translate(0.5, 0.19, 0.5),
+      new THREE.BoxGeometry(0.56, 0.025, 0.04).rotateY(-Math.PI / 4).translate(0.5, 0.19, 0.5),
+      ...[[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => cyl(0.085, 0.085, 0.012, 0.5 + a * 0.2, 0.215, 0.5 + b * 0.2, 12)),
+      ...[[-1, -1], [1, 1]].map(([a, b]) => box(0.02, 0.08, 0.2, 0.5 + a * 0.08, 0.1, 0.5)),
+    ],
+    glow: [ball(0.025, 0.5, 0.215, 0.6)],
+    colors: { body: 0x2b2f36, glow: 0x00e676, accent: 0xeceff1, trim: 0xffca28, metal: 0.2 },
+  },
+  // DO NOT PRESS.
+  redButton: {
+    body: [box(0.36, 0.8, 0.36, 0.5, 0.4, 0.5)],
+    trim: [box(0.46, 0.05, 0.46, 0.5, 0.825, 0.5)],
+    glow: [cyl(0.12, 0.15, 0.09, 0.5, 0.895, 0.5, 16)],
+    accent: [box(0.28, 0.09, 0.012, 0.5, 0.6, 0.686)],
+    colors: { body: 0x546e7a, glow: 0xff1744, accent: 0x212121, trim: 0xffca28, metal: 0.4 },
+  },
+  // A big screen on the wall, with a map and a blinking REC light.
+  spyScreen: {
+    body: [box(1, 0.96, 0.08, 0.5, 0.5, 0.04)],
+    glow: [box(0.88, 0.8, 0.012, 0.5, 0.5, 0.086)],
+    accent: [
+      ...[0.3, 0.5, 0.7].map(y => box(0.88, 0.012, 0.014, 0.5, y, 0.093)),
+      ...[0.3, 0.5, 0.7].map(x => box(0.012, 0.8, 0.014, x, 0.5, 0.093)),
+    ],
+    trim: [box(0.05, 0.05, 0.016, 0.86, 0.84, 0.094)],
+    colors: { body: 0x1c1f24, glow: 0x2ee67a, accent: 0x0d4d26, trim: 0xff1744, metal: 0.2 },
+  },
+  // A round table with a glowing map of BuildZone on top.
+  radarTable: {
+    body: [cyl(0.12, 0.2, 0.7, 0.5, 0.35, 0.5), cyl(0.46, 0.46, 0.08, 0.5, 0.74, 0.5, 24)],
+    glow: [cyl(0.42, 0.42, 0.02, 0.5, 0.79, 0.5, 24)],
+    accent: [
+      new THREE.TorusGeometry(0.28, 0.008, 4, 28).rotateX(Math.PI / 2).translate(0.5, 0.803, 0.5),
+      new THREE.TorusGeometry(0.14, 0.008, 4, 20).rotateX(Math.PI / 2).translate(0.5, 0.803, 0.5),
+      box(0.4, 0.006, 0.014, 0.7, 0.804, 0.5),
+    ],
+    trim: [ball(0.025, 0.62, 0.81, 0.4), ball(0.025, 0.36, 0.81, 0.62), ball(0.025, 0.55, 0.81, 0.7)],
+    colors: { body: 0x263238, glow: 0x40c4ff, accent: 0x01579b, trim: 0xffeb3b, metal: 0.5 },
+  },
+  // A shelf of gadgets, with night-vision goggles on it.
+  gogglesRack: {
+    body: [box(0.04, 1, 0.4, 0.06, 0.5, 0.5), box(0.04, 1, 0.4, 0.94, 0.5, 0.5), ...[0.02, 0.45, 0.86].map(y => box(0.9, 0.03, 0.4, 0.5, y, 0.5))],
+    accent: [0.3, 0.7].flatMap(x => [box(0.26, 0.05, 0.03, x, 0.53, 0.56), box(0.26, 0.05, 0.03, x, 0.94, 0.56)]),
+    glow: [0.3, 0.7].flatMap(x => [0.53, 0.94].flatMap(y => [-1, 1].map(s => new THREE.CylinderGeometry(0.045, 0.045, 0.035, 10).rotateX(Math.PI / 2).translate(x + s * 0.065, y, 0.58)))),
+    trim: [box(0.22, 0.16, 0.22, 0.5, 0.12, 0.5)],
+    colors: { body: 0x455a64, glow: 0x76ff03, accent: 0x212121, trim: 0xffa000, metal: 0.4 },
+  },
+  // A radar dish (on the base's roof).
+  radarDish: {
+    body: [cyl(0.05, 0.08, 0.6, 0.5, 0.3, 0.5)],
+    accent: [new THREE.CylinderGeometry(0.46, 0.1, 0.14, 18).rotateX(-0.7).translate(0.5, 0.76, 0.55)],
+    trim: [new THREE.CylinderGeometry(0.015, 0.015, 0.4, 6).rotateX(-0.7).translate(0.5, 0.9, 0.67)],
+    glow: [ball(0.035, 0.5, 1.04, 0.8)],
+    colors: { body: 0x90a4ae, glow: 0xff1744, accent: 0xeceff1, trim: 0x607d8b, metal: 0.6 },
+  },
   // ---------- Fancy things ----------
   piano: {
     body: [

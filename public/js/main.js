@@ -5,7 +5,7 @@ import {
   railMask, railBoxes, nearestRailEdge, canHoldItem, stack, itemOf, floorOf, turnLine, blockKey, faceIndex, hexToRgb,
   switchable, lightOff, toggleLight, setDoorOpen, isWaterBlock, facingTowards,
   PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP, BED_FOOT, NOTE_NAMES, NOTE_FREQS, PICTURES, isSnowyAt, SNOW_LINE, SIGN, SIGN_LENGTH,
-  GOLD_PAINT, GOLD_HEX,
+  GOLD_PAINT, GOLD_HEX, ELEVATOR,
 } from './shared/blocks.js';
 import { generateWorld } from './shared/worldgen.js';
 import { randomLook, sanitizeLook } from './shared/avatar.js';
@@ -29,7 +29,7 @@ import { Editor } from './editor.js';
 import { CharacterClient, Gallery } from './gallery.js';
 import { Hud, renderControls, CUSTOM_PAINT } from './hud.js';
 import {
-  HAMMER, FIREWORKS, BALL, CLAIM, VACATION, BRUSH, SCRAPER, WRENCH, SKIS, GOLDPAINT, SNEAKERS, LADDER, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME,
+  HAMMER, FIREWORKS, BALL, CLAIM, VACATION, BRUSH, SCRAPER, WRENCH, SKIS, GOGGLES, GOLDPAINT, SNEAKERS, LADDER, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME,
   ALL_ITEMS, ICON_ITEMS, GEAR, DEFAULT_HOTBAR, FAMILIES, itemName, makeIcon, ViewModel,
 } from './items.js';
 import { MAX_MANY, MAX_OWNED_VEHICLES } from './shared/game.js';
@@ -43,6 +43,9 @@ import { SignTexts } from './signs.js';
 import { Contraptions } from './contraptions.js';
 import { TouchControls, IS_TOUCH } from './touch.js';
 import { RVHome, RV_FLOOR } from './rvhome.js';
+import { Elevators } from './elevator.js';
+import { liftDoors } from './shared/elevator.js';
+import { SecretAgency } from './spy.js';
 
 const $ = id => document.getElementById(id);
 const REACH = 7;
@@ -183,6 +186,7 @@ sounds.volume = settings.volume;
 // ---------- Game state ----------
 
 let world, player, materials, textures, icons, hud, cars, myBody, editor, gallery, structures, ball, shop, ground, lifts, signs, contraptions;
+let elevators, agency; // elevators (riding them), and the Secret Agency (its base and gadgets)
 const npcs = new Map(); // the town's people (run by the server): id -> Avatar
 const coinMap = new Map(); // gold coins lying about: id -> { x, y, z, value, asked }
 let wallet = { coins: 0, owned: [] };
@@ -262,6 +266,17 @@ async function load() {
       updateOverlays();
     },
   });
+  elevators = new Elevators(scene, world, sounds);
+  agency = new SecretAgency({
+    scene, world, sounds, effects, hud, net, headlight,
+    others: () => [...avatars.list.values()],
+    people: spyTargets,
+    vehicles: () => [...cars.list.values()],
+    me: () => settings.name,
+    mePos: () => player.pos,
+    nightK: () => 1 - sky.dayK,
+    avoidWalls: (focus, want) => avoidWalls(focus, want),
+  });
   editor = new Editor();
   gallery = new Gallery(new CharacterClient(), sounds);
   myBody = new Avatar(scene, { id: 0, name: '', look: settings.look }, { tag: false });
@@ -270,6 +285,8 @@ async function load() {
   myBody.brain = new PetBrain();
   myBody.ball = ball;
   myBody.petNav = new PetNav(world);
+  // Your pet doesn't go into the Secret Agency's base unless you've got clearance.
+  myBody.petNav.forbid = (x, y, z) => !!agency?.base && !agency.clear && agency.inside({ x: x + 0.5, y, z: z + 0.5 });
   myBody.petBoxes = () => cars.boxes(); // pets bump into cars too
   myBody.onPetEvent = (kind, what) => {
     const pet = myBody.pet;
@@ -365,6 +382,7 @@ $('join-form').addEventListener('submit', async e => {
   cars.clear();
   for (const c of welcome.cars) cars.add(c);
   setClaims(welcome.claims || []);
+  agency.setWorld({ base: welcome.base, files: welcome.files, landmarks: welcome.landmarks });
   sky.time = welcome.time;
   hud.addChat({ system: true, text: online
     ? `Welcome, ${settings.name}! ${welcome.players.length} other builder(s) online.`
@@ -430,9 +448,27 @@ net.on('npc_say', ({ id, text }) => {
   if (a.pos.distanceTo(player.pos) < 16) hud.addChat({ name: a.name, color: '#ffd54f', text });
 });
 net.on('npc_pet', () => myBody.brain?.cheer()); // somebody petted our pet: it's so happy!
+// A TOP SECRET file (and maybe Top Secret clearance).
+net.on('secret_file', ({ again, found, need, clear, left = [] }) => {
+  if (again) return hud.toast(clear ? '🗂️ You\'ve read this one, agent. Your clearance is good!' : `🗂️ You've already found this one (${found} of ${need}). ${need - found} to go!`);
+  sounds.coin();
+  effects.sparkle(player.pos.x, player.pos.y + 1, player.pos.z, 24);
+  if (clear) {
+    sounds.party?.();
+    effects.sparkle(player.pos.x, player.pos.y + 2, player.pos.z, 60);
+    hud.addChat({ system: true, text: '🕶️ TOP SECRET CLEARANCE GRANTED! You\'re a Secret Agency agent now. The base is hidden out in the south-east, past the campground: the guards will let you in.' });
+    hud.toast('🕶️ TOP SECRET CLEARANCE GRANTED! The secret base is out in the south-east. 🤫');
+  } else {
+    hud.toast(`🗂️ TOP SECRET file found! (${found} of ${need}) Still to find: ${left.join(', and ')}.`);
+  }
+});
 net.on('shop_open', () => openShop());
-net.on('wallet', ({ coins, owned, vacation, found = [] }) => {
+net.on('wallet', ({ coins, owned, vacation, found = [], agent }) => {
   const more = coins > wallet.coins;
+  if (agent) {
+    if (agent.clear !== agency.agent.clear) myBody.petNav?.cache.clear(); // (your pet may go in now)
+    agency.agent = agent;
+  }
   wallet = { coins, owned };
   hud.setOwned(owned, found);
   // (Gold paint is only for those who bought it.)
@@ -645,7 +681,7 @@ function goFullscreen() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || !!signOpen || !!askOpen);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || !!signOpen || !!askOpen || !!elevators?.panel);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -678,7 +714,7 @@ $('exit-menu').addEventListener('click', () => {
     location.reload();
   }, 150); // a moment for "I got out of the car" to reach the server
 });
-canvas.addEventListener('click', () => inGame && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && lock());
+canvas.addEventListener('click', () => inGame && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && lock());
 $('sensitivity').addEventListener('input', e => {
   settings.sensitivity = Number(e.target.value);
   saveSettings();
@@ -804,6 +840,12 @@ function answer(yes) {
   (yes ? onYes : onNo)();
 }
 $('ask-yes').addEventListener('click', () => answer(true));
+// The elevator panel's Close, and the spy screens' buttons (for phones, and mice).
+$('lift-close').addEventListener('click', () => elevators.closePanel(true));
+$('spy-prev').addEventListener('click', () => agency.mode === 'cams' && agency.nextTarget(-1));
+$('spy-next').addEventListener('click', () => agency.mode === 'cams' && agency.nextTarget(1));
+$('spy-stop').addEventListener('click', () => agency.stop());
+$('radar-close').addEventListener('click', () => agency.stop());
 $('ask-no').addEventListener('click', () => answer(false));
 window.addEventListener('keydown', e => {
   if (!askOpen) return;
@@ -909,6 +951,15 @@ let useCooldown = 0;
 
 window.addEventListener('keydown', e => {
   if (!inGame || hud.chatOpen || editorOpen || galleryOpen || signOpen || askOpen) return;
+  if (elevators.panel) {
+    elevators.panelKey(e);
+    return;
+  }
+  if (agency.keydown(e)) {
+    e.preventDefault();
+    keys.clear();
+    return;
+  }
   if (shopOpen) {
     if (e.code === 'Escape' || e.code === 'KeyE') shop.close();
     return;
@@ -2079,6 +2130,8 @@ function landSpawn() {
 
 // Back home: your bed if you have one, then your land, then the town square.
 function respawn(joining = false, resume = null) {
+  elevators?.stop();
+  agency?.stop();
   leaveRV(true);
   wakeUp(true);
   standUp(true);
@@ -2154,7 +2207,7 @@ function sendState() {
   const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
     (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) |
     (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
-  net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item });
+  net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item, drone: agency.droneState(player.yaw) });
 }
 
 // Lamps with real flames (tiki torches and candles), refreshed when the world changes.
@@ -2727,7 +2780,7 @@ function toggleDoor(x, y, z) {
 // whole ladder, or just the block.
 function blockGroup(x, y, z, v) {
   if (shapeOf(v) === 'door') return world.doorColumnCells(x, y, z);
-  if (shapeOf(v) === 'ladder') return world.ladderCells(x, y, z);
+  if (shapeOf(v) === 'ladder' || blockId(v) === ELEVATOR) return world.ladderCells(x, y, z);
   if (blockId(itemOf(v)) === BED) return bedCells(x, y, z, v);
   return [[x, y, z, v]];
 }
@@ -2745,6 +2798,11 @@ function hitBlock() {
     return;
   }
   const [x, y, z] = hit.block;
+  if (BLOCKS[blockId(itemOf(hit.value))]?.secretFile) {
+    sounds.crack();
+    hud.toast('🔒 It\'s TOP SECRET: it can\'t be broken! Right-click it to read it.');
+    return;
+  }
   if (!canBuildAt(x, z)) {
     notifyLand(x, z);
     return;
@@ -2865,6 +2923,10 @@ function placeBlock(item) {
     placeLadder();
     return;
   }
+  if (BLOCKS[item]?.elevator) {
+    placeElevator();
+    return;
+  }
   if (item === BED) {
     placeBed(item, x, y, z);
     return;
@@ -2947,6 +3009,8 @@ function placeUnder(item) {
 // Left click: use whatever you're holding.
 function useItem() {
   const item = hud.item;
+  if (agency.click()) return; // (flying a drone: sparkles!)
+  if (agency.active || elevators.riding) return;
   if (rv.inside) return rvAct(rvSpot); // (no hammering the RV from inside)
   if (fishingStool()) return fishClick();
   view.swing();
@@ -3002,6 +3066,8 @@ function useItem() {
 
 // Right click: interact with things (never breaks anything).
 function interact() {
+  if (agency.active) return agency.stop();
+  if (elevators.riding) return;
   if (rv.inside) return rvAct(rvSpot);
   // Wands: right-click empties the Fill box, or forgets what was copied.
   if (hud.item === FILL && wand.b) return fillClick(true);
@@ -3023,7 +3089,13 @@ function interact() {
     return;
   }
   if (hit && !hit.ground) {
-    if (shapeOf(hit.value) === 'door' && hit.part !== 'floor') return toggleDoor(...hit.block);
+    if (shapeOf(hit.value) === 'door' && hit.part !== 'floor') {
+      if (agency.lockedDoor(...hit.block)) {
+        sounds.tone(220, 180, 0.2, 0.2, 'square');
+        return hud.toast('🔒 Locked! TOP SECRET: agents with clearance only. (Agent Shadow on the town square can tell you how to get it. 🕶️)');
+      }
+      return toggleDoor(...hit.block);
+    }
     if (switchable(hit.value) && hit.part !== 'floor') {
       // Light switch: off, and on again.
       if (!canBuildAt(hit.block[0], hit.block[2])) return notifyLand(hit.block[0], hit.block[2]);
@@ -3041,6 +3113,15 @@ function interact() {
       if (def?.piano) return playPiano(...hit.block);
       if (def?.oven) return net.send({ t: 'job' });
       if (def?.lift) return rideLift(...hit.block);
+      if (def?.elevator) return callElevator(...hit.block);
+      if (def?.secretFile) return net.send({ t: 'secret_file', x: hit.block[0], y: hit.block[1], z: hit.block[2] });
+      if (def?.spy) {
+        if (def.spy === 'drone' || def.spy === 'cams' || def.spy === 'radar') {
+          keys.clear();
+          player.vel.set(0, 0, 0);
+        }
+        return agency.use(def.spy, ...hit.block);
+      }
       if (def?.skiRack) {
         const [x, y, z] = hit.block;
         return net.send({ t: 'take_skis', x, y, z });
@@ -3098,6 +3179,95 @@ function placeLadder() {
   for (let y = lo; y <= hi; y++) setBlock(lx, y, lz, makeBlock(LADDER, facing));
   sounds.place();
   if (hi > lo) hud.toast(`🪜 ${hi - lo + 1} blocks tall! Walk into it and hold W or Space to climb.`);
+}
+
+// Everybody the spy cameras (and the radar) can watch: other players, and the town's people.
+function spyTargets() {
+  const out = [];
+  const doing = a => (a.seat ? 'riding in a vehicle 🚗' : a.lying ? 'fast asleep 😴' : a.sitting ? 'sitting down 🪑' : a.flying ? 'flying ✈️'
+    : a.pizza ? 'delivering a pizza 🍕' : a.dance > 0 ? 'dancing 💃' : (a.speed || 0) > 0.3 ? 'walking about 🚶' : 'standing around');
+  for (const a of avatars.list.values()) out.push({ name: a.name, short: a.name, pos: a.pos, doing: doing(a), npc: false });
+  for (const a of npcs.values()) out.push({ name: a.name, short: a.name.replace(/\s*[^\w\s.'-].*$/u, ''), pos: a.pos, doing: doing(a), npc: true });
+  return out;
+}
+
+// ---------- Elevators ----------
+
+// An elevator goes against a wall, like a ladder, and its shaft runs from the bottom of the wall
+// all the way up to the top (up through your floors: the shaft goes through them). It stops at
+// every floor where there's somewhere to step out in front of its doors (see elevator.js).
+function placeElevator() {
+  if (!hit || hit.ground || hit.normal[1] !== 0 || shapeOf(hit.value) !== 'cube') {
+    hud.toast('🛗 Elevators go against a wall, like ladders: point at the bottom of a wall and click. It goes all the way up!');
+    return;
+  }
+  const [bx, by, bz] = hit.block, [nx, , nz] = hit.normal;
+  const lx = bx + nx, lz = bz + nz;
+  if (!canBuildAt(lx, lz)) return notifyLand(lx, lz);
+  const facing = nz === 1 ? 0 : nx === 1 ? 1 : nz === -1 ? 2 : 3; // the doors face away from the wall
+  const wall = y => {
+    const v = world.get(bx, y, bz);
+    return y >= 0 && v !== 0 && shapeOf(v) === 'cube';
+  };
+  // The shaft can go where there's nothing (or something you'd walk through), and up through
+  // floors (plain blocks): not through doors, furniture, lamps and the like.
+  const room = y => {
+    const v = world.get(lx, y, lz);
+    if (!inBounds(lx, y, lz)) return false;
+    return !v || isReplaceable(v) || (shapeOf(v) === 'cube' && !floorOf(v) && !BLOCKS[blockId(v)]?.price && !BLOCKS[blockId(v)]?.worldOnly);
+  };
+  const v0 = world.get(lx, by, lz);
+  if (v0 && !isReplaceable(v0)) return hud.toast("🛗 There's something in the way there.");
+  let lo = by, hi = by;
+  while (lo > 0 && wall(lo - 1) && room(lo - 1)) lo--;
+  while (wall(hi + 1) && room(hi + 1)) hi++;
+  if (hi - lo < 2) return hud.toast('🛗 Elevators go up tall walls: this one\'s only ' + (hi - lo + 1) + ' block' + (hi > lo ? 's' : '') + ' high. Build it taller (with floors to stop at)!');
+  for (let y = lo; y <= hi; y++) setBlock(lx, y, lz, makeBlock(ELEVATOR, facing));
+  sounds.place();
+  const info = fitElevatorDoors(lx, lo, lz);
+  const floors = info && typeof info === 'object' ? info.stops.length : 0;
+  hud.toast(floors >= 2 ? `🛗 An elevator, ${hi - lo + 1} blocks tall, with ${floors} floors! Right-click its doors to ride it.`
+    : `🛗 An elevator, ${hi - lo + 1} blocks tall! It stops at floors you can step out onto in front of its doors: build some floors (or a roof) and it'll stop there.`);
+}
+
+// Puts the elevator's doors at the floors it stops at now (floors may have come or gone since
+// it was built). Returns its info, or a message if there's no riding it.
+function fitElevatorDoors(x, y, z) {
+  const info = elevators.lookUp(x, y, z, y);
+  const col = typeof info === 'object' && info ? info : null;
+  if (col && canBuildAt(x, z)) {
+    for (const [yy, v] of liftDoors((a, b, c) => world.get(a, b, c), x, z, col.lo, col.hi, col.facing, col.stops)) setBlock(x, yy, z, v);
+  }
+  return info;
+}
+
+// Right-click an elevator: its panel of floor buttons (if you're at its doors).
+function callElevator(x, y, z) {
+  if (riding() || sleeping || seated || elevators.riding) return;
+  const feet = Math.floor(player.pos.y + 0.05);
+  const info = elevators.lookUp(x, y, z, feet);
+  if (!info) return;
+  if (typeof info === 'string') return hud.toast(info);
+  fitElevatorDoors(x, y, z);
+  // You need to be in front of its doors (not round the side of it).
+  const [dx, dz] = [[0, 1], [1, 0], [0, -1], [-1, 0]][info.facing];
+  const fx = x + 0.5 + dx, fz = z + 0.5 + dz;
+  if (Math.hypot(player.pos.x - fx, player.pos.z - fz) > 2.2) return hud.toast('🛗 Stand in front of the elevator\'s doors to call it!');
+  sounds.click();
+  keys.clear();
+  unlock();
+  elevators.showPanel(info, i => {
+    lock();
+    updateOverlays();
+    if (!elevators.start(info, i, player)) return;
+    player.flying = false;
+    player.vel.set(0, 0, 0);
+    contraptions.end();
+  }, cancelled => {
+    if (cancelled) lock();
+    updateOverlays();
+  });
+  updateOverlays();
 }
 
 // ---------- Railings ----------
@@ -3187,7 +3357,8 @@ net.on('gear_found', ({ gear, again }) => {
   hud.renderGearHud();
   sounds.coin();
   effects.sparkle(player.pos.x, player.pos.y + 1, player.pos.z, 20);
-  hud.toast("🎿 You've got skis! They're on: ride the lift and ski down. (They're in 🎒 Gear, in the 🎉 Fun tab.)");
+  hud.toast(gear === GOGGLES ? "🥽 Night-vision goggles! They're on: at night, everything glows green and bright. (Take them off in 🎒 Gear, in the 🎉 Fun tab.)"
+    : "🎿 You've got skis! They're on: ride the lift and ski down. (They're in 🎒 Gear, in the 🎉 Fun tab.)");
   saveSettings();
 });
 
@@ -4164,6 +4335,12 @@ function vanSleepView(car) {
 }
 
 function updateCamera(dt) {
+  // Watching through a spy camera, or flying a drone.
+  if (agency.view(camera, dt, player.pitch, player.yaw)) {
+    camera.fov += (BASE_FOV - camera.fov) * Math.min(1, dt * 8);
+    camera.updateProjectionMatrix();
+    return;
+  }
   const car = riding();
   camSleepK += ((sleeping || vanSleep || rv.bed >= 0 ? 1 : 0) - camSleepK) * Math.min(1, dt * 2.4);
   if (car) {
@@ -4207,7 +4384,7 @@ function updateCamera(dt) {
     sleepCam.pos.copy(avoidWalls(above, lie.clone().addScaledVector(dir, -0.7).add(new THREE.Vector3(0, 2.1, 0))));
     sleepCam.quat.setFromRotationMatrix(tmpMatrix.lookAt(sleepCam.pos, tmp.set(lie.x + dir.x * 1.2, lie.y + 0.2, lie.z + dir.z * 1.2), camera.up));
   }
-  if (viewMode === 0 || rv.inside) {
+  if (viewMode === 0 || rv.inside || elevators.riding) {
     camera.position.copy(eye);
     camera.rotation.set(player.pitch, player.yaw, 0);
   } else if (viewMode === 1) {
@@ -4242,7 +4419,7 @@ let menuSpin = 0, lastFrame = 0, frameCount = 0, crouchK = 0;
 // menu (nothing much is moving then).
 function frameRateNow() {
   if (!inGame) return 30;
-  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen) return 12;
+  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel) return 12;
   return settings.fps || 1000;
 }
 
@@ -4294,6 +4471,12 @@ function frame(timestamp) {
       if (vanSleep && touch?.enabled && Math.hypot(touch.stick.x, touch.stick.y) > 0.5) wakeInVan();
     } else if (rv.inside) {
       updateRV(dt, active ? held : noKeys);
+    } else if (elevators.update(dt, player)) {
+      // Riding an elevator.
+    } else if (agency.active === 'drone' && agency.flyDrone(dt, active ? held : noKeys, player.yaw, touch?.enabled && active ? touch.stick : null)) {
+      player.vel.set(0, 0, 0); // (flying a drone: you stay by its pad)
+    } else if (agency.active === 'cams' || agency.active === 'radar') {
+      player.vel.set(0, 0, 0); // (watching the spy screens)
     } else if (updateLift(dt, active ? held : noKeys)) {
       // Riding the ski lift.
     } else if (contraptions.riding && rideContraption(dt, active ? held : noKeys)) {
@@ -4337,6 +4520,8 @@ function frame(timestamp) {
       if (danceView <= 0 && viewMode === 2) viewMode = 0;
     }
     crouchK += ((player.crouching && !riding() ? 1 : 0) - crouchK) * Math.min(1, dt * 12);
+    agency.frame(dt, time, player, !!riding() || elevators.riding);
+    agency.nightVision(hud.wearing(GOGGLES));
     updateCamera(dt);
 
     // What are we looking at? Vehicles and pets count if they're closer than the nearest block.
@@ -4382,7 +4567,11 @@ function frame(timestamp) {
 
     // A hint under the crosshair about what you can do.
     let hint = '';
-    if (rv.inside) {
+    if (agency.active) {
+      hint = agency.hint();
+    } else if (elevators.riding) {
+      hint = elevators.hint();
+    } else if (rv.inside) {
       hint = rv.bed >= 0 ? '😴 Zzz… (move to get up)' : rv.sit ? '🛋️ Move to get up' : rvSpot?.hint || '🚐 Walk around (WASD) · Right-click things · E: go outside';
     } else if (rodOut) {
       hint = !fishing ? '🎣 Click to cast · Move to get up' : fishing.phase === 'bite' ? '❗ A bite! Click, quick!' : fishing.phase === 'reel' ? '🎣 Reeling in…' : '🎣 Wait for the bobber to dip…';
@@ -4423,7 +4612,7 @@ function frame(timestamp) {
       const tool = item === HAMMER || item === BRUSH || item === SCRAPER;
       if (item === BRUSH && hit && !hit.ground) hint = `🎨 Click to paint this side ${paintName()}`;
       else if (item === SCRAPER && hit && !hit.ground) hint = sidePaint(hit) >= 0 ? '🧽 Click to scrape the paint off this side' : '';
-      else if (hit && shapeOf(hit.value) === 'door') hint = '🚪 Right-click to open / close';
+      else if (hit && shapeOf(hit.value) === 'door') hint = agency.lockedDoor(...hit.block) ? '🔒 TOP SECRET: agents with clearance only' : '🚪 Right-click to open / close';
       else if (hit && switchable(hit.value) && hit.part !== 'floor' && item !== HAMMER) hint = lightOff(hit.value) ? '💡 Right-click to turn it on' : '💡 Right-click to turn it off';
       else if (hit && blockId(hit.value) === 46 && item !== HAMMER) hint = '🌙 Street lamps turn on by themselves at night';
       else if (hit && BLOCKS[blockId(hit.value)]?.turns && !floorOf(hit.value) && item !== HAMMER) hint = '↻ Right-click to turn the line';
@@ -4431,6 +4620,10 @@ function frame(timestamp) {
       else if (item === RAILING && hit) hint = railPreview && withRail(railPreview) ? '🚧 Click to add a railing here' : '🚧 Point near the edge of a floor, or at the side of a block';
       else if (s?.type === 'bed') hint = '🛏️ Right-click to sleep · Jump on it to bounce!';
       else if (def?.fishing && !tool) hint = '🎣 Right-click to sit and fish';
+      else if (def?.elevator) hint = '🛗 Right-click its doors to take the elevator';
+      else if (def?.secretFile) hint = '🗂️ TOP SECRET! Right-click to read it';
+      else if (def?.spy && !agency.clear) hint = '🔒 TOP SECRET: agents only';
+      else if (def?.spy) hint = { cams: '📹 Right-click: spy cameras (watch anyone!)', radar: '📡 Right-click: the radar (where is everybody?)', drone: '🚁 Right-click to fly the drone', button: '🔴 DO NOT PRESS (right-click)', goggles: hud.hasGear(GOGGLES) ? '🥽 Right-click to put your goggles on or off' : '🥽 Right-click to take night-vision goggles' }[def.spy];
       else if (def?.skiRack && !tool) hint = hud.wearing(SKIS) ? '🎿 Right-click to put your skis back' : hud.hasGear(SKIS) ? '🎿 Right-click to put your skis on' : '🎿 Right-click to take a pair of skis';
       else if (def?.seat && !tool) hint = '🛋️ Right-click to sit down';
       else if (def?.hug && !tool) hint = '🧸 Right-click for a hug';
@@ -4537,9 +4730,9 @@ function frame(timestamp) {
 
     // Our own body, seen in the third-person views.
     // (Getting into bed, you see yourself once the camera has pulled back out of your head.)
-    myBody.root.visible = riding() ? carView !== 0 : viewMode !== 0 || camSleepK > 0.3;
+    myBody.root.visible = riding() ? carView !== 0 : agency.active === 'drone' || agency.active === 'cams' || (viewMode !== 0 && !elevators.riding) || camSleepK > 0.3;
     myBody.seat = riding() ? cars.seat(riding(), mySeat()) : null;
-    myBody.petAboard = rv.inside && !!rv.car.driver; // (your pet comes along in the RV while it's driven)
+    myBody.petAboard = (rv.inside && !!rv.car.driver) || elevators.riding; // (your pet comes along in the RV while it's driven, and in elevators)
     myBody.target.copy(player.pos);
     myBody.targetYaw = player.yaw;
     myBody.targetPitch = player.pitch;
@@ -4686,7 +4879,7 @@ function frame(timestamp) {
     sky.sun.intensity += f * 0.4;
     scene.fog.color.lerp(tmpColor.copy(c).multiplyScalar(0.35), f * 0.6);
   }
-  const firstPerson = inGame && !riding() && viewMode === 0 && !sleeping;
+  const firstPerson = inGame && !riding() && viewMode === 0 && !sleeping && !agency.active;
   // While the ball is off being thrown (or fetched), it isn't in your hand.
   view.holder.visible = !(hud?.item === BALL && ball?.active);
   view.update(dt, player.moving && player.onGround, camera.aspect, scene.environment, sky.dayK);
@@ -4764,6 +4957,9 @@ window.buildzone = {
   kickBall: () => kickBall(),
   carSpecial: () => carSpecial(),
   rv,
+  get elevators() { return elevators; },
+  get agency() { return agency; },
+  callElevator: (x, y, z) => callElevator(x, y, z),
   get rvSpot() { return rvSpot; },
   enterRV: car => enterRV(car),
   rvAct: spot => rvAct(spot),

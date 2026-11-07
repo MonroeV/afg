@@ -3,14 +3,15 @@
 // the browser runs its own copy so single player works exactly the same way.
 import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, isExclusive, DOOR_OPEN, DOOR_TOP, DAY_LENGTH, WORLD, isNightTime, SHOP_ITEMS, BLOCKS, SHOP_TOOLS, FOUND_GEAR, HOLE_HEAL, SIGN, cleanSignText, cleanWords } from './blocks.js';
 import { sanitizeLook, cleanName } from './avatar.js';
-import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines, buildStore, furnishHouses, furnishTowers } from './worldgen.js';
+import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines, buildStore, furnishHouses, furnishTowers, elevatorTowers } from './worldgen.js';
+import { buildSecretBase, hideSecretFiles, AGENCY, AGENT_SPOT, FILES_NEEDED, FILE_HINTS, inZone } from './secretbase.js';
 import { NpcCrew } from './npcs.js';
 import { buildFrontier, buildPizzeria, buildSignposts, refurnish, addFishingSpots } from './frontier.js';
 import { buildFarCountry, moreVehicles } from './farcountry.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot, seatCount } from './vehicles.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
 
-export const SAVE_VERSION = 12;
+export const SAVE_VERSION = 13;
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
 const DOOR = 21;
@@ -176,6 +177,7 @@ export class GameRoom {
       this.upgradeTo10();
       this.upgradeTo11();
       this.upgradeTo12();
+      this.upgradeTo13();
       this.populate();
       return true;
     }
@@ -204,6 +206,8 @@ export class GameRoom {
         coins: Math.max(0, Math.floor(w.coins)), owned: Array.isArray(w.owned) ? w.owned.filter(i => SHOP_ITEMS.some(([s]) => s === i)) : [], day: w.day || '',
         found: Array.isArray(w.found) ? w.found.filter(g => FOUND_GEAR[g]) : [], // gear found in the world (the skis)
         fish: Array.isArray(w.fish) ? w.fish.filter(f => FISH.some(d => d.name === f)) : [], // the kinds of fish they've caught
+        // The Secret Agency: which TOP SECRET files they've found, and whether they've got clearance.
+        agent: { files: Array.isArray(w.agent?.files) ? w.agent.files.filter(k => typeof k === 'string').slice(0, 8) : [], clear: !!w.agent?.clear },
       };
     }
     this.places = data.places && typeof data.places === 'object' ? data.places : null;
@@ -227,6 +231,7 @@ export class GameRoom {
     if (data.version < 10) this.upgradeTo10();
     if (data.version < 11) this.upgradeTo11();
     if (data.version < 12) this.upgradeTo12();
+    if (data.version < 13) this.upgradeTo13();
     this.populate();
     return true;
   }
@@ -326,6 +331,42 @@ export class GameRoom {
     for (const c of moreVehicles()) this.spawn(this.addHome(c));
     this.log('Added the RV and two sports cars');
     this.onDirty();
+  }
+
+  // Worlds saved before version 13: elevators in the skyscrapers (instead of their ladders, where
+  // they're just as they were built and nobody's claimed them), the Secret Agency's base out in
+  // the south-east (on empty land nobody's claimed), its three TOP SECRET files (in empty spots),
+  // and Agent Shadow on the town square. Nothing anyone built is touched.
+  upgradeTo13() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const each = fn => {
+      for (const [k, v] of [...this.world]) {
+        const [x, y, z] = k.split(',').map(Number);
+        fn(x, y, z, v);
+      }
+    };
+    const townLand = (x, z) => {
+      const c = claimAt(this.claims, x, z);
+      return !c || c.permanent; // (nobody's, or the town's own: the lodge, the quarry…)
+    };
+    const lifts = elevatorTowers({ each, get, set, canUse: townLand });
+    const base = buildSecretBase({ get, set, canUse: this.freeLand() });
+    if (base) {
+      this.claims.push(base.claim);
+      for (const [x, y, z, text] of base.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+    }
+    this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...(base?.places || {}), agent: AGENT_SPOT };
+    this.places.files = hideSecretFiles({ get, set, canUse: townLand, places: this.places });
+    this.log(`Added elevators to ${lifts} towers, the Secret Agency's base (${base ? `${base.count} blocks` : 'no room for it'}) and ${this.places.files.length} TOP SECRET files`);
+    this.onDirty();
+  }
+
+  // Where the files still to find are, in Agent Shadow's words.
+  filesLeft(w) {
+    return (this.places?.files || []).filter(f => !w.agent.files.includes(blockKey(f[0], f[1], f[2]))).map(f => FILE_HINTS[f[3]] || 'somewhere out there');
   }
 
   // Land a new landmark may be built on: nobody has claimed it, and no vehicle is parked
@@ -479,17 +520,35 @@ export class GameRoom {
     const w = (this.wallets[nameKey(client.name)] ??= { coins: 0, owned: [], day: '' });
     w.found ??= [];
     w.fish ??= [];
+    w.agent ??= { files: [], clear: false };
     return w;
   }
 
   sendWallet(client) {
     const w = this.wallet(client);
-    client.send({ t: 'wallet', coins: w.coins, owned: w.owned, found: w.found, vacation: !!this.vacationOf(client) });
+    client.send({ t: 'wallet', coins: w.coins, owned: w.owned, found: w.found, vacation: !!this.vacationOf(client), agent: { files: w.agent.files.length, need: this.filesNeeded(), clear: w.agent.clear } });
+  }
+
+  // ---------- The Secret Agency ----------
+
+  cleared(client) {
+    return !!this.wallet(client).agent.clear;
+  }
+
+  // How many TOP SECRET files there are to find (three, unless there wasn't room for them all).
+  filesNeeded() {
+    return Math.min(FILES_NEEDED, this.places?.files?.length || FILES_NEEDED);
+  }
+
+  // Is this somewhere you need clearance to be? (Inside the base.)
+  inBase(x, y, z) {
+    return inZone(this.places?.base?.zone, x, y, z);
   }
 
   // Can this go down here? (Things from the Luxe Store need buying first; world-only things,
   // like the lodge's ski rack, are never put down by players: only kept as they are.)
   mayPlace(client, b, old) {
+    if (BLOCKS[blockId(itemOf(old))]?.secretFile && blockId(itemOf(b)) !== blockId(itemOf(old))) return false; // (they stay where they're hidden)
     const same = (old & ~(15 << 8)) === (b & ~(15 << 8));
     if (isExclusive(b) && !this.owns(client, b) && !(isExclusive(old) && same)) return false;
     const worldOnly = v => BLOCKS[itemOf(v) & 255]?.worldOnly || BLOCKS[floorOf(v) & 255]?.worldOnly;
@@ -583,6 +642,10 @@ export class GameRoom {
       // Where you were when you last left (your game puts you back there if there's room).
       resume: this.spots[nameKey(client.name)]?.slice(0, 4) || null,
       coins: [...this.coins].map(([id, c]) => [id, ...c]),
+      // The Secret Agency's base (its inside, its lasers) and where the TOP SECRET files are.
+      base: this.places?.base || null,
+      files: (this.places?.files || []).map(f => f.slice(0, 3)),
+      landmarks: Object.entries(this.places || {}).filter(([, p]) => p && Number.isFinite(p.x) && Number.isFinite(p.z)).map(([k, p]) => [k, p.x, p.z]),
     });
     // Coins: your wallet, and a little present the first time you play each day.
     const wallet = this.wallet(client);
@@ -668,6 +731,7 @@ export class GameRoom {
       client.ts = Number.isFinite(msg.ts) ? msg.ts : null;
       client.fresh = true;
       client.hold = typeof msg.hold === 'string' || typeof msg.hold === 'number' ? String(msg.hold).slice(0, 16) : '';
+      client.drone = this.cleared(client) ? numbers(msg.drone, 4) : 0; // a Secret Agency drone they're flying
     },
 
     set(client, { x, y, z, b }) {
@@ -681,6 +745,12 @@ export class GameRoom {
       // Room for a whole ladder or garage door at once. Too fast? Undo it for that player.
       if (!this.allow(client, 'set', 40, 160)) {
         client.send({ t: 'set', x, y, z, b: old });
+        return;
+      }
+      if (isDoorToggle(old, b) && claimAt(this.claims, x, z)?.key === AGENCY.key && !this.cleared(client)) {
+        // The Secret Agency's door: locked, unless you've got Top Secret clearance.
+        client.send({ t: 'set', x, y, z, b: old });
+        this.npcs.halt(client);
         return;
       }
       if (!canBuild(this.claims, client.name, x, z) && !isDoorToggle(old, b)) {
@@ -1090,6 +1160,37 @@ export class GameRoom {
       this.onDirty();
     },
 
+    // A TOP SECRET file: find all of them and you get Top Secret clearance.
+    secret_file(client, { x, y, z }) {
+      if (!this.allow(client, 'file', 1, 3) || !inBounds(x, y, z) || !BLOCKS[blockId(itemOf(this.get(x, y, z)))]?.secretFile) return;
+      if (Math.hypot(client.pos[0] - x - 0.5, client.pos[1] - y, client.pos[2] - z - 0.5) > 6) return;
+      const w = this.wallet(client), key = blockKey(x, y, z), need = this.filesNeeded();
+      const where = (this.places?.files || []).find(f => blockKey(f[0], f[1], f[2]) === key)?.[3];
+      if (w.agent.files.includes(key)) return client.send({ t: 'secret_file', again: true, found: w.agent.files.length, need, clear: w.agent.clear });
+      w.agent.files.push(key);
+      const done = w.agent.files.length >= need && !w.agent.clear;
+      if (done) w.agent.clear = true;
+      this.sendWallet(client);
+      client.send({ t: 'secret_file', found: w.agent.files.length, need, clear: w.agent.clear, where, left: this.filesLeft(w) });
+      if (done) {
+        this.log(`${client.name} got Top Secret clearance`);
+        this.npcs.breaking('Rumor has it there\'s a brand new secret agent in BuildZone... but that\'s TOP SECRET! 🕵️');
+      }
+      this.onDirty();
+    },
+
+    // Night-vision goggles from the gadget vault (agents only: you'd have to be inside!).
+    take_goggles(client, { x, y, z }) {
+      if (!this.allow(client, 'skis', 1, 3) || !inBounds(x, y, z) || BLOCKS[blockId(itemOf(this.get(x, y, z)))]?.spy !== 'goggles') return;
+      if (Math.hypot(client.pos[0] - x - 0.5, client.pos[1] - y, client.pos[2] - z - 0.5) > 6 || !this.cleared(client)) return;
+      const w = this.wallet(client);
+      if (w.found.includes('goggles')) return client.send({ t: 'gear_found', gear: 'goggles', again: true });
+      w.found.push('goggles');
+      this.sendWallet(client);
+      client.send({ t: 'gear_found', gear: 'goggles' });
+      this.onDirty();
+    },
+
     // Fishing: cast from a fishing stool (the bite comes a little later), then reel in.
     fish_cast(client, { x, y, z }) {
       if (!this.allow(client, 'fish', 1, 3) || !inBounds(x, y, z) || !BLOCKS[blockId(itemOf(this.get(x, y, z)))]?.fishing) return;
@@ -1450,7 +1551,7 @@ export class GameRoom {
     for (const c of this.clients.values()) if (c.joined) joined++;
     const list = [], cars = [];
     for (const c of this.clients.values()) {
-      if (c.joined && c.fresh && joined > 1) list.push([c.id, ...c.pos, ...c.rot, c.pet, c.ball, c.flags, c.ts]);
+      if (c.joined && c.fresh && joined > 1) list.push([c.id, ...c.pos, ...c.rot, c.pet, c.ball, c.flags, c.ts, c.drone || 0]);
       c.fresh = false;
     }
     for (const v of this.vehicles.values()) {

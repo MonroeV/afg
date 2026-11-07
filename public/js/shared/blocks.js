@@ -147,7 +147,32 @@ export const BLOCKS = {
   100: { name: 'Pumpkin', shape: 'model', model: 'pumpkin', box: [0.18, 0, 0.18, 0.82, 0.5, 0.82] },
   101: { name: 'Traffic Cone', shape: 'model', model: 'trafficCone', box: [0.3, 0, 0.3, 0.7, 0.7, 0.7] },
   102: { name: 'Picnic Table', shape: 'model', model: 'picnicTable', facing: true, box: [0, 0, 0.04, 1, 0.76, 0.96] },
+  // An elevator: put it at the bottom of a wall (like a ladder) and it goes all the way up. Its
+  // doors are at the floors it stops at. (The meta's low bits are which way the doors face; the
+  // next two say what this bit of the shaft is: plain, the doors, or the top of the doors.)
+  103: { name: 'Elevator', shape: 'model', model: 'elevatorDoor', facing: true, elevator: true, box: [0, 0, 0, 1, 1, 1] },
+  // ---------- The Secret Agency (only in its base, and around the world: `worldOnly`) ----------
+  // A TOP SECRET file: find all three and you get Top Secret clearance.
+  104: { name: 'Top Secret File', shape: 'model', model: 'secretFile', facing: true, secretFile: true, hidden: true, worldOnly: true, box: [0.2, 0, 0.2, 0.8, 0.85, 0.8], light: { color: 0xffd54f, power: 0.35, range: 6, always: true, y: 0.8 } },
+  // Spy cameras: watch anybody, anywhere.
+  105: { name: 'Spy Console', shape: 'model', model: 'spyConsole', facing: true, spy: 'cams', hidden: true, worldOnly: true, box: [0, 0, 0.1, 1, 0.8, 0.9] },
+  // A drone on its launch pad: fly it all over town.
+  106: { name: 'Drone Pad', shape: 'model', model: 'dronePad', spy: 'drone', hidden: true, worldOnly: true, box: [0.05, 0, 0.05, 0.95, 0.35, 0.95] },
+  // DO NOT PRESS.
+  107: { name: 'Big Red Button', shape: 'model', model: 'redButton', spy: 'button', hidden: true, worldOnly: true, box: [0.25, 0, 0.25, 0.75, 1, 0.75] },
+  // A wall of glowing screens.
+  108: { name: 'Spy Screens', shape: 'model', model: 'spyScreen', facing: true, hidden: true, worldOnly: true, box: [0, 0, 0, 1, 1, 0.12], light: { color: 0x66ffa6, power: 0.4, range: 8, always: true, y: 0.5 } },
+  // A table with a glowing map: where everybody is.
+  109: { name: 'Radar Table', shape: 'model', model: 'radarTable', spy: 'radar', hidden: true, worldOnly: true, box: [0.05, 0, 0.05, 0.95, 0.85, 0.95], light: { color: 0x40c4ff, power: 0.45, range: 8, always: true, y: 0.9 } },
+  // Night-vision goggles, to take (gear: you wear them).
+  110: { name: 'Gadget Shelf', shape: 'model', model: 'gogglesRack', facing: true, spy: 'goggles', hidden: true, worldOnly: true, box: [0.04, 0, 0.3, 0.96, 1, 0.7] },
+  // A radar dish on the roof.
+  111: { name: 'Radar Dish', shape: 'model', model: 'radarDish', hidden: true, worldOnly: true, box: [0.35, 0, 0.35, 0.65, 1, 0.65] },
 };
+// Elevator shaft parts (in the meta, above the facing bits).
+export const ELEVATOR = 103;
+export const LIFT_SHAFT = 0, LIFT_DOOR = 1, LIFT_DOOR_TOP = 2;
+export const liftRole = v => (((v >> 8) & 15) >> 2) & 3;
 
 // Furniture that faces you: which quarter turn makes its front (+z in the model) face
 // someone looking along `yaw`.
@@ -179,7 +204,10 @@ export const SHOP_TOOLS = {
   vacationflag: { name: 'Vacation Flag', price: 150, about: 'Claim a second piece of land for a vacation home! It stays where you plant it.', got: 'Hold your Land Flag and press X to switch it to vacation land.' },
 };
 // Gear you find in the world instead of buying: [name, where you get it].
-export const FOUND_GEAR = { skis: { name: 'Skis', where: 'Pick up a pair from the rack in the ski lodge, up north.' } };
+export const FOUND_GEAR = {
+  skis: { name: 'Skis', where: 'Pick up a pair from the rack in the ski lodge, up north.' },
+  goggles: { name: 'Night-Vision Goggles', where: 'A gadget from the Secret Agency\'s vault (Top Secret clearance only!).' },
+};
 // The Paint Brush's gold (once you've bought Gold Car Paint): cars turn shiny gold, blocks gold-colored.
 export const GOLD_PAINT = 17;
 export const GOLD_HEX = '#d9a21b';
@@ -264,7 +292,7 @@ export const isWaterBlock = v => blockId(itemOf(v)) === 36 || blockId(floorOf(v)
 // they come on by themselves when it gets dark.
 export const LIGHT_OFF = 1;
 const STREET_LAMP = 46;
-export const switchable = v => !!BLOCKS[v & 255]?.light && (v & 255) !== STREET_LAMP;
+export const switchable = v => !!BLOCKS[v & 255]?.light && (v & 255) !== STREET_LAMP && !BLOCKS[v & 255].worldOnly; // (not the Agency's things)
 export const lightOff = v => switchable(v) && (blockMeta(v) & LIGHT_OFF) !== 0;
 export const toggleLight = v => stack(itemOf(v) ^ (LIGHT_OFF << 8), floorOf(v));
 

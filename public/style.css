@@ -775,3 +775,32 @@ body.touch #quick-chat button { padding: 4px 7px; font-size: 12px; }
 .sign-colors button.on { border-color: #fff; }
 .sign-buttons { display: flex; gap: 10px; justify-content: flex-end; }
 .ask-text { font-size: 16px; line-height: 1.45; margin: 0; }
+
+/* ---------- Elevators ---------- */
+.lift-panel { width: min(360px, 100%); display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+#lift-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; max-height: 58vh; overflow-y: auto; padding: 8px; background: #3b4048; border-radius: 12px; }
+.lift-button {
+  aspect-ratio: 1; border-radius: 50%; border: 3px solid #c9ced4; background: radial-gradient(circle at 40% 35%, #f5f6f8, #9aa3ad);
+  color: #22262b; font: bold 19px system-ui, sans-serif; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.4); max-height: 64px; justify-self: center; width: min(64px, 100%);
+}
+.lift-button:hover, .lift-button:focus { border-color: #ffc24d; outline: none; box-shadow: 0 0 12px #ffc24d; }
+.lift-button.here { background: radial-gradient(circle at 40% 35%, #fff3d6, #ffc24d); cursor: default; }
+
+/* ---------- The Secret Agency ---------- */
+body.spycam #game { filter: saturate(0.35) sepia(0.55) hue-rotate(70deg) contrast(1.15); }
+#spy-overlay {
+  position: fixed; inset: 0; pointer-events: none; z-index: 5;
+  background: repeating-linear-gradient(rgba(0,0,0,0.12) 0 2px, transparent 2px 4px), radial-gradient(ellipse at center, transparent 55%, rgba(0,20,8,0.65));
+}
+#spy-cam { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); color: #ff5252; font: bold 18px monospace; text-shadow: 0 0 6px #000; animation: rec 1.2s steps(2) infinite; }
+@keyframes rec { 50% { opacity: 0.55; } }
+#spy-target { position: absolute; bottom: 92px; left: 50%; transform: translateX(-50%); max-width: 90vw; color: #b9ffcf; font: bold 17px monospace; background: rgba(0,25,10,0.65); border: 1px solid #2ee67a; padding: 6px 12px; border-radius: 6px; text-align: center; }
+#spy-buttons { position: absolute; top: 94px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; pointer-events: auto; }
+#spy-buttons button { font: bold 18px sans-serif; width: 44px; height: 38px; border-radius: 8px; border: 1px solid #2ee67a; background: rgba(0,30,12,0.75); color: #b9ffcf; cursor: pointer; }
+#radar { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.45); z-index: 6; }
+#radar.hidden, #spy-overlay.hidden { display: none; }
+.radar-panel { background: #021a0e; border: 2px solid #2ee67a; border-radius: 12px; padding: 10px; box-shadow: 0 0 30px rgba(46,230,122,0.4); }
+.radar-title { color: #2ee67a; font: bold 16px monospace; display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 12px; }
+.radar-title button { background: none; border: 1px solid #2ee67a; color: #2ee67a; border-radius: 6px; cursor: pointer; font: bold 14px sans-serif; width: auto; flex: none; padding: 3px 10px; margin: 0; }
+#radar-map { width: min(76vh, 88vw); height: min(76vh, 88vw); display: block; border-radius: 8px; }
+#red-flash { position: fixed; inset: 0; background: #ff1744; opacity: 0; pointer-events: none; z-index: 4; }
