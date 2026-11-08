@@ -299,12 +299,33 @@ async function load() {
   // Your pet doesn't go into the Secret Agency's base unless you've got clearance.
   myBody.petNav.forbid = (x, y, z) => (!!agency?.base && !agency.clear && agency.inside({ x: x + 0.5, y, z: z + 0.5 })) || !!agency?.keptOut(x + 0.5, z + 0.5);
   myBody.petBoxes = () => cars.boxes(); // pets bump into cars too
+  // Other players' pets (out and about, not riding in something), for ours to play with, and
+  // the clock their games go by (the world's time of day: everyone's game has the same).
+  myBody.petFriends = () => {
+    const out = [];
+    for (const a of avatars.list.values()) if (a.pet && !a.seat && !a.petAboard) out.push({ id: a.id, pos: a.pet.pos, name: a.name, kind: a.pet.kind });
+    return out;
+  };
+  myBody.playClock = () => sky.time;
+  myBody.petId = () => myId || 0;
+  const playToast = new Map(); // (who your pet last played with, so it's only said now and then)
   myBody.onPetEvent = (kind, what) => {
     const pet = myBody.pet;
     if (!pet) return;
     if (kind === 'dropped') {
       sounds.pet(pet.kind);
       effects.heartsAt(pet.pos.x, pet.pos.y + 0.6, pet.pos.z);
+    } else if (kind === 'play') {
+      // Playing with someone else's pet: a happy bark (or meow, or oink), and hearts between them.
+      sounds.pet(pet.kind);
+      effects.heartsAt((pet.pos.x + what.pos.x) / 2, pet.pos.y + 0.8, (pet.pos.z + what.pos.z) / 2);
+      const now = performance.now();
+      if (now - (playToast.get(what.id) || -1e9) > 120000) {
+        playToast.set(what.id, now);
+        hud.toast(`🐾 Your pet is playing with ${what.name ? `${what.name}'s` : 'another'} ${what.kind || 'pet'}!`);
+      }
+    } else if (kind === 'tag') {
+      if (Math.random() < 0.5) sounds.pet(pet.kind); // ("Tag, you're it!")
     } else if (kind === 'whine') {
       sounds.pet(pet.kind);
     } else if (kind === 'respawn') {

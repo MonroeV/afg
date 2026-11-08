@@ -78,7 +78,13 @@ customize your character, drive cars, build anything and play with friends.
   ladders paw over paw, so a ball thrown off a roof means a trip down the ladder and back up.
   If there's no way to reach you, your pet waits as close as it can get, looking up and whining;
   if the ball lands somewhere it can't reach, it gives up and the ball comes back to your hand.
-  Dragons fly, so they go up and over walls instead. Your pet comes along when you ride in a
+  Dragons fly, so they go up and over walls instead. **Pets play together**: when your pet meets
+  someone else's (and you're both nearby), they trot up for a nose-to-nose hello (with hearts),
+  then play: tag (taking turns being "it", chasing and pouncing), zoomies round and round each
+  other, and play bows (front down, tail wagging like mad) with bouncy pounces. Both pets' games
+  keep time with the world's clock, so they take turns together on everyone's screen. After a
+  good game they rest a little before the next one; throw the ball, or walk off, and they come
+  running. Your pet comes along when you ride in a
   vehicle (or in the RV while somebody drives it) and hops out right beside you when you get
   out. If it ever gets stuck (in a block, underground, or shut in somewhere with no way out) or
   ends up more than 30 blocks away, it pops back in beside you with a little sparkle, on the

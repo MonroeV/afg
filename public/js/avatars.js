@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { buildCharacter, animateCharacter, buildPet, animatePet } from './character.js';
 import { SEAT_SCALE } from './cars.js';
-import { PET_HAPPY, PET_CARRYING } from './pets.js';
+import { PET_HAPPY, PET_CARRYING, PET_BOW, PET_POUNCE } from './pets.js';
 import { PetMover } from './petmove.js';
 import { PlayClock, Track } from './smooth.js';
 import { balloonModel } from './contraptions.js';
@@ -235,8 +235,12 @@ export class Avatar {
         pet.pos.copy(to);
         if (why !== 'ride') this.onPetEvent?.('respawn', from);
       }
-      const plan = this.brain.think(dt, { pos: this.pos, yaw: this.yaw, speed: this.speed }, m.pos, this.ball, m.reachable);
+      // (Other players' pets nearby, to play with.)
+      const plan = this.brain.think(dt, { pos: this.pos, yaw: this.yaw, speed: this.speed }, m.pos, this.ball, m.reachable,
+        this.petFriends?.() || [], this.playClock?.() ?? performance.now() / 1000, this.petId?.() ?? 0);
       pet.action = plan.action;
+      if (plan.play) this.onPetEvent?.('play', plan.pal);
+      if (plan.tagged) this.onPetEvent?.('tag', plan.pal);
       if (plan.dropped) this.onPetEvent?.('dropped');
       if (plan.giveUp) this.onPetEvent?.('giveup', plan.giveUp);
       if (plan.whine) this.onPetEvent?.('whine');
@@ -294,6 +298,12 @@ export class Avatar {
       // Jump for joy and spin around.
       pet.body.position.y += Math.abs(Math.sin(time * 9)) * 0.35;
       pet.group.rotation.y = pet.yaw + time * 6;
+    } else if (pet.action === PET_BOW || pet.action === PET_POUNCE) {
+      // Playing: a play bow (front end down, bottom and tail up), or bouncy little pounces,
+      // with the tail wagging like mad.
+      pet.tail.rotation.y = Math.sin(time * 22) * 0.75;
+      if (pet.action === PET_POUNCE) pet.body.position.y += Math.abs(Math.sin(time * 8)) * 0.32;
+      else pet.head.rotation.x = 0.25 + Math.sin(time * 6) * 0.1;
     } else if (pet.sniff) {
       pet.head.rotation.x = -0.5 + Math.sin(time * 12) * 0.08;
     }
@@ -306,7 +316,7 @@ export class Avatar {
     pet.airK = (pet.airK || 0) + ((pet.air ? 1 : 0) - (pet.airK || 0)) * k;
     pet.climbK = (pet.climbK || 0) + ((pet.climb ? 1 : 0) - (pet.climbK || 0)) * k;
     // Nose up going up, nose down coming down; nose right up on a ladder.
-    const lean = pet.climb ? 1.05 : pet.air ? Math.max(-0.5, Math.min(0.5, (pet.vy || 0) * 0.07)) : 0;
+    const lean = pet.climb ? 1.05 : pet.air ? Math.max(-0.5, Math.min(0.5, (pet.vy || 0) * 0.07)) : pet.action === PET_BOW ? -0.42 : 0;
     pet.pitch = (pet.pitch || 0) + (lean - (pet.pitch || 0)) * Math.min(1, dt * 10);
     // Tilt around the middle of the body, not the feet.
     const c = 0.3;

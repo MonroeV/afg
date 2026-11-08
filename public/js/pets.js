@@ -2,7 +2,16 @@
 // play fetch with the ball, and jump for joy when you pet it.
 import * as THREE from 'three';
 
-export const PET_IDLE = 0, PET_MOVING = 1, PET_HAPPY = 2, PET_CARRYING = 3;
+export const PET_IDLE = 0, PET_MOVING = 1, PET_HAPPY = 2, PET_CARRYING = 3, PET_BOW = 4, PET_POUNCE = 5;
+
+// Pets playing together: when your pet is near someone else's (and you're close by), they say
+// hello nose to nose, then play: tag (taking turns to chase and be chased), zoomies round and
+// round each other, and play bows and pounces. Both pets' games go by the same clock (the
+// world's time of day, which everyone shares), so they take turns together.
+const PLAY_NEAR = 9; // another pet this close starts a game
+const PLAY_LEASH = 12; // and they keep playing while you're no further away than this
+const TURN = 2.6; // seconds each turn lasts
+const PLAY_MODES = ['tag', 'tag', 'bow', 'tag', 'zoom'];
 
 // A ball you throw for your pet. It flies in an arc (with a little trail and a shadow
 // on the ground under it), bounces off anything solid and rolls to a stop.
@@ -168,7 +177,9 @@ export class PetBrain {
 
   // owner: { pos, yaw, speed }. reachable: whether the pet can find a way to where it's
   // going. Returns where to go, how fast, and what the pet is doing.
-  think(dt, owner, petPos, ball, reachable = true) {
+  // friends: other players' pets nearby ({ id, pos, name }); clock: the shared clock (seconds);
+  // me: our own id (so two pets playing tag know which of them is "it" first).
+  think(dt, owner, petPos, ball, reachable = true, friends = [], clock = 0, me = 0) {
     this.timer -= dt;
     this.unreach = reachable ? 0 : (this.unreach || 0) + dt;
     this.happy = Math.max(0, this.happy - dt);
@@ -179,6 +190,7 @@ export class PetBrain {
     };
 
     if (ball?.active && !ball.carried && this.state !== 'return' && this.state !== 'fetch') {
+      if (this.state === 'play') this.stopPlaying(); // (a ball! that's even better)
       // Spotted the ball! A moment to watch where it's going, then off it runs.
       this.state = 'fetch';
       this.react = 0.3 + Math.random() * 0.4;
@@ -241,6 +253,8 @@ export class PetBrain {
       return { goal: front, speed: 5.5, action: PET_CARRYING, far: 60, turnRate: 6 };
     }
     if (this.happy > 0) return { goal: null, action: PET_HAPPY };
+    const play = this.playWith(dt, owner, petPos, friends, clock, me, reachable);
+    if (play) return play;
 
     // Wander a little when you stand still for a while.
     if (this.idle > 3 && owner.pos.distanceTo(petPos) < 7 && reachable) {
@@ -265,5 +279,92 @@ export class PetBrain {
       return { goal: behind(), speed: null, action: PET_MOVING, look: owner.pos, whine };
     }
     return { goal: behind(), speed: null, action: PET_MOVING };
+  }
+
+  // Playing with another pet (see PLAY_NEAR above). Returns a plan, or null when not playing.
+  playWith(dt, owner, petPos, friends, clock, me, reachable) {
+    this.playRest = Math.max(0, (this.playRest || 0) - dt);
+    const ownerFar = Math.hypot(owner.pos.x - petPos.x, owner.pos.z - petPos.z);
+    const flat = p => Math.hypot(p.x - petPos.x, p.z - petPos.z);
+    let pal = this.pal ? friends.find(f => f.id === this.pal) : null;
+    let start = false;
+    if (this.state === 'play') {
+      this.playTime -= dt;
+      // Time to stop: you've walked off (or run, or flown), their pet's gone, or they've played
+      // long enough (they'll have another game after a rest).
+      if (!pal || !reachable || ownerFar > PLAY_LEASH || owner.speed > 4.5 || this.playTime <= 0 || flat(pal.pos) > PLAY_NEAR * 2.5 || Math.abs(pal.pos.y - petPos.y) > 2.5) {
+        this.stopPlaying();
+        return null;
+      }
+    } else {
+      if (this.playRest > 0 || !reachable || ownerFar > PLAY_LEASH * 0.7 || owner.speed > 3.5) return null;
+      pal = null;
+      let best = PLAY_NEAR;
+      for (const f of friends) {
+        const d = flat(f.pos);
+        if (d < best && Math.abs(f.pos.y - petPos.y) < 2) [pal, best] = [f, d];
+      }
+      if (!pal) return null;
+      this.state = 'play';
+      this.pal = pal.id;
+      this.playTime = 20 + Math.random() * 15;
+      this.greet = 1.6;
+      this.center = new THREE.Vector3((petPos.x + pal.pos.x) / 2, petPos.y, (petPos.z + pal.pos.z) / 2);
+      this.tagT = 0;
+      start = true;
+    }
+    const d = flat(pal.pos);
+    const plan = p => Object.assign(p, start ? { play: 'start', pal } : {});
+    // Hello first: up to each other, nose to nose, a sniff.
+    if (this.greet > 0) {
+      this.greet -= dt;
+      return plan(d > 0.9 ? { goal: pal.pos, speed: 2.4, action: PET_MOVING, level: true } : { goal: null, action: PET_IDLE, look: pal.pos, sniff: true });
+    }
+    // Keep the game round about where it started (it drifts after you, a bit).
+    this.center.lerp(owner.pos, Math.min(1, dt * 0.05));
+    this.center.y = petPos.y;
+    const slot = Math.floor(clock / TURN), within = (clock / TURN) % 1;
+    const mode = PLAY_MODES[slot % PLAY_MODES.length];
+    const first = me < pal.id; // (which of the two goes first)
+    const around = (a, r) => new THREE.Vector3(this.center.x + Math.cos(a) * r, this.center.y, this.center.z + Math.sin(a) * r);
+    this.tagT = Math.max(0, this.tagT - dt);
+    if (mode === 'tag') {
+      const it = (slot + (first ? 0 : 1)) % 2 === 0;
+      if (it) {
+        // It's "it": chase! Close enough, and a pounce to tag them.
+        this.runAngle = null;
+        if (d < 0.9) {
+          let tagged = false;
+          if (!this.tagT) {
+            this.tagT = 1.2;
+            tagged = true;
+          }
+          return plan({ goal: null, action: PET_POUNCE, look: pal.pos, tagged });
+        }
+        return plan({ goal: pal.pos, speed: 5.4, action: PET_MOVING, turnRate: 6, level: true });
+      }
+      // Being chased: dash round in a circle, away from them.
+      if (this.runAngle == null) this.runAngle = Math.atan2(petPos.z - this.center.z, petPos.x - this.center.x);
+      this.runDir ??= Math.random() < 0.5 ? 1 : -1;
+      this.runAngle += this.runDir * dt * 1.9;
+      return plan({ goal: around(this.runAngle + this.runDir * 0.6, 2.6), speed: 5.2, action: PET_MOVING, turnRate: 6, level: true });
+    }
+    this.runAngle = null;
+    if (mode === 'zoom') {
+      // Zoomies: both racing round and round, one on each side of the circle.
+      const a = clock * 2 + (first ? 0 : Math.PI);
+      return plan({ goal: around(a + 0.5, 2.2), speed: 5.6, action: PET_MOVING, turnRate: 7, level: true });
+    }
+    // Play bow (front down, tail up and wagging), then a bouncy pounce at the other one.
+    if (d > 2.2) return plan({ goal: pal.pos, speed: 3, action: PET_MOVING, level: true });
+    if (within < 0.55) return plan({ goal: null, action: PET_BOW, look: pal.pos });
+    return plan({ goal: d > 1 ? pal.pos : null, speed: 2.2, action: PET_POUNCE, look: pal.pos, level: true });
+  }
+
+  stopPlaying() {
+    this.state = 'follow';
+    this.pal = null;
+    this.runAngle = null;
+    this.playRest = 8 + Math.random() * 8;
   }
 }
