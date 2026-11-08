@@ -92,6 +92,8 @@ customize your character, drive cars, build anything and play with friends.
   News, and when it stops there's a rainbow. (Up north it snows instead, and the snow stays out
   of the lodge and cabins now too)
 - **Day and night**: the sun sets, the stars and moon come out and the street lamps light up.
+  Sunrises and sunsets are soft and colorful (gold, orange, pink and red, with a round sun you
+  can look at) instead of a blinding white glare.
   Too dark (or not dark enough)? **Brightness at night** in the pause menu (Esc) makes the nights
   lighter or darker; the days stay the same
 - **Cars parked around town**: regular cars, a police car with a siren and monster trucks that climb

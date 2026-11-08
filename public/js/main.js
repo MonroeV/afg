@@ -5032,7 +5032,7 @@ function frame(timestamp) {
   reflections.refresh(sky.dayK);
   renderLive(dt, time, viewDist);
   if (glow.enabled) {
-    glow.render(sky.dayK);
+    glow.render(sky.dayK, sky.glare);
   } else {
     renderer.clear();
     renderer.render(scene, camera);

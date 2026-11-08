@@ -22,7 +22,32 @@ function makeSky() {
   sky.material.fragmentShader = sky.material.fragmentShader
     .replace('acos( max( 0.0, direction.y ) )', 'acos( clamp( direction.y, 0.0, 1.0 ) )')
     .replace('acos( direction.y )', 'acos( clamp( direction.y, -1.0, 1.0 ) )')
-    .replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( clamp( texColor, 0.0, 2000.0 ), 1.0 );');
+    .replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( clamp( texColor, 0.0, 2000.0 ), 1.0 );')
+    // When the sun is low (mornings and evenings) its glare is softened: the bright haze round it
+    // is rolled off gently instead of going blinding white over half the sky, and the sun itself
+    // is a warm, round ball you can look at rather than a white starburst. (soften: 0..1)
+    .replace('vec3 texColor = ( Lin + L0 ) * 0.04 + sundiscColor + vec3( 0.0, 0.0003, 0.00075 );', `
+      const vec3 LUMA = vec3( 0.2126, 0.7152, 0.0722 );
+      vec3 skyGlow = ( Lin + L0 ) * 0.04;
+      float glowLum = dot( skyGlow, LUMA );
+      float over = max( 0.0, glowLum - 0.4 );
+      float softLum = min( glowLum, 0.4 ) + over / ( 1.0 + over / 0.4 );
+      skyGlow *= mix( 1.0, softLum / max( glowLum, 1e-5 ), soften );
+      // The color of sunlight through all that air: white high up, gold, then orange, then red.
+      vec3 warm = Fex / max( max( Fex.r, Fex.g ), 1e-4 );
+      // Richer colors at sunrise and sunset, and a warm glow hugging the sun.
+      skyGlow = mix( vec3( dot( skyGlow, LUMA ) ), skyGlow, 1.0 + 0.45 * dusk );
+      float near = max( cosTheta, 0.0 );
+      skyGlow += soften * warm * ( 0.22 * pow( near, 900.0 ) + 0.08 * pow( near, 60.0 ) ) * smoothstep( -0.12, 0.02, vSunDirection.y );
+      // A bigger, softer sun when it's low: a ball you can look at.
+      float discCos = mix( sunAngularDiameterCos, 0.99976, soften );
+      float disc = smoothstep( discCos - 0.00002, discCos + 0.00003, cosTheta ) * showSunDisc;
+      float discCap = 2.4 + 3000.0 * pow( 1.0 - soften, 3.0 );
+      vec3 sunBall = max( sundiscColor * min( 1.0, discCap / max( dot( sundiscColor, LUMA ), 1e-5 ) ), disc * warm * 2.4 * soften );
+      vec3 texColor = skyGlow + sunBall + vec3( 0.0, 0.0003, 0.00075 );`)
+    .replace('uniform float showSunDisc;', 'uniform float showSunDisc;\nuniform float soften;\nuniform float dusk;');
+  sky.material.uniforms.soften = { value: 0 };
+  sky.material.uniforms.dusk = { value: 0 };
   const u = sky.material.uniforms;
   u.turbidity.value = 3;
   u.rayleigh.value = 1.2;
@@ -122,6 +147,7 @@ export class DayNight {
     this.dayK = 1;
     this.fogDay = new THREE.Color(0xc4d6e6);
     this.fogSunset = new THREE.Color(0xe8a882);
+    this.duskSky = new THREE.Color(0.95, 0.66, 0.62); // (the sky's light at sunrise and sunset)
     this.fogNight = new THREE.Color(0x0b1226);
     this.fogNightLight = new THREE.Color(0x243660); // (the night haze with the brightest nights)
     this.fogRain = new THREE.Color(); // (grey, when it rains)
@@ -172,6 +198,9 @@ export class DayNight {
     const nightK = 1 - this.dayK;
     const lift = this.nightLight * nightK; // (only at night: the days stay the same)
     const sunsetK = (1 - smooth(0.05, 0.35, Math.abs(h))) * smooth(-0.15, 0, h);
+    // How low (and so how glaring) the sun is: all morning and evening, not just right at sunset.
+    const lowSun = (1 - smooth(0.3, 0.75, h)) * smooth(-0.2, -0.02, h);
+    this.glare = lowSun; // (the glow effect stays off the sky then, see Glow.render)
 
     // The sky box goes everywhere with you: left in the middle of the world, its far corners
     // were beyond what the camera draws (black) when you looked up from the edge of town.
@@ -186,8 +215,9 @@ export class DayNight {
     this.sun.target.position.set(cx, 0, cz);
     this.sun.position.set(cx, 0, cz).addScaledVector(dir, 140);
     if (sunUp) {
-      this.sun.intensity = 3 * smooth(-0.03, 0.15, h);
-      this.sun.color.setRGB(1, 0.94 - sunsetK * 0.3, 0.86 - sunsetK * 0.5);
+      // A low sun is gentler (it's shining through more air) and goes golden, then rosy.
+      this.sun.intensity = 3 * smooth(-0.03, 0.15, h) * (1 - 0.3 * lowSun);
+      this.sun.color.setRGB(1, 0.94 - sunsetK * 0.24 - lowSun * 0.06, 0.86 - sunsetK * 0.38 - lowSun * 0.12);
     } else {
       this.sun.intensity = 0.5 * (1 + 0.9 * this.nightLight) * smooth(0.03, 0.2, -h);
       this.sun.color.setHex(0x9db4ff);
@@ -196,6 +226,9 @@ export class DayNight {
     this.hemi.intensity = 0.14 + 0.41 * this.dayK + 0.2 * lift;
     this.hemi.color.setRGB(0.23 + 0.61 * this.dayK + 0.12 * lift, 0.29 + 0.62 * this.dayK + 0.12 * lift, 0.5 + 0.5 * this.dayK + 0.08 * lift);
     this.hemi.groundColor.setRGB(0.06 + 0.3 * this.dayK + 0.09 * lift, 0.06 + 0.24 * this.dayK + 0.09 * lift, 0.08 + 0.13 * this.dayK + 0.1 * lift);
+    // At sunrise and sunset the light from the sky is a soft peachy pink, so the shady sides of
+    // things glow warmly too instead of going grey.
+    this.hemi.color.lerp(this.duskSky, sunsetK * 0.45);
     // Live reflections already get darker at night; the plain sky picture doesn't.
     this.scene.environmentIntensity = this.liveReflections ? 0.3 : 0.04 + 0.26 * this.dayK + 0.08 * lift;
     // And a touch more exposure at night (like eyes getting used to the dark).
@@ -229,8 +262,14 @@ export class DayNight {
       this.scene.fog.far += (240 - this.scene.fog.far) * nv;
     }
     const u = this.sky.material.uniforms;
-    u.turbidity.value = 3 + 9 * wet;
-    u.rayleigh.value = 1.2 - 0.9 * wet;
+    // Mornings and evenings: a clearer, deeper sky (richer oranges, pinks and purples) and a
+    // smaller, tighter glow round the sun.
+    u.turbidity.value = 3 - 0.8 * lowSun + 9 * wet;
+    u.rayleigh.value = (1.2 + 0.9 * sunsetK) * (1 - 0.75 * wet);
+    u.mieCoefficient.value = 0.004 - 0.0018 * lowSun;
+    u.mieDirectionalG.value = 0.8 + 0.1 * lowSun;
+    u.soften.value = lowSun * (1 - wet);
+    u.dusk.value = sunsetK * (1 - wet);
     u.cloudCoverage.value = 0.4 + 0.58 * wet; // (clouded right over)
     u.cloudDensity.value = 0.4 + 0.55 * wet;
 

@@ -126,12 +126,14 @@ export class Glow {
     this.composer.setSize(w, h);
   }
 
-  // dayK: 1 in the day, 0 at night.
-  render(dayK) {
+  // dayK: 1 in the day, 0 at night. glare: 0..1, how low the sun is (mornings and evenings).
+  render(dayK, glare = 0) {
     // In daylight only really bright things (like the sun) glow; at night lamps,
-    // headlights, TVs and fireworks do too.
-    this.bloom.threshold = 3.2 + 7 * dayK; // only really bright things glow, and gently
-    this.bloom.strength = 0.22 - 0.12 * dayK;
+    // headlights, TVs and fireworks do too. While the sun is low the sky stays out of it
+    // (the sunset glow smeared over everything made it hard to see).
+    const k = Math.max(dayK, glare);
+    this.bloom.threshold = 3.2 + 7 * k; // only really bright things glow, and gently
+    this.bloom.strength = (0.22 - 0.12 * dayK) * (1 - 0.5 * glare);
     this.composer.render();
   }
 }
