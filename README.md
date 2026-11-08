@@ -567,6 +567,9 @@ name and look. To save your own, type a name and press **Save my character**. Sa
 with the same name updates that character, so it works like a simple account. When all 25 spots
 are taken, the game asks you to click one to replace, or to replace the oldest one.
 
+If you press **Play** with a look that isn't saved yet, the game asks whether to save it first
+(under the name you typed). Press **Not now** to skip it. It won't ask again once that look is saved.
+
 In single player (no server) the gallery is kept in your browser instead.
 
 ## How the code is organized

@@ -8,7 +8,7 @@ import {
   GOLD_PAINT, GOLD_HEX, ELEVATOR,
 } from './shared/blocks.js';
 import { generateWorld } from './shared/worldgen.js';
-import { randomLook, sanitizeLook } from './shared/avatar.js';
+import { randomLook, sanitizeLook, cleanName } from './shared/avatar.js';
 import { generateTextures } from './textures.js';
 import { World, createBlockMaterials, blockMaterial, RAILING, WIND, rayBox } from './world.js';
 import { Player, EYE_HEIGHT, CROUCH_DROP } from './player.js';
@@ -336,12 +336,41 @@ async function load() {
 
 // ---------- Joining ----------
 
+// Before playing: if your character isn't saved in the Character Gallery (nothing there looks
+// just like it), ask whether to save it, so you can pick it again later. (Saving under your name
+// updates your old one, if there is one.)
+const menuGallery = new CharacterClient();
+async function offerToSaveCharacter() {
+  let saved = [];
+  try {
+    saved = await menuGallery.list();
+  } catch {
+    return; // (no gallery to save to)
+  }
+  const look = JSON.stringify(sanitizeLook(settings.look));
+  if (saved.some(c => JSON.stringify(sanitizeLook(c.look)) === look)) return;
+  const name = cleanName(settings.name);
+  const mine = saved.find(c => nameKey(c.name) === nameKey(name));
+  const yes = await new Promise(done => ask(
+    mine ? '💾 Save your new look?' : '💾 Save your character?',
+    mine ? `Your character "${name}" in the Character Gallery looks different from how you look now. Save your new look (so you and everyone can pick it later)?`
+      : `Your character isn't saved yet. Save it in the Character Gallery as "${name}", so you (and everyone) can pick it again later?`,
+    '💾 Save it', 'Not now', () => done(true), () => done(false), { menu: true }));
+  if (!yes) return;
+  $('status').textContent = 'Saving your character…';
+  const result = await menuGallery.save({ name, look: settings.look });
+  $('status').textContent = result.error === 'full' ? 'The Character Gallery is full, so your character wasn\'t saved (replace an old one in the Gallery later).'
+    : result.error ? 'Couldn\'t save your character right now. You can save it from the Gallery later.' : `Saved "${name}" in the Character Gallery!`;
+}
+
 $('join-form').addEventListener('submit', async e => {
   e.preventDefault();
-  goFullscreen();
+  if ($('play').disabled) return;
   settings.name = $('name').value.trim() || 'Builder';
   saveSettings();
   $('play').disabled = true;
+  await offerToSaveCharacter();
+  goFullscreen();
   $('status').textContent = 'Connecting…';
   sounds.ensure();
 
@@ -844,10 +873,10 @@ for (const text of QUICK_CHAT) {
 // ---------- Yes or no? ----------
 // A question that needs a proper answer (like "move your land here?"), with two big buttons.
 
-function ask(title, text, yesLabel, noLabel, onYes, onNo = () => {}) {
-  askOpen = { yes: onYes, no: onNo };
+function ask(title, text, yesLabel, noLabel, onYes, onNo = () => {}, { menu = false } = {}) {
+  askOpen = { yes: onYes, no: onNo, menu };
   keys.clear();
-  unlock();
+  if (!menu) unlock();
   $('ask-title').textContent = title;
   $('ask-text').textContent = text;
   $('ask-yes').textContent = yesLabel;
@@ -858,10 +887,10 @@ function ask(title, text, yesLabel, noLabel, onYes, onNo = () => {}) {
 
 function answer(yes) {
   if (!askOpen) return;
-  const { yes: onYes, no: onNo } = askOpen;
+  const { yes: onYes, no: onNo, menu } = askOpen;
   askOpen = null;
   $('ask').classList.add('hidden');
-  lock();
+  if (!menu) lock();
   updateOverlays();
   (yes ? onYes : onNo)();
 }
