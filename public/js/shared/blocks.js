@@ -170,6 +170,13 @@ export const BLOCKS = {
   111: { name: 'Radar Dish', shape: 'model', model: 'radarDish', hidden: true, worldOnly: true, box: [0.35, 0, 0.35, 0.65, 1, 0.65] },
   // Super clear glass: you can only just see it's there (a thin, faint edge and a little shine).
   112: { name: 'Clear Glass', tex: 'clear_glass', transparent: true, fragile: true, clear: true },
+  // ---------- Gas stations (only there: `worldOnly`) ----------
+  // A gas pump: right-click it to fill up a vehicle parked beside it (or buy a gas can).
+  113: { name: 'Gas Pump', shape: 'model', model: 'gasPump', facing: true, gasPump: true, hidden: true, worldOnly: true, box: [0.18, 0, 0.25, 0.82, 1, 0.75], light: { color: 0xfff3c4, power: 0.25, range: 5, always: true, y: 0.8 } },
+  // The car wash's soapy floor: drive over it slowly and your vehicle comes out clean.
+  114: { name: 'Car Wash', shape: 'flat', tex: 'car_wash', carWash: true, hidden: true, worldOnly: true },
+  // A big spinning car wash brush, hanging from the roof.
+  115: { name: 'Wash Brush', shape: 'model', model: 'washBrush', facing: true, hidden: true, worldOnly: true, box: [0, 0.35, 0, 1, 1, 1] },
 };
 // Elevator shaft parts (in the meta, above the facing bits).
 export const ELEVATOR = 103;

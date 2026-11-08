@@ -9,9 +9,10 @@ import { NpcCrew } from './npcs.js';
 import { buildFrontier, buildPizzeria, buildSignposts, refurnish, addFishingSpots } from './frontier.js';
 import { buildFarCountry, moreVehicles } from './farcountry.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot, seatCount } from './vehicles.js';
+import { buildGasStations, usesFuel, getsDirty, TANK_RANGE, GAS_PUMP, GAS_CAN, GAS_CAN_PRICE, FULL_TANK_PRICE, PUMP_REACH, DIRT_RANGE, WASH_TIME, fillPrice, paved, isWash } from './fuel.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
 
-export const SAVE_VERSION = 13;
+export const SAVE_VERSION = 14;
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
 const DOOR = 21;
@@ -20,6 +21,8 @@ const COIN_COUNT = 26; // gold coins lying around the world at once
 const DAILY_BONUS = 10;
 const RACE_PRIZE = 3;
 const FIX_AMOUNT = 8; // health a turn of the wrench puts back (out of 100)
+const TOWN_REFILL = 10 * 60 * 1000; // a town vehicle left nearly empty this long gets filled up by the town
+const MUDDY = new Set([1, 2, 10, 87]); // grass, dirt, sand, snow
 const TICK_RATE = 15; // how often the town's people's positions go out
 const DAY_MS = 24 * 60 * 60 * 1000;
 // Rain: now and then, not often. Between showers it stays dry for 30 to 75 minutes; a shower lasts
@@ -145,7 +148,7 @@ export class GameRoom {
     return this.addVehicle({ ...home, ...spot, home: home.id, hp: MAX_HP });
   }
 
-  addVehicle({ kind, color, x, y, z, h, home, hp }) {
+  addVehicle({ kind, color, x, y, z, h, home, hp, fuel, dirt }) {
     const owned = this.homes.get(home);
     const v = {
       id: this.nextVehicleId++, kind, color, home,
@@ -153,6 +156,10 @@ export class GameRoom {
       hp: Math.max(1, Math.min(MAX_HP, Number.isFinite(hp) ? hp : MAX_HP)),
       speed: 0, steer: 0, siren: 0, pitch: 0, roll: 0, rotor: 0, flags: 0, driver: 0, passengers: [],
       owner: owned?.key ? owned.owner : '', key: owned?.key || '', loaded: false,
+      // Gas in the tank (0..1) and how dirty it is (0..1). New ones come full and clean.
+      fuel: Number.isFinite(fuel) ? Math.max(0, Math.min(1, fuel)) : 1,
+      dirt: Number.isFinite(dirt) ? Math.max(0, Math.min(1, dirt)) : 0,
+      idleAt: Date.now(),
     };
     this.vehicles.set(v.id, v);
     return v;
@@ -182,6 +189,7 @@ export class GameRoom {
       this.upgradeTo11();
       this.upgradeTo12();
       this.upgradeTo13();
+      this.upgradeTo14();
       this.populate();
       return true;
     }
@@ -213,6 +221,7 @@ export class GameRoom {
         // The Secret Agency: which TOP SECRET files they've found, and whether they've got clearance.
         agent: { files: Array.isArray(w.agent?.files) ? w.agent.files.filter(k => typeof k === 'string').slice(0, 8) : [], clear: !!w.agent?.clear },
         guests: Array.isArray(w.guests) ? w.guests.filter(k => typeof k === 'string').map(nameKey).slice(0, 40) : [], // who their bodyguards let in
+        can: w.can ? 1 : 0, // carrying a gas can
       };
     }
     this.places = data.places && typeof data.places === 'object' ? data.places : null;
@@ -237,6 +246,7 @@ export class GameRoom {
     if (data.version < 11) this.upgradeTo11();
     if (data.version < 12) this.upgradeTo12();
     if (data.version < 13) this.upgradeTo13();
+    if (data.version < 14) this.upgradeTo14();
     this.populate();
     return true;
   }
@@ -423,6 +433,23 @@ export class GameRoom {
     this.onDirty();
   }
 
+  // Worlds saved before version 14: two gas stations, each with a car wash, by the roads out of
+  // town (on empty land nobody's claimed). Nothing anyone built is touched.
+  upgradeTo14() {
+    const gas = buildGasStations({
+      get: (x, y, z) => this.get(x, y, z),
+      set: (x, y, z, v) => {
+        if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+      },
+      canUse: this.freeLand(),
+    });
+    this.claims.push(...gas.claims);
+    for (const [x, y, z, text] of gas.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+    this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...gas.places };
+    this.log(`Added ${gas.claims.length} gas stations with car washes (${gas.count} blocks)`);
+    this.onDirty();
+  }
+
   // Where the files still to find are, in Agent Shadow's words.
   filesLeft(w) {
     return (this.places?.files || []).filter(f => !w.agent.files.includes(blockKey(f[0], f[1], f[2]))).map(f => FILE_HINTS[f[3]] || 'somewhere out there');
@@ -465,7 +492,7 @@ export class GameRoom {
       time: Math.round(this.time),
       blocks: this.flatBlocks(),
       homes: [...this.homes.values()],
-      vehicles: [...this.vehicles.values()].map(({ home, kind, color, x, y, z, h, hp }) => ({ home, kind, color, x, y, z, h, hp: Math.round(hp) })),
+      vehicles: [...this.vehicles.values()].map(({ home, kind, color, x, y, z, h, hp, fuel, dirt }) => ({ home, kind, color, x, y, z, h, hp: Math.round(hp), fuel: round3(fuel), dirt: round3(dirt) })),
       claims: this.claims,
       names: this.names,
       spots: this.spots,
@@ -581,12 +608,13 @@ export class GameRoom {
     w.fish ??= [];
     w.agent ??= { files: [], clear: false };
     w.guests ??= [];
+    w.can ??= 0;
     return w;
   }
 
   sendWallet(client) {
     const w = this.wallet(client);
-    client.send({ t: 'wallet', coins: w.coins, owned: w.owned, found: w.found, vacation: !!this.vacationOf(client), agent: { files: w.agent.files.length, need: this.filesNeeded(), clear: w.agent.clear } });
+    client.send({ t: 'wallet', coins: w.coins, owned: w.owned, found: w.found, vacation: !!this.vacationOf(client), agent: { files: w.agent.files.length, need: this.filesNeeded(), clear: w.agent.clear }, can: w.can });
   }
 
   // ---------- The Secret Agency ----------
@@ -741,6 +769,7 @@ export class GameRoom {
     }
     if (v.driver !== client.id) return;
     v.driver = 0;
+    v.idleAt = Date.now();
     v.speed = v.steer = v.siren = v.pitch = v.roll = v.rotor = 0;
     // Nobody flying it any more? It drops to the ground.
     if (VEHICLES[v.kind].flying) {
@@ -771,6 +800,36 @@ export class GameRoom {
   // Close enough to reach it (or in it).
   nearVehicle(client, v) {
     return client.car === v.id || Math.hypot(client.pos[0] - v.x, client.pos[1] - v.y, client.pos[2] - v.z) < 14;
+  }
+
+  // A vehicle's driver moved it (from `was`): it uses gas, and gets dirty (much faster off the
+  // road, faster still off the road in the rain), or clean in the car wash.
+  driven(v, was) {
+    const now = Date.now();
+    const dt = Math.min(0.25, (now - (v.drivenAt || now)) / 1000);
+    v.drivenAt = now;
+    const d = Math.hypot(v.x - was[0], VEHICLES[v.kind].flying ? v.y - was[1] : 0, v.z - was[2]);
+    if (d > 12) return; // (a teleporter, not driving)
+    if (usesFuel(v.kind) && v.fuel > 0 && d > 0) {
+      const before = v.fuel;
+      v.fuel = Math.max(0, v.fuel - d / TANK_RANGE[v.kind]);
+      if (!v.fuel || Math.floor(before * 50) !== Math.floor(v.fuel * 50)) this.broadcast({ t: 'car_fuel', id: v.id, fuel: round3(v.fuel) });
+    }
+    if (!getsDirty(v.kind)) return;
+    const x = Math.floor(v.x), z = Math.floor(v.z), y = Math.max(0, Math.floor(v.y + 0.05));
+    const here = this.get(x, y, z);
+    const before = v.dirt;
+    if (isWash(here)) v.dirt = Math.max(0, v.dirt - dt / WASH_TIME);
+    else if (d > 0) {
+      // (Driving on top of something built is clean; on the bare ground, or sand or snow, it's muddy.)
+      const under = here || (y > 0 ? this.get(x, y - 1, z) : 0);
+      const muddy = !paved(here) && (y === 0 ? !here || MUDDY.has(blockId(itemOf(here))) : MUDDY.has(blockId(itemOf(under))));
+      const k = muddy ? 3 * (this.weather?.rain > 0 ? 2 : 1) : 1;
+      v.dirt = Math.min(1, v.dirt + d * k / DIRT_RANGE);
+    }
+    if (v.dirt !== before && (!v.dirt || Math.floor(before * 25) !== Math.floor(v.dirt * 25))) {
+      this.broadcast({ t: 'car_dirt', id: v.id, dirt: round3(v.dirt), wash: v.dirt < before });
+    }
   }
 
   damageVehicle(v, amount, impact) {
@@ -1014,6 +1073,7 @@ export class GameRoom {
     car_state(client, msg) {
       const v = this.vehicles.get(msg.id);
       if (!v || v.driver !== client.id) return;
+      const was = [v.x, v.y, v.z];
       v.x = clampWorld(msg.x);
       v.y = Math.max(0, Math.min(WORLD.maxY + 40, num(msg.y)));
       v.z = clampWorld(msg.z);
@@ -1028,6 +1088,7 @@ export class GameRoom {
       v.loaded = !!(v.flags & 4);
       v.ts = Number.isFinite(msg.ts) ? msg.ts : null;
       v.fresh = true;
+      this.driven(v, was);
     },
 
     // Crashes (reported by the driver) and hammer hits (from anyone close by).
@@ -1098,6 +1159,58 @@ export class GameRoom {
       if (!v || v.hp >= MAX_HP || !this.allow(client, 'fix', 5, 6) || !this.nearVehicle(client, v)) return;
       v.hp = Math.min(MAX_HP, v.hp + FIX_AMOUNT);
       this.broadcast({ t: 'car_hp', id: v.id, hp: Math.round(v.hp), fixer: client.id });
+      this.onDirty();
+    },
+
+    // At a gas pump: fill up a vehicle parked beside it (paying for the gas: as much as you can
+    // afford, if you can't afford a whole tank), or buy a gas can to carry to one that's run dry.
+    pump(client, { x, y, z, id, can }) {
+      if (!this.allow(client, 'pump', 1, 3) || ![x, y, z].every(Number.isInteger)) return;
+      if (blockId(itemOf(this.get(x, y, z))) !== GAS_PUMP) return;
+      const reply = text => client.send({ t: 'chat', system: true, text });
+      if (Math.hypot(client.pos[0] - x - 0.5, client.pos[2] - z - 0.5) > 6) return reply('⛽ Walk up to the pump first.');
+      const w = this.wallet(client);
+      if (can) {
+        if (w.can) return reply('⛽ You\'re already carrying a gas can! Take it to your vehicle and right-click the vehicle to pour it in.');
+        if (w.coins < GAS_CAN_PRICE) return reply(`🪙 A gas can costs ${GAS_CAN_PRICE} coins, and you have ${w.coins}. Find more coins around town!`);
+        w.coins -= GAS_CAN_PRICE;
+        w.can = 1;
+        this.sendWallet(client);
+        this.onDirty();
+        client.send({ t: 'gas_can', got: true });
+        return reply('⛽ You bought a gas can (a quarter of a tank). Carry it to your vehicle and right-click the vehicle to pour it in.');
+      }
+      const v = this.vehicles.get(id);
+      if (!v || !usesFuel(v.kind)) return;
+      const name = VEHICLES[v.kind].name;
+      if (Math.hypot(v.x - x - 0.5, v.z - z - 0.5) > PUMP_REACH) return reply(`⛽ Park the ${name} right next to the pump first.`);
+      if (v.driver && v.driver !== client.id) return reply(`⛽ Someone's driving that ${name}.`);
+      if (v.key && v.key !== nameKey(client.name)) return reply(`🔑 That's ${v.owner}'s ${name}: only ${v.owner} can fill it up.`);
+      if (v.fuel >= 0.995) return reply(`⛽ The ${name}'s tank is already full!`);
+      const price = fillPrice(v.fuel);
+      if (w.coins <= 0) return reply(`🪙 Filling up costs ${price} coins, and you don't have any. Find some coins around town!`);
+      const paid = Math.min(price, w.coins);
+      w.coins -= paid;
+      v.fuel = paid >= price ? 1 : Math.min(1, v.fuel + paid / FULL_TANK_PRICE);
+      v.idleAt = Date.now();
+      this.sendWallet(client);
+      this.broadcast({ t: 'car_fuel', id: v.id, fuel: round3(v.fuel), filled: client.id });
+      this.onDirty();
+      reply(paid >= price ? `⛽ Filled up! The ${name} has a full tank. (${paid} coin${paid > 1 ? 's' : ''})` : `⛽ You had ${paid} coin${paid > 1 ? 's' : ''}, so you put in that much gas: the tank's ${Math.round(v.fuel * 100)}% full now.`);
+    },
+
+    // Pouring the gas can you're carrying into a vehicle.
+    pour(client, { id }) {
+      const v = this.vehicles.get(id);
+      const w = this.wallet(client);
+      if (!v || !usesFuel(v.kind) || !w.can || !this.allow(client, 'pour', 1, 3)) return;
+      const reply = text => client.send({ t: 'chat', system: true, text });
+      if (Math.hypot(client.pos[0] - v.x, client.pos[2] - v.z) > 7) return reply('⛽ Get right up to it first.');
+      if (v.fuel >= 0.995) return reply(`⛽ The ${VEHICLES[v.kind].name}'s tank is already full! Keep the can for when you need it.`);
+      w.can = 0;
+      v.fuel = Math.min(1, v.fuel + GAS_CAN);
+      this.sendWallet(client);
+      this.broadcast({ t: 'car_fuel', id: v.id, fuel: round3(v.fuel), filled: client.id, can: true });
       this.onDirty();
     },
 
@@ -1590,6 +1703,18 @@ export class GameRoom {
       }
     }
 
+    // A town vehicle left with hardly any gas gets filled up by the town after a while (so the
+    // town's cars don't all end up empty). People's own vehicles are up to them.
+    if (!(t.refill > 0)) {
+      t.refill = 30;
+      for (const v of this.vehicles.values()) {
+        if (v.key || v.driver || !usesFuel(v.kind) || v.fuel >= 0.3 || now - v.idleAt < TOWN_REFILL) continue;
+        v.fuel = 1;
+        this.broadcast({ t: 'car_fuel', id: v.id, fuel: 1 });
+        this.onDirty();
+      }
+    }
+
     // Burning vehicles lose health until they blow up.
     const burnTick = t.burn <= 0;
     if (burnTick) t.burn = 1;
@@ -1656,4 +1781,5 @@ function isDoorToggle(old, b) {
 }
 
 const publicPlayer = c => ({ id: c.id, name: c.name, look: c.look, pos: c.pos, rot: c.rot });
-const publicVehicle = ({ id, kind, color, x, y, z, h, driver, passengers, hp, owner, loaded }) => ({ id, kind, color, x, y, z, h, driver, passengers, hp: Math.round(hp), owner: owner || '', loaded: !!loaded });
+const publicVehicle = ({ id, kind, color, x, y, z, h, driver, passengers, hp, owner, loaded, fuel, dirt }) => ({ id, kind, color, x, y, z, h, driver, passengers, hp: Math.round(hp), owner: owner || '', loaded: !!loaded, fuel: round3(fuel), dirt: round3(dirt) });
+const round3 = n => Math.round(num(n) * 1000) / 1000;

@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BLOCKS, blockId, blockMeta, itemOf, floorOf, isWaterBlock } from './shared/blocks.js';
 import { PlayClock, Track } from './smooth.js';
 import { VEHICLES, MAX_HP, SMOKE_HP, FIRE_HP, PERSON_MASS, outlinePoints, rotorPoints, vehicleBlocked, toWorld, afloat } from './shared/vehicles.js';
+import { usesFuel } from './shared/fuel.js';
 
 export const CAR_SPECS = VEHICLES;
 
@@ -16,6 +17,43 @@ const STRAFE_EASE = 1.25; // how quickly it leans over, and back to level (half 
 export const SEAT_SCALE = 0.85;
 const GOLD = '#d9a21b'; // the color of gold car paint
 const LAMP_COLOR = new THREE.Color(0xffe0a8);
+
+// Mud on a dirty vehicle (levels 1 to 4: a few splashes, up to caked on): a picture that's
+// white where the paint shows through and brown where there's mud, heaviest low down on the
+// sides, like it's been splashed up from the road.
+const MUD = [];
+function mudTexture(level) {
+  if (MUD[level]) return MUD[level];
+  const S = 128, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, S, S);
+  let seed = 7 + level * 13;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const k = level / 4;
+  // A band of splashed mud along the bottom.
+  const band = ctx.createLinearGradient(0, S, 0, S * (0.45 - 0.25 * k));
+  band.addColorStop(0, `rgba(120, 88, 54, ${0.35 + 0.5 * k})`);
+  band.addColorStop(1, 'rgba(120, 88, 54, 0)');
+  ctx.fillStyle = band;
+  ctx.fillRect(0, 0, S, S);
+  // Splotches and specks all over (more of them, and bigger, the dirtier it is).
+  for (let i = 0; i < 30 + 110 * k; i++) {
+    const x = rand() * S, y = S - Math.pow(rand(), 0.6 + k) * S, r = 1 + rand() * (3 + 7 * k);
+    ctx.fillStyle = `rgba(${105 + rand() * 30}, ${78 + rand() * 20}, ${48 + rand() * 15}, ${0.25 + 0.45 * rand() * (0.5 + k)})`;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * (0.6 + rand() * 0.6), rand() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // A dusty film over everything.
+  ctx.fillStyle = `rgba(150, 125, 95, ${0.08 + 0.2 * k})`;
+  ctx.fillRect(0, 0, S, S);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  MUD[level] = tex;
+  return tex;
+}
 
 function textTexture(text, bg, fg) {
   const c = document.createElement('canvas');
@@ -572,6 +610,7 @@ export class Cars {
       h: data.h,
       targetH: data.h,
       hp: data.hp ?? MAX_HP,
+      fuel: data.fuel ?? 1, dirt: 0,
       speed: 0, steer: 0, siren: 0, vy: 0, spin: 0,
       gear: 1, rpm: 0, shiftT: 0,
       pitch: 0, roll: 0, targetPitch: 0, targetRoll: 0, yawRate: 0, collective: 0.5, rotorSpin: 0, rotorAngle: 0,
@@ -590,6 +629,7 @@ export class Cars {
       if (o.isMesh && o.material.metalness !== undefined && o.material.roughness < 0.5) this.reflections?.addShiny(o.material, o.material.transparent ? 1.4 : 1);
     });
     this.applyHp(car, car.hp);
+    this.applyDirt(car, data.dirt || 0);
     this.place(car);
     return car;
   }
@@ -625,9 +665,11 @@ export class Cars {
     for (const id of [...this.list.keys()]) this.remove(id);
   }
 
-  setDriver({ id, driver, passengers, x, y, z, h, loaded }) {
+  setDriver({ id, driver, passengers, x, y, z, h, loaded, fuel, dirt }) {
     const car = this.list.get(id);
     if (!car) return;
+    if (Number.isFinite(fuel)) car.fuel = fuel;
+    if (Number.isFinite(dirt)) this.applyDirt(car, dirt);
     car.driver = driver;
     car.passengers = passengers || [];
     if (loaded !== undefined) car.loaded = loaded;
@@ -678,6 +720,24 @@ export class Cars {
     if (lost < 0) this.undent(car, hp >= MAX_HP ? 1 : -lost / Math.max(1, MAX_HP - before));
   }
 
+  // Out of gas? (Boats don't need any.)
+  empty(car) {
+    return usesFuel(car.kind) && car.fuel <= 0;
+  }
+
+  // How dirty it is (0..1): mud on the paint, and the shine dulled.
+  applyDirt(car, dirt) {
+    car.dirt = dirt;
+    const m = car.model.paint;
+    const level = dirt < 0.08 ? 0 : Math.min(4, Math.ceil(dirt * 4));
+    const tex = level ? mudTexture(level) : null;
+    if (m.map !== tex) {
+      m.map = tex;
+      m.needsUpdate = true;
+    }
+    this.finish(car);
+  }
+
   // A fresh coat of paint (the Paint Brush).
   setColor(car, color) {
     car.color = color;
@@ -691,9 +751,10 @@ export class Cars {
   finish(car) {
     const m = car.model.paint, gold = car.color === 'gold';
     m.userData.normal ??= { metalness: m.metalness, roughness: m.roughness, clearcoat: m.clearcoat ?? 0, env: m.envMapIntensity, strength: m.userData.envStrength };
-    m.metalness = gold ? 0.9 : m.userData.normal.metalness;
-    m.roughness = gold ? 0.32 : m.userData.normal.roughness;
-    if ('clearcoat' in m) m.clearcoat = gold ? 0 : m.userData.normal.clearcoat;
+    const dirt = car.dirt || 0; // (mud dulls the shine)
+    m.metalness = (gold ? 0.9 : m.userData.normal.metalness) * (1 - 0.6 * dirt);
+    m.roughness = Math.min(1, (gold ? 0.32 : m.userData.normal.roughness) + 0.45 * dirt);
+    if ('clearcoat' in m) m.clearcoat = (gold ? 0 : m.userData.normal.clearcoat) * (1 - dirt);
     m.envMapIntensity = gold ? 0.55 : m.userData.normal.env;
     if (m.userData.normal.strength !== undefined) m.userData.envStrength = gold ? m.userData.normal.strength * 0.45 : m.userData.normal.strength;
     m.emissive?.set(gold ? 0x2a1a00 : 0x000000);
@@ -1113,7 +1174,17 @@ export class Cars {
 
   driveCar(car, dt, keys) {
     const s = car.spec;
-    const throttle = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
+    let throttle = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
+    // Out of gas: the engine's dead. You can still steer and brake while you roll to a stop.
+    const empty = this.empty(car);
+    car.noGasT = Math.max(0, (car.noGasT || 0) - dt);
+    if (empty) {
+      if (throttle > 0 && !car.noGasT) {
+        car.noGasT = 4;
+        car.noGas = true; // (the game says so)
+      }
+      throttle = throttle < 0 && car.speed > 0.2 ? -1 : 0;
+    }
     const steerIn = (keys.has('KeyA') ? 1 : 0) - (keys.has('KeyD') ? 1 : 0);
     const boost = keys.has('ShiftLeft') || keys.has('ShiftRight');
     const max = s.maxSpeed * (boost ? 1.3 : 1);
@@ -1218,7 +1289,7 @@ export class Cars {
     }
     car.speed = Math.max(-7, Math.min(limit, car.speed));
     if (Math.abs(car.speed) < 0.05 && !throttle) car.speed = 0;
-    car.load = throttle !== 0 && !car.braking ? 1 : 0;
+    car.load = throttle !== 0 && !car.braking && !empty ? 1 : 0;
     car.reversing = car.gear === 0;
 
     car.steer += (steerIn * 0.6 - car.steer) * Math.min(1, 6 * dt);
@@ -1316,7 +1387,10 @@ export class Cars {
     const s = car.spec;
     const events = [];
     const health = 0.6 + 0.4 * (car.hp / MAX_HP);
-    car.rotorSpin = Math.min(1, car.rotorSpin + dt / 3.5); // engine spools up when you get in
+    // The engine spools up when you get in. Out of gas, the rotor slowly winds down, just enough
+    // to float you gently down to the ground (but not to fly).
+    const empty = this.empty(car);
+    car.rotorSpin = empty ? Math.max(0.78, car.rotorSpin - dt / 6) : Math.min(1, car.rotorSpin + dt / 3.5);
     const lift = car.rotorSpin ** 2;
     const grounded = car.onGround;
 
@@ -1352,6 +1426,14 @@ export class Cars {
     const level = Math.max(0.55, Math.cos(car.pitch) * Math.cos(car.roll));
     const hover = Math.max(0.2, Math.min(1, (0.5 - car.vel.y * 0.05 - 0.004) / (level * health)));
     car.collective += ((up ? 1 : down ? 0.2 : hover) - car.collective) * Math.min(1, (up || down ? 1.6 : 4) * dt);
+    if (empty) {
+      car.collective = Math.min(car.collective, 0.42);
+      if (up && !car.noGasT) {
+        car.noGasT = 4;
+        car.noGas = true;
+      }
+      car.noGasT = Math.max(0, (car.noGasT || 0) - dt);
+    }
     const thrust = lift * car.collective * 2 * HELI_GRAVITY * health;
     const fwd = new THREE.Vector3(-Math.sin(car.h), 0, -Math.cos(car.h));
     car.vel.addScaledVector(fwd, thrust * Math.sin(-car.pitch) * dt);
@@ -1363,6 +1445,7 @@ export class Cars {
     car.vel.x *= drag;
     car.vel.z *= drag;
     car.vel.y *= Math.exp(-0.9 * dt);
+    if (empty) car.vel.y = Math.max(car.vel.y, -4); // (out of gas: a gentle float down, never a crash)
     // A little wind keeps you on your toes.
     const t = performance.now() / 1000;
     if (car.pos.y > 3) {

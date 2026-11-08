@@ -562,6 +562,16 @@ export class Effects {
     this.zzz.spawn({ x, y, z, vx: 0.3, vy: 0.5, vz: 0.1, life: 2.2, size: 0.3, grow: 0.15, color: [0.8, 0.9, 1] });
   }
 
+  // The car wash: water and soap suds spraying down and in from the sides onto a vehicle.
+  washSpray(x, y, z, h = 1.6) {
+    for (let i = 0; i < 6; i++) {
+      const side = Math.random() < 0.5 ? -1 : 1, along = (Math.random() - 0.5) * 2.5;
+      this.glow.spawn({ x: x + side * 1.6, y: y + 0.4 + Math.random() * h, z: z + along, vx: -side * (3 + Math.random() * 2), vy: 0.5, vz: 0, life: 0.45, size: 0.12, color: [0.55, 0.8, 1], gravity: 9, alpha: 0.75 });
+      this.glow.spawn({ x: x + (Math.random() - 0.5) * 2, y: y + h + 1, z: z + along, vx: 0, vy: -3, vz: 0, life: 0.4, size: 0.12, color: [0.6, 0.85, 1], gravity: 9, alpha: 0.7 });
+    }
+    this.smoke.spawn({ x: x + (Math.random() - 0.5) * 2, y: y + Math.random() * h, z: z + (Math.random() - 0.5) * 2.5, vx: 0, vy: 0.2, vz: 0, life: 1, size: 0.35, grow: 0.6, color: [1, 1, 1], alpha: 0.75, drag: 2 });
+  }
+
   spray(x, y, z) {
     const a = Math.random() * Math.PI * 2, r = Math.random() * 0.6;
     this.glow.spawn({ x, y, z, vx: Math.cos(a) * r, vy: 5 + Math.random() * 1.5, vz: Math.sin(a) * r, life: 1.1, size: 0.18, color: [0.5, 0.75, 1], gravity: 9, alpha: 0.8 });
@@ -1078,6 +1088,23 @@ export class Sounds {
   }
 
   // A wrench: the ratchet clicking round, then a clink of metal.
+  // A gas pump running (a whir and a click when it's done), and a gas can glugging.
+  pump() {
+    this.together(() => {
+      this.tone(140, 180, 1.1, 0.12, 'sawtooth');
+      this.noiseHit(900, 1.1, 0.25, 'bandpass');
+      this.tone(1300, 1200, 0.05, 0.25, 'square', 1.15);
+    });
+  }
+  glug() {
+    for (let i = 0; i < 6; i++) this.tone(170 + Math.random() * 60, 90, 0.12, 0.3, 'sine', i * 0.16);
+  }
+  // A swoosh of water in the car wash.
+  wash(volume = 1) {
+    this.noiseHit(2500, 0.35, 0.35 * volume, 'bandpass');
+    this.noiseHit(700, 0.3, 0.2 * volume, 'lowpass');
+  }
+
   wrench(volume = 1) {
     this.together(() => {
       for (let i = 0; i < 4; i++) this.noiseHit(4200 + i * 150, 0.02, 0.45 * volume, 'highpass', i * 0.045);

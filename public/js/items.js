@@ -723,6 +723,18 @@ export class ViewModel {
       obj.scale.setScalar(0.8);
       obj.position.set(0.02, -0.12, 0);
       obj.rotation.set(-0.85, 0.1, -0.22);
+    } else if (item === 'gascan') {
+      // (Not an item: a gas can you've bought, carried to a vehicle that needs it.)
+      obj = new THREE.Group();
+      const red = new THREE.MeshStandardMaterial({ color: 0xd32f2f, roughness: 0.45, metalness: 0.2 });
+      const black = new THREE.MeshStandardMaterial({ color: 0x212121, roughness: 0.6 });
+      obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.28, 0.12), red));
+      obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.04, 0.04).translate(-0.03, 0.17, 0), black)); // the handle
+      obj.add(new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 0.12, 8).rotateZ(-0.7).translate(0.12, 0.17, 0), black)); // the spout
+      obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.05, 0.005).translate(0, 0, 0.0625), new THREE.MeshStandardMaterial({ color: 0xffeb3b, roughness: 0.5 })));
+      obj.scale.setScalar(1.15);
+      obj.position.set(-0.04, 0.1, 0.05);
+      obj.rotation.set(0.15, -0.6, 0.05);
     } else if (item === WATER_BALLOON) {
       obj = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 12).scale(1, 1.15, 1), new THREE.MeshStandardMaterial({ color: 0x42a5f5, roughness: 0.15, transparent: true, opacity: 0.85 }));
       obj.position.y = 0.05;

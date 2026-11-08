@@ -47,6 +47,7 @@ import { Elevators } from './elevator.js';
 import { liftDoors } from './shared/elevator.js';
 import { SecretAgency } from './spy.js';
 import { Weather } from './weather.js';
+import { usesFuel, fillPrice, GAS_CAN_PRICE, PUMP_REACH } from './shared/fuel.js';
 
 const $ = id => document.getElementById(id);
 const REACH = 7;
@@ -196,6 +197,8 @@ let elevators, agency; // elevators (riding them), and the Secret Agency (its ba
 const npcs = new Map(); // the town's people (run by the server): id -> Avatar
 const coinMap = new Map(); // gold coins lying about: id -> { x, y, z, value, asked }
 let wallet = { coins: 0, owned: [] };
+let carryingCan = false; // a gas can bought at a gas station, to carry to a vehicle that's out of gas
+let gasStations = []; // where the gas stations are: [name, x, z]
 let shopOpen = false;
 let signOpen = null; // [x, y, z] of the sign being written on
 let askOpen = null; // a yes/no question on screen: { yes, no }
@@ -259,7 +262,7 @@ async function load() {
   hud = new Hud({
     icons, settings, sounds, onPaint: choosePaint, onGear: gearChanged,
     onChange: item => {
-      view.setItem(rodOut ? 'rod' : item);
+      showHeld(item);
       if (fillable(item)) lastBlock = item;
     },
   });
@@ -420,6 +423,7 @@ $('join-form').addEventListener('submit', async e => {
   for (const c of welcome.cars) cars.add(c);
   setClaims(welcome.claims || []);
   agency.setWorld({ base: welcome.base, files: welcome.files, landmarks: welcome.landmarks });
+  gasStations = (welcome.landmarks || []).filter(([k]) => /^gas\d/.test(k));
   weather.set(welcome.rain || 0);
   agency.setGuards(welcome.guards);
   weather.rain = weather.target; // (if it's raining when you arrive, it already is)
@@ -518,8 +522,12 @@ net.on('secret_file', ({ again, found, need, clear, left = [] }) => {
   }
 });
 net.on('shop_open', () => openShop());
-net.on('wallet', ({ coins, owned, vacation, found = [], agent }) => {
+net.on('wallet', ({ coins, owned, vacation, found = [], agent, can }) => {
   const more = coins > wallet.coins;
+  if (!!can !== carryingCan) {
+    carryingCan = !!can;
+    showHeld();
+  }
   if (agent) {
     if (agent.clear !== agency.agent.clear) myBody.petNav?.cache.clear(); // (your pet may go in now)
     agency.agent = agent;
@@ -618,6 +626,112 @@ net.on('car_hp', ({ id, hp, impact, fixer }) => {
   cars.applyHp(car, hp, impact);
   if (hurt && impact && riding() !== car) sounds.crash(loudness(car.pos.x, car.pos.y, car.pos.z, 40) * 0.6);
 });
+// ---------- Gas and the car wash ----------
+
+// Gas in a vehicle's tank: used up as it's driven, or filled at a pump or from a gas can.
+net.on('car_fuel', ({ id, fuel, filled, can }) => {
+  const car = cars.list.get(id);
+  if (!car) return;
+  const was = car.fuel;
+  car.fuel = fuel;
+  if (filled) {
+    const near = loudness(car.pos.x, car.pos.y, car.pos.z, 25);
+    if (near > 0) {
+      if (can) sounds.glug();
+      else sounds.pump();
+    }
+    if (filled === myId) {
+      effects.sparkle(car.pos.x, car.pos.y + 1, car.pos.z, 20);
+      if (can) hud.toast(`⛽ Glug, glug… a quarter of a tank! The ${car.spec.name}'s at ${Math.round(fuel * 100)}%. Hop in and drive to a gas station to fill it up.`);
+    }
+  }
+  if (car === myCar) gasWarning(was, fuel);
+});
+// How dirty a vehicle is (and, in the car wash, getting clean).
+net.on('car_dirt', ({ id, dirt, wash }) => {
+  const car = cars.list.get(id);
+  if (!car) return;
+  const was = car.dirt;
+  cars.applyDirt(car, dirt);
+  if (wash) {
+    effects.washSpray(car.pos.x, car.pos.y, car.pos.z, car.spec.height);
+    const near = loudness(car.pos.x, car.pos.y, car.pos.z, 30);
+    if (near > 0) sounds.wash(near);
+    if (!dirt && was > 0) {
+      effects.sparkle(car.pos.x, car.pos.y + car.spec.height / 2, car.pos.z, 40);
+      if (riding() === car) {
+        sounds.magic();
+        hud.toast(`✨ Squeaky clean! Your ${car.spec.name} is sparkling.`);
+      }
+    }
+  } else if (car === myCar && was < 0.5 && dirt >= 0.5) {
+    hud.toast(`🟫 Your ${car.spec.name} is getting muddy! The gas stations have a car wash (it's free).`);
+  }
+});
+net.on('gas_can', () => {
+  sounds.click();
+  hud.toast('⛽ You got a gas can! Carry it to your vehicle and right-click the vehicle to pour it in.');
+});
+
+// Where the nearest gas station is from here, in words (" 120 blocks north-east").
+function nearestGas(from = player.pos) {
+  let best = null, bestD = Infinity;
+  for (const [, x, z] of gasStations) {
+    const d = Math.hypot(x - from.x, z - from.z);
+    if (d < bestD) [best, bestD] = [[x, z], d];
+  }
+  if (!best) return '';
+  if (bestD < 20) return ' right here';
+  const dirs = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+  const dir = dirs[(Math.round(Math.atan2(best[0] - from.x, -(best[1] - from.z)) / (Math.PI / 4)) + 8) % 8];
+  return ` ${Math.round(bestD / 10) * 10} blocks ${dir} of here`;
+}
+
+// Running low (or out) of gas while you drive: say so, and where to get more.
+function gasWarning(was, fuel) {
+  if (!myCar || !usesFuel(myCar.kind) || !(was > fuel)) return;
+  const where = nearestGas();
+  if (was > 0 && fuel <= 0) {
+    sounds.tone(320, 110, 0.6, 0.3, 'sawtooth');
+    hud.toast('⛽ Out of gas!');
+    hud.addChat({ system: true, text: `⛽ Out of gas! ${myCar.spec.flying ? 'You\'ll float gently down.' : 'The engine has stopped.'} Walk to the gas station${where ? ` (${where.trim()})` : ''}, right-click a pump to buy a gas can (${GAS_CAN_PRICE} coins), then carry it back and right-click your ${myCar.spec.name} to pour it in.` });
+    return;
+  }
+  for (const k of [0.25, 0.1]) {
+    if (was > k && fuel <= k) {
+      sounds.tone(880, 660, 0.18, 0.2, 'triangle');
+      hud.toast(`⛽ ${k < 0.2 ? 'Very low' : 'Low'} on gas: ${Math.round(fuel * 100)}% left! ${where ? `The nearest gas station is${where}.` : 'Find a gas station!'}`);
+    }
+  }
+}
+
+// Right-clicking a gas pump: fill up the vehicle parked beside it, or buy a gas can.
+function usePump(x, y, z) {
+  const me = nameKey(settings.name);
+  let best = null, bestD = PUMP_REACH;
+  for (const c of cars.list.values()) {
+    if (!usesFuel(c.kind) || (c.driver && c.driver !== myId) || (c.owner && nameKey(c.owner) !== me)) continue;
+    const d = Math.hypot(c.pos.x - x - 0.5, c.pos.z - z - 0.5);
+    if (d < bestD) [best, bestD] = [c, d];
+  }
+  if (best && best.fuel < 0.995) {
+    const price = fillPrice(best.fuel), afford = wallet.coins >= price;
+    const text = `The ${best.spec.name}'s tank is ${Math.round(best.fuel * 100)}% full. Filling it up costs ${price} coin${price > 1 ? 's' : ''}`
+      + (afford ? ` (you have ${wallet.coins}).` : wallet.coins > 0 ? `, and you have ${wallet.coins}: you'll get as much gas as that buys.` : ", and you don't have any coins yet. Find some around town!");
+    if (!wallet.coins) return ask('⛽ Fill it up?', text, 'OK', 'Close', () => {});
+    return ask('⛽ Fill it up?', text, `⛽ Fill up (${Math.min(price, wallet.coins)} 🪙)`, 'Not now', () => net.send({ t: 'pump', x, y, z, id: best.id }));
+  }
+  if (carryingCan) return hud.toast('⛽ You\'re already carrying a gas can! Take it to your vehicle and right-click the vehicle to pour it in.');
+  const why = best ? `The ${best.spec.name}'s tank is already full. ` : 'Park a vehicle right beside the pump to fill it up. ';
+  ask('⛽ Buy a gas can?', `${why}Or buy a gas can: it holds a quarter of a tank, for a vehicle that's run out of gas somewhere. Carry it there and right-click the vehicle to pour it in. It costs ${GAS_CAN_PRICE} coins (you have ${wallet.coins}).`,
+    `⛽ Buy a gas can (${GAS_CAN_PRICE} 🪙)`, 'Not now', () => net.send({ t: 'pump', x, y, z, can: true }));
+}
+
+// What's in your hand: the fishing rod while you fish, a gas can while you carry one, or your item.
+function showHeld(item = hud.item) {
+  view.setItem(rodOut ? 'rod' : carryingCan ? 'gascan' : item);
+}
+
 net.on('car_destroy', ({ id, x, y, z }) => {
   const car = cars.list.get(id);
   const p = car ? car.pos : new THREE.Vector3(x, y, z);
@@ -3141,6 +3255,8 @@ function interact() {
     hud.toast('🚩 Claiming cancelled.');
     return;
   }
+  // Carrying a gas can to a vehicle that needs gas: pour it in.
+  if (target?.car && carryingCan && usesFuel(target.car.kind) && target.car.fuel < 0.995) return net.send({ t: 'pour', id: target.car.id });
   if (target?.car?.kind === 'rv' && !riding()) return enterRV(target.car);
   if (target?.car) return requestEnter(target.car);
   if (target?.pet) return petThePet(target);
@@ -3170,6 +3286,7 @@ function interact() {
       if (def?.shape === 'picture') return nextPicture(...hit.block, hit.value);
       if (def?.music) return changeNote(...hit.block, hit.value);
       if (def?.shop) return openShop();
+      if (def?.gasPump) return usePump(...hit.block);
       if (def?.piano) return playPiano(...hit.block);
       if (def?.oven) return net.send({ t: 'job' });
       if (def?.lift) return rideLift(...hit.block);
@@ -3729,7 +3846,7 @@ function updateFishing(dt, time) {
   const stool = !!fishingStool();
   if (stool !== rodOut) {
     rodOut = stool;
-    view.setItem(rodOut ? 'rod' : hud.item);
+    showHeld();
     if (!rodOut) stopFishing(true);
   }
   myBody.fishing = rodOut;
@@ -4587,7 +4704,11 @@ function frame(timestamp) {
       if (myCar.spec.flying) carCam.yaw = Math.atan2(Math.sin(aim - myCar.h), Math.cos(aim - myCar.h));
       player.pos.copy(vanSleep ? cars.bed(myCar, 0).position : cars.seat(myCar).position);
       player.vel.set(0, 0, 0);
-      if (myCar.spec.flying) sounds.engine(null);
+      if (myCar.noGas) {
+        myCar.noGas = false;
+        hud.toast(myCar.spec.flying ? "⛽ Out of gas! You can't fly up without any: float down and land." : `⛽ Out of gas! Get out (E) and fetch a gas can from a gas station${nearestGas() ? ` (${nearestGas().trim()})` : ''}.`);
+      }
+      if (myCar.spec.flying || cars.empty(myCar)) sounds.engine(null);
       else {
         // The engine note follows the revs smoothly (so you hear each gear change).
         myCar.rpmShown = (myCar.rpmShown ?? myCar.rpm) + (myCar.rpm - (myCar.rpmShown ?? myCar.rpm)) * Math.min(1, dt * 9);
@@ -4714,9 +4835,13 @@ function frame(timestamp) {
       if (item === WRENCH) hint = health >= 100 ? '🔧 Good as new!' : `🔧 ${state}Click (or hold) to fix it · ${health}%`;
       else if (item === BRUSH) hint = `🎨 Click to paint it ${paintName()}`;
       else if (isFlag(item)) hint = mine ? `🔑 Your ${target.car.spec.name} · Click to give it back` : owner ? `🔑 ${owner}'s ${target.car.spec.name}` : `🔑 Click to make this ${target.car.spec.name} yours!`;
+      else if (carryingCan && usesFuel(target.car.kind) && target.car.fuel < 0.995) hint = `⛽ Right-click to pour your gas can into the ${target.car.spec.name} (${Math.round(target.car.fuel * 100)}% full)`;
       else if (owner && !mine && !target.car.driver) hint = `🔑 ${owner}'s ${target.car.spec.name} (only ${owner} can drive it)`;
       else if (item === HAMMER && state) hint = `${state}Fix it with the 🔧 Wrench (Tools tab) · Click to whack it`;
-      else hint = full ? "🚗 It's full" : target.car.driver ? '🚗 Right-click or E to ride along' : (mine ? `🔑 Your ${target.car.spec.name}! ` : '') + what + (item === HAMMER && !owner ? ' · Click to whack it' : '');
+      else {
+        const noGas = !target.car.driver && cars.empty(target.car) ? `⛽ Out of gas! (Bring a gas can from a gas station) · ` : '';
+        hint = full ? "🚗 It's full" : target.car.driver ? '🚗 Right-click or E to ride along' : noGas + (mine ? `🔑 Your ${target.car.spec.name}! ` : '') + what + (item === HAMMER && !owner ? ' · Click to whack it' : '');
+      }
     } else if (target?.pet) {
       hint = item === BALL && target.avatar === myBody ? '🎾 Click to throw the ball · Right-click to pet' : '🐾 Right-click to pet';
     } else if (target?.npc) {
@@ -4755,6 +4880,8 @@ function frame(timestamp) {
       else if (def?.spy && !agency.clear) hint = '🔒 TOP SECRET: agents only';
       else if (def?.spy) hint = { cams: '📹 Right-click: spy cameras (watch anyone!)', radar: '📡 Right-click: the radar (where is everybody?)', drone: '🚁 Right-click to fly the drone', button: '🔴 DO NOT PRESS (right-click)', goggles: hud.hasGear(GOGGLES) ? '🥽 Right-click to put your goggles on or off' : '🥽 Right-click to take night-vision goggles' }[def.spy];
       else if (def?.skiRack && !tool) hint = hud.wearing(SKIS) ? '🎿 Right-click to put your skis back' : hud.hasGear(SKIS) ? '🎿 Right-click to put your skis on' : '🎿 Right-click to take a pair of skis';
+      else if (def?.gasPump) hint = `⛽ Right-click to fill up a vehicle parked here (or buy a gas can)`;
+      else if (def?.carWash) hint = '🧽 The car wash: drive through it slowly to wash your vehicle';
       else if (def?.seat && !tool) hint = '🛋️ Right-click to sit down';
       else if (def?.hug && !tool) hint = '🧸 Right-click for a hug';
       else if (def?.art === 'sign' && !tool) hint = signs.get(...hit.block) ? `🪧 "${signs.get(...hit.block)}" · Right-click to change it` : '🪧 Right-click to write on it';
@@ -4900,10 +5027,14 @@ function frame(timestamp) {
         const sp = myCar.stickPitch || 0, sr = myCar.roll || 0;
         const tilt = myCar.onGround ? '🛬 On the ground' : deg(sp) < 2 && deg(sr) < 2 ? '🎯 Level'
           : [deg(sp) >= 2 ? `${sp < 0 ? '⬆' : '⬇'} ${deg(sp)}°` : '', deg(sr) >= 2 ? `${sr > 0 ? '⬅' : '➡'} ${deg(sr)}°` : ''].filter(Boolean).join(' ');
+        // The gas gauge (five bars), and a note if it's muddy.
+        const pct = Math.round(myCar.fuel * 100);
+        const gas = usesFuel(myCar.kind) ? ` · ⛽ ${'▮'.repeat(Math.ceil(myCar.fuel * 5))}${'▯'.repeat(5 - Math.ceil(myCar.fuel * 5))} ${pct}%${pct <= 0 ? ' OUT OF GAS' : pct <= 10 ? ' LOW!' : ''}` : '';
+        const mud = myCar.dirt >= 0.5 ? ' · 🟫 Muddy' : '';
         hud.setVehicleInfo(myCar.spec.flying
-          ? `⬆️ ${Math.max(0, Math.round(myCar.pos.y - ground))} m · ${kmh} km/h · Tilt: ${tilt} · Rotor ${Math.round(myCar.rotorSpin * 100)}% · ${health}`
+          ? `⬆️ ${Math.max(0, Math.round(myCar.pos.y - ground))} m · ${kmh} km/h · Tilt: ${tilt} · Rotor ${Math.round(myCar.rotorSpin * 100)}% · ${health}${gas}`
           : myCar.spec.boat ? `🚤 ${kmh} km/h · ${health}`
-            : `Gear ${myCar.gear === 0 ? 'R' : myCar.gear === 3 ? '3 (overdrive)' : myCar.gear} · ${kmh} km/h · ${health}`);
+            : `Gear ${myCar.gear === 0 ? 'R' : myCar.gear === 3 ? '3 (overdrive)' : myCar.gear} · ${kmh} km/h · ${health}${gas}${mud}`);
       } else if (myRide) {
         const driver = avatars.list.get(myRide.driver);
         hud.setVehicleInfo(`🧍 Passenger${driver ? ` · ${driver.name} is driving` : ' · Waiting for a driver'} · ${Math.round(Math.abs(myRide.speed) * 3.6)} km/h`);
@@ -5089,6 +5220,9 @@ window.buildzone = {
   get signs() { return signs; },
   get contraptions() { return contraptions; },
   kickBall: () => kickBall(),
+  usePump: (x, y, z) => usePump(x, y, z),
+  leaveCar: () => leaveCar(true),
+  get carryingCan() { return carryingCan; },
   carSpecial: () => carSpecial(),
   rv,
   get elevators() { return elevators; },

@@ -129,6 +129,21 @@ customize your character, drive cars, build anything and play with friends.
   or hold the button, to keep turning it. Each turn fixes a bit, knocks some of the dents back out
   and brings the shine back; it can even put out a fire if you're quick. The hint under the
   crosshair shows how healthy it is
+- **Gas** ⛽: every car, truck and helicopter has a tank of gas that runs down as you drive (a car
+  goes about 4,000 blocks on a full tank; big trucks and the RV use more). Boats don't need any.
+  The gas gauge is next to your speed, and you get a warning at a quarter and at a tenth of a tank,
+  with how far it is to the nearest gas station. Out of gas, the engine stops (a helicopter floats
+  gently down). There are two **gas stations** by the roads out of town: park beside a pump, get
+  out and right-click the pump to fill up. A whole tank costs 8 coins (less if it isn't empty; if
+  you don't have enough coins you get as much as you can pay for). Ran dry somewhere far away?
+  Walk to a gas station, right-click a pump with no car beside it to buy a **gas can** (3 coins, a
+  quarter of a tank), carry it back (it's in your hand) and right-click your vehicle to pour it
+  in. You can carry one can at a time. Town vehicles left nearly empty get filled up by the town
+  after 10 minutes; your own vehicles are up to you
+- **Mud and the car wash** 🧽: vehicles get dirty as you drive, slowly on roads, three times as
+  fast on grass, sand and snow, and twice as fast again off the road in the rain. They get
+  splashed with mud and lose their shine. Every gas station has a free **car wash**: drive through
+  it slowly (about two seconds in the suds) and you come out sparkling
 - **Paint any vehicle**: click a car, truck, boat or helicopter with the Paint Brush and it turns
   your paint color. It stays that color for everyone, and even comes back that color if it blows up
 - **Real bumps (Newton's laws)**: when things collide they trade momentum. Ram a parked car and it
@@ -627,6 +642,7 @@ public/
       farcountry.js    The far country: the beach and campground, the quarry and the farm
       elevator.js      Elevators: their shafts, where they stop, their doors and floor names
       secretbase.js    The Secret Agency's base, its TOP SECRET files, and who may be inside
+      fuel.js          Gas, mud, the gas stations and their car washes
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/
   make-engine-sounds.py  Makes the engine recordings (needs numpy and ffmpeg; run it after changing a voice)

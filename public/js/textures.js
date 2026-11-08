@@ -520,6 +520,17 @@ function speedPad(u, v) {
   return { c: [0.95 - n * 0.1, 0.35, 0.1], h: 0.5 };
 }
 
+// The car wash floor: wet blue tiles with a drain grate and soap suds.
+function carWash(u, v) {
+  const n = fbm(u, v, 8, 3, 840);
+  const grate = Math.abs(v - 0.5) < 0.08 && (u * 10) % 1 < 0.55;
+  if (grate) return { c: [0.25, 0.27, 0.3], h: 0.2 };
+  const suds = fbm(u + 3.1, v + 1.7, 5, 3, 841) > 0.62;
+  if (suds) return { c: [0.93, 0.96, 1], h: 0.8 };
+  const line = (u * 2) % 1 < 0.04 || (v * 2) % 1 < 0.04;
+  return { c: shade(line ? [0.75, 0.85, 0.92] : [0.22, 0.55, 0.85], 0.9 + n * 0.15), h: line ? 0.4 : 0.6 };
+}
+
 // Race lines: green and white squares for the start, black and white for the finish.
 function checkers(dark, cells) {
   return (u, v) => {
@@ -650,6 +661,7 @@ const GENERATORS = {
   speed_pad: speedPad,
   race_start: checkers([0.15, 0.65, 0.25], 4),
   race_finish: checkers([0.08, 0.08, 0.1], 6),
+  car_wash: carWash,
   filing,
   diamond,
   bedrock,

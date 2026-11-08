@@ -12,6 +12,7 @@ const PLACE_NAMES = {
   plaza: 'on the town square', store: 'at the Luxe Store', tower: 'at the tower', pizza: 'at the Pizza Palace',
   lodge: 'at the ski lodge', camp: 'at Sunny Shores Campground', quarry: 'at Big Rock Quarry', farm: 'at Happy Acres Farm',
   base: 'at the secret base', agent: 'on the town square',
+  gas1: 'at the gas station', gas2: 'at the gas station',
 };
 const DRONE_RANGE = 180; // how far from the base a drone's signal reaches
 const DRONE_BATTERY = 150; // seconds of flying

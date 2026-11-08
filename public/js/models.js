@@ -426,6 +426,24 @@ export const MODELS = {
     trim: [box(0.16, 0.02, 0.1, 0.6, 0.44, 0.5)],
     colors: { body: 0xf57c00, accent: 0x6d4c22, trim: 0x43a047, metal: 0 },
   },
+  // A gas pump: a red cabinet with a glowing screen, a nozzle hanging on the side and its hose.
+  gasPump: {
+    body: [box(0.56, 0.08, 0.42, 0.5, 0.04, 0.5), box(0.5, 0.86, 0.36, 0.5, 0.5, 0.5), box(0.56, 0.08, 0.42, 0.5, 0.97, 0.5)],
+    glow: [box(0.34, 0.2, 0.012, 0.5, 0.74, 0.684)],
+    accent: [box(0.42, 0.1, 0.012, 0.5, 0.48, 0.684), box(0.08, 0.16, 0.06, 0.78, 0.58, 0.5), box(0.03, 0.1, 0.03, 0.78, 0.47, 0.54)],
+    trim: [
+      new THREE.TorusGeometry(0.16, 0.018, 5, 12, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2).translate(0.8, 0.42, 0.5),
+      box(0.5, 0.05, 0.37, 0.5, 0.88, 0.5),
+    ],
+    colors: { body: 0xe53935, glow: 0xb9f6ca, accent: 0x263238, trim: 0x1c1c1c, metal: 0.3 },
+  },
+  // A car wash brush: a fat, fluffy blue roller on an arm, hanging from the roof.
+  washBrush: {
+    body: [box(0.08, 0.3, 0.08, 0.5, 0.85, 0.5)],
+    accent: [new THREE.CylinderGeometry(0.24, 0.24, 0.98, 12).rotateZ(Math.PI / 2).translate(0.5, 0.55, 0.5)],
+    trim: [new THREE.CylinderGeometry(0.05, 0.05, 1.0, 8).rotateZ(Math.PI / 2).translate(0.5, 0.55, 0.5)],
+    colors: { body: 0x90a4ae, accent: 0x29b6f6, trim: 0xeceff1, metal: 0 },
+  },
   // An orange traffic cone with a white stripe.
   trafficCone: {
     body: [box(0.42, 0.04, 0.42, 0.5, 0.02, 0.5), cone(0.17, 0.62, 0.5, 0.35, 0.5, 12)],
