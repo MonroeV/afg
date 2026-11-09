@@ -514,7 +514,7 @@ function speedPad(u, v) {
   const n = fbm(u, v, 8, 3, 820);
   const border = Math.min(u, v, 1 - u, 1 - v) < 0.06;
   if (border) return { c: [0.15, 0.15, 0.17], h: 0.8 };
-  const k = ((v - Math.abs(u - 0.5) * 0.9) * 3) % 1;
+  const k = ((1 - v - Math.abs(u - 0.5) * 0.9) * 3) % 1; // (pointing +z: the way the pad pushes)
   const arrow = k > 0.55 && k < 0.85 && Math.abs(u - 0.5) < 0.38;
   if (arrow) return { c: [1, 0.85, 0.15], h: 1, e: 0.7 };
   return { c: [0.95 - n * 0.1, 0.35, 0.1], h: 0.5 };
