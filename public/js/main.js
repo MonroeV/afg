@@ -578,6 +578,20 @@ net.on('npc_say', ({ id, text }) => {
   if (a.pos.distanceTo(player.pos) < 16) hud.addChat({ name: a.name, color: '#ffd54f', text });
 });
 net.on('npc_pet', () => myBody.brain?.cheer()); // somebody petted our pet: it's so happy!
+// Someone who lives in a tower riding its elevator: its doors slide open (ding!) and shut.
+net.on('lift_doors', ({ x, z, y, open, ding }) => {
+  if (![x, y, z].every(Number.isFinite)) return;
+  for (const yy of [y, y + 1]) {
+    const k = blockKey(x, yy, z);
+    if (open) world.liftOpen.add(k);
+    else world.liftOpen.delete(k);
+    world.rerender(x, yy, z);
+  }
+  if (ding && Math.hypot(player.pos.x - x - 0.5, player.pos.z - z - 0.5) < 14 && Math.abs(player.pos.y - y) < 3) {
+    sounds.tone(1318, 1318, 0.45, 0.1, 'sine');
+    sounds.tone(1046, 1046, 0.7, 0.09, 'sine', 0.22);
+  }
+});
 net.on('weather', ({ rain }) => weather.set(rain));
 // Bodyguards: whose land they guard (and who may go in), and the town's people coming and going.
 net.on('guards', ({ lands }) => {

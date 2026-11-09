@@ -270,14 +270,18 @@ customize your character, drive cars, build anything and play with friends.
   gold), **Super Sneakers** (90; run super fast and jump super high), the **Vacation Flag**
   (150; claim a second piece of land, see below), and the most expensive thing in the store,
   **Bodyguards** (300, and only for Secret Agency agents with Top Secret clearance): two guards in
-  black suits and sunglasses who stand either side of the front door of your land (your home
-  land) and don't let anybody else on it, just like the guards at the secret base. Players who
+  black suits and sunglasses who patrol your land (your home land): round the house, every floor,
+  the yard and the front door. They walk right up to anyone who shouldn't be there, and don't let
+  anybody else on it, just like the guards at the secret base. Players who
   aren't on your guest list get walked straight back off it, the town's people (and other
   people's pets) can't step onto it, and the guards say so ("🛑 Sorry Bo, you're not on Mia's
   guest list"). Right-click one of your bodyguards for your **guest list**: tick the names saved
   in the Character Gallery (or type in anyone's) and they're let in. **A Family** (160): a family
-  moves into your house (your home land) and lives there, pottering about and saying hello when
-  you come home. Right-click one of them to name them and choose how each one looks (with the
+  moves into your house (your home land) and lives there, pottering about and coming to say hello
+  when you come home. Your family and your bodyguards really get about: from room to room, up the
+  stairs and ladders to the upper floors, out into the yard and back (opening the doors and shutting
+  them behind them), and if your home is a skyscraper, they ride its elevators to every floor. They
+  keep away from garage doors. Right-click one of them to name them and choose how each one looks (with the
   same character maker as yours, pets and all), and to add more of them (up to five) or say
   goodbye to one. A **Mystery Box** (12, buy as many as you like) holds a surprise: something
   from one of the stores that you don't have yet. Things you put down show up at the top of the

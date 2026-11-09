@@ -4,7 +4,10 @@
 // come near, pet your pet, love your cool stuff, and react to fireworks, explosions,
 // dancing and water balloons.
 import { sanitizeLook } from './avatar.js';
-import { BLOCKS, isSolidBlock, blockId, itemOf, shapeOf, blockMeta, DOOR_TOP, SHOP_TOOLS } from './blocks.js';
+import { BLOCKS, isSolidBlock, blockId, itemOf, shapeOf, blockMeta, blockKey, toggleDoorValue, DOOR_OPEN, DOOR_TOP, SHOP_TOOLS } from './blocks.js';
+import { claimAt } from './claims.js';
+import { liftColumn, liftStops } from './elevator.js';
+import { buildMap, route, nearestNode, cellKey, cellFlags, doorAt, nearGarage, STAND, DOOR, CLIMB, RIDE } from './homenav.js';
 import { inZone } from './secretbase.js';
 import { RESIDENTS } from './residents.js';
 
@@ -206,10 +209,17 @@ export class NpcCrew {
 
   // def: who's asking (the base is only for the Agency's own people).
   standable(x, y, z, def = null) {
-    if (this.zone && !def?.clearance && inZone(this.zone, x + 0.5, y, z + 0.5)) return false;
-    for (const l of this.lands) if (def?.land !== l.key && def?.home !== l.key && x >= l.rect[0] && x <= l.rect[2] && z >= l.rect[1] && z <= l.rect[3]) return false;
+    if (!this.mayGo(x, y, z, def)) return false;
     const v = this.room.get(x, y, z);
     return !this.solid(x, y, z) && !this.solid(x, y + 1, z) && this.solid(x, y - 1, z) && blockId(itemOf(v)) !== 36 && blockId(v >> 16) !== 36;
+  }
+
+  // Somewhere this person is let in: not the Agency's base without clearance, and not land
+  // with bodyguards that aren't theirs.
+  mayGo(x, y, z, def = null) {
+    if (this.zone && !def?.clearance && inZone(this.zone, x + 0.5, y, z + 0.5)) return false;
+    for (const l of this.lands) if (def?.land !== l.key && def?.home !== l.key && x >= l.rect[0] && x <= l.rect[2] && z >= l.rect[1] && z <= l.rect[3]) return false;
+    return true;
   }
 
   // The nearest spot to stand on, near (x, y, z).
@@ -267,8 +277,11 @@ export class NpcCrew {
       if (n.actionT <= 0 && n.action !== NPC_ACT.walk) n.action = NPC_ACT.idle;
       if (n.def.reporter) this.report(n, dt, players);
       this.notice(n, players, now);
-      this.move(n, dt, players);
+      if (n.nav) this.homeMove(n, dt, players);
+      else this.move(n, dt, players);
     }
+    this.clock += dt;
+    this.shutDoors(this.clock * 1000);
   }
 
   // Say hello, admire things, go and pet pets.
@@ -316,18 +329,7 @@ export class NpcCrew {
         n.task = null;
       } else {
         const d = Math.hypot(pet[0] - n.pos[0], pet[2] - n.pos[2]);
-        if (d < 1.1) {
-          // Crouch down and give it a pat.
-          this.face(n, pet[0], pet[2]);
-          this.act(n, NPC_ACT.pet, 2.5);
-          const kind = c.look?.pet || 'dog';
-          this.say(n, kind === 'dragon' ? 'A baby dragon?! How amazing! 🐉' : pickOne([`Aww, what a cute ${PET_WORDS[kind] || kind}! 🐾`, `Who's a good ${PET_WORDS[kind] || kind}? You are! 💕`, `Hello, little ${PET_WORDS[kind] || kind}! 🐾`]), true);
-          this.room.broadcast({ t: 'fx', kind: 'hearts', x: pet[0], y: pet[1] + 0.6, z: pet[2], color: '#ffffff', seed: 0 });
-          c.send({ t: 'npc_pet' });
-          n.task = null;
-          n.goal = null;
-          return;
-        }
+        if (d < 1.1) return this.patPet(n, c, pet);
         target = [pet[0] - ((pet[0] - n.pos[0]) / d) * 0.8, n.pos[1], pet[2] - ((pet[2] - n.pos[2]) / d) * 0.8];
       }
     }
@@ -367,6 +369,20 @@ export class NpcCrew {
     n.action = NPC_ACT.walk;
   }
 
+  // Crouch down and give someone's pet a pat.
+  patPet(n, c, pet) {
+    this.face(n, pet[0], pet[2]);
+    this.act(n, NPC_ACT.pet, 2.5);
+    const kind = c.look?.pet || 'dog';
+    this.say(n, kind === 'dragon' ? 'A baby dragon?! How amazing! 🐉' : pickOne([`Aww, what a cute ${PET_WORDS[kind] || kind}! 🐾`, `Who's a good ${PET_WORDS[kind] || kind}? You are! 💕`, `Hello, little ${PET_WORDS[kind] || kind}! 🐾`]), true);
+    this.room.broadcast({ t: 'fx', kind: 'hearts', x: pet[0], y: pet[1] + 0.6, z: pet[2], color: '#ffffff', seed: 0 });
+    c.send({ t: 'npc_pet' });
+    n.task = null;
+    n.goal = null;
+    n.path = null;
+    n.chase = null;
+  }
+
   // Somewhere nearby to stroll to (home, now and then).
   wanderGoal(n) {
     if (Math.random() < 0.3) return n.home.slice();
@@ -378,6 +394,339 @@ export class NpcCrew {
       if (this.standable(Math.floor(x), n.home[1], Math.floor(z), n.def) && this.clearLine(n.pos, spot, n.def)) return spot;
     }
     return null;
+  }
+
+  // ---------- Getting about at home (families and bodyguards) ----------
+  // They have a map of their land and just round it (homenav.js): every room, every floor (up
+  // the stairs, up ladders, and in elevators), the yard. They stroll from place to place, go and
+  // say hi when the owner comes home, pat pets, and the bodyguards walk right up to anyone who
+  // shouldn't be there. They keep away from garage doors.
+
+  homeWorld(n) {
+    const def = n.def, [x0, z0, x1, z1] = n.nav.rect;
+    const own = (x, z) => x >= x0 && x <= x1 && z >= z0 && z <= z1;
+    return {
+      get: (x, y, z) => this.room.get(x, y, z),
+      solid: (x, y, z) => this.solid(x, y, z),
+      stand: (x, y, z) => this.standable(x, y, z, def),
+      own,
+      // (Their own land, and anywhere just round it that isn't somebody else's.)
+      allowed: (x, z) => own(x, z) || !claimAt(this.room.claims || [], x, z),
+      garages: n.map?.garages || [],
+    };
+  }
+
+  cellOf(n) {
+    return [Math.floor(n.pos[0]), Math.round(n.pos[1]), Math.floor(n.pos[2])];
+  }
+
+  // The map of where they live (shared by everyone who lives there, and made again every half
+  // a minute or so, or sooner when the way's been blocked).
+  homeMap(n, soon = false) {
+    const now = Date.now(), here = cellKey(...this.cellOf(n));
+    this.homeMaps ??= new Map();
+    const shared = this.homeMaps.get(n.nav.key);
+    const good = m => m && now - m.at < (soon || m.stale ? 3000 : 30000) && m.map.nodes.has(here);
+    if (good(shared)) return (n.map = shared.map);
+    if (good(n.ownMap)) return (n.map = n.ownMap.map);
+    if (n.mapAt && now - n.mapAt < 3000) return n.map?.nodes.has(here) ? n.map : null;
+    n.mapAt = now;
+    const map = this.buildHome(n, this.cellOf(n));
+    const entry = { map, at: now };
+    if (!shared || now - shared.at > 3000 || map.nodes.size >= shared.map.nodes.size) this.homeMaps.set(n.nav.key, entry);
+    else n.ownMap = entry;
+    return (n.map = map);
+  }
+
+  buildHome(n, seed) {
+    const [x0, z0, x1, z1] = n.nav.rect, M = 3;
+    return buildMap(this.homeWorld(n), [x0 - M, z0 - M, x1 + M, z1 + M], seed);
+  }
+
+  // Somewhere to go next: usually another floor or another room, in the house more often than
+  // out in the yard (bodyguards patrol both, and keep an eye on the front door).
+  homeSpot(n) {
+    const map = n.map;
+    if (!map?.nodes.size) return null;
+    if (n.post && Math.random() < 0.3) {
+      const k = nearestNode(map, n.post[0], n.post[1], n.post[2], 4);
+      if (k && Math.hypot(n.post[0] - n.pos[0], n.post[2] - n.pos[2]) > 2.5) return k;
+    }
+    const levels = new Map();
+    for (const [k, m] of map.nodes) {
+      if (m.f !== STAND || nearGarage(map.garages, m.x, m.y, m.z, 3)) continue;
+      if (m.to.some(e => e[1] === RIDE)) continue; // (not right in front of an elevator)
+      if (this.list.some(o => o !== n && o.nav && (o.goalKey === k || Math.hypot(o.pos[0] - m.x - 0.5, o.pos[2] - m.z - 0.5) + Math.abs(o.pos[1] - m.y) < 1.5))) continue;
+      if (!levels.has(m.y)) levels.set(m.y, []);
+      levels.get(m.y).push([k, m]);
+    }
+    const floors = [...levels.values()].filter(l => l.length >= 4); // (not the steps of the stairs)
+    if (!floors.length) return null;
+    const y = Math.round(n.pos[1]);
+    const mine = floors.find(l => l[0][1].y === y);
+    const others = floors.filter(l => l !== mine);
+    const level = mine && (!others.length || Math.random() < 0.45) ? mine : pickOne(others);
+    const inside = level.filter(([, m]) => m.roof), outside = level.filter(([, m]) => !m.roof);
+    const pool = inside.length && (!outside.length || Math.random() < (n.def.land ? 0.5 : 0.65)) ? inside : outside;
+    const away = pool.filter(([, m]) => m.y !== y || Math.hypot(m.x + 0.5 - n.pos[0], m.z + 0.5 - n.pos[2]) > 3);
+    return pickOne(away.length ? away : pool)[0];
+  }
+
+  // Someone (or something) to go over to: a pet to pat, the boss coming home, or (for
+  // bodyguards) somebody who's not on the guest list. { id, x, y, z, near }
+  homeChase(n, players, now) {
+    if (n.task?.kind === 'pet') {
+      const c = this.room.clients.get(n.task.client);
+      const pet = c && Array.isArray(c.pet) ? c.pet : null;
+      if (!pet || now > n.task.until) n.task = null;
+      else return { id: `pet:${c.id}`, x: pet[0], y: pet[1], z: pet[2], near: 1.1, pet, c };
+    }
+    const [x0, z0, x1, z1] = n.nav.rect;
+    const onLand = (p, m) => p[0] >= x0 - m && p[0] <= x1 + 1 + m && p[2] >= z0 - m && p[2] <= z1 + 1 + m && Math.abs(p[1] - n.pos[1]) < 9;
+    const land = n.def.land && this.lands.find(l => l.key === n.def.land);
+    let best = null;
+    for (const c of players) {
+      if (!c.pos || c.sleeping) continue;
+      const boss = nameKey(c.name) === n.nav.key, seenKey = n.def.land ? `${c.id}:true` : c.id;
+      if (land && !this.room.welcomeOn(land, c) && onLand(c.pos, 2)) return { id: c.id, x: c.pos[0], y: c.pos[1], z: c.pos[2], near: 2 };
+      if (boss && onLand(c.pos, 4) && now - (n.seen.get(seenKey) || 0) > 120 * SECOND) best = { id: c.id, x: c.pos[0], y: c.pos[1], z: c.pos[2], near: 3 };
+    }
+    return best;
+  }
+
+  homeMove(n, dt, players) {
+    if (n.ride) return this.rideLift(n, dt);
+    const step = n.path?.[n.pathI];
+    const between = step && (step.how === CLIMB || Math.abs(n.pos[1] - Math.round(n.pos[1])) > 0.01);
+    if (n.actionT > 0 && n.action !== NPC_ACT.walk && !between) return; // busy waving, dancing, petting
+    const now = Date.now();
+    const chase = between ? null : this.homeChase(n, players, now);
+    if (between) {
+      // (Finish the step, or the climb, first.)
+    } else if (chase) {
+      const d = Math.hypot(chase.x - n.pos[0], chase.z - n.pos[2]);
+      if (d < chase.near && Math.abs(chase.y - n.pos[1]) < 1.5) {
+        if (chase.pet) return this.patPet(n, chase.c, chase.pet);
+        if (n.chase) [n.path, n.chase] = [null, null];
+        this.face(n, chase.x, chase.z);
+        n.action = NPC_ACT.idle;
+        return;
+      }
+      if (n.chase?.id !== chase.id || now - n.chaseAt > 1500) {
+        n.chase = chase;
+        n.chaseAt = now;
+        const map = this.homeMap(n);
+        const goal = map && nearestNode(map, chase.x, chase.y, chase.z, 5);
+        const path = goal && route(map, cellKey(...this.cellOf(n)), goal);
+        if (path?.length) this.setPath(n, path, goal);
+        else if (chase.pet) n.task = null; // (can't get there from here)
+      }
+    } else if (n.chase) [n.path, n.chase] = [null, null];
+    if (!n.path) {
+      n.action = NPC_ACT.idle;
+      n.wait -= dt;
+      const c = players.find(p => this.near(n, p.pos[0], p.pos[1], p.pos[2], 6));
+      if (c) n.yaw = turn(n.yaw, Math.atan2(-(c.pos[0] - n.pos[0]), -(c.pos[2] - n.pos[2])), dt * 4);
+      if (n.wait > 0) return;
+      const map = this.homeMap(n);
+      const goal = map && this.homeSpot(n);
+      const path = goal && route(map, cellKey(...this.cellOf(n)), goal);
+      if (!path?.length) {
+        n.wait = 2 + Math.random() * 3;
+        return;
+      }
+      this.setPath(n, path, goal);
+    }
+    this.followPath(n, dt);
+  }
+
+  setPath(n, path, goal) {
+    n.path = path;
+    n.pathI = 0;
+    n.stepOk = false;
+    n.goalKey = goal;
+  }
+
+  // Is the next bit of the way still there? (Someone might have built in the way.)
+  stepOk(n, step) {
+    if (step.how === RIDE) {
+      const get = (x, y, z) => this.room.get(x, y, z), y = Math.round(n.pos[1]);
+      const col = liftColumn(get, step.sx, y, step.sz);
+      return !!col && liftStops((a, b, c) => this.solid(a, b, c), step.sx, step.sz, col.lo, col.hi, col.facing).includes(step.y);
+    }
+    const f = cellFlags(this.homeWorld(n), step.x, step.y, step.z);
+    return !!f && (f & DOOR) === (step.f & DOOR);
+  }
+
+  followPath(n, dt) {
+    const step = n.path[n.pathI];
+    if (!n.stepOk) {
+      if (!this.stepOk(n, step)) {
+        // Blocked: stop, and look again in a moment (with a new map).
+        const shared = this.homeMaps?.get(n.nav.key);
+        if (shared) shared.stale = true;
+        if (n.ownMap) n.ownMap.stale = true;
+        [n.path, n.chase, n.goalKey] = [null, null, null];
+        n.wait = 1;
+        n.action = NPC_ACT.idle;
+        return;
+      }
+      n.stepOk = true;
+      if (step.how === RIDE) return this.startRide(n, step);
+      if (step.f & DOOR) this.openDoor(n, step.x, step.y, step.z);
+    }
+    const tx = step.x + 0.5, tz = step.z + 0.5, ty = step.y;
+    const dx = tx - n.pos[0], dz = tz - n.pos[2], d = Math.hypot(dx, dz), dy = ty - n.pos[1];
+    if (step.how === CLIMB) {
+      n.pos[1] += Math.sign(dy) * Math.min(Math.abs(dy), 1.8 * dt);
+    } else {
+      const s = Math.min(d, (n.def.land ? 1.7 : 1.4) * dt);
+      if (d > 1e-6) {
+        n.pos[0] += (dx / d) * s;
+        n.pos[2] += (dz / d) * s;
+        n.yaw = turn(n.yaw, Math.atan2(-dx, -dz), dt * 8);
+      }
+      // Up a step straight away, but down one only once we're over it.
+      if (dy > 0 || (dy < 0 && d < 0.55)) n.pos[1] += Math.sign(dy) * Math.min(Math.abs(dy), 5 * dt);
+    }
+    n.action = NPC_ACT.walk;
+    if (d < 0.02 && Math.abs(ty - n.pos[1]) < 0.01) {
+      n.pos = [tx, ty, tz];
+      this.stepDone(n);
+    }
+  }
+
+  stepDone(n) {
+    n.pathI++;
+    n.stepOk = false;
+    if (n.pathI < n.path.length) return;
+    [n.path, n.chase, n.goalKey] = [null, null, null];
+    n.wait = n.def.land ? 2 + Math.random() * 5 : 3 + Math.random() * 9;
+    n.action = NPC_ACT.idle;
+  }
+
+  // ---------- Doors and elevators at home ----------
+
+  // Open a door to go through it (it's shut again once they're through: see shutDoors).
+  openDoor(n, x, y, z) {
+    const d = doorAt((a, b, c) => this.room.get(a, b, c), x, y, z);
+    if (!d || blockMeta(itemOf(this.room.get(x, d.lo, z))) & DOOR_OPEN) return;
+    const cells = [];
+    for (let yy = d.lo; yy <= d.hi; yy++) {
+      const v = toggleDoorValue(this.room.get(x, yy, z));
+      this.room.world.set(blockKey(x, yy, z), v);
+      cells.push(x, yy, z, v);
+    }
+    this.room.broadcast({ t: 'many', cells });
+    this.room.onDirty?.();
+    (this.doorsOpen ??= []).push({ x, z, lo: d.lo, cells, at: this.clock * 1000 });
+  }
+
+  // Doors they opened, shut once nobody's in the doorway (unless someone's changed them since).
+  shutDoors(now) {
+    if (this.liftsOpen?.length) {
+      this.liftsOpen = this.liftsOpen.filter(l => {
+        if (now < l.at) return true;
+        this.liftDoors(l.x, l.z, l.y, false);
+        return false;
+      });
+    }
+    if (!this.doorsOpen?.length) return;
+    this.doorsOpen = this.doorsOpen.filter(o => {
+      if (now - o.at < 1200) return true;
+      const inDoor = p => p && Math.abs(p[0] - o.x - 0.5) < 1 && Math.abs(p[2] - o.z - 0.5) < 1 && Math.abs(p[1] - o.lo) < 2;
+      if (now - o.at < 30 * SECOND && (this.list.some(n => inDoor(n.pos)) || [...this.room.clients.values()].some(c => c.joined && inDoor(c.pos)))) return true;
+      for (let i = 0; i < o.cells.length; i += 4) if (this.room.get(o.cells[i], o.cells[i + 1], o.cells[i + 2]) !== o.cells[i + 3]) return false;
+      const cells = [];
+      for (let i = 0; i < o.cells.length; i += 4) {
+        const [x, y, z, v] = o.cells.slice(i, i + 4), shut = toggleDoorValue(v);
+        this.room.world.set(blockKey(x, y, z), shut);
+        cells.push(x, y, z, shut);
+      }
+      this.room.broadcast({ t: 'many', cells });
+      this.room.onDirty?.();
+      return false;
+    });
+  }
+
+  // An elevator's doors at one floor sliding open or shut (on everyone's screen).
+  liftDoors(x, z, y, open, ding = false) {
+    this.room.broadcast({ t: 'lift_doors', x, z, y, open, ding });
+  }
+
+  startRide(n, step) {
+    const y0 = Math.round(n.pos[1]);
+    n.ride = { x: step.sx, z: step.sz, y0, y1: step.y, from: [n.pos[0], n.pos[2]], out: [step.x + 0.5, step.z + 0.5], phase: 'call', t: 0, travel: Math.max(1.4, Math.abs(step.y - y0) / 6 + 1) };
+    this.face(n, step.sx + 0.5, step.sz + 0.5);
+    this.liftDoors(step.sx, step.sz, y0, true);
+    n.action = NPC_ACT.idle;
+  }
+
+  // Riding: in through the doors, they shut, up (or down) the shaft, ding, out.
+  rideLift(n, dt) {
+    const r = n.ride, cx = r.x + 0.5, cz = r.z + 0.5;
+    r.t += dt;
+    const k = t => Math.min(1, r.t / t);
+    const next = phase => [r.phase, r.t] = [phase, 0];
+    if (r.phase === 'call') {
+      n.action = NPC_ACT.idle;
+      if (r.t > 0.8) next('in');
+    } else if (r.phase === 'in') {
+      n.action = NPC_ACT.walk;
+      n.pos = [r.from[0] + (cx - r.from[0]) * k(0.5), r.y0, r.from[1] + (cz - r.from[1]) * k(0.5)];
+      if (r.t >= 0.5) {
+        n.yaw = Math.atan2(-(r.out[0] - cx), -(r.out[1] - cz)); // (turned round to face the doors)
+        this.liftDoors(r.x, r.z, r.y0, false);
+        next('shut');
+      }
+    } else if (r.phase === 'shut') {
+      n.action = NPC_ACT.idle;
+      if (r.t >= 0.5) next('go');
+    } else if (r.phase === 'go') {
+      const e = k(r.travel), s = e * e * (3 - 2 * e);
+      n.pos = [cx, r.y0 + (r.y1 - r.y0) * s, cz];
+      if (r.t >= r.travel) {
+        this.liftDoors(r.x, r.z, r.y1, true, true);
+        next('open');
+      }
+    } else if (r.phase === 'open') {
+      if (r.t >= 0.5) next('out');
+    } else {
+      n.action = NPC_ACT.walk;
+      n.pos = [cx + (r.out[0] - cx) * k(0.5), r.y1, cz + (r.out[1] - cz) * k(0.5)];
+      if (r.t >= 0.5) {
+        (this.liftsOpen ??= []).push({ x: r.x, z: r.z, y: r.y1, at: this.clock * 1000 + 1200 });
+        n.ride = null;
+        n.pos = [r.out[0], r.y1, r.out[1]];
+        this.stepDone(n);
+      }
+    }
+  }
+
+  // Where someone who lives here starts out: indoors on the ground floor if there's an indoors
+  // (not by the garage door), else somewhere on the land.
+  homeStart(n, seeds) {
+    let map = null;
+    for (const s of seeds) {
+      const m = this.buildHome(n, [Math.floor(s[0]), Math.round(s[1]), Math.floor(s[2])]);
+      if (!map || m.nodes.size > map.nodes.size) map = m;
+      if (map.nodes.size >= 30) break;
+    }
+    if (!map?.nodes.size) return;
+    const [x0, z0, x1, z1] = n.nav.rect;
+    const spots = [...map.nodes.values()].filter(m => m.f === STAND && !nearGarage(map.garages, m.x, m.y, m.z, 3) && !m.to.some(e => e[1] === RIDE));
+    const onLand = spots.filter(m => m.x >= x0 && m.x <= x1 && m.z >= z0 && m.z <= z1);
+    const low = Math.min(...(onLand.length ? onLand : spots).map(m => m.y));
+    const pool = [onLand.filter(m => m.roof && m.y === low), onLand.filter(m => m.roof), onLand, spots].find(l => l.length);
+    if (!pool) return;
+    const taken = p => this.list.some(o => o !== n && o.nav && Math.hypot(o.pos[0] - p.x - 0.5, o.pos[2] - p.z - 0.5) < 1.2);
+    const free = pool.filter(p => !taken(p));
+    const m = pickOne(free.length ? free : pool);
+    n.home = n.pos = [m.x + 0.5, m.y, m.z + 0.5];
+    n.pos = n.home.slice();
+    n.map = map;
+    this.homeMaps ??= new Map();
+    this.homeMaps.set(n.nav.key, { map, at: Date.now() });
   }
 
   // ---------- Things happening around them ----------
@@ -516,7 +865,12 @@ export class NpcCrew {
     this.list = this.list.filter(n => !n.def.land || want.has(n.def.land));
     this.guardIds ??= new Map();
     for (const land of lands) {
-      if (this.list.some(n => n.def.land === land.key)) continue;
+      const mine = this.list.filter(n => n.def.land === land.key);
+      if (mine.length) {
+        // (The land might have moved or changed size.)
+        for (const n of mine) if (String(n.nav.rect) !== String(land.rect)) [n.nav.rect, n.path, n.map, n.ownMap] = [land.rect, null, null, null];
+        continue;
+      }
       if (!this.guardIds.has(land.key)) this.guardIds.set(land.key, -100 - this.guardIds.size * 2);
       const id0 = this.guardIds.get(land.key);
       const spots = this.guardSpots(land);
@@ -530,8 +884,9 @@ export class NpcCrew {
         const home = this.findStand(x, y, z, def) || [x, y, z];
         this.list.push({
           def, id: def.id, home, area: [Math.floor(home[0]) - 1, Math.floor(home[2]) - 1, Math.floor(home[0]) + 1, Math.floor(home[2]) + 1], face,
-          pos: home.slice(), yaw: face, goal: null, wait: 3, action: NPC_ACT.idle, actionT: 0, saidAt: 0, look: sanitizeLook(def.look),
+          pos: home.slice(), yaw: face, goal: null, wait: 3 + i * 4, action: NPC_ACT.idle, actionT: 0, saidAt: 0, look: sanitizeLook(def.look),
           seen: new Map(), noticed: new Map(), petted: new Map(), task: null,
+          nav: { key: land.key, rect: land.rect }, post: home.slice(), // (they patrol, and keep coming back to the front door)
         });
       });
     }
@@ -556,11 +911,15 @@ export class NpcCrew {
         };
         const cx = (x0 + x1) / 2 + (i - 1) * 1.2, cz = (z0 + z1) / 2;
         const home = this.findStand(cx, 0, cz, def) || [cx + 0.5, 0, cz + 0.5];
-        this.list.push({
+        const n = {
           def, id: def.id, home, area: [x0, z0, x1, z1], face: 0,
-          pos: home.slice(), yaw: 0, goal: null, wait: 2 + i, action: NPC_ACT.idle, actionT: 0, saidAt: 0, look: sanitizeLook(def.look),
+          pos: home.slice(), yaw: Math.random() * Math.PI * 2, goal: null, wait: 2 + i * 2, action: NPC_ACT.idle, actionT: 0, saidAt: 0, look: sanitizeLook(def.look),
           seen: new Map(), noticed: new Map(), petted: new Map(), task: null,
-        });
+          nav: { key: fam.key, rect: fam.rect },
+        };
+        this.list.push(n);
+        // (Indoors, if there's a house: tried from the middle of the land, and from its front door.)
+        this.homeStart(n, [home, ...this.guardSpots({ rect: fam.rect }).map(s => s.slice(0, 3))]);
       });
     }
     return true;
@@ -582,6 +941,7 @@ export class NpcCrew {
       for (let z = z0; z <= z1; z++) {
         const v = room.get(x, 0, z);
         if (shapeOf(itemOf(v)) !== 'door' || blockMeta(itemOf(v)) & DOOR_TOP) continue;
+        if (doorAt((a, b, c) => room.get(a, b, c), x, 0, z)?.garage) continue; // (that's for the car)
         for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
           const ox = x + dx, oz = z + dz;
           if (this.solid(ox, 0, oz) || this.solid(ox, 1, oz)) continue;
