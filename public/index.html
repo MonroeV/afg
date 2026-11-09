@@ -36,7 +36,9 @@
     </div>
     <div id="banner" class="hidden"></div>
     <div id="race" class="hidden"></div>
-    <div id="coins" class="hidden">🪙 0</div>
+    <div id="purse"><div id="coins" class="hidden">🪙 0</div><div id="badge-chip" class="hidden" title="Badges (J)">🏅 <span>0</span></div></div>
+    <div id="badge-pops"></div>
+    <div id="badge-win" class="hidden"><div class="win-rays"></div><div class="win-badge"></div><div class="win-name"></div><div class="win-prize"></div></div>
     <div id="splash"></div>
   </div>
   <div id="flash"></div>
@@ -64,6 +66,7 @@
     <div class="panel wide">
       <h2>Paused</h2>
       <button id="resume">RESUME</button>
+      <button id="pause-badges" class="secondary">🏅 BADGES</button>
       <button id="pause-customize" class="secondary">🎨 CUSTOMIZE MY CHARACTER</button>
       <button id="pause-gallery" class="secondary">👥 CHARACTER GALLERY</button>
       <label class="slider">Mouse sensitivity <input id="sensitivity" type="range" min="0.2" max="3" step="0.05" value="1"></label>
@@ -139,6 +142,14 @@
       <div id="sign-count" class="hint"></div>
       <div id="sign-colors" class="sign-colors"></div>
       <div class="sign-buttons"><button id="sign-cancel" class="secondary">CANCEL</button><button id="sign-done">DONE</button></div>
+    </div>
+  </div>
+
+  <div id="badges" class="screen hidden">
+    <div class="panel wide badge-panel">
+      <h2>🏅</h2>
+      <div id="badge-grid" class="badge-grid"></div>
+      <button id="badges-done">✓</button>
     </div>
   </div>
 

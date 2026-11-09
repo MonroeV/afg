@@ -543,8 +543,9 @@ button.secondary {
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 
 /* Your coins, and the Luxe Store. */
+#purse { position: absolute; top: 96px; left: 14px; display: flex; gap: 6px; align-items: center; }
 #coins {
-  position: absolute; top: 96px; left: 14px; padding: 5px 12px; border-radius: 12px;
+  padding: 5px 12px; border-radius: 12px;
   background: rgba(0, 0, 0, 0.55); font-size: 18px; font-weight: 800; color: #ffd54f; text-shadow: 0 1px 2px #000;
   transition: transform 0.15s;
 }
@@ -556,7 +557,8 @@ button.secondary {
 }
 #job button { border: none; border-radius: 8px; background: rgba(0, 0, 0, 0.35); color: #fff; font-weight: 900; cursor: pointer; padding: 2px 8px; }
 body.touch #job { top: 92px; left: 8px; font-size: 12px; }
-body.touch #coins { top: 62px; left: 8px; font-size: 14px; }
+body.touch #purse { top: 62px; left: 8px; }
+body.touch #coins, body.touch #badge-chip { font-size: 14px; }
 .shop-panel { width: min(820px, 100%); max-height: 100%; overflow-y: auto; }
 .shop-panel h2 { color: #ffd54f; text-shadow: 0 2px 6px rgba(255, 180, 0, 0.5); }
 .shop-coins { font-size: 22px; font-weight: 900; color: #ffd54f; margin-bottom: 12px; }
@@ -814,3 +816,79 @@ body.spycam #game { filter: saturate(0.35) sepia(0.55) hue-rotate(70deg) contras
 .guest-add input { flex: 1; min-width: 0; }
 .guest-add button { width: auto; flex: none; padding: 8px 18px; margin: 0; }
 .guest-add input { padding: 8px 10px; border-radius: 8px; border: 1px solid #556; background: #1d2027; color: #fff; font-size: 15px; }
+
+/* ---------- Badges (the clubs) ---------- */
+#badge-chip {
+  padding: 5px 10px; border-radius: 12px; background: rgba(0, 0, 0, 0.55); font-size: 17px; font-weight: 800;
+  color: #fff; text-shadow: 0 1px 2px #000; pointer-events: auto; cursor: pointer; transition: transform 0.15s;
+}
+#badge-chip.bump { transform: scale(1.3); }
+#badge-pops { position: absolute; top: 132px; left: 14px; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
+.badge-pop {
+  padding: 4px 12px; border-radius: 14px; background: var(--c); color: #fff; font-size: 20px; font-weight: 900;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  animation: badge-pop 2.2s ease-out forwards;
+}
+@keyframes badge-pop {
+  0% { transform: scale(0.3) translateY(10px); opacity: 0; }
+  12% { transform: scale(1.15); opacity: 1; }
+  22% { transform: scale(1); }
+  80% { opacity: 1; }
+  100% { transform: translateY(-14px); opacity: 0; }
+}
+.badge-panel { width: min(900px, 100%); max-height: 100%; overflow-y: auto; }
+.badge-panel h2 { font-size: 40px; margin: 0 0 6px; }
+.badge-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.club {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 10px; border-radius: 16px;
+  background: linear-gradient(170deg, color-mix(in srgb, var(--c) 22%, transparent), rgba(255, 255, 255, 0.03));
+  border: 2px solid color-mix(in srgb, var(--c) 45%, transparent);
+}
+.club.focus { animation: club-focus 1.2s ease-in-out 3; }
+@keyframes club-focus { 50% { box-shadow: 0 0 0 4px var(--c), 0 0 26px var(--c); } }
+.club.done { border-color: var(--c); box-shadow: 0 0 18px color-mix(in srgb, var(--c) 55%, transparent); }
+.club-badge {
+  position: relative; width: 78px; height: 78px; border-radius: 50%; display: grid; place-items: center; font-size: 38px;
+  background: radial-gradient(circle, #23262d 58%, transparent 60%),
+    conic-gradient(var(--c) calc(var(--k) * 360deg), rgba(255, 255, 255, 0.12) 0);
+}
+.club:not(.done) .club-badge { filter: saturate(0.55); }
+.club.done .club-badge { background: radial-gradient(circle, color-mix(in srgb, var(--c) 35%, #23262d) 58%, transparent 60%), var(--c); }
+.club-check {
+  position: absolute; right: -2px; bottom: -2px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  background: #43a047; color: #fff; font-size: 16px; font-style: normal; font-weight: 900; border: 2px solid #fff;
+}
+.club-name { font-weight: 900; font-size: 15px; color: #fff; }
+.club-who { font-size: 12px; color: var(--muted); }
+.club-tasks { display: flex; flex-direction: column; gap: 5px; width: 100%; }
+.task { display: grid; grid-template-columns: 28px 1fr 42px; align-items: center; gap: 6px; font-size: 13px; }
+.task-icon { font-size: 22px; text-align: center; }
+.task-bar { height: 10px; border-radius: 5px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.task-bar i { display: block; height: 100%; border-radius: 5px; background: var(--c); transition: width 0.4s; }
+.task b { text-align: right; color: #fff; }
+.task.full b { color: #7ee787; font-size: 16px; }
+.club-prize { margin-top: 2px; padding: 3px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.3); font-size: 16px; font-weight: 800; color: #ffd54f; }
+.club.done .club-prize { background: color-mix(in srgb, var(--c) 40%, transparent); color: #fff; }
+#badge-win {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  pointer-events: auto; background: radial-gradient(circle, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.6)); z-index: 30;
+}
+#badge-win.hidden { display: none; }
+.win-rays {
+  position: absolute; width: 520px; height: 520px; border-radius: 50%; opacity: 0.55;
+  background: repeating-conic-gradient(var(--c) 0 10deg, transparent 10deg 20deg);
+  mask: radial-gradient(circle, #000 20%, transparent 70%); -webkit-mask: radial-gradient(circle, #000 20%, transparent 70%);
+  animation: win-spin 8s linear infinite;
+}
+.win-badge {
+  position: relative; width: 170px; height: 170px; border-radius: 50%; display: grid; place-items: center; font-size: 96px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--c) 40%, #1d1f24) 60%, var(--c) 62%);
+  box-shadow: 0 0 0 6px #fff, 0 0 60px var(--c);
+}
+.win-name { position: relative; font-size: 30px; font-weight: 900; color: #fff; text-shadow: 0 3px 8px #000; }
+.win-prize { position: relative; font-size: 28px; font-weight: 900; color: #ffd54f; text-shadow: 0 3px 8px #000; }
+#badge-win.go .win-badge { animation: win-in 0.9s cubic-bezier(0.2, 1.6, 0.4, 1); }
+#badge-win.go .win-name, #badge-win.go .win-prize { animation: win-up 0.9s 0.3s both; }
+@keyframes win-in { from { transform: scale(0) rotate(-200deg); } to { transform: scale(1) rotate(0); } }
+@keyframes win-up { from { transform: translateY(20px); opacity: 0; } }
+@keyframes win-spin { to { transform: rotate(360deg); } }

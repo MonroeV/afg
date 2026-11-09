@@ -48,6 +48,8 @@ import { liftDoors } from './shared/elevator.js';
 import { SecretAgency } from './spy.js';
 import { Weather } from './weather.js';
 import { usesFuel, fillPrice, GAS_CAN_PRICE, PUMP_REACH } from './shared/fuel.js';
+import { TURBO, MAGNET } from './shared/clubs.js';
+import { BadgeBook } from './badges.js';
 
 const $ = id => document.getElementById(id);
 const REACH = 7;
@@ -200,6 +202,8 @@ let wallet = { coins: 0, owned: [] };
 let carryingCan = false; // a gas can bought at a gas station, to carry to a vehicle that's out of gas
 let gasStations = []; // where the gas stations are: [name, x, z]
 let shopOpen = false;
+let book = null; // the badge book (clubs)
+let perks = new Set(); // the clubs whose badges you have (their perks are yours)
 let signOpen = null; // [x, y, z] of the sign being written on
 let askOpen = null; // a yes/no question on screen: { yes, no }
 let claims = [];
@@ -264,6 +268,18 @@ async function load() {
     onChange: item => {
       showHeld(item);
       if (fillable(item)) lastBlock = item;
+    },
+  });
+  book = new BadgeBook({
+    sounds,
+    onOpen: () => {
+      keys.clear();
+      unlock();
+      updateOverlays();
+    },
+    onClose: () => {
+      lock();
+      updateOverlays();
     },
   });
   shop = new Shop({
@@ -534,6 +550,7 @@ net.on('secret_file', ({ again, found, need, clear, left = [] }) => {
   sounds.coin();
   effects.sparkle(player.pos.x, player.pos.y + 1, player.pos.z, 24);
   if (clear) {
+    book.win({ club: 'agency', coins: 0 });
     sounds.party?.();
     effects.sparkle(player.pos.x, player.pos.y + 2, player.pos.z, 60);
     hud.addChat({ system: true, text: '🕶️ TOP SECRET CLEARANCE GRANTED! You\'re a Secret Agency agent now. The base is hidden out in the south-east, past the campground: the guards will let you in.' });
@@ -543,8 +560,12 @@ net.on('secret_file', ({ again, found, need, clear, left = [] }) => {
   }
 });
 net.on('shop_open', () => openShop());
-net.on('wallet', ({ coins, owned, vacation, found = [], agent, can }) => {
+net.on('wallet', ({ coins, owned, vacation, found = [], agent, can, clubs, badges }) => {
   const more = coins > wallet.coins;
+  // Club badges, and what they give you: a turbo in everything you drive, a coin magnet.
+  perks = new Set(badges || []);
+  cars.turbo = perks.has('speed') ? TURBO : 1;
+  book.set({ clubs, badges, agent });
   if (!!can !== carryingCan) {
     carryingCan = !!can;
     showHeld();
@@ -647,6 +668,22 @@ net.on('car_hp', ({ id, hp, impact, fixer }) => {
   cars.applyHp(car, hp, impact);
   if (hurt && impact && riding() !== car) sounds.crash(loudness(car.pos.x, car.pos.y, car.pos.z, 40) * 0.6);
 });
+// ---------- Clubs and badges ----------
+net.on('club_step', msg => book.step(msg));
+net.on('club_open', ({ club }) => book.show(club));
+net.on('badge', msg => {
+  book.win(msg);
+  sounds.party?.();
+  sounds.coin();
+  effects.sparkle(player.pos.x, player.pos.y + 1.5, player.pos.z, 80);
+  for (let i = 0; i < 3; i++) setTimeout(() => fireworks.launch(player.pos.x + (i - 1) * 4, player.pos.y, player.pos.z - 6, FIREWORK_COLORS[i % FIREWORK_COLORS.length], Math.random()), 400 + i * 350);
+});
+// The daily bonus (bigger every day in a row you play).
+net.on('daily', ({ coins, streak }) => {
+  sounds.coin();
+  hud.toast(`🪙 +${coins}${streak > 1 ? `   🔥 ${streak}` : ''}`);
+});
+
 // ---------- Gas and the car wash ----------
 
 // Gas in a vehicle's tank: used up as it's driven, or filled at a pump or from a gas can.
@@ -736,16 +773,17 @@ function usePump(x, y, z) {
     if (d < bestD) [best, bestD] = [c, d];
   }
   if (best && best.fuel < 0.995) {
-    const price = fillPrice(best.fuel), afford = wallet.coins >= price;
+    const price = fillPrice(best.fuel, perks.has('mechanic')), afford = wallet.coins >= price;
     const text = `The ${best.spec.name}'s tank is ${Math.round(best.fuel * 100)}% full. Filling it up costs ${price} coin${price > 1 ? 's' : ''}`
       + (afford ? ` (you have ${wallet.coins}).` : wallet.coins > 0 ? `, and you have ${wallet.coins}: you'll get as much gas as that buys.` : ", and you don't have any coins yet. Find some around town!");
     if (!wallet.coins) return ask('⛽ Fill it up?', text, 'OK', 'Close', () => {});
     return ask('⛽ Fill it up?', text, `⛽ Fill up (${Math.min(price, wallet.coins)} 🪙)`, 'Not now', () => net.send({ t: 'pump', x, y, z, id: best.id }));
   }
   if (carryingCan) return hud.toast('⛽ You\'re already carrying a gas can! Take it to your vehicle and right-click the vehicle to pour it in.');
+  const canPrice = perks.has('mechanic') ? Math.ceil(GAS_CAN_PRICE / 2) : GAS_CAN_PRICE;
   const why = best ? `The ${best.spec.name}'s tank is already full. ` : 'Park a vehicle right beside the pump to fill it up. ';
-  ask('⛽ Buy a gas can?', `${why}Or buy a gas can: it holds a quarter of a tank, for a vehicle that's run out of gas somewhere. Carry it there and right-click the vehicle to pour it in. It costs ${GAS_CAN_PRICE} coins (you have ${wallet.coins}).`,
-    `⛽ Buy a gas can (${GAS_CAN_PRICE} 🪙)`, 'Not now', () => net.send({ t: 'pump', x, y, z, can: true }));
+  ask('⛽ Buy a gas can?', `${why}Or buy a gas can: it holds a quarter of a tank, for a vehicle that's run out of gas somewhere. Carry it there and right-click the vehicle to pour it in. It costs ${canPrice} coins (you have ${wallet.coins}).`,
+    `⛽ Buy a gas can (${canPrice} 🪙)`, 'Not now', () => net.send({ t: 'pump', x, y, z, can: true }));
 }
 
 // What's in your hand: the fishing rod while you fish, a gas can while you carry one, or your item.
@@ -871,7 +909,7 @@ function goFullscreen() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -886,6 +924,7 @@ document.addEventListener('pointerlockchange', () => {
 });
 document.addEventListener('pointerlockerror', updateOverlays);
 
+$('pause-badges').addEventListener('click', () => book.show());
 $('resume').addEventListener('click', () => {
   goFullscreen();
   lock();
@@ -1156,6 +1195,14 @@ window.addEventListener('keydown', e => {
   }
   if (shopOpen) {
     if (e.code === 'Escape' || e.code === 'KeyE') shop.close();
+    return;
+  }
+  if (book?.open) {
+    if (e.code === 'Escape' || e.code === 'KeyJ' || e.code === 'KeyE') book.close();
+    return;
+  }
+  if (e.code === 'KeyJ' && inGame && !inventoryOpen) {
+    book.show();
     return;
   }
   if (inventoryOpen) {
@@ -1630,7 +1677,8 @@ function leaveCar(tell = false) {
   }
   myCar = null;
   car.driver = 0;
-  car.speed = car.steer = car.siren = 0;
+  car.speed = car.steer = 0;
+  if (car.kind !== 'police') car.siren = 0; // (the police lights stay on: just the siren stops)
   car.braking = car.reversing = false;
   if (car.kind === 'rv' && tell) enterRV(car, 'cab'); // (out of the RV's driver's seat: still inside it)
   else stepOut(car, -1); // the driver's door is on the left
@@ -4494,7 +4542,7 @@ function updateCoins(dt, time) {
     i++;
     // Close enough to grab? Ask the server (once every couple of seconds).
     const p = player.pos;
-    if (Math.hypot(p.x - c.x, p.z - c.z) < (myCar ? 2 : 1.1) && Math.abs(p.y - c.y) < 2 && time - (c.asked ?? -9) > 2) {
+    if (Math.hypot(p.x - c.x, p.z - c.z) < (myCar ? 2 : 1.1) * (perks.has('gold') ? MAGNET : 1) && Math.abs(p.y - c.y) < 2 && time - (c.asked ?? -9) > 2) {
       c.asked = time;
       net.send({ t: 'coin', id });
     }
@@ -5109,7 +5157,7 @@ function frame(timestamp) {
   // Loudest nearby siren, fire and helicopter.
   let siren = 0, rotor = 0, rotorSpin = 0, rotorEffort = 0.5;
   for (const car of cars.list.values()) {
-    if (car.siren && car.kind === 'police') siren = Math.max(siren, loudness(car.pos.x, car.pos.y, car.pos.z, 70)); // (G on other vehicles isn't a siren)
+    if (car.siren && car.kind === 'police' && car.driver) siren = Math.max(siren, loudness(car.pos.x, car.pos.y, car.pos.z, 70)); // (G on other vehicles isn't a siren)
     if (car.hp < FIRE_HP) fire = Math.max(fire, loudness(car.pos.x, car.pos.y, car.pos.z, 35));
     if (car.spec.flying && car.rotorSpin > 0.02) {
       const level = car === riding() ? 1 : loudness(car.pos.x, car.pos.y, car.pos.z, 120);
@@ -5148,6 +5196,7 @@ function frame(timestamp) {
     updateSparkly(dt, time);
   }
   cars.setView(camera.position, scene.fog.far);
+  cars.setPoliceLights((QUALITY[settings.quality] || QUALITY.high).lamps >= 6); // (police lights light up the street, except on Low)
   cars.update(dt, time, nightK, myCar?.id);
   if (inGame) for (const ev of cars.events) vehicleEvent(ev, ev.other);
   particles.update(dt, world);
@@ -5242,6 +5291,8 @@ window.buildzone = {
   get contraptions() { return contraptions; },
   kickBall: () => kickBall(),
   usePump: (x, y, z) => usePump(x, y, z),
+  get book() { return book; },
+  get perks() { return perks; },
   leaveCar: () => leaveCar(true),
   get carryingCan() { return carryingCan; },
   carSpecial: () => carSpecial(),

@@ -26,13 +26,13 @@ const NPCS = [
     tips: ['Every floor has offices. The top floor has a grand piano! 🎹', 'The elevator in the corner goes all the way up to the roof. Right-click its doors and pick a floor! 🛗', 'You can sit in the office chairs. Very comfy!'],
   },
   {
-    id: -3, place: 'plaza', name: 'Mayor Maple', title: 'Mayor Maple 🎩', roam: 7,
+    id: -3, place: 'plaza', name: 'Mayor Maple', title: 'Mayor Maple 🎩', roam: 7, club: 'gold',
     look: { face: 'smile', hair: 'none', hat: 'tophat', shirt: 'jacket', pants: 'jeans', skin: '#e8b088', hatColor: '#111111', shirtColor: '#6d4c41', shirtColor2: '#ffd54f', pantsColor: '#424242', shoesColor: '#111111' },
     hello: n => [`Hello ${n}! Welcome to town! 🎩`, `Lovely day, ${n}! Have you found the gold coins yet?`, `${n}! Have you been to the Luxe Store? It's fabulous!`],
     tips: ['Gold coins pop up all over town. Walk into them to collect them! 🪙', 'Win a race and you get 3 coins! 🏁', 'You get 10 coins every day just for visiting!', 'Spend your coins at the Luxe Store by the road out of town!', 'Need more coins? The Pizza Palace is looking for delivery helpers! 🍕', 'Have you been up north? There\'s a ski resort in the snow! ⛷️', 'Sit on a fishing stool on the dock and catch some fish! 🎣 Every kind is worth coins (well, not the old boots).', 'Found a car you love? Click it with the Land Flag and it can be yours! 🔑', 'Out past the edge of the old map: a beach, a campground, a quarry and a farm! 🗺️'],
   },
   {
-    id: -4, place: 'pizza', name: 'Chef Rosa', title: 'Chef Rosa 🍕', roam: 2,
+    id: -4, place: 'pizza', name: 'Chef Rosa', title: 'Chef Rosa 🍕', roam: 2, club: 'pizza',
     look: { face: 'grin', hair: 'buns', hat: 'tophat', shirt: 'jacket', pants: 'jeans', skin: '#d9a273', hairColor: '#2b1a10', hatColor: '#ffffff', shirtColor: '#ffffff', shirtColor2: '#e53935', pantsColor: '#1d1f24', shoesColor: '#111111' },
     hello: n => [`Hi ${n}! Welcome to the Pizza Palace! 🍕`, `${n}! Want to earn some coins? I need a delivery helper!`, `Hello ${n}! The pizzas are hot and ready! 🔥`],
     tips: ['Right-click me (or the oven) to take a pizza out for delivery. 🍕', 'Deliver it quickly and you get a tip! ⏱️', 'Driving is faster than walking! 🚗', 'Super Sneakers from the Luxe Store make deliveries zoom! 👟'],
@@ -46,10 +46,23 @@ const NPCS = [
     tips: ['Tune any TV to BZ Live to watch me report! 📺', 'I go wherever the news is! 🎤'],
   },
   {
-    id: -5, place: 'lodge', name: 'Coach Frost', title: 'Coach Frost ⛷️', roam: 3,
+    id: -5, place: 'lodge', name: 'Coach Frost', title: 'Coach Frost ⛷️', roam: 3, club: 'speed',
     look: { face: 'cool', hair: 'short', hat: 'beanie', shirt: 'hoodie', pants: 'jeans', skin: '#f2c6a5', hairColor: '#c9b38a', hatColor: '#1e88e5', shirtColor: '#e53935', shirtColor2: '#ffffff', pantsColor: '#283593', shoesColor: '#111111' },
     hello: n => [`Hey ${n}! Ready to hit the slopes? ⛷️`, `Welcome to the lodge, ${n}! Warm up by the fire! 🔥`, `${n}! The snow is perfect today! ❄️`],
     tips: ['Grab a pair of skis from the rack by the door, then ride down the slope! ⛷️', 'Right-click the chair at the bottom of the ski lift to ride up to the top! 🚡', 'On skis: hold W to carve toward where you look, S to slow down.', 'The ice rink is super slippery. Have fun skating! ⛸️', 'Try a jump on skis! Press Space! 🏂'],
+  },
+  // ---------- Club leaders (see clubs.js) ----------
+  {
+    id: -12, place: 'gas1', name: 'Mo', title: 'Mo 🔧', roam: 3, club: 'mechanic',
+    look: { face: 'grin', hair: 'short', hat: 'cap', shirt: 'tshirt', pants: 'jeans', skin: '#c68642', hairColor: '#1b1209', hatColor: '#ff8f00', shirtColor: '#1565c0', shirtColor2: '#ff8f00', pantsColor: '#37474f', shoesColor: '#111111' },
+    hello: n => [`Hey ${n}! Need gas? ⛽`, `${n}! Bring me a dirty car! 🧽`, `Howdy, ${n}! 🔧`],
+    tips: ['🔧⛽🧽'],
+  },
+  {
+    id: -13, place: 'camp', name: 'Ranger Rae', title: 'Ranger Rae 🌲', roam: 4, club: 'nature',
+    look: { face: 'smile', hair: 'ponytail', hat: 'cowboy', shirt: 'tshirt', pants: 'jeans', skin: '#f2c6a5', hairColor: '#8d5524', hatColor: '#2e7d32', shirtColor: '#6d8b3a', shirtColor2: '#f9a825', pantsColor: '#5d4037', shoesColor: '#3e2723' },
+    hello: n => [`Hi ${n}! Lovely day outdoors! 🌲`, `${n}! The fish are biting! 🎣`, `Hello ${n}! Plant a tree today? 🌳`],
+    tips: ['🎣🌳'],
   },
   // ---------- The Secret Agency ----------
   // Agent Shadow, on the town square: talk to him to join the Agency (find the three TOP SECRET
@@ -415,8 +428,14 @@ export class NpcCrew {
       else this.say(n, pickOne([`🛑 Sorry ${c.name}, this is ${n.def.owner}'s house. Guests only!`, `🛑 You're not on the list, ${c.name}. Ask ${n.def.owner}!`]), true);
     } else if (n.def.agent) {
       this.say(n, this.mission(c), true);
+      c.send({ t: 'club_open', club: 'agency' });
     } else if (n.def.guard) {
       this.say(n, this.room.cleared(c) ? pickOne([`Welcome back, Agent ${c.name}! 🫡 In you go.`, `Agent ${c.name}! The door's open for you. 🫡`]) : pickOne([`🛑 No clearance, no entry, ${c.name}! Agent Shadow on the town square can tell you how to get some.`, '🛑 This is a TOP SECRET area! Only agents with Top Secret clearance get in.']), true);
+    } else if (n.def.club) {
+      // A club's leader: shows you what to do (in the badge book: pictures, not lots of words).
+      const done = this.room.perk(c, n.def.club);
+      this.say(n, done ? pickOne([`You're a star, ${c.name}! ⭐`, `Thanks for all your help, ${c.name}! 🏅`]) : pickOne([`Join my club, ${c.name}! 🏅`, `Can you help me, ${c.name}? 🙂`, `Here's what to do! 👇`]), true);
+      c.send({ t: 'club_open', club: n.def.club });
     } else {
       this.say(n, pickOne(n.def.tips), true);
     }

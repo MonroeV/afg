@@ -20,7 +20,7 @@ export const FULL_TANK_PRICE = 8; // coins for a whole tank (less if it isn't em
 export const GAS_CAN = 0.25; // a gas can holds a quarter of a tank
 export const GAS_CAN_PRICE = 3;
 export const PUMP_REACH = 8; // a vehicle this close to a pump can be filled from it
-export const fillPrice = fuel => Math.max(1, Math.ceil((1 - fuel) * FULL_TANK_PRICE));
+export const fillPrice = (fuel, half = false) => Math.max(1, Math.ceil((1 - fuel) * FULL_TANK_PRICE / (half ? 2 : 1)));
 // Driving this far on the road makes a clean car completely dirty (three times sooner off the
 // road, and twice as fast again off the road in the rain).
 export const DIRT_RANGE = 5000;

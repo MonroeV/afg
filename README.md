@@ -102,6 +102,10 @@ customize your character, drive cars, build anything and play with friends.
   can look at) instead of a blinding white glare.
   Too dark (or not dark enough)? **Brightness at night** in the pause menu (Esc) makes the nights
   lighter or darker; the days stay the same
+- **Police lights**: G in the police car turns on its lights and siren. The lights flash like the
+  real thing (three quick red flashes, then three blue, with a glow round the light bar) and throw
+  red and blue light over the street and the buildings around (on Medium and High graphics). Get
+  out and the lights keep flashing (only the siren stops); off when you got out stays off
 - **Cars parked around town**: regular cars, a police car with a siren and monster trucks that climb
   blocks, and two **sports cars** on the road down to the campground (low, light and quick). Out in
   the far country: **camper vans** (four seats, G pops the roof up, and you can sleep in them),
@@ -257,6 +261,27 @@ customize your character, drive cars, build anything and play with friends.
   walk over to pet your pet, love your cool stuff ("A JETPACK?!"), cheer at fireworks, gasp at
   exploding cars, dance when you dance, and complain when you hit them with a water balloon.
   Right-click them for tips
+- **Clubs and badges** 🏅: things to do, like the Secret Agency. Each club has a leader in town;
+  right-click them (or press **J**, or 🏅 next to your coins, or BADGES in the pause menu) to
+  open the **badge book**: each club is a big badge whose ring fills up as you go, with its tasks
+  as pictures and progress bars (hover for the words), and the prize. Finish all of a club's tasks
+  for its badge, some coins, and a perk that's yours for good:
+
+  | Club | Leader | Tasks | Prize |
+  |---|---|---|---|
+  | 🔧 Mechanic Crew | Mo, at the gas station | fix 3 vehicles good as new, fill up 3 times, wash 2 | 15 🪙, gas costs half |
+  | 🍕 Pizza Pro | Chef Rosa | deliver 5 pizzas, 3 of them fast | 10 🪙, +2 coins on every delivery |
+  | 🌲 Nature Club | Ranger Rae, at the campground | catch 10 fish, 5 different kinds, plant 2 trees | 15 🪙, a lucky rod (rare fish bite more) |
+  | 🏁 Speed Club | Coach Frost, at the ski lodge | drive 2,000 blocks, fly 500, finish a race | 15 🪙, turbo (everything you drive is faster) |
+  | 🪙 Gold Club | Mayor Maple | pick up 30 coins, buy something at the Luxe Store, claim land | 20 🪙, a coin magnet and a bigger daily bonus |
+  | 🕶️ Secret Agency | Agent Shadow | find the 3 TOP SECRET files | Top Secret clearance |
+
+  Each step pops up by the badge counter ("🔧 2/3"), and a new badge gets a big celebration with
+  fireworks. The **daily bonus** grows every day in a row you play (+2 a day, up to +10)
+- **The town mends itself**: the town's own things (as the world was made) that get knocked down,
+  turned, painted or switched off outside anyone's land slowly go back the way they were: after
+  they've been left like that for 15 minutes, a couple of blocks at a time, and never while
+  someone is nearby. Claim land and what's on it is yours to change for good
 - **The Secret Agency** 🕶️: a TOP SECRET base hidden out in the south-east of the far country,
   past the campground. Only agents with **Top Secret clearance** get in: two guards stand at its
   door ("🛑 Halt! No clearance, no entry!"), the door won't open for anyone else, and if somebody
@@ -363,6 +388,7 @@ customize your character, drive cars, build anything and play with friends.
 | F | Toggle flying (Space = up, C = down) |
 | V | Switch camera: first person, behind you, in front of you |
 | G | Dance! (on a dance floor it starts a party). Driving: the police car's siren, the camper van's pop-up roof, the dump truck's bed, the RV's awning |
+| J | The badge book: the clubs, what to do for each badge, and how close you are |
 | B | Wave. In a parked camper van, or inside the RV: sleep (move to get up) |
 | T or Enter | Chat (with quick-chat buttons for common things to say) |
 | R | Go home: your bed, or your land if you have no bed, or else the town square |
@@ -628,6 +654,7 @@ public/
     pictures.js        The paintings, posters and whiteboards (drawn in code)
     petmove.js         How pets find their way around and move (jumps, ladders, no walls)
     elevator.js        Riding elevators: the cab, the ride, and the panel of floor buttons
+    badges.js          The badge book (the clubs), the task pops and the badge celebration
     spy.js             The Secret Agency on your screen: spy cameras, radar, drones, lasers, goggles
     shop.js            The Luxe Store's window
     tv.js              The TV shows
@@ -649,6 +676,7 @@ public/
       elevator.js      Elevators: their shafts, where they stop, their doors and floor names
       secretbase.js    The Secret Agency's base, its TOP SECRET files, and who may be inside
       fuel.js          Gas, mud, the gas stations and their car washes
+      clubs.js         The clubs: their leaders, tasks and prizes
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/
   make-engine-sounds.py  Makes the engine recordings (needs numpy and ffmpeg; run it after changing a voice)

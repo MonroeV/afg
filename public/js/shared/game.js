@@ -10,6 +10,7 @@ import { buildFrontier, buildPizzeria, buildSignposts, refurnish, addFishingSpot
 import { buildFarCountry, moreVehicles } from './farcountry.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot, seatCount } from './vehicles.js';
 import { buildGasStations, usesFuel, getsDirty, TANK_RANGE, GAS_PUMP, GAS_CAN, GAS_CAN_PRICE, FULL_TANK_PRICE, PUMP_REACH, DIRT_RANGE, WASH_TIME, fillPrice, paved, isWash } from './fuel.js';
+import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
 
 export const SAVE_VERSION = 14;
@@ -23,7 +24,14 @@ const RACE_PRIZE = 3;
 const FIX_AMOUNT = 8; // health a turn of the wrench puts back (out of 100)
 const TOWN_REFILL = 10 * 60 * 1000; // a town vehicle left nearly empty this long gets filled up by the town
 const MUDDY = new Set([1, 2, 10, 87]); // grass, dirt, sand, snow
-const TICK_RATE = 15; // how often the town's people's positions go out
+const TICK_RATE = 15;
+// The town mends itself: its own things (as the world was made), changed outside anyone's land,
+// slowly go back the way they were. Not until they've been left like that a while, a couple of
+// blocks at a time, and never right where someone is.
+const MEND_AFTER = 15 * 60 * 1000;
+const MEND_EVERY = 2; // seconds
+const MEND_EACH = 2; // blocks each time
+const MEND_AWAY = 14; // blocks from anyone // how often the town's people's positions go out
 const DAY_MS = 24 * 60 * 60 * 1000;
 // Rain: now and then, not often. Between showers it stays dry for 30 to 75 minutes; a shower lasts
 // 1½ to 3½ minutes (so it rains about once an hour, and about one minute in twenty-five).
@@ -106,6 +114,7 @@ export class GameRoom {
     this.places = places;
     this.claims = claims.slice();
     for (const [x, y, z, text] of signs || []) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+    this.setOriginal({ blocks, signs });
     this.populate();
   }
 
@@ -190,6 +199,7 @@ export class GameRoom {
       this.upgradeTo12();
       this.upgradeTo13();
       this.upgradeTo14();
+      this.setOriginal(generateWorld());
       this.populate();
       return true;
     }
@@ -222,6 +232,11 @@ export class GameRoom {
         agent: { files: Array.isArray(w.agent?.files) ? w.agent.files.filter(k => typeof k === 'string').slice(0, 8) : [], clear: !!w.agent?.clear },
         guests: Array.isArray(w.guests) ? w.guests.filter(k => typeof k === 'string').map(nameKey).slice(0, 40) : [], // who their bodyguards let in
         can: w.can ? 1 : 0, // carrying a gas can
+        // Clubs: how far along each club's tasks are, and the badges earned. And how many days in
+        // a row they've come to play.
+        clubs: cleanClubs(w.clubs),
+        badges: Array.isArray(w.badges) ? w.badges.filter(b => clubById(b)) : [],
+        streak: Number.isInteger(w.streak) && w.streak > 0 ? w.streak : 0,
       };
     }
     this.places = data.places && typeof data.places === 'object' ? data.places : null;
@@ -247,6 +262,7 @@ export class GameRoom {
     if (data.version < 12) this.upgradeTo12();
     if (data.version < 13) this.upgradeTo13();
     if (data.version < 14) this.upgradeTo14();
+    this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
   }
@@ -504,6 +520,8 @@ export class GameRoom {
       wallets: this.wallets,
       holes: [...this.holes].map(([k, t]) => [...k.split(',').map(Number), t]),
       signs: this.signList(),
+      // The town's own things that have been changed, to mend (see setOriginal).
+      damaged: [...(this.damaged || [])].map(([k, since]) => [...k.split(',').map(Number), this.original.get(k), since]),
     };
   }
 
@@ -536,6 +554,86 @@ export class GameRoom {
 
   get(x, y, z) {
     return this.world.get(blockKey(x, y, z)) || 0;
+  }
+
+  // ---------- The town mends itself ----------
+
+  // What the world was like when it was made: every block the world maker put down that's still
+  // just like that (in an older world, only the ones that match how the world is made now; things
+  // already changed before, or built since, aren't known, so they're left alone), plus the ones
+  // saved as changed (`damaged`: [x, y, z, block, since]).
+  setOriginal(gen, damaged = []) {
+    this.original = new Map();
+    this.originalSigns = new Map();
+    this.damaged = new Map();
+    for (const [x, y, z, v] of gen.blocks) {
+      const k = blockKey(x, y, z);
+      if (this.world.get(k) === v) this.original.set(k, v);
+    }
+    for (const d of Array.isArray(damaged) ? damaged : []) {
+      if (!Array.isArray(d) || d.length < 5 || !d.every(Number.isFinite) || !inBounds(d[0], d[1], d[2]) || !d[3] || !isValidBlock(d[3])) continue;
+      const k = blockKey(d[0], d[1], d[2]);
+      this.original.set(k, d[3]);
+      this.damaged.set(k, d[4]);
+    }
+    for (const [x, y, z, text] of gen.signs || []) {
+      const k = blockKey(x, y, z);
+      if (this.original.has(k)) this.originalSigns.set(k, cleanSignText(text));
+    }
+  }
+
+  // Someone changed something here (a block, its paint, a sign's words). If it's one of the town's
+  // own things, it's noted, to mend later. On someone's land it's theirs now: it's left as it is.
+  touched(x, y, z) {
+    const k = blockKey(x, y, z);
+    if (!this.original?.has(k)) return;
+    if (claimAt(this.claims, x, z)) {
+      this.original.delete(k);
+      this.damaged.delete(k);
+      return;
+    }
+    const sign = this.originalSigns.has(k) && this.signs.get(k) !== this.originalSigns.get(k);
+    const same = this.world.get(k) === this.original.get(k) && !this.paints.has(k) && !this.paints.has(`${k}|f`) && !sign;
+    if (same) this.damaged.delete(k);
+    else if (!this.damaged.has(k)) this.damaged.set(k, Date.now());
+  }
+
+  // Puts back a couple of the town's things that were changed a while ago (oldest first).
+  mend() {
+    if (!this.damaged?.size) return;
+    const now = Date.now(), cells = [];
+    const people = [...this.clients.values()].filter(c => c.joined && c.pos);
+    for (const [k, since] of this.damaged) {
+      if (now - since < MEND_AFTER || cells.length >= MEND_EACH * 4) break;
+      const [x, y, z] = k.split(',').map(Number);
+      if (claimAt(this.claims, x, z)) {
+        this.damaged.delete(k);
+        this.original.delete(k);
+        continue;
+      }
+      // (Not with someone watching, or standing or parked right there.)
+      if (people.some(c => Math.hypot(c.pos[0] - x - 0.5, c.pos[2] - z - 0.5) < MEND_AWAY)) continue;
+      let parked = false;
+      for (const v of this.vehicles.values()) if (Math.hypot(v.x - x - 0.5, v.z - z - 0.5) < 4 && Math.abs(v.y - y) < 4) parked = true;
+      if (parked) continue;
+      const v = this.original.get(k);
+      this.world.set(k, v);
+      for (const pk of [k, `${k}|f`]) {
+        if (!this.paints.delete(pk)) continue;
+        this.broadcast({ t: 'paint', x, y, z, floor: pk !== k, faces: null });
+      }
+      const text = this.originalSigns.get(k);
+      if (text && this.signs.get(k) !== text) {
+        this.signs.set(k, text);
+        this.broadcast({ t: 'sign', x, y, z, text });
+      }
+      this.damaged.delete(k);
+      cells.push(x, y, z, v);
+    }
+    if (cells.length) {
+      this.broadcast({ t: 'many', cells });
+      this.onDirty();
+    }
   }
 
   // Changes a block on the server's own behalf (growing trees) and tells everyone.
@@ -609,12 +707,45 @@ export class GameRoom {
     w.agent ??= { files: [], clear: false };
     w.guests ??= [];
     w.can ??= 0;
+    w.clubs ??= {};
+    w.badges ??= [];
+    w.streak ??= 0;
     return w;
   }
 
   sendWallet(client) {
     const w = this.wallet(client);
-    client.send({ t: 'wallet', coins: w.coins, owned: w.owned, found: w.found, vacation: !!this.vacationOf(client), agent: { files: w.agent.files.length, need: this.filesNeeded(), clear: w.agent.clear }, can: w.can });
+    client.send({ t: 'wallet', coins: w.coins, owned: w.owned, found: w.found, vacation: !!this.vacationOf(client), agent: { files: w.agent.files.length, need: this.filesNeeded(), clear: w.agent.clear }, can: w.can, clubs: w.clubs, badges: w.badges, streak: w.streak });
+  }
+
+  // ---------- Clubs ----------
+
+  // Has this player earned this club's badge (and its perk)?
+  perk(client, club) {
+    return this.wallet(client).badges.includes(club);
+  }
+
+  // A step toward one of a club's tasks (by `n`, or up to `n` with `to`). All the tasks done: the
+  // badge, its coins and its perk, and everybody hears about it.
+  progress(client, club, task, n = 1, to = false) {
+    const def = clubById(club), t = def?.tasks.find(k => k.id === task);
+    if (!t || !client?.joined) return;
+    const w = this.wallet(client);
+    if (w.badges.includes(club)) return;
+    const counts = (w.clubs[club] ??= {});
+    const was = counts[task] || 0, now = Math.min(t.goal, Math.floor(to ? n : was + n));
+    if (now <= was) return;
+    counts[task] = now;
+    client.send({ t: 'club_step', club, task, n: now, goal: t.goal });
+    if (def.tasks.every(k => (counts[k.id] || 0) >= k.goal)) {
+      w.badges.push(club);
+      w.coins += def.reward.coins;
+      client.send({ t: 'badge', club, coins: def.reward.coins });
+      this.broadcast({ t: 'chat', system: true, text: `🏅 ${client.name} earned the ${def.icon} ${def.name} badge!` }, client);
+      this.log(`${client.name} earned the ${def.name} badge`);
+    }
+    this.sendWallet(client);
+    this.onDirty();
   }
 
   // ---------- The Secret Agency ----------
@@ -741,9 +872,13 @@ export class GameRoom {
     const wallet = this.wallet(client);
     const today = new Date().toISOString().slice(0, 10);
     if (wallet.day !== today) {
+      // Every day in a row you come to play, the bonus grows (and the Gold Club adds a bit).
+      const yesterday = new Date(Date.now() - DAY_MS).toISOString().slice(0, 10);
+      wallet.streak = wallet.day === yesterday ? wallet.streak + 1 : 1;
       wallet.day = today;
-      wallet.coins += DAILY_BONUS;
-      client.send({ t: 'chat', system: true, text: `🪙 Daily bonus: ${DAILY_BONUS} coins! Spend them at the Luxe Store.` });
+      const bonus = DAILY_BONUS + Math.min(STREAK_MAX, (wallet.streak - 1) * 2) + (this.perk(client, 'gold') ? 5 : 0);
+      wallet.coins += bonus;
+      client.send({ t: 'daily', coins: bonus, streak: wallet.streak });
       this.onDirty();
     }
     this.sendWallet(client);
@@ -770,7 +905,10 @@ export class GameRoom {
     if (v.driver !== client.id) return;
     v.driver = 0;
     v.idleAt = Date.now();
-    v.speed = v.steer = v.siren = v.pitch = v.roll = v.rotor = 0;
+    v.speed = v.steer = v.pitch = v.roll = v.rotor = 0;
+    // (A police car's flashing lights stay on when you get out, if they were on: only the siren
+    // stops. The camper's roof and such go back down.)
+    if (v.kind !== 'police') v.siren = 0;
     // Nobody flying it any more? It drops to the ground.
     if (VEHICLES[v.kind].flying) {
       const x = Math.floor(v.x), z = Math.floor(v.z), start = v.y;
@@ -810,6 +948,16 @@ export class GameRoom {
     v.drivenAt = now;
     const d = Math.hypot(v.x - was[0], VEHICLES[v.kind].flying ? v.y - was[1] : 0, v.z - was[2]);
     if (d > 12) return; // (a teleporter, not driving)
+    // The Speed Club counts how far its members-to-be drive and fly.
+    const driver = this.clients.get(v.driver);
+    if (driver && d > 0 && !VEHICLES[v.kind].boat) {
+      const flying = !!VEHICLES[v.kind].flying;
+      driver.distance = (driver.distance || 0) + d;
+      if (driver.distance >= 50) {
+        this.progress(driver, 'speed', flying ? 'fly' : 'drive', driver.distance);
+        driver.distance = 0;
+      }
+    }
     if (usesFuel(v.kind) && v.fuel > 0 && d > 0) {
       const before = v.fuel;
       v.fuel = Math.max(0, v.fuel - d / TANK_RANGE[v.kind]);
@@ -827,6 +975,7 @@ export class GameRoom {
       const k = muddy ? 3 * (this.weather?.rain > 0 ? 2 : 1) : 1;
       v.dirt = Math.min(1, v.dirt + d * k / DIRT_RANGE);
     }
+    if (!v.dirt && before > 0 && isWash(here) && driver) this.progress(driver, 'mechanic', 'wash');
     if (v.dirt !== before && (!v.dirt || Math.floor(before * 25) !== Math.floor(v.dirt * 25))) {
       this.broadcast({ t: 'car_dirt', id: v.id, dirt: round3(v.dirt), wash: v.dirt < before });
     }
@@ -888,8 +1037,9 @@ export class GameRoom {
       // Paint goes with the block: it's gone when the block is broken or replaced.
       carryPaint(this.paints, k, old, b);
       this.carrySign(k, b);
+      this.touched(x, y, z);
       this.broadcast({ t: 'set', x, y, z, b }, client);
-      if (blockId(b) === LOG && blockId(old) !== LOG) this.maybePlant(x, y, z);
+      if (blockId(b) === LOG && blockId(old) !== LOG && this.maybePlant(x, y, z)) this.progress(client, 'nature', 'trees');
       this.onDirty();
     },
 
@@ -905,6 +1055,7 @@ export class GameRoom {
       }
       if (!faces || faces.every(c => c < 0)) this.paints.delete(key);
       else this.paints.set(key, faces.slice());
+      this.touched(x, y, z);
       this.broadcast({ t: 'paint', x, y, z, floor: !!floor, faces: this.paints.get(key) || null }, client);
       this.onDirty();
     },
@@ -963,6 +1114,7 @@ export class GameRoom {
         else this.world.set(k, b);
         carryPaint(this.paints, k, old, b);
         this.carrySign(k, b);
+        this.touched(x, y, z);
         applied.push(x, y, z, b);
       }
       if (applied.length) {
@@ -988,11 +1140,13 @@ export class GameRoom {
     coin(client, { id }) {
       const c = this.coins.get(id);
       if (!c || !this.allow(client, 'coin', 6, 10)) return;
-      if (Math.hypot(client.pos[0] - c[0], client.pos[2] - c[2]) > 3 || Math.abs(client.pos[1] - c[1]) > 3) return;
+      const reach = this.perk(client, 'gold') ? 3 * MAGNET : 3; // (the Gold Club's coin magnet)
+      if (Math.hypot(client.pos[0] - c[0], client.pos[2] - c[2]) > reach || Math.abs(client.pos[1] - c[1]) > 3) return;
       this.coins.delete(id);
       this.broadcast({ t: 'coin_gone', id, by: client.id });
       this.pay(client, c[3]);
       client.send({ t: 'coin_got', value: c[3] });
+      this.progress(client, 'gold', 'coins');
       this.coinTimers.push(Date.now() + 15000 + Math.random() * 25000);
     },
 
@@ -1013,6 +1167,7 @@ export class GameRoom {
       this.onDirty();
       reply(`🛍️ You bought the ${name}! ${item === 'bodyguards' && !this.homeOf(client) ? 'Plant your Land Flag somewhere and they\'ll guard it!' : SHOP_TOOLS[item]?.got || "It's in your items now (press E, 🎉 Fun tab)."}`);
       this.npcs.onBuy(client, item);
+      this.progress(client, 'gold', 'shop');
       if (item === 'bodyguards') this.updateGuards();
     },
 
@@ -1047,6 +1202,7 @@ export class GameRoom {
       this.broadcast({ t: 'chat', system: true, text: `🏁 ${client.name} finished in ${time.toFixed(2)} s!${record ? ' 🥇 NEW RECORD!' : place >= 0 ? ` ${medal} on the leaderboard` : ''}` });
       client.send({ t: 'race_board', board: this.races[key].map(r => [r.name, r.time]) });
       this.pay(client, RACE_PRIZE);
+      this.progress(client, 'speed', 'race');
       client.send({ t: 'chat', system: true, text: `🪙 +${RACE_PRIZE} coins for finishing the race!` });
     },
 
@@ -1159,6 +1315,7 @@ export class GameRoom {
       if (!v || v.hp >= MAX_HP || !this.allow(client, 'fix', 5, 6) || !this.nearVehicle(client, v)) return;
       v.hp = Math.min(MAX_HP, v.hp + FIX_AMOUNT);
       this.broadcast({ t: 'car_hp', id: v.id, hp: Math.round(v.hp), fixer: client.id });
+      if (v.hp >= MAX_HP) this.progress(client, 'mechanic', 'fix');
       this.onDirty();
     },
 
@@ -1170,10 +1327,12 @@ export class GameRoom {
       const reply = text => client.send({ t: 'chat', system: true, text });
       if (Math.hypot(client.pos[0] - x - 0.5, client.pos[2] - z - 0.5) > 6) return reply('⛽ Walk up to the pump first.');
       const w = this.wallet(client);
+      const half = this.perk(client, 'mechanic'); // (the Mechanic Crew: gas costs half)
+      const canPrice = half ? Math.ceil(GAS_CAN_PRICE / 2) : GAS_CAN_PRICE;
       if (can) {
         if (w.can) return reply('⛽ You\'re already carrying a gas can! Take it to your vehicle and right-click the vehicle to pour it in.');
-        if (w.coins < GAS_CAN_PRICE) return reply(`🪙 A gas can costs ${GAS_CAN_PRICE} coins, and you have ${w.coins}. Find more coins around town!`);
-        w.coins -= GAS_CAN_PRICE;
+        if (w.coins < canPrice) return reply(`🪙 A gas can costs ${canPrice} coins, and you have ${w.coins}. Find more coins around town!`);
+        w.coins -= canPrice;
         w.can = 1;
         this.sendWallet(client);
         this.onDirty();
@@ -1187,11 +1346,12 @@ export class GameRoom {
       if (v.driver && v.driver !== client.id) return reply(`⛽ Someone's driving that ${name}.`);
       if (v.key && v.key !== nameKey(client.name)) return reply(`🔑 That's ${v.owner}'s ${name}: only ${v.owner} can fill it up.`);
       if (v.fuel >= 0.995) return reply(`⛽ The ${name}'s tank is already full!`);
-      const price = fillPrice(v.fuel);
+      const price = fillPrice(v.fuel, half);
       if (w.coins <= 0) return reply(`🪙 Filling up costs ${price} coins, and you don't have any. Find some coins around town!`);
       const paid = Math.min(price, w.coins);
       w.coins -= paid;
-      v.fuel = paid >= price ? 1 : Math.min(1, v.fuel + paid / FULL_TANK_PRICE);
+      v.fuel = paid >= price ? 1 : Math.min(1, v.fuel + paid / (half ? FULL_TANK_PRICE / 2 : FULL_TANK_PRICE));
+      this.progress(client, 'mechanic', 'fuel');
       v.idleAt = Date.now();
       this.sendWallet(client);
       this.broadcast({ t: 'car_fuel', id: v.id, fuel: round3(v.fuel), filled: client.id });
@@ -1209,6 +1369,7 @@ export class GameRoom {
       if (v.fuel >= 0.995) return reply(`⛽ The ${VEHICLES[v.kind].name}'s tank is already full! Keep the can for when you need it.`);
       w.can = 0;
       v.fuel = Math.min(1, v.fuel + GAS_CAN);
+      this.progress(client, 'mechanic', 'fuel');
       this.sendWallet(client);
       this.broadcast({ t: 'car_fuel', id: v.id, fuel: round3(v.fuel), filled: client.id, can: true });
       this.onDirty();
@@ -1279,6 +1440,7 @@ export class GameRoom {
         reply(`🏠 This land is now yours, ${client.name}!${had ? ' (Your old land is free again.)' : ''} Only someone named ${client.name} can build here.`);
       }
       this.seen(client.name);
+      this.progress(client, 'gold', 'land');
       this.broadcast({ t: 'claims', claims: this.claims });
       this.onDirty();
     },
@@ -1295,6 +1457,7 @@ export class GameRoom {
       const clean = cleanSignText(text);
       if (clean) this.signs.set(k, clean);
       else this.signs.delete(k);
+      this.touched(x, y, z);
       this.broadcast({ t: 'sign', x, y, z, text: clean });
       this.onDirty();
     },
@@ -1313,10 +1476,12 @@ export class GameRoom {
       if (Math.hypot(client.pos[0] - job.x, client.pos[2] - job.z) > 4.5) return;
       this.jobs.delete(client.id);
       const fast = (Date.now() - job.at) / 1000 <= job.par;
-      const coins = job.reward + (fast ? JOB_TIP : 0);
+      const coins = job.reward + (fast ? JOB_TIP : 0) + (this.perk(client, 'pizza') ? PIZZA_TIP : 0);
       this.wallet(client).coins += coins;
       this.sendWallet(client);
       client.send({ t: 'job_done', coins, fast });
+      this.progress(client, 'pizza', 'deliver');
+      if (fast) this.progress(client, 'pizza', 'fast');
       this.log(`${client.name} delivered a pizza (+${coins} coins)`);
       this.onDirty();
     },
@@ -1396,15 +1561,23 @@ export class GameRoom {
       const now = Date.now();
       if (!f.bitten) return client.send({ t: 'fish_gone', why: 'soon' });
       if (now > f.bitten + FISH_BITE + 600) return client.send({ t: 'fish_gone', why: 'away' }); // (a little extra for the trip here)
-      let r = Math.random() * FISH.reduce((a, d) => a + d.chance, 0), fish = FISH[0];
-      for (const d of FISH) if ((r -= d.chance) < 0) {
-        fish = d;
-        break;
+      const pick = () => {
+        let r = Math.random() * FISH.reduce((a, d) => a + d.chance, 0);
+        for (const d of FISH) if ((r -= d.chance) < 0) return d;
+        return FISH[0];
+      };
+      let fish = pick();
+      // The Nature Club's lucky rod: two tries, and the rarer fish wins.
+      if (this.perk(client, 'nature')) {
+        const other = pick();
+        if (other.chance < fish.chance) fish = other;
       }
       const w = this.wallet(client), isNew = !w.fish.includes(fish.name);
       if (isNew) w.fish.push(fish.name);
       w.coins += fish.coins;
       this.sendWallet(client);
+      if (fish.coins > 0) this.progress(client, 'nature', 'fish');
+      this.progress(client, 'nature', 'kinds', w.fish.filter(f => f !== 'Old Boot').length, true);
       client.send({ t: 'fish_caught', name: fish.name, icon: fish.icon, coins: fish.coins, isNew, kinds: w.fish.length, of: FISH.length, rare: fish.chance <= 3 });
       if (fish.chance <= 3) this.broadcast({ t: 'chat', system: true, text: `🎣 ${client.name} caught a ${fish.name}! ${fish.icon}` }, client);
       this.onDirty();
@@ -1557,6 +1730,7 @@ export class GameRoom {
     for (let k = 1; k <= 3; k++) if (this.get(x, y + k, z)) return;
     if (this.saplings.length > 200) return;
     this.saplings.push({ x, y, z, stage: 0, height: 4 + Math.floor(Math.random() * 3), at: Date.now() + 8000 });
+    return true;
   }
 
   growSapling(s) {
@@ -1678,6 +1852,10 @@ export class GameRoom {
         if (c.moved) this.rememberSpot(c); // (in case the server stops before they leave)
       }
     }
+    if (!(t.mend > 0)) {
+      t.mend = MEND_EVERY;
+      this.mend();
+    }
     if (t.holes <= 0) {
       t.holes = 5;
       if (this.holes.size) this.healHoles();
@@ -1781,5 +1959,16 @@ function isDoorToggle(old, b) {
 }
 
 const publicPlayer = c => ({ id: c.id, name: c.name, look: c.look, pos: c.pos, rot: c.rot });
-const publicVehicle = ({ id, kind, color, x, y, z, h, driver, passengers, hp, owner, loaded, fuel, dirt }) => ({ id, kind, color, x, y, z, h, driver, passengers, hp: Math.round(hp), owner: owner || '', loaded: !!loaded, fuel: round3(fuel), dirt: round3(dirt) });
+const publicVehicle = ({ id, kind, color, x, y, z, h, driver, passengers, hp, owner, loaded, fuel, dirt, siren }) => ({ id, kind, color, x, y, z, h, driver, passengers, hp: Math.round(hp), owner: owner || '', loaded: !!loaded, fuel: round3(fuel), dirt: round3(dirt), siren: siren ? 1 : 0 });
 const round3 = n => Math.round(num(n) * 1000) / 1000;
+// Saved club progress, checked over: only real clubs and tasks, and sensible counts.
+function cleanClubs(saved) {
+  const out = {};
+  if (!saved || typeof saved !== 'object') return out;
+  for (const def of CLUBS) {
+    const c = saved[def.id];
+    if (!c || typeof c !== 'object') continue;
+    for (const t of def.tasks) if (Number.isFinite(c[t.id]) && c[t.id] > 0) (out[def.id] ??= {})[t.id] = Math.min(t.goal, Math.floor(c[t.id]));
+  }
+  return out;
+}

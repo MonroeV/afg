@@ -55,6 +55,31 @@ function mudTexture(level) {
   return tex;
 }
 
+// A soft round glow (for the police lights' halos).
+let HALO = null;
+function haloTexture() {
+  if (HALO) return HALO;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.25, 'rgba(255,255,255,0.55)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  HALO = new THREE.CanvasTexture(c);
+  return HALO;
+}
+
+// Police lights flash like the real thing: three quick red flashes, then three blue, over and
+// over (and a little of the other color glowing in between). 0..1 for each.
+export function policeFlash(t) {
+  const p = ((t % 0.84) + 0.84) % 0.84, half = p < 0.42, q = (p % 0.42) / 0.14;
+  const strobe = q % 1 < 0.55 ? 1 : 0.08;
+  return half ? [strobe, 0.08] : [0.08, strobe];
+}
+
 function textTexture(text, bg, fg) {
   const c = document.createElement('canvas');
   c.width = 256;
@@ -177,6 +202,18 @@ export function buildCarModel(kind, color) {
     for (const x of [-1, 1]) add(new THREE.PlaneGeometry(L * 0.55, 0.32), 'label', x * (W / 2 + 0.005), bodyY, 0.1, x * Math.PI / 2);
   }
   const meshes = mergeParts(g, parts, mats);
+  // The police light bar's glow: a big soft red and blue halo that flashes with the lights.
+  let halos = null;
+  if (kind === 'police') {
+    const top = ride + bodyH + cabinH + 0.1;
+    halos = ['#ff2020', '#2a5cff'].map((c, i) => {
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTexture(), color: c, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+      halo.position.set(i ? 0.3 : -0.3, top + 0.05, 0.15);
+      halo.scale.setScalar(2.4);
+      g.add(halo);
+      return halo;
+    });
+  }
 
   // Wheels (front ones steer). The six-sided hub shows them spinning.
   const wheelGeo = new THREE.CylinderGeometry(wheelR, wheelR, kind === 'monster' ? 0.6 : 0.3, 18).rotateZ(Math.PI / 2);
@@ -197,7 +234,7 @@ export function buildCarModel(kind, color) {
 
   return {
     group: g, wheels, steerers, paint: mats.paint, paintMesh: meshes.paint, baseColor: new THREE.Color(color),
-    headMat: mats.head, tailMat: mats.tail, brakeMat: mats.brake, reverseMat: mats.reverse, siren: kind === 'police' ? { red: mats.red, blue: mats.blue } : null,
+    headMat: mats.head, tailMat: mats.tail, brakeMat: mats.brake, reverseMat: mats.reverse, siren: kind === 'police' ? { red: mats.red, blue: mats.blue, halos } : null,
     ...extra,
   };
 }
@@ -611,7 +648,7 @@ export class Cars {
       targetH: data.h,
       hp: data.hp ?? MAX_HP,
       fuel: data.fuel ?? 1, dirt: 0,
-      speed: 0, steer: 0, siren: 0, vy: 0, spin: 0,
+      speed: 0, steer: 0, siren: data.siren ? 1 : 0, vy: 0, spin: 0,
       gear: 1, rpm: 0, shiftT: 0,
       pitch: 0, roll: 0, targetPitch: 0, targetRoll: 0, yawRate: 0, collective: 0.5, rotorSpin: 0, rotorAngle: 0,
       outline: outlinePoints(spec),
@@ -665,7 +702,7 @@ export class Cars {
     for (const id of [...this.list.keys()]) this.remove(id);
   }
 
-  setDriver({ id, driver, passengers, x, y, z, h, loaded, fuel, dirt }) {
+  setDriver({ id, driver, passengers, x, y, z, h, loaded, fuel, dirt, siren }) {
     const car = this.list.get(id);
     if (!car) return;
     if (Number.isFinite(fuel)) car.fuel = fuel;
@@ -677,7 +714,10 @@ export class Cars {
     car.push.set(0, 0, 0);
     car.target.set(x, y, z);
     car.targetH = h;
-    if (!driver) car.speed = car.steer = car.siren = 0;
+    if (!driver) {
+      car.speed = car.steer = 0;
+      car.siren = car.kind === 'police' && siren ? 1 : 0; // (police lights stay on, parked)
+    }
   }
 
   // Positions from the server for vehicles other people are driving.
@@ -1187,7 +1227,7 @@ export class Cars {
     }
     const steerIn = (keys.has('KeyA') ? 1 : 0) - (keys.has('KeyD') ? 1 : 0);
     const boost = keys.has('ShiftLeft') || keys.has('ShiftRight');
-    const max = s.maxSpeed * (boost ? 1.3 : 1);
+    const max = s.maxSpeed * (boost ? 1.3 : 1) * (this.turbo || 1); // (the Speed Club's turbo)
     const events = [];
     const health = 0.55 + 0.45 * (car.hp / MAX_HP); // wrecked cars are sluggish
 
@@ -1515,6 +1555,7 @@ export class Cars {
     this.myCarId = myCarId;
     const k = 1 - Math.exp(-10 * dt);
     this.events = [];
+    const flashing = []; // police cars with their lights on
     for (const car of this.list.values()) {
       if (car.loose || car.id === myCarId) car.track.clear();
       if (car.loose && !car.driver) {
@@ -1584,9 +1625,14 @@ export class Cars {
       car.model.brakeMat.emissiveIntensity = car.braking ? 2 : 0.04;
       car.model.reverseMat.emissiveIntensity = car.driver && (car.reversing || car.gear === 0 && car.id === myCarId) ? 3 : 0.05;
       if (car.model.siren) {
-        const flash = Math.floor(time * 6) % 2;
-        car.model.siren.red.emissiveIntensity = car.siren && flash === 0 ? 5 : 0.2;
-        car.model.siren.blue.emissiveIntensity = car.siren && flash === 1 ? 5 : 0.2;
+        // (Each car's lights flash a little out of step with the others, like real ones.)
+        const [r, b] = car.siren ? policeFlash(time + car.id * 0.37) : [0, 0];
+        const sr = car.model.siren;
+        sr.red.emissiveIntensity = car.siren ? 0.3 + 9 * r : 0.2;
+        sr.blue.emissiveIntensity = car.siren ? 0.3 + 9 * b : 0.2;
+        sr.halos[0].material.opacity = r * (0.55 + 0.45 * nightK);
+        sr.halos[1].material.opacity = b * (0.55 + 0.45 * nightK);
+        if (car.siren) flashing.push(car);
       }
       // G: the camper's roof pops up, the dump truck's bed tips.
       const roof = car.model.roof;
@@ -1612,6 +1658,43 @@ export class Cars {
         bed.load.visible = !!car.loaded;
       }
     }
+    this.flashLights(flashing, time, nightK);
+  }
+
+  // Real red and blue light from the police car nearest you with its lights on, splashing over
+  // the road, the buildings and everything round it as the lights flash. (Two lights that are
+  // always there, dark when not needed: adding and removing lights makes the graphics stutter.)
+  setPoliceLights(on) {
+    if (!!this.policeLights === on) return;
+    if (!on) {
+      for (const l of this.policeLights) this.scene.remove(l);
+      this.policeLights = null;
+      return;
+    }
+    this.policeLights = [0xff1a1a, 0x2255ff].map(c => {
+      const l = new THREE.PointLight(c, 0, 30, 1.1);
+      this.scene.add(l);
+      return l;
+    });
+  }
+
+  flashLights(flashing, time, nightK) {
+    if (!this.policeLights) return;
+    let best = null, bestD = 70 * 70;
+    for (const car of flashing) {
+      const d = this.viewer ? car.pos.distanceToSquared(this.viewer) : 0;
+      if (d < bestD) [best, bestD] = [car, d];
+    }
+    const [r, b] = best ? policeFlash(time + best.id * 0.37) : [0, 0];
+    this.policeLights.forEach((l, i) => {
+      if (!best) {
+        l.intensity = 0;
+        return;
+      }
+      const s = best.spec, side = i ? 1.1 : -1.1;
+      l.position.set(best.pos.x + Math.cos(best.h) * side, best.pos.y + s.ride + s.bodyH + s.cabinH + 1, best.pos.z - Math.sin(best.h) * side);
+      l.intensity = (i ? b : r) * (10 + 26 * nightK);
+    });
   }
 
   // White water behind a moving boat (and spray off the bow when it's going fast).
