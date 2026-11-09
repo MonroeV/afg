@@ -6,6 +6,7 @@
 import { sanitizeLook } from './avatar.js';
 import { BLOCKS, isSolidBlock, blockId, itemOf, shapeOf, blockMeta, DOOR_TOP, SHOP_TOOLS } from './blocks.js';
 import { inZone } from './secretbase.js';
+import { RESIDENTS } from './residents.js';
 
 export const NPC_ACT = { idle: 0, walk: 1, wave: 2, dance: 3, pet: 4, cheer: 5 };
 
@@ -14,7 +15,7 @@ const nameKey = name => String(name || '').trim().toLowerCase();
 
 const NPCS = [
   {
-    id: -1, place: 'store', name: 'Penny', title: 'Penny 🛍️', roam: 2.5,
+    id: -1, place: 'store', name: 'Penny', title: 'Penny 🛍️', roam: 2.5, store: 'luxe',
     look: { face: 'grin', hair: 'ponytail', shirt: 'dress', pants: 'skirt', skin: '#f5c9a0', hairColor: '#c23b22', shirtColor: '#ec407a', shirtColor2: '#ffffff', pantsColor: '#ec407a', shoesColor: '#111111' },
     hello: n => [`Hi ${n}! Welcome to the Luxe Store! ✨`, `Hello again, ${n}! Got coins to spend? 🪙`, `${n}! Come and see our shiny things!`],
     tips: ['Right-click me (or the cash register) to see what\'s for sale! 🛍️', 'The Jetpack is our most popular item! 🚀', 'Everything here is one of a kind. Well, almost! ✨'],
@@ -51,6 +52,28 @@ const NPCS = [
     hello: n => [`Hey ${n}! Ready to hit the slopes? ⛷️`, `Welcome to the lodge, ${n}! Warm up by the fire! 🔥`, `${n}! The snow is perfect today! ❄️`],
     tips: ['Grab a pair of skis from the rack by the door, then ride down the slope! ⛷️', 'Right-click the chair at the bottom of the ski lift to ride up to the top! 🚡', 'On skis: hold W to carve toward where you look, S to slow down.', 'The ice rink is super slippery. Have fun skating! ⛸️', 'Try a jump on skis! Press Space! 🏂'],
   },
+  // ---------- The other stores' shopkeepers ----------
+  {
+    id: -15, place: 'shop_garden', name: 'Fern', title: 'Fern 🌻', roam: 2, store: 'garden',
+    look: { face: 'smile', hair: 'long', hat: 'cowboy', shirt: 'tshirt', pants: 'jeans', skin: '#e8b088', hairColor: '#a0632b', hatColor: '#d7a86e', shirtColor: '#66bb6a', shirtColor2: '#ffffff', pantsColor: '#5d4037', shoesColor: '#3b2314' },
+    hello: n => [`Hi ${n}! Everything's blooming! 🌻`, `Welcome, ${n}! Fancy a garden gnome? 🧙`], tips: ['🌻🌹🧙⛲'],
+  },
+  {
+    id: -16, place: 'shop_toys', name: 'Mr. Jingles', title: 'Mr. Jingles 🧸', roam: 2, store: 'toys',
+    look: { face: 'silly', hair: 'afro', hat: 'party', shirt: 'striped', pants: 'shorts', skin: '#f5c9a0', hairColor: '#ff7043', hatColor: '#ab47bc', shirtColor: '#ff7043', shirtColor2: '#fdd835', pantsColor: '#1e88e5', shoesColor: '#e53935' },
+    hello: n => [`Toys, toys, toys, ${n}! 🧸`, `${n}! Have you seen the rocking horse? 🐴`], tips: ['🦆🤖🚂🐴'],
+  },
+  {
+    id: -17, place: 'shop_pets', name: 'Pip', title: 'Pip 🐾', roam: 2, store: 'pets',
+    look: { face: 'grin', hair: 'short', hat: 'beanie', shirt: 'hoodie', pants: 'jeans', skin: '#8d5a34', hairColor: '#1b1209', hatColor: '#8d6e63', shirtColor: '#a1887f', shirtColor2: '#ffffff', pantsColor: '#37474f', shoesColor: '#111111', pet: 'dog' },
+    hello: n => [`Hi ${n}! Treats for your pet? 🐾`, `${n}! Our dog houses are the best! 🏠`], tips: ['🥣🛏️🐠🐈'],
+  },
+  // ---------- The residents, in their houses (residents.js, quests.js) ----------
+  ...RESIDENTS.map((r, i) => ({
+    id: r.id, place: `home${i + 1}`, name: r.name, title: `${r.name} ${r.emoji}`, emoji: r.emoji, roam: 1.2, resident: true, look: r.look,
+    ...(i === 0 ? { club: 'neighbor' } : {}),
+    hello: n => [`Hello, ${n}! 👋`, `Oh, hi ${n}! Come in! 😊`, `${n}! Nice to see you! 🏡`], tips: ['😊'],
+  })),
   // ---------- Club leaders (see clubs.js) ----------
   {
     id: -12, place: 'gas1', name: 'Mo', title: 'Mo 🔧', roam: 3, club: 'mechanic',
@@ -149,6 +172,7 @@ export class NpcCrew {
     this.list = [];
     this.lands = []; // land with bodyguards: nobody but its own guards (and guests) goes in
     this.zone = places?.base?.zone || null; // the Secret Agency's base: clearance only
+    this.familySig = null; // (families come back in a moment: see syncFamilies)
     for (const def of NPCS) {
       const place = def.place === 'plaza' ? { x: 4.5, y: 0, z: 6.5, face: 0, area: [-7, -7, 7, 7] } : places?.[def.place];
       if (!place) continue;
@@ -183,7 +207,7 @@ export class NpcCrew {
   // def: who's asking (the base is only for the Agency's own people).
   standable(x, y, z, def = null) {
     if (this.zone && !def?.clearance && inZone(this.zone, x + 0.5, y, z + 0.5)) return false;
-    for (const l of this.lands) if (def?.land !== l.key && x >= l.rect[0] && x <= l.rect[2] && z >= l.rect[1] && z <= l.rect[3]) return false;
+    for (const l of this.lands) if (def?.land !== l.key && def?.home !== l.key && x >= l.rect[0] && x <= l.rect[2] && z >= l.rect[1] && z <= l.rect[3]) return false;
     const v = this.room.get(x, y, z);
     return !this.solid(x, y, z) && !this.solid(x, y + 1, z) && this.solid(x, y - 1, z) && blockId(itemOf(v)) !== 36 && blockId(v >> 16) !== 36;
   }
@@ -420,9 +444,17 @@ export class NpcCrew {
     if (!n || !this.near(n, c.pos[0], c.pos[1], c.pos[2], 9)) return;
     this.face(n, c.pos[0], c.pos[2]);
     this.act(n, NPC_ACT.wave, 1.5);
-    if (n.def.place === 'store') {
-      this.say(n, pickOne([`Take a look, ${c.name}! ✨`, 'Everything sparkles here! 💎', 'What catches your eye? 🛍️']), true);
-      c.send({ t: 'shop_open' });
+    if (n.def.store) {
+      this.say(n, n.def.store === 'luxe' ? pickOne([`Take a look, ${c.name}! ✨`, 'Everything sparkles here! 💎', 'What catches your eye? 🛍️']) : pickOne([`Have a look, ${c.name}! 🛍️`, 'What would you like? 😊']), true);
+      c.send({ t: 'shop_open', store: n.def.store });
+    } else if (n.def.resident) {
+      this.say(n, this.room.quests.talk(c, n), true);
+    } else if (n.def.home) {
+      // Someone's family (from the Luxe Store): the owner can change them; anyone else gets a hello.
+      if (nameKey(c.name) === n.def.home) {
+        this.say(n, pickOne([`Hi! 🏡`, `What's up? 😊`, `Love you! 💖`]), true);
+        c.send({ t: 'family_open', members: this.room.wallet(c).family || [] });
+      } else this.say(n, pickOne([`Hi ${c.name}! This is ${n.def.owner}'s house! 🏡`, `Hello! Are you a friend of ${n.def.owner}'s? 👋`]), true);
     } else if (n.def.place === 'pizza') {
       this.room.startJob(c);
     } else if (n.def.land) {
@@ -503,6 +535,35 @@ export class NpcCrew {
         });
       });
     }
+  }
+
+  // Families (from the Luxe Store) living on their owners' land: [{ key, owner, rect, members }].
+  syncFamilies(families) {
+    const sig = JSON.stringify(families);
+    if (sig === this.familySig) return false;
+    this.familySig = sig;
+    this.list = this.list.filter(n => !n.def.home);
+    this.familyIds ??= new Map();
+    for (const fam of families) {
+      if (!this.familyIds.has(fam.key)) this.familyIds.set(fam.key, -300 - this.familyIds.size * 8);
+      const id0 = this.familyIds.get(fam.key);
+      const [x0, z0, x1, z1] = fam.rect;
+      fam.members.forEach((m, i) => {
+        const def = {
+          id: id0 - i, name: m.name, title: `${m.name} 🏡`, roam: Math.max(2, Math.min(5, (x1 - x0) / 2)), home: fam.key, owner: fam.owner,
+          look: m.look,
+          hello: n => (nameKey(n) === fam.key ? [`Welcome home, ${n}! 🏡`, `${n}! You're home! 🥰`, 'Hi! 👋'] : [`Hi ${n}! 👋`]), tips: [],
+        };
+        const cx = (x0 + x1) / 2 + (i - 1) * 1.2, cz = (z0 + z1) / 2;
+        const home = this.findStand(cx, 0, cz, def) || [cx + 0.5, 0, cz + 0.5];
+        this.list.push({
+          def, id: def.id, home, area: [x0, z0, x1, z1], face: 0,
+          pos: home.slice(), yaw: 0, goal: null, wait: 2 + i, action: NPC_ACT.idle, actionT: 0, saidAt: 0, look: sanitizeLook(def.look),
+          seen: new Map(), noticed: new Map(), petted: new Map(), task: null,
+        });
+      });
+    }
+    return true;
   }
 
   // Where a land's bodyguards stand: either side of its front door (outside it), or, with no

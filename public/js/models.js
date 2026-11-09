@@ -444,6 +444,97 @@ export const MODELS = {
     trim: [new THREE.CylinderGeometry(0.05, 0.05, 1.0, 8).rotateZ(Math.PI / 2).translate(0.5, 0.55, 0.5)],
     colors: { body: 0x90a4ae, accent: 0x29b6f6, trim: 0xeceff1, metal: 0 },
   },
+  // ---------- From the Green Thumb Garden Center ----------
+  sunflower: {
+    body: [cyl(0.03, 0.035, 0.75, 0.5, 0.375, 0.5, 6), box(0.18, 0.02, 0.08, 0.42, 0.35, 0.5), box(0.18, 0.02, 0.08, 0.58, 0.5, 0.5)],
+    accent: [...Array(10)].map((_, i) => box(0.09, 0.05, 0.02, 0.5 + Math.cos(i * Math.PI / 5) * 0.14, 0.8 + Math.sin(i * Math.PI / 5) * 0.14, 0.53)),
+    trim: [new THREE.CylinderGeometry(0.1, 0.1, 0.04, 14).rotateX(Math.PI / 2).translate(0.5, 0.8, 0.55)],
+    colors: { body: 0x4caf50, accent: 0xffd600, trim: 0x5d4037, metal: 0 },
+  },
+  roseBush: {
+    body: [ball(0.3, 0.5, 0.3, 0.5), ball(0.22, 0.32, 0.42, 0.45), ball(0.22, 0.66, 0.42, 0.56), ball(0.2, 0.5, 0.55, 0.5)],
+    accent: [[0.3, 0.55, 0.3], [0.7, 0.5, 0.35], [0.5, 0.72, 0.5], [0.4, 0.45, 0.75], [0.68, 0.6, 0.7], [0.25, 0.35, 0.6], [0.75, 0.3, 0.5]].map(([x, y, z]) => ball(0.07, x, y, z)),
+    colors: { body: 0x2e7d32, accent: 0xe91e63, metal: 0 },
+  },
+  gnome: {
+    body: [cyl(0.16, 0.2, 0.32, 0.5, 0.16, 0.5, 12)],
+    accent: [cone(0.15, 0.32, 0.5, 0.62, 0.5, 12)],
+    trim: [ball(0.1, 0.5, 0.36, 0.6), new THREE.ConeGeometry(0.09, 0.16, 8).rotateX(Math.PI).translate(0.5, 0.25, 0.63)],
+    glow: [ball(0.04, 0.5, 0.42, 0.66)],
+    colors: { body: 0x1e88e5, accent: 0xe53935, trim: 0xfafafa, glow: 0xffb4a0, metal: 0 },
+  },
+  birdbath: {
+    body: [cyl(0.14, 0.18, 0.08, 0.5, 0.04, 0.5, 12), cyl(0.06, 0.08, 0.6, 0.5, 0.38, 0.5, 10), cyl(0.34, 0.22, 0.12, 0.5, 0.72, 0.5, 18)],
+    accent: [cyl(0.29, 0.29, 0.02, 0.5, 0.78, 0.5, 18)],
+    trim: [ball(0.05, 0.3, 0.84, 0.5), cone(0.03, 0.06, 0.25, 0.84, 0.5, 4)],
+    colors: { body: 0xbdbdbd, accent: 0x4fc3f7, trim: 0x8d6e63, metal: 0 },
+  },
+  fountain: {
+    body: [new THREE.CylinderGeometry(0.5, 0.5, 0.4, 20, 1, true).translate(0.5, 0.2, 0.5), cyl(0.44, 0.44, 0.06, 0.5, 0.03, 0.5, 20), cyl(0.07, 0.09, 0.55, 0.5, 0.45, 0.5, 10), cyl(0.18, 0.1, 0.08, 0.5, 0.72, 0.5, 14)],
+    accent: [cyl(0.45, 0.45, 0.02, 0.5, 0.34, 0.5, 20)],
+    glow: [cyl(0.03, 0.05, 0.25, 0.5, 0.88, 0.5, 8), ball(0.06, 0.5, 1.0, 0.5)],
+    colors: { body: 0xe0e0e0, accent: 0x29b6f6, glow: 0xb3ecff, metal: 0.1 },
+  },
+  // ---------- From the Toy Box ----------
+  rubberDuck: {
+    body: [ball(0.16, 0.5, 0.14, 0.5).scale(1, 0.8, 1.2).translate(0, 0.03, -0.1), ball(0.1, 0.5, 0.32, 0.58)],
+    accent: [box(0.1, 0.04, 0.08, 0.5, 0.3, 0.7)],
+    trim: [ball(0.02, 0.44, 0.35, 0.66), ball(0.02, 0.56, 0.35, 0.66)],
+    colors: { body: 0xffeb3b, accent: 0xff9800, trim: 0x111111, metal: 0 },
+  },
+  beachBall: {
+    body: [ball(0.28, 0.5, 0.3, 0.5)],
+    accent: [new THREE.TorusGeometry(0.28, 0.035, 6, 20).translate(0.5, 0.3, 0.5), new THREE.TorusGeometry(0.28, 0.035, 6, 20).rotateY(Math.PI / 2).translate(0.5, 0.3, 0.5)],
+    trim: [ball(0.06, 0.5, 0.57, 0.5)],
+    colors: { body: 0xff5252, accent: 0xffffff, trim: 0x2979ff, metal: 0 },
+  },
+  toyRobot: {
+    body: [box(0.34, 0.36, 0.24, 0.5, 0.38, 0.5), box(0.26, 0.2, 0.22, 0.5, 0.68, 0.5), box(0.1, 0.2, 0.1, 0.4, 0.1, 0.5), box(0.1, 0.2, 0.1, 0.6, 0.1, 0.5), box(0.07, 0.26, 0.07, 0.29, 0.42, 0.5), box(0.07, 0.26, 0.07, 0.71, 0.42, 0.5)],
+    glow: [box(0.06, 0.04, 0.01, 0.44, 0.7, 0.615), box(0.06, 0.04, 0.01, 0.56, 0.7, 0.615), box(0.14, 0.08, 0.01, 0.5, 0.42, 0.625)],
+    accent: [cyl(0.012, 0.012, 0.1, 0.5, 0.83, 0.5, 6), ball(0.035, 0.5, 0.9, 0.5)],
+    colors: { body: 0xb0bec5, glow: 0x40e0ff, accent: 0xff1744, metal: 0.6 },
+  },
+  toyTrain: {
+    body: [box(0.44, 0.22, 0.3, 0.36, 0.2, 0.5), box(0.2, 0.18, 0.3, 0.68, 0.36, 0.5)],
+    accent: [...[0.22, 0.42, 0.66].flatMap(x => [0.33, 0.67].map(z => new THREE.CylinderGeometry(0.07, 0.07, 0.04, 12).rotateX(Math.PI / 2).translate(x, 0.08, z)))],
+    trim: [cyl(0.04, 0.05, 0.14, 0.25, 0.38, 0.5, 8), box(0.24, 0.03, 0.34, 0.68, 0.46, 0.5)],
+    colors: { body: 0xe53935, accent: 0x212121, trim: 0xfdd835, metal: 0.2 },
+  },
+  rockingHorse: {
+    body: [box(0.18, 0.18, 0.5, 0.5, 0.42, 0.5), box(0.14, 0.24, 0.14, 0.5, 0.58, 0.78), box(0.12, 0.1, 0.18, 0.5, 0.66, 0.9), ...[[0.43, 0.32], [0.57, 0.32], [0.43, 0.68], [0.57, 0.68]].map(([x, z]) => box(0.05, 0.24, 0.05, x, 0.22, z))],
+    accent: [-1, 1].map(s => new THREE.TorusGeometry(0.6, 0.025, 4, 16, Math.PI * 0.42).rotateZ(Math.PI * 1.29).rotateY(Math.PI / 2).translate(0.5 + s * 0.08, 0.68, 0.5)),
+    trim: [box(0.04, 0.2, 0.12, 0.5, 0.62, 0.7), box(0.04, 0.1, 0.16, 0.5, 0.44, 0.22)],
+    colors: { body: 0xfafafa, accent: 0xc62828, trim: 0x6d4c41, metal: 0 },
+  },
+  // ---------- From Happy Paws Pet Shop ----------
+  petBowl: {
+    body: [cyl(0.2, 0.15, 0.1, 0.5, 0.05, 0.5, 16)],
+    accent: [cyl(0.17, 0.17, 0.02, 0.5, 0.09, 0.5, 16)],
+    colors: { body: 0xe53935, accent: 0x8d6e63, metal: 0.3 },
+  },
+  petBed: {
+    body: [new THREE.TorusGeometry(0.36, 0.09, 8, 20).rotateX(Math.PI / 2).translate(0.5, 0.1, 0.5)],
+    accent: [cyl(0.34, 0.36, 0.08, 0.5, 0.05, 0.5, 20)],
+    colors: { body: 0x7e57c2, accent: 0xd1c4e9, metal: 0 },
+  },
+  fishBowl: {
+    body: [cyl(0.16, 0.16, 0.04, 0.5, 0.02, 0.5, 14)],
+    glow: [ball(0.26, 0.5, 0.3, 0.5).scale(1, 0.95, 1)],
+    accent: [box(0.08, 0.05, 0.02, 0.48, 0.3, 0.5), cone(0.03, 0.05, 0.54, 0.3, 0.5, 4).rotateZ(Math.PI / 2).translate(0.84, -0.24, 0)],
+    colors: { body: 0x8d6e63, glow: 0x9fe8ff, accent: 0xff8f00, metal: 0 },
+  },
+  catTree: {
+    body: [cyl(0.05, 0.05, 1, 0.3, 0.5, 0.3, 8), cyl(0.05, 0.05, 0.7, 0.7, 0.35, 0.7, 8), box(0.8, 0.06, 0.8, 0.5, 0.03, 0.5)],
+    accent: [box(0.36, 0.05, 0.36, 0.3, 0.98, 0.3), box(0.36, 0.05, 0.36, 0.7, 0.7, 0.7), box(0.3, 0.2, 0.3, 0.3, 0.55, 0.3)],
+    trim: [ball(0.04, 0.55, 0.6, 0.55)],
+    colors: { body: 0xd7ccc8, accent: 0x8e24aa, trim: 0xffeb3b, metal: 0 },
+  },
+  dogHouse: {
+    body: [box(0.9, 0.6, 0.9, 0.5, 0.3, 0.5)],
+    accent: [new THREE.BoxGeometry(0.7, 0.06, 1).rotateZ(Math.PI / 4).translate(0.25, 0.82, 0.5), new THREE.BoxGeometry(0.7, 0.06, 1).rotateZ(-Math.PI / 4).translate(0.75, 0.82, 0.5)],
+    trim: [box(0.34, 0.42, 0.02, 0.5, 0.21, 0.955), box(0.3, 0.08, 0.02, 0.5, 0.52, 0.96)],
+    colors: { body: 0xd84315, accent: 0x5d4037, trim: 0x1b1209, metal: 0 },
+  },
   // An orange traffic cone with a white stripe.
   trafficCone: {
     body: [box(0.42, 0.04, 0.42, 0.5, 0.02, 0.5), cone(0.17, 0.62, 0.5, 0.35, 0.5, 12)],

@@ -1,6 +1,6 @@
 // The Luxe Store's window: everything for sale, what it costs, and a Buy button. (The server
 // keeps everyone's coins and decides what they can buy.)
-import { BLOCKS, SHOP_ITEMS, SHOP_TOOLS, SHOP_ABOUT } from './shared/blocks.js';
+import { BLOCKS, SHOP_ITEMS, SHOP_TOOLS, SHOP_ABOUT, STORES, storeOf } from './shared/blocks.js';
 import { itemName } from './items.js';
 
 const $ = id => document.getElementById(id);
@@ -18,7 +18,12 @@ export class Shop {
     $('shop-done').addEventListener('click', () => this.close());
   }
 
-  open() {
+  // store: which store's window (see STORES): the Luxe Store, or one of the others.
+  open(store = 'luxe') {
+    this.store = STORES[store] ? store : 'luxe';
+    const s = STORES[this.store];
+    $('shop-title').textContent = `${s.icon} ${s.name} ${s.icon}`;
+    $('shop').style.setProperty('--store', s.color);
     this.isOpen = true;
     $('shop').classList.remove('hidden');
     this.render();
@@ -45,6 +50,7 @@ export class Shop {
     const grid = $('shop-grid');
     grid.textContent = '';
     for (const [item, price] of SHOP_ITEMS) {
+      if (storeOf(item) !== this.store) continue;
       const card = document.createElement('div');
       card.className = 'shop-card';
       const pic = document.createElement('canvas');
@@ -56,7 +62,7 @@ export class Shop {
       about.className = 'shop-about';
       about.textContent = typeof item === 'number' ? SHOP_ABOUT[item] || BLOCKS[item].name : SHOP_TOOLS[item].about;
       const button = document.createElement('button');
-      const owned = this.owned.has(item);
+      const owned = this.owned.has(item) && !SHOP_TOOLS[item]?.again;
       if (owned) {
         button.textContent = '✓ YOURS';
         button.disabled = true;

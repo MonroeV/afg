@@ -60,7 +60,7 @@ export class CharacterClient {
 }
 
 // Draws little portraits of characters (with their pets) for the grid.
-class Thumbnails {
+export class Thumbnails {
   constructor() {
     this.cache = new Map();
   }

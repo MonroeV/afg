@@ -2,7 +2,7 @@
 // The Node server runs one of these for everybody. When there is no server,
 // the browser runs its own copy so single player works exactly the same way.
 import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, isExclusive, DOOR_OPEN, DOOR_TOP, DAY_LENGTH, WORLD, isNightTime, SHOP_ITEMS, BLOCKS, SHOP_TOOLS, FOUND_GEAR, HOLE_HEAL, SIGN, cleanSignText, cleanWords } from './blocks.js';
-import { sanitizeLook, cleanName } from './avatar.js';
+import { sanitizeLook, cleanName, randomLook } from './avatar.js';
 import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines, buildStore, furnishHouses, furnishTowers, elevatorTowers } from './worldgen.js';
 import { buildSecretBase, hideSecretFiles, AGENCY, AGENT_SPOT, FILES_NEEDED, FILE_HINTS, inZone } from './secretbase.js';
 import { NpcCrew } from './npcs.js';
@@ -11,10 +11,14 @@ import { buildFarCountry, moreVehicles } from './farcountry.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot, seatCount } from './vehicles.js';
 import { buildGasStations, usesFuel, getsDirty, TANK_RANGE, GAS_PUMP, GAS_CAN, GAS_CAN_PRICE, FULL_TANK_PRICE, PUMP_REACH, DIRT_RANGE, WASH_TIME, fillPrice, paved, isWash } from './fuel.js';
 import { MAX_TUNNELS, isTunnelY, tunnelKey, openBelow } from './underground.js';
+import { buildShops } from './shops.js';
+import { findHomes } from './residents.js';
+import { Quests, cleanQuest } from './quests.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
 
-export const SAVE_VERSION = 14;
+export const SAVE_VERSION = 15;
+const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
 const DOOR = 21;
@@ -88,6 +92,7 @@ export class GameRoom {
     this.coinTimers = []; // when to put new coins out
     this.nextCoin = 1;
     this.npcs = new NpcCrew(this);
+    this.quests = new Quests(this);
     this.nextId = 1;
     this.nextVehicleId = 1;
     this.nextHomeId = 1;
@@ -232,6 +237,7 @@ export class GameRoom {
       this.upgradeTo12();
       this.upgradeTo13();
       this.upgradeTo14();
+      this.upgradeTo15();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -270,6 +276,9 @@ export class GameRoom {
         clubs: cleanClubs(w.clubs),
         badges: Array.isArray(w.badges) ? w.badges.filter(b => clubById(b)) : [],
         streak: Number.isInteger(w.streak) && w.streak > 0 ? w.streak : 0,
+        quest: cleanQuest(w.quest), // a resident's job they're doing (quests.js)
+        questAt: w.questAt && typeof w.questAt === 'object' ? w.questAt : {},
+        family: cleanFamily(w.family), // their family (from the Luxe Store), if they have one
       };
     }
     this.places = data.places && typeof data.places === 'object' ? data.places : null;
@@ -299,6 +308,7 @@ export class GameRoom {
     if (data.version < 12) this.upgradeTo12();
     if (data.version < 13) this.upgradeTo13();
     if (data.version < 14) this.upgradeTo14();
+    if (data.version < 15) this.upgradeTo15();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -501,6 +511,42 @@ export class GameRoom {
     this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...gas.places };
     this.log(`Added ${gas.claims.length} gas stations with car washes (${gas.count} blocks)`);
     this.onDirty();
+  }
+
+  // Worlds saved before version 15: the Garden Center, the Toy Box and the Pet Shop by the roads
+  // out of town (on empty land nobody's claimed), and residents in some of the town's houses.
+  upgradeTo15() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const shops = buildShops({
+      get,
+      set: (x, y, z, v) => {
+        if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+      },
+      canUse: this.freeLand(),
+    });
+    this.claims.push(...shops.claims);
+    for (const [x, y, z, text] of shops.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+    const each = fn => {
+      for (const [k, v] of this.world) {
+        const [x, y, z] = k.split(',').map(Number);
+        fn(x, y, z, v);
+      }
+    };
+    const homes = findHomes({ each, get, canUse: (x, z) => !claimAt(this.claims, x, z) });
+    this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...shops.places, ...Object.fromEntries(homes.map((h, i) => [`home${i + 1}`, h])) };
+    this.log(`Added ${shops.built.length} stores (${shops.built.join(', ')}) and ${homes.length} residents`);
+    this.onDirty();
+  }
+
+  // Families (from the Luxe Store) on their owners' home land.
+  updateFamilies() {
+    const list = [];
+    for (const [key, w] of Object.entries(this.wallets)) {
+      if (!w.family?.length || !w.owned?.includes('family')) continue;
+      const land = this.claims.find(c => c.key === key && !c.vacation && !c.permanent);
+      if (land) list.push({ key, owner: land.owner, rect: [land.x0, land.z0, land.x1, land.z1], members: w.family });
+    }
+    if (this.npcs.syncFamilies(list)) this.broadcast({ t: 'npcs', list: this.npcs.info() });
   }
 
   // Where the files still to find are, in Agent Shadow's words.
@@ -787,6 +833,22 @@ export class GameRoom {
     this.onDirty();
   }
 
+  // A Mystery Box: something from one of the stores you don't have yet (a surprise!).
+  openMysteryBox(client, price) {
+    const w = this.wallet(client);
+    const reply = text => client.send({ t: 'chat', system: true, text });
+    const prizes = SHOP_ITEMS.filter(([i, p]) => typeof i === 'number' && p <= 30 && !w.owned.includes(i)).map(([i]) => i);
+    if (!prizes.length) return reply('🎁 You have everything a Mystery Box could hold!');
+    if (w.coins < price) return reply(`🪙 A Mystery Box costs ${price} coins, and you have ${w.coins}.`);
+    const prize = prizes[Math.floor(Math.random() * prizes.length)];
+    w.coins -= price;
+    w.owned.push(prize);
+    this.sendWallet(client);
+    client.send({ t: 'mystery', item: prize });
+    this.progress(client, 'gold', 'shop');
+    this.onDirty();
+  }
+
   // ---------- The Secret Agency ----------
 
   cleared(client) {
@@ -922,6 +984,7 @@ export class GameRoom {
       this.onDirty();
     }
     this.sendWallet(client);
+    this.quests.send(client);
     this.broadcast({ t: 'join', ...publicPlayer(client) }, client);
     this.broadcast({ t: 'chat', system: true, text: `${client.name} joined` });
     this.log(`${client.name} joined (${this.clients.size} online)`);
@@ -1204,6 +1267,7 @@ export class GameRoom {
       const name = typeof item === 'number' ? BLOCKS[item].name : SHOP_TOOLS[item].name;
       const reply = text => client.send({ t: 'chat', system: true, text });
       if (w.owned.includes(item)) return reply(`🛍️ You already have the ${name}!`);
+      if (item === 'mysterybox') return this.openMysteryBox(client, price);
       if (item === VACATION && this.vacationOf(client)) return reply('🏖️ You already have vacation land! Give it up first if you want to buy a flag for somewhere new.');
       if (SHOP_TOOLS[item]?.clearance && !this.cleared(client)) return reply(`🕶️ The ${name} are for Secret Agency agents only! Get Top Secret clearance first (Agent Shadow on the town square knows how).`);
       if (w.coins < price) return reply(`🪙 The ${name} costs ${price} coins, and you have ${w.coins}. Find more coins around town!`);
@@ -1215,6 +1279,24 @@ export class GameRoom {
       this.npcs.onBuy(client, item);
       this.progress(client, 'gold', 'shop');
       if (item === 'bodyguards') this.updateGuards();
+      if (item === 'family') {
+        // A family to start with (change them however you like).
+        w.family = [{ name: 'Mom', look: randomLook() }, { name: 'Dad', look: randomLook() }, { name: 'Kiddo', look: randomLook() }];
+        this.updateFamilies();
+        if (!this.homeOf(client)) reply('🏡 Plant your Land Flag somewhere and your family moves in!');
+      }
+    },
+
+    // Changing your family (names, looks, how many of them).
+    family(client, { members }) {
+      const w = this.wallet(client);
+      if (!w.owned.includes('family') || !this.allow(client, 'family', 1, 3)) return;
+      const clean = cleanFamily(members);
+      if (!clean) return;
+      w.family = clean;
+      this.updateFamilies();
+      this.onDirty();
+      client.send({ t: 'chat', system: true, text: '🏡 ✓' });
     },
 
     // Right-clicking one of the town's people.
@@ -1941,8 +2023,13 @@ export class GameRoom {
       this.expireClaims();
     }
     if (!(t.guards > 0)) {
-      t.guards = 2; // (land claimed, moved or given up: the bodyguards go with it)
+      t.guards = 2; // (land claimed, moved or given up: the bodyguards (and families) go with it)
       this.updateGuards();
+      this.updateFamilies();
+    }
+    if (!(t.quests > 0)) {
+      t.quests = 1;
+      this.quests.update();
     }
     // A fish bites (or, too slow, swims off).
     for (const c of this.clients.values()) {
@@ -2037,6 +2124,12 @@ function isDoorToggle(old, b) {
 const publicPlayer = c => ({ id: c.id, name: c.name, look: c.look, pos: c.pos, rot: c.rot });
 const publicVehicle = ({ id, kind, color, x, y, z, h, driver, passengers, hp, owner, loaded, fuel, dirt, siren }) => ({ id, kind, color, x, y, z, h, driver, passengers, hp: Math.round(hp), owner: owner || '', loaded: !!loaded, fuel: round3(fuel), dirt: round3(dirt), siren: siren ? 1 : 0 });
 const round3 = n => Math.round(num(n) * 1000) / 1000;
+// A family's members, checked over: names and looks, a few of them.
+function cleanFamily(list) {
+  if (!Array.isArray(list)) return null;
+  const out = list.filter(m => m && typeof m === 'object').slice(0, MAX_FAMILY).map(m => ({ name: cleanName(m.name), look: sanitizeLook(m.look) }));
+  return out.length ? out : null;
+}
 // Saved club progress, checked over: only real clubs and tasks, and sensible counts.
 function cleanClubs(saved) {
   const out = {};

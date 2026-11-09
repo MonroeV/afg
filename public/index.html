@@ -38,6 +38,7 @@
     <div id="race" class="hidden"></div>
     <div id="purse"><div id="coins" class="hidden">🪙 0</div><div id="badge-chip" class="hidden" title="Badges (J)">🏅 <span>0</span></div></div>
     <div id="badge-pops"></div>
+    <div id="quest-card" class="hidden"><span id="quest-arrow">⬆</span><span class="quest-what"></span><span id="quest-far"></span><span class="quest-pay"></span></div>
     <div id="badge-win" class="hidden"><div class="win-rays"></div><div class="win-badge"></div><div class="win-name"></div><div class="win-prize"></div></div>
     <div id="splash"></div>
   </div>
@@ -72,6 +73,7 @@
       <label class="slider">Mouse sensitivity <input id="sensitivity" type="range" min="0.2" max="3" step="0.05" value="1"></label>
       <label class="slider">Sound volume <input id="volume" type="range" min="0" max="1" step="0.05" value="0.4"></label>
       <label class="slider">Brightness at night <input id="night-light" type="range" min="0" max="1" step="0.05" value="0.5"></label>
+      <label class="slider">Field of view (how wide you see) <input id="fov" type="range" min="55" max="110" step="1" value="80"></label>
       <label>Graphics
         <select id="quality">
           <option value="high">High</option>
@@ -145,6 +147,14 @@
     </div>
   </div>
 
+  <div id="family" class="screen hidden">
+    <div class="panel wide family-panel">
+      <h2>🏡</h2>
+      <div id="family-list" class="family-list"></div>
+      <div class="family-buttons"><button id="family-add" class="secondary">➕</button><button id="family-cancel" class="secondary">✕</button><button id="family-save">✓</button></div>
+    </div>
+  </div>
+
   <div id="badges" class="screen hidden">
     <div class="panel wide badge-panel">
       <h2>🏅</h2>
@@ -155,7 +165,7 @@
 
   <div id="shop" class="screen hidden">
     <div class="panel wide shop-panel">
-      <h2>✨ The Luxe Store ✨</h2>
+      <h2 id="shop-title">✨ The Luxe Store ✨</h2>
       <div id="shop-coins" class="shop-coins">🪙 0 coins</div>
       <div id="shop-grid" class="shop-grid"></div>
       <p class="hint">Get coins by picking up the gold coins around town, finishing races, and every day you play!</p>

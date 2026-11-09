@@ -110,7 +110,8 @@ customize your character, drive cars, build anything and play with friends.
 - **Day and night**: the sun sets, the stars and moon come out and the street lamps light up.
   Sunrises and sunsets are soft and colorful (gold, orange, pink and red, with a round sun you
   can look at) instead of a blinding white glare.
-  Too dark (or not dark enough)? **Brightness at night** in the pause menu (Esc) makes the nights
+  **Field of view** in the pause menu makes how wide you see narrower or wider (some people feel
+  sick with the wrong one). Too dark (or not dark enough)? **Brightness at night** in the pause menu (Esc) makes the nights
   lighter or darker; the days stay the same
 - **Police lights**: G in the police car turns on its lights and siren. The lights flash like the
   real thing (three quick red flashes, then three blue, with a glow round the light bar) and throw
@@ -243,6 +244,20 @@ customize your character, drive cars, build anything and play with friends.
   porch lanterns, ceiling lights and table lamps in houses, garden lights and tiki torches in parks.
   Any lamp with a roof over it counts as indoors, so it lights up the room day and night. Windows
   are clear enough to see in and out, with just a little reflection
+- **More stores** 🛍️: by the roads out of town, each with its shopkeeper (right-click them, or
+  the cash register) and its things on display:
+  - 🌻 **Green Thumb Garden Center** (Fern): Sunflower 3, Rose Bush 4, Garden Gnome 8, Birdbath 10, Fountain 25
+  - 🧸 **The Toy Box** (Mr. Jingles): Rubber Duck 3, Beach Ball 4, Toy Robot 10, Toy Train 15, Rocking Horse 18 (you can sit on it)
+  - 🐾 **Happy Paws Pet Shop** (Pip): Pet Bowl 3, Pet Bed 6, Fish Bowl 8, Cat Tree 12, Dog House 20
+
+  Buy something once and you can build with it as much as you like (it's in the item menu)
+- **Neighbors and their quests** 🏡: six residents live in houses around town (Grandma Rose,
+  Grandpa Joe, Lily, Sam the Baker, Dr. Maya and Captain Leo). A 💬 floats over anyone with a job
+  for you (you can see it through walls). Right-click them and they ask for a little help: take
+  a package 📦 to a neighbor, bring them something 🎁 (hold it and talk to them; some things come
+  from the stores), or go and see somewhere 📍 for them and come back. A card in the corner shows
+  what to do, with an arrow pointing the way and how far it is, and a marker floats over where
+  you're going. Each one pays a few coins, and they count toward the Good Neighbors club
 - **Gold coins and the Luxe Store**: gold coins lie about all over town (walk, or drive, into
   them to collect them; the big orange ones are worth 2 and the shiny blue ones 5). You also get
   10 coins the first time you play each day and 3 for finishing a race. Spend them at the **Luxe
@@ -260,7 +275,12 @@ customize your character, drive cars, build anything and play with friends.
   aren't on your guest list get walked straight back off it, the town's people (and other
   people's pets) can't step onto it, and the guards say so ("🛑 Sorry Bo, you're not on Mia's
   guest list"). Right-click one of your bodyguards for your **guest list**: tick the names saved
-  in the Character Gallery (or type in anyone's) and they're let in. Things you put down show up at the top of the
+  in the Character Gallery (or type in anyone's) and they're let in. **A Family** (160): a family
+  moves into your house (your home land) and lives there, pottering about and saying hello when
+  you come home. Right-click one of them to name them and choose how each one looks (with the
+  same character maker as yours, pets and all), and to add more of them (up to five) or say
+  goodbye to one. A **Mystery Box** (12, buy as many as you like) holds a surprise: something
+  from one of the stores that you don't have yet. Things you put down show up at the top of the
   🎉 Fun tab. The Jetpack, the Rainbow Trail, Super Sneakers and Skis are **gear**: you wear them
   instead of holding them, so they work with anything in your hand. Put them on and take them off
   in **🎒 Gear**, at the top of the 🎉 Fun tab (what you have on shows by the hotbar). Your coins
@@ -284,6 +304,7 @@ customize your character, drive cars, build anything and play with friends.
   | 🌲 Nature Club | Ranger Rae, at the campground | catch 10 fish, 5 different kinds, plant 2 trees | 15 🪙, a lucky rod (rare fish bite more) |
   | 🏁 Speed Club | Coach Frost, at the ski lodge | drive 2,000 blocks, fly 500, finish a race | 15 🪙, turbo (everything you drive is faster) |
   | 🪙 Gold Club | Mayor Maple | pick up 30 coins, buy something at the Luxe Store, claim land | 20 🪙, a coin magnet and a bigger daily bonus |
+  | 🏡 Good Neighbors | Grandma Rose, in her house | take 3 packages, bring 3 things, go and see 2 places | 20 🪙, neighbors pay you twice as much |
   | ⛏️ Tunnel Diggers | Digger Dot, at Big Rock Quarry | dig 15 holes, put a block in 3 holes, tip out a dump truck of dirt | 15 🪙, secret tunnels under the ground |
   | 🕶️ Secret Agency | Agent Shadow | find the 3 TOP SECRET files | Top Secret clearance |
 
@@ -669,6 +690,7 @@ public/
     pictures.js        The paintings, posters and whiteboards (drawn in code)
     petmove.js         How pets find their way around and move (jumps, ladders, no walls)
     elevator.js        Riding elevators: the cab, the ride, and the panel of floor buttons
+    questui.js         The quest card, its arrow, and the markers over people's heads
     badges.js          The badge book (the clubs), the task pops and the badge celebration
     spy.js             The Secret Agency on your screen: spy cameras, radar, drones, lasers, goggles
     shop.js            The Luxe Store's window
@@ -693,6 +715,9 @@ public/
       fuel.js          Gas, mud, the gas stations and their car washes
       clubs.js         The clubs: their leaders, tasks and prizes
       underground.js   Under the ground: holes, and the Tunnel Diggers' secret tunnels
+      shops.js         The Garden Center, the Toy Box and the Pet Shop (what they sell is in blocks.js)
+      residents.js     The residents and the houses they live in
+      quests.js        The residents' quests
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/
   make-engine-sounds.py  Makes the engine recordings (needs numpy and ffmpeg; run it after changing a voice)

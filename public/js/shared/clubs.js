@@ -56,6 +56,15 @@ export const CLUBS = [
     ],
     reward: { coins: 15, perk: '⛏️🤫', perkName: 'Secret tunnels: dig deep under the ground' },
   },
+  {
+    id: 'neighbor', name: 'Good Neighbors', icon: '🏡', color: '#ec407a', leader: 'Grandma Rose', where: 'in her house in town',
+    tasks: [
+      { id: 'deliver', icon: '📦', goal: 3, what: 'Take a package to a neighbor' },
+      { id: 'fetch', icon: '🎁', goal: 3, what: 'Bring a neighbor something they want' },
+      { id: 'visit', icon: '📍', goal: 2, what: 'Go and see somewhere for a neighbor' },
+    ],
+    reward: { coins: 20, perk: '💌×2', perkName: 'Neighbors pay you twice as much' },
+  },
 ];
 
 export const clubById = id => CLUBS.find(c => c.id === id);

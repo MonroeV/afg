@@ -37,7 +37,7 @@ export const ALL_ITEMS = [...TOOLS, ...BLOCK_IDS];
 // Gear isn't held: you wear it (put it on and take it off in the item menu's 🎒 Gear).
 export const GEAR = [SNEAKERS, JETPACK, TRAIL, SKIS, GOGGLES];
 // Everything that needs a little picture: the hotbar things, gear, and Gold Car Paint (for the store).
-export const ICON_ITEMS = [...ALL_ITEMS, ...GEAR, GOLDPAINT, BODYGUARDS];
+export const ICON_ITEMS = [...ALL_ITEMS, ...GEAR, GOLDPAINT, BODYGUARDS, 'family', 'mysterybox'];
 
 // ---------- Styles ----------
 // Look-alikes share one place in the item menu. Pick one, then choose its style: X in the game
@@ -69,9 +69,9 @@ export const familyOf = item => FAMILY_OF.get(item) || null;
 
 // The tabs of the item menu. Blocks not listed anywhere go under Blocks. (Each family of styles
 // shows up once, where its first style is.) Lamps are in Home, outdoor lights in Town.
-const HOME = [94, 60, 74, 95, 61, 62, 73, 64, 63, 65, 66, 78, 67, 68, 39, 40, 41, 42, 44, 43, 21, 53, 103, 54, 25, 35, 20, 75, 76, 77, 79, 80, 81, 86, 92];
-const TOWN = [22, 23, 56, 24, 58, 46, 47, 45, 48, 49, 27, 36, 1, 7, 8, 89, 87, 88, 91, 90, 97, 98, 99, 100, 101, 102];
-const FUN = [93, SHOWTIME, 83, 84, 82, 85, BALL, FIREWORKS, WATER_BALLOON, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28];
+const HOME = [94, 60, 74, 95, 61, 62, 73, 64, 63, 65, 66, 78, 67, 68, 39, 40, 41, 42, 44, 43, 21, 53, 103, 54, 25, 35, 20, 75, 76, 77, 79, 80, 81, 86, 92, 126, 127, 128, 129, 130];
+const TOWN = [22, 23, 56, 24, 58, 46, 47, 45, 48, 49, 27, 36, 1, 7, 8, 89, 87, 88, 91, 90, 97, 98, 99, 100, 101, 102, 116, 117, 118, 119, 120];
+const FUN = [93, SHOWTIME, 83, 84, 82, 85, BALL, FIREWORKS, WATER_BALLOON, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28, 121, 122, 123, 124, 125];
 const listed = new Set([...HOME, ...TOWN, ...FUN]);
 const visible = i => typeof i !== 'number' || !BLOCKS[i].hidden;
 export const TABS = [
@@ -95,7 +95,7 @@ export const SEARCH_WORDS = {
   68: 'toy bear hug', 69: 'piano song note sound', 73: 'office table', 74: 'office seat sit', 75: 'pc screen office', 76: 'office drawers',
   77: 'office water drink', 78: 'office board chart', 79: 'music play keys', 80: 'aquarium fish', 81: 'gold', 82: 'gem shiny store',
   83: 'gold king queen chair store', 84: 'party light store', 85: 'gold cup winner store', 86: 'shop store buy',
-  [VACATION]: 'land claim second holiday beach store flag', 97: 'camp camping outdoor', 98: 'beach sun shade parasol', 99: 'farm straw hay',
+  [VACATION]: 'land claim second holiday beach store flag', 116: 'flower garden plant yellow', 117: 'flower garden plant red rose', 118: 'garden statue', 119: 'garden bird water', 120: 'garden water park', 121: 'toy bath yellow', 122: 'toy beach', 123: 'toy', 124: 'toy choo', 125: 'toy ride sit', 126: 'pet dog cat food', 127: 'pet dog cat sleep', 128: 'pet fish aquarium', 129: 'pet cat climb', 130: 'pet dog kennel', 97: 'camp camping outdoor', 98: 'beach sun shade parasol', 99: 'farm straw hay',
   100: 'farm halloween orange', 101: 'road works orange', 102: 'picnic bench camp park', 95: 'fish fishing rod lake dock stool seat', 18: 'light glow',
   50: 'glow light', 51: 'glow light', 52: 'glow light', 14: 'color', 15: 'color', 16: 'color', 17: 'color', 29: 'color', 30: 'color',
   31: 'color', 32: 'color', 33: 'color', 34: 'color', 39: 'light', 40: 'light', 41: 'light', 42: 'light', 43: 'light', 44: 'light',
@@ -164,6 +164,22 @@ export function makeIcon(item, textures, paint = 1) {
     return canvas;
   }
 
+  if (item === 'family' || item === 'mysterybox') {
+    // A family (a little house with hearts), or a wrapped present with a question mark.
+    ctx.font = '44px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(item === 'family' ? '👨‍👩‍👧' : '🎁', 32, 34);
+    if (item === 'mysterybox') {
+      ctx.font = 'bold 22px sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 3;
+      ctx.strokeText('?', 46, 16);
+      ctx.fillText('?', 46, 16);
+    }
+    return canvas;
+  }
   if (item === BODYGUARDS) {
     // Two guards in black suits and sunglasses.
     for (const [x, skin] of [[20, '#6b4226'], [44, '#e8b088']]) {

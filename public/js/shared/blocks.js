@@ -177,6 +177,25 @@ export const BLOCKS = {
   114: { name: 'Car Wash', shape: 'flat', tex: 'car_wash', carWash: true, hidden: true, worldOnly: true },
   // A big spinning car wash brush, hanging from the roof.
   115: { name: 'Wash Brush', shape: 'model', model: 'washBrush', facing: true, hidden: true, worldOnly: true, box: [0, 0.35, 0, 1, 1, 1] },
+  // ---------- From the other stores (`store`): buy them once, then build with them ----------
+  // The Green Thumb Garden Center
+  116: { name: 'Sunflower', shape: 'model', model: 'sunflower', facing: true, price: 3, store: 'garden' },
+  117: { name: 'Rose Bush', shape: 'model', model: 'roseBush', price: 4, store: 'garden', box: [0.1, 0, 0.1, 0.9, 0.75, 0.9] },
+  118: { name: 'Garden Gnome', shape: 'model', model: 'gnome', facing: true, price: 8, store: 'garden', box: [0.3, 0, 0.3, 0.7, 0.75, 0.7] },
+  119: { name: 'Birdbath', shape: 'model', model: 'birdbath', price: 10, store: 'garden', box: [0.15, 0, 0.15, 0.85, 0.8, 0.85] },
+  120: { name: 'Fountain', shape: 'model', model: 'fountain', price: 25, store: 'garden', box: [0, 0, 0, 1, 0.45, 1], light: { color: 0x9fe6ff, power: 0.25, range: 5, always: true, y: 0.8 } },
+  // The Toy Box
+  121: { name: 'Rubber Duck', shape: 'model', model: 'rubberDuck', facing: true, price: 3, store: 'toys', box: [0.3, 0, 0.3, 0.7, 0.4, 0.7] },
+  122: { name: 'Beach Ball', shape: 'model', model: 'beachBall', price: 4, store: 'toys', box: [0.2, 0, 0.2, 0.8, 0.6, 0.8] },
+  123: { name: 'Toy Robot', shape: 'model', model: 'toyRobot', facing: true, price: 10, store: 'toys', box: [0.25, 0, 0.3, 0.75, 0.85, 0.7] },
+  124: { name: 'Toy Train', shape: 'model', model: 'toyTrain', facing: true, price: 15, store: 'toys', box: [0.05, 0, 0.3, 0.95, 0.5, 0.7] },
+  125: { name: 'Rocking Horse', shape: 'model', model: 'rockingHorse', facing: true, seat: 0.55, price: 18, store: 'toys', box: [0.1, 0, 0.3, 0.9, 0.55, 0.7] },
+  // Happy Paws Pet Shop
+  126: { name: 'Pet Bowl', shape: 'model', model: 'petBowl', price: 3, store: 'pets' },
+  127: { name: 'Pet Bed', shape: 'model', model: 'petBed', price: 6, store: 'pets', box: [0.05, 0, 0.05, 0.95, 0.2, 0.95] },
+  128: { name: 'Fish Bowl', shape: 'model', model: 'fishBowl', price: 8, store: 'pets', box: [0.2, 0, 0.2, 0.8, 0.65, 0.8], light: { color: 0x66d9ff, power: 0.15, range: 3, always: true, y: 0.4 } },
+  129: { name: 'Cat Tree', shape: 'model', model: 'catTree', price: 12, store: 'pets', box: [0.1, 0, 0.1, 0.9, 1, 0.9] },
+  130: { name: 'Dog House', shape: 'model', model: 'dogHouse', facing: true, price: 20, store: 'pets', box: [0, 0, 0, 1, 1, 1] },
 };
 // Elevator shaft parts (in the meta, above the facing bits).
 export const ELEVATOR = 103;
@@ -213,6 +232,10 @@ export const SHOP_TOOLS = {
   // The most expensive thing in the store, and only for Secret Agency agents: two bodyguards who
   // guard your land (home land) and only let in you and the guests on your list.
   bodyguards: { name: 'Bodyguards', price: 300, clearance: true, about: 'Two bodyguards guard your land: nobody gets in but you and the guests on your list! (Agents with Top Secret clearance only.)', got: 'They\'re on duty at your land now! Right-click one of them to choose who\'s allowed in.' },
+  // A family who lives on your land (home land): name them and choose how they look.
+  family: { name: 'A Family', price: 160, about: 'A family moves into your house! Name them and choose how each of them looks.', got: 'They live on your land now! Right-click one of them to change their names and looks.' },
+  // A surprise: something from one of the stores that you don't have yet. (Used up: buy as many as you like.)
+  mysterybox: { name: 'Mystery Box', price: 12, again: true, about: 'A surprise from one of the stores: something you don\'t have yet!', got: '' },
   vacationflag: { name: 'Vacation Flag', price: 150, about: 'Claim a second piece of land for a vacation home! It stays where you plant it.', got: 'Hold your Land Flag and press X to switch it to vacation land.' },
 };
 // Gear you find in the world instead of buying: [name, where you get it].
@@ -227,7 +250,22 @@ export const SHOP_ABOUT = {
   82: 'A sparkling block of pure diamond.', 83: 'Sit like royalty (right-click to sit).',
   84: 'A mirror ball that fills the room with party light.', 85: 'For the champion of BuildZone!',
   93: 'Warm, glowing and full of bubbles. Right-click to sit in it.',
+  116: 'Tall, sunny and always smiling.', 117: 'A bush full of red roses.', 118: 'A cheeky little gnome for your garden.',
+  119: 'For the birds to splash in.', 120: 'A splashing fountain that sparkles.',
+  121: 'Squeak! Every bath needs one.', 122: 'A big bouncy beach ball.', 123: 'Beep boop! A friendly little robot.',
+  124: 'Choo choo! All aboard!', 125: 'Giddy up! Right-click to ride it.',
+  126: 'Dinner time for your pet!', 127: 'A comfy bed for a sleepy pet.', 128: 'A bowl with a goldfish in it.',
+  129: 'For cats to climb, scratch and nap on.', 130: 'A cozy house for a dog.',
 };
+// The stores (each has its own building and shopkeeper in town). Blocks and things for sale say which
+// store has them (`store`); anything that doesn't is at the Luxe Store.
+export const STORES = {
+  luxe: { name: 'The Luxe Store', icon: '✨', color: '#ffd54f', keeper: 'Penny' },
+  garden: { name: 'Green Thumb Garden Center', icon: '🌻', color: '#66bb6a', keeper: 'Fern' },
+  toys: { name: 'The Toy Box', icon: '🧸', color: '#ff8a65', keeper: 'Mr. Jingles' },
+  pets: { name: 'Happy Paws Pet Shop', icon: '🐾', color: '#a1887f', keeper: 'Pip' },
+};
+export const storeOf = item => (typeof item === 'number' ? BLOCKS[item]?.store : SHOP_TOOLS[item]?.store) || 'luxe';
 // What's for sale, cheapest first: [item, price].
 export const SHOP_ITEMS = [
   ...Object.entries(BLOCKS).filter(([, d]) => d.price).map(([id, d]) => [Number(id), d.price]),

@@ -26,7 +26,8 @@ import { Ball, PetBrain } from './pets.js';
 import { PetNav } from './petmove.js';
 import { DayNight } from './daynight.js';
 import { Editor } from './editor.js';
-import { CharacterClient, Gallery } from './gallery.js';
+import { CharacterClient, Gallery, Thumbnails } from './gallery.js';
+import { QuestHud } from './questui.js';
 import { MAX_CHARACTERS } from './shared/characters.js';
 import { Hud, renderControls, CUSTOM_PAINT } from './hud.js';
 import {
@@ -55,7 +56,8 @@ import { BadgeBook } from './badges.js';
 
 const $ = id => document.getElementById(id);
 const REACH = 7;
-const BASE_FOV = 80;
+const DEFAULT_FOV = 80;
+const fov = () => settings.fov; // (how wide you see: a setting, since a narrow or wide view makes some people feel sick)
 const FIREWORK_COLORS = ['#ff4d4d', '#ffd84a', '#4dd2ff', '#7dff6a', '#ff7af0', '#ffffff', '#ff9a3c', '#b388ff'];
 const DOOR = 21;
 const DIRT = 2;
@@ -97,6 +99,7 @@ settings.gear = Object.fromEntries(GEAR.filter(g => settings.gear?.[g] === true)
 if (!/^#[0-9a-f]{6}$/i.test(settings.customColor)) settings.customColor = '#ff9ec7';
 if (![0, 30, 60].includes(settings.fps)) settings.fps = 60;
 if (!(settings.nightLight >= 0 && settings.nightLight <= 1)) settings.nightLight = 0.5;
+if (!(settings.fov >= 55 && settings.fov <= 110)) settings.fov = DEFAULT_FOV;
 settings.recent = Array.isArray(settings.recent) ? settings.recent.filter(i => ALL_ITEMS.includes(i)).slice(0, 12) : [];
 // The brush's color: a palette color, or your own.
 const paintHex = () => (settings.paint === CUSTOM_PAINT ? settings.customColor : settings.paint === GOLD_PAINT ? GOLD_HEX : PAINT_COLORS[settings.paint]);
@@ -122,7 +125,7 @@ renderer.toneMappingExposure = 0.8;
 renderer.autoClear = false;
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.05, 1000);
+const camera = new THREE.PerspectiveCamera(fov(), window.innerWidth / window.innerHeight, 0.05, 1000);
 camera.rotation.order = 'YXZ';
 const sky = new DayNight(renderer, scene);
 sky.nightLight = settings.nightLight;
@@ -203,6 +206,7 @@ const coinMap = new Map(); // gold coins lying about: id -> { x, y, z, value, as
 let wallet = { coins: 0, owned: [] };
 let carryingCan = false; // a gas can bought at a gas station, to carry to a vehicle that's out of gas
 let gasStations = []; // where the gas stations are: [name, x, z]
+let landmarks = []; // where the town's places are: [name, x, z]
 let shopOpen = false;
 let book = null; // the badge book (clubs)
 let perks = new Set(); // the clubs whose badges you have (their perks are yours)
@@ -368,6 +372,7 @@ async function load() {
   $('sensitivity').value = settings.sensitivity;
   $('volume').value = settings.volume;
   $('night-light').value = settings.nightLight;
+  $('fov').value = settings.fov;
   $('quality').value = settings.quality;
   $('fps').value = String(settings.fps);
   $('loading').classList.add('hidden');
@@ -487,6 +492,7 @@ $('join-form').addEventListener('submit', async e => {
   setClaims(welcome.claims || []);
   agency.setWorld({ base: welcome.base, files: welcome.files, landmarks: welcome.landmarks });
   gasStations = (welcome.landmarks || []).filter(([k]) => /^gas\d/.test(k));
+  landmarks = welcome.landmarks || [];
   weather.set(welcome.rain || 0);
   agency.setGuards(welcome.guards);
   weather.rain = weather.target; // (if it's raining when you arrive, it already is)
@@ -602,7 +608,7 @@ net.on('secret_file', ({ again, found, need, clear, left = [] }) => {
     hud.toast(`🗂️ TOP SECRET file found! (${found} of ${need}) Still to find: ${left.join(', and ')}.`);
   }
 });
-net.on('shop_open', () => openShop());
+net.on('shop_open', ({ store }) => openShop(store));
 net.on('wallet', ({ coins, owned, vacation, found = [], agent, can, clubs, badges }) => {
   const more = coins > wallet.coins;
   // Club badges, and what they give you: a turbo in everything you drive, a coin magnet.
@@ -712,6 +718,98 @@ net.on('car_hp', ({ id, hp, impact, fixer }) => {
   cars.applyHp(car, hp, impact);
   if (hurt && impact && riding() !== car) sounds.crash(loudness(car.pos.x, car.pos.y, car.pos.z, 40) * 0.6);
 });
+// ---------- Residents' quests ----------
+const questHud = new QuestHud(scene);
+net.on('quest', info => questHud.set(info));
+net.on('quest_done', ({ coins, type }) => {
+  sounds.coin();
+  sounds.magic();
+  hud.toast(`${{ deliver: '📦', fetch: '🎁', visit: '📍' }[type] || '💌'} ✓   🪙 +${coins}`);
+  effects.heartsAt(player.pos.x, player.pos.y + 1.6, player.pos.z);
+});
+net.on('quest_visited', () => {
+  sounds.magic();
+  hud.toast('📍 ✓');
+  effects.sparkle(player.pos.x, player.pos.y + 1, player.pos.z, 30);
+});
+
+// ---------- Your family (from the Luxe Store) ----------
+let familyEdit = null; // the members, while you're changing them
+const familyThumbs = new Thumbnails();
+net.on('family_open', ({ members }) => openFamily(members));
+function openFamily(members) {
+  if (familyEdit || !inGame) return;
+  familyEdit = members.map(m => ({ name: m.name, look: sanitizeLook(m.look) }));
+  keys.clear();
+  unlock();
+  renderFamily();
+  $('family').classList.remove('hidden');
+  updateOverlays();
+}
+function renderFamily() {
+  const list = $('family-list');
+  list.textContent = '';
+  familyEdit.forEach((m, i) => {
+    const row = document.createElement('div');
+    row.className = 'family-row';
+    const img = document.createElement('img');
+    img.src = familyThumbs.get(m.look);
+    const name = document.createElement('input');
+    name.maxLength = 16;
+    name.value = m.name;
+    name.addEventListener('input', () => (m.name = name.value));
+    const paint = document.createElement('button');
+    paint.textContent = '🎨';
+    paint.title = 'Change how they look';
+    paint.addEventListener('click', async () => {
+      $('family').classList.add('hidden');
+      editorOpen = true;
+      updateOverlays();
+      m.look = await editor.show(m.look);
+      editorOpen = false;
+      $('family').classList.remove('hidden');
+      renderFamily();
+      updateOverlays();
+    });
+    const out = document.createElement('button');
+    out.className = 'secondary';
+    out.textContent = '✕';
+    out.disabled = familyEdit.length <= 1;
+    out.addEventListener('click', () => {
+      familyEdit.splice(i, 1);
+      renderFamily();
+    });
+    row.append(img, name, paint, out);
+    list.append(row);
+  });
+  $('family-add').disabled = familyEdit.length >= 5;
+}
+function closeFamily(save) {
+  if (!familyEdit) return;
+  if (save) {
+    net.send({ t: 'family', members: familyEdit.map(m => ({ name: cleanName(m.name), look: m.look })) });
+    sounds.magic();
+  }
+  familyEdit = null;
+  $('family').classList.add('hidden');
+  lock();
+  updateOverlays();
+}
+$('family-add').addEventListener('click', () => {
+  if (familyEdit.length >= 5) return;
+  familyEdit.push({ name: ['Buddy', 'Sunny', 'Pip', 'Max', 'Lulu'][familyEdit.length % 5], look: randomLook() });
+  renderFamily();
+});
+$('family-save').addEventListener('click', () => closeFamily(true));
+$('family-cancel').addEventListener('click', () => closeFamily(false));
+
+// A Mystery Box from the Luxe Store: what's inside?
+net.on('mystery', ({ item }) => {
+  sounds.party?.();
+  effects.sparkle(player.pos.x, player.pos.y + 1.5, player.pos.z, 60);
+  hud.toast(`🎁 ✨ ${itemName(item)}! ✨`);
+});
+
 // ---------- Clubs and badges ----------
 net.on('club_step', msg => book.step(msg));
 net.on('club_open', ({ club }) => book.show(club));
@@ -953,7 +1051,7 @@ function goFullscreen() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -987,7 +1085,7 @@ $('exit-menu').addEventListener('click', () => {
     location.reload();
   }, 150); // a moment for "I got out of the car" to reach the server
 });
-canvas.addEventListener('click', () => inGame && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && lock());
+canvas.addEventListener('click', () => inGame && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !familyEdit && lock());
 $('sensitivity').addEventListener('input', e => {
   settings.sensitivity = Number(e.target.value);
   saveSettings();
@@ -995,6 +1093,13 @@ $('sensitivity').addEventListener('input', e => {
 $('volume').addEventListener('input', e => {
   settings.volume = sounds.volume = Number(e.target.value);
   if (sounds.master) sounds.master.gain.value = settings.volume;
+  saveSettings();
+});
+// How wide you see (field of view).
+$('fov').addEventListener('input', e => {
+  settings.fov = Number(e.target.value);
+  camera.fov = settings.fov;
+  camera.updateProjectionMatrix();
   saveSettings();
 });
 // How bright the nights are: darker or lighter than usual (the days stay the same).
@@ -1244,6 +1349,10 @@ window.addEventListener('keydown', e => {
   }
   if (book?.open) {
     if (e.code === 'Escape' || e.code === 'KeyJ' || e.code === 'KeyE') book.close();
+    return;
+  }
+  if (familyEdit) {
+    if (e.code === 'Escape' && !editorOpen) closeFamily(false);
     return;
   }
   if (e.code === 'KeyJ' && inGame && !inventoryOpen) {
@@ -3405,7 +3514,7 @@ function interact() {
       if (def?.art === 'sign') return openSign(...hit.block);
       if (def?.shape === 'picture') return nextPicture(...hit.block, hit.value);
       if (def?.music) return changeNote(...hit.block, hit.value);
-      if (def?.shop) return openShop();
+      if (def?.shop) return openShop(storeAt(hit.block[0], hit.block[2]));
       if (def?.gasPump) return usePump(...hit.block);
       if (def?.piano) return playPiano(...hit.block);
       if (def?.oven) return net.send({ t: 'job' });
@@ -4636,12 +4745,23 @@ function npcRaycast(origin, dir, max) {
   return best;
 }
 
-function openShop() {
+function openShop(store = 'luxe') {
   if (shopOpen || !inGame) return;
   shopOpen = true;
   unlock();
-  shop.open();
+  shop.open(store);
   updateOverlays();
+}
+
+// Which store this spot is in (by the cash register): the nearest store, or the Luxe Store.
+function storeAt(x, z) {
+  let best = 'luxe', bestD = 16;
+  for (const [k, lx, lz] of landmarks) {
+    const id = k === 'store' ? 'luxe' : k.startsWith('shop_') ? k.slice(5) : null;
+    const d = Math.hypot(lx - x, lz - z);
+    if (id && d < bestD) [best, bestD] = [id, d];
+  }
+  return best;
 }
 
 // The Firework Show: rockets all around you, one after another.
@@ -4703,7 +4823,7 @@ function vanSleepView(car) {
 function updateCamera(dt) {
   // Watching through a spy camera, or flying a drone.
   if (agency.view(camera, dt, player.pitch, player.yaw)) {
-    camera.fov += (BASE_FOV - camera.fov) * Math.min(1, dt * 8);
+    camera.fov += (fov() - camera.fov) * Math.min(1, dt * 8);
     camera.updateProjectionMatrix();
     return;
   }
@@ -4731,7 +4851,7 @@ function updateCamera(dt) {
       camera.position.lerp(sleepCam.pos, camSleepK);
       camera.quaternion.slerp(sleepCam.quat, camSleepK);
     }
-    camera.fov += (BASE_FOV - camera.fov) * Math.min(1, dt * 8);
+    camera.fov += (fov() - camera.fov) * Math.min(1, dt * 8);
     camera.updateProjectionMatrix();
     return;
   }
@@ -4768,7 +4888,7 @@ function updateCamera(dt) {
     camera.position.lerp(sleepCam.pos, camSleepK);
     camera.quaternion.slerp(sleepCam.quat, camSleepK);
   }
-  const targetFov = BASE_FOV + (player.sprinting && player.moving ? 6 : 0);
+  const targetFov = fov() + (player.sprinting && player.moving ? 6 : 0);
   camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 8);
   camera.updateProjectionMatrix();
 }
@@ -5249,6 +5369,7 @@ function frame(timestamp) {
     updateSparkly(dt, time);
   }
   cars.setView(camera.position, scene.fog.far);
+  if (inGame) questHud.update(time, player, camera, npcs);
   cars.setPoliceLights((QUALITY[settings.quality] || QUALITY.high).lamps >= 6); // (police lights light up the street, except on Low)
   cars.update(dt, time, nightK, myCar?.id);
   if (inGame) for (const ev of cars.events) vehicleEvent(ev, ev.other);
