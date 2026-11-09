@@ -141,10 +141,13 @@ export class Gallery {
 
   // Opens the gallery. `onSaved(name)` is called after saving.
   // Resolves with the picked character, or null if the player just closed it.
-  async show({ name, look, onSaved }) {
+  // replace: the gallery's full, so it opens ready to pick a character to replace (and closes
+  // once that's done).
+  async show({ name, look, onSaved, replace = false }) {
     this.look = look;
     this.onSaved = onSaved;
     this.open = true;
+    this.closeOnSave = replace;
     this.setReplacing(false);
     $('gallery-name').value = name;
     $('gallery-status').textContent = 'Loading…';
@@ -152,6 +155,7 @@ export class Gallery {
     this.characters = await this.client.list();
     $('gallery-status').textContent = this.client.remote ? '' : 'Single player: characters are saved in this browser.';
     this.render();
+    if (replace) this.setReplacing(true);
     return new Promise(resolve => (this.resolve = resolve));
   }
 
@@ -190,6 +194,7 @@ export class Gallery {
       : `Saved "${name}"! Everyone can pick it now.`;
     this.setReplacing(false);
     this.onSaved?.(name);
+    if (this.closeOnSave) setTimeout(() => this.close(null), 700);
   }
 
   render() {

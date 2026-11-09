@@ -27,6 +27,7 @@ import { PetNav } from './petmove.js';
 import { DayNight } from './daynight.js';
 import { Editor } from './editor.js';
 import { CharacterClient, Gallery } from './gallery.js';
+import { MAX_CHARACTERS } from './shared/characters.js';
 import { Hud, renderControls, CUSTOM_PAINT } from './hud.js';
 import {
   HAMMER, FIREWORKS, BALL, CLAIM, VACATION, BRUSH, SCRAPER, WRENCH, SKIS, GOGGLES, GOLDPAINT, SNEAKERS, LADDER, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME,
@@ -380,6 +381,11 @@ async function load() {
 // just like it), ask whether to save it, so you can pick it again later. (Saving under your name
 // updates your old one, if there is one.)
 const menuGallery = new CharacterClient();
+// Pressing Play with a character that isn't in the Character Gallery: one click saves it. It goes
+// over the gallery's character with your name if there is one; otherwise in a free spot; and if
+// the gallery's full, over the character you're playing as (the one you last picked or saved,
+// even if you've renamed it since). Only if there's none of those does the gallery open, to pick
+// which one to replace.
 async function offerToSaveCharacter() {
   let saved = [];
   try {
@@ -387,20 +393,37 @@ async function offerToSaveCharacter() {
   } catch {
     return; // (no gallery to save to)
   }
-  const look = JSON.stringify(sanitizeLook(settings.look));
+  const look = JSON.stringify(sanitizeLook(settings.look)), name = cleanName(settings.name);
+  const named = n => n && saved.find(c => nameKey(c.name) === nameKey(n));
+  // Already saved: this look's in the gallery (or it's what was saved last time, and that's there).
   if (saved.some(c => JSON.stringify(sanitizeLook(c.look)) === look)) return;
-  const name = cleanName(settings.name);
-  const mine = saved.find(c => nameKey(c.name) === nameKey(name));
-  const yes = await new Promise(done => ask(
-    mine ? '💾 Save your new look?' : '💾 Save your character?',
-    mine ? `Your character "${name}" in the Character Gallery looks different from how you look now. Save your new look (so you and everyone can pick it later)?`
-      : `Your character isn't saved yet. Save it in the Character Gallery as "${name}", so you (and everyone) can pick it again later?`,
-    '💾 Save it', 'Not now', () => done(true), () => done(false), { menu: true }));
+  if (settings.savedAs?.look === look && named(settings.savedAs.name)) return;
+  const full = saved.length >= MAX_CHARACTERS;
+  const target = named(name) || (full ? named(settings.savedAs?.name) : null);
+  const yes = await new Promise(done => ask(`💾 Save ${name}?`, target && nameKey(target.name) !== nameKey(name) ? `🔁 ${target.name}` : '',
+    '💾 Save', 'Not now', () => done(true), () => done(false), { menu: true }));
   if (!yes) return;
-  $('status').textContent = 'Saving your character…';
-  const result = await menuGallery.save({ name, look: settings.look });
-  $('status').textContent = result.error === 'full' ? 'The Character Gallery is full, so your character wasn\'t saved (replace an old one in the Gallery later).'
-    : result.error ? 'Couldn\'t save your character right now. You can save it from the Gallery later.' : `Saved "${name}" in the Character Gallery!`;
+  if (full && !target) return replaceInGallery();
+  $('status').textContent = '💾…';
+  const result = await menuGallery.save({ name, look: settings.look, replaceId: target && nameKey(target.name) !== nameKey(name) ? target.id : undefined });
+  if (result.error === 'full') return replaceInGallery();
+  if (result.error) {
+    $('status').textContent = '💾 ✗';
+    return;
+  }
+  settings.savedAs = { name, look };
+  saveSettings();
+  sounds.spawnCar?.();
+  hud?.toast(`💾 ✓ ${name}`);
+}
+
+// The gallery's full and it's not clear which character to save over: pick one.
+async function replaceInGallery() {
+  galleryOpen = true;
+  updateOverlays();
+  await gallery.show({ name: settings.name, look: settings.look, onSaved: savedName => setIdentity(savedName, settings.look), replace: true });
+  galleryOpen = false;
+  updateOverlays();
 }
 
 $('join-form').addEventListener('submit', async e => {
@@ -986,6 +1009,7 @@ $('pause-customize').addEventListener('click', customize);
 function setIdentity(name, look) {
   settings.name = name;
   settings.look = sanitizeLook(look);
+  settings.savedAs = { name: cleanName(name), look: JSON.stringify(settings.look) }; // (who you're playing as, from the gallery)
   $('name').value = name;
   saveSettings();
   myBody.setLook(settings.look);

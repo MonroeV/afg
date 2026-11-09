@@ -616,8 +616,12 @@ name and look. To save your own, type a name and press **Save my character**. Sa
 with the same name updates that character, so it works like a simple account. When all 25 spots
 are taken, the game asks you to click one to replace, or to replace the oldest one.
 
-If you press **Play** with a look that isn't saved yet, the game asks whether to save it first
-(under the name you typed). Press **Not now** to skip it. It won't ask again once that look is saved.
+If you press **Play** with a look that isn't saved yet, the game asks "💾 Save (your name)?", and
+one click saves it: over the character with your name if there is one, otherwise in a free spot,
+and if the gallery is full, over the character you're playing as (the one you last picked or
+saved, even if you've renamed it; the question shows "🔁" and its name). Only when the gallery is
+full and none of those fit does the gallery open, to pick which character to replace. Press **Not
+now** to skip it. It won't ask again once that look is saved.
 
 In single player (no server) the gallery is kept in your browser instead.
 
