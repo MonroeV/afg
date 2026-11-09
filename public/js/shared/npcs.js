@@ -64,6 +64,12 @@ const NPCS = [
     hello: n => [`Hi ${n}! Lovely day outdoors! 🌲`, `${n}! The fish are biting! 🎣`, `Hello ${n}! Plant a tree today? 🌳`],
     tips: ['🎣🌳'],
   },
+  {
+    id: -14, place: 'quarry', name: 'Digger Dot', title: 'Digger Dot ⛏️', roam: 3, club: 'tunnel',
+    look: { face: 'grin', hair: 'buns', hat: 'cap', shirt: 'jacket', pants: 'jeans', skin: '#d39a6a', hairColor: '#6b3e1f', hatColor: '#fdd835', shirtColor: '#ff7043', shirtColor2: '#fdd835', pantsColor: '#3949ab', shoesColor: '#3b2314' },
+    hello: n => [`Hey ${n}! Dig, dig, dig! ⛏️`, `${n}! Want to know a secret? 🤫`, `Howdy, ${n}! Mind the dump trucks! 🚚`],
+    tips: ['⛏️🤫'],
+  },
   // ---------- The Secret Agency ----------
   // Agent Shadow, on the town square: talk to him to join the Agency (find the three TOP SECRET
   // files for Top Secret clearance).

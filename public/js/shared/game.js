@@ -10,6 +10,7 @@ import { buildFrontier, buildPizzeria, buildSignposts, refurnish, addFishingSpot
 import { buildFarCountry, moreVehicles } from './farcountry.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot, seatCount } from './vehicles.js';
 import { buildGasStations, usesFuel, getsDirty, TANK_RANGE, GAS_PUMP, GAS_CAN, GAS_CAN_PRICE, FULL_TANK_PRICE, PUMP_REACH, DIRT_RANGE, WASH_TIME, fillPrice, paved, isWash } from './fuel.js';
+import { MAX_TUNNELS, isTunnelY, tunnelKey, openBelow } from './underground.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
 
@@ -80,6 +81,7 @@ export class GameRoom {
     this.places = null; // where the store, the tower lobby and the town square are (for the NPCs)
     this.wallets = {}; // name key -> { coins, owned: [items], day }
     this.holes = new Map(); // "x,z" -> when the ground there was dug out (it grows back)
+    this.tunnels = new Set(); // "x,y,z" dug out underground (secret tunnels: see underground.js)
     this.signs = new Map(); // "x,y,z" -> what that sign says
     this.jobs = new Map(); // client id -> the pizza they're delivering: { x, z, reward, par, at }
     this.coins = new Map(); // id -> [x, y, z, value]: gold coins to pick up
@@ -97,9 +99,39 @@ export class GameRoom {
     this.isWater = (x, y, z) => isWaterBlock(this.world.get(blockKey(x, y, z)) || 0);
   }
 
-  // The ground (y = -1) is solid unless it's been dug out; the bedrock under it always is.
+  // The ground (y = -1) is solid unless it's been dug out; under it, the earth is solid except where
+  // Tunnel Diggers have dug tunnels; the bedrock under that always is.
   groundSolid(x, y, z) {
-    return y < -1 || (y === -1 && !this.holes.has(`${x},${z}`));
+    return y < 0 && !openBelow(this.holes, this.tunnels, x, y, z);
+  }
+
+  // ---------- Under the ground ----------
+
+  // Is (x, y, z) a spot under the ground this player may build in: a hole in the ground (anyone),
+  // or a tunnel (Tunnel Diggers only)?
+  underground(client, x, y, z) {
+    if (!Number.isInteger(y) || y >= 0 || !inBounds(x, 0, z)) return false;
+    if (y < -1 && !this.perk(client, 'tunnel')) return false;
+    return openBelow(this.holes, this.tunnels, x, y, z);
+  }
+
+  // Tunnels are secret: only Tunnel Diggers hear about anything down there.
+  diggers() {
+    return [...this.clients.values()].filter(c => c.joined && this.perk(c, 'tunnel'));
+  }
+
+  tellDiggers(msg, except) {
+    for (const c of this.diggers()) if (c !== except) c.send(msg);
+  }
+
+  // Everything secret under the ground (for someone who's just become a Tunnel Digger, or joins as one).
+  undergroundInfo() {
+    const blocks = [];
+    for (const [k, v] of this.world) {
+      const [x, y, z] = k.split(',').map(Number);
+      if (y < -1) blocks.push(x, y, z, v);
+    }
+    return { tunnels: [...this.tunnels].map(k => k.split(',').map(Number)), blocks };
   }
 
   // ---------- World data ----------
@@ -108,6 +140,7 @@ export class GameRoom {
     const { blocks, cars, places, claims, signs } = generateWorld();
     this.world.clear();
     this.holes.clear();
+    this.tunnels.clear();
     this.signs.clear();
     for (const [x, y, z, v] of blocks) this.world.set(blockKey(x, y, z), v);
     this.setHomes(cars);
@@ -249,6 +282,10 @@ export class GameRoom {
     this.holes = new Map();
     for (const h of Array.isArray(data.holes) ? data.holes : []) {
       if (Array.isArray(h) && Number.isInteger(h[0]) && Number.isInteger(h[1])) this.holes.set(`${h[0]},${h[1]}`, Number.isFinite(h[2]) ? h[2] : Date.now());
+    }
+    this.tunnels = new Set();
+    for (const t of Array.isArray(data.tunnels) ? data.tunnels : []) {
+      if (Array.isArray(t) && inBounds(t[0], 0, t[2]) && isTunnelY(t[1])) this.tunnels.add(tunnelKey(t[0], t[1], t[2]));
     }
     this.expireClaims();
     if (data.version < 4) this.upgradeLamps();
@@ -519,6 +556,7 @@ export class GameRoom {
       places: this.places,
       wallets: this.wallets,
       holes: [...this.holes].map(([k, t]) => [...k.split(',').map(Number), t]),
+      tunnels: [...this.tunnels].map(k => k.split(',').map(Number)),
       signs: this.signList(),
       // The town's own things that have been changed, to mend (see setOriginal).
       damaged: [...(this.damaged || [])].map(([k, since]) => [...k.split(',').map(Number), this.original.get(k), since]),
@@ -741,6 +779,7 @@ export class GameRoom {
       w.badges.push(club);
       w.coins += def.reward.coins;
       client.send({ t: 'badge', club, coins: def.reward.coins });
+      if (club === 'tunnel') client.send({ t: 'underground', ...this.undergroundInfo() }); // (now you know the secret)
       this.broadcast({ t: 'chat', system: true, text: `🏅 ${client.name} earned the ${def.icon} ${def.name} badge!` }, client);
       this.log(`${client.name} earned the ${def.name} badge`);
     }
@@ -849,9 +888,10 @@ export class GameRoom {
       build: this.build, // (the server's version of the game files; none in single player)
       time: this.time,
       dayLength: DAY_LENGTH,
-      world: this.flatBlocks(),
+      world: this.perk(client, 'tunnel') ? this.flatBlocks() : this.flatBlocks().filter((_, i, a) => a[i - (i % 4) + 1] >= -1),
       paints: [...this.paints],
       holes: [...this.holes.keys()].map(k => k.split(',').map(Number)),
+      ...(this.perk(client, 'tunnel') ? { tunnels: this.undergroundInfo().tunnels } : {}),
       signs: this.signList(),
       cars: [...this.vehicles.values()].map(publicVehicle),
       claims: this.claims,
@@ -1005,7 +1045,7 @@ export class GameRoom {
     },
 
     set(client, { x, y, z, b }) {
-      if (!inBounds(x, y, z) || !isValidBlock(b)) return;
+      if (!(inBounds(x, y, z) || this.underground(client, x, y, z)) || !isValidBlock(b)) return;
       const old = this.get(x, y, z);
       // Things from the Luxe Store can only be put down by someone who bought them.
       if (!this.mayPlace(client, b, old)) {
@@ -1038,7 +1078,9 @@ export class GameRoom {
       carryPaint(this.paints, k, old, b);
       this.carrySign(k, b);
       this.touched(x, y, z);
-      this.broadcast({ t: 'set', x, y, z, b }, client);
+      if (y < -1) this.tellDiggers({ t: 'set', x, y, z, b }, client); // (secret!)
+      else this.broadcast({ t: 'set', x, y, z, b }, client);
+      if (y === -1 && b && !old) this.progress(client, 'tunnel', 'fill'); // something put in a hole
       if (blockId(b) === LOG && blockId(old) !== LOG && this.maybePlant(x, y, z)) this.progress(client, 'nature', 'trees');
       this.onDirty();
     },
@@ -1100,7 +1142,7 @@ export class GameRoom {
       let blocked = null;
       for (let i = 0; i < cells.length; i += 4) {
         const [x, y, z, b] = cells.slice(i, i + 4);
-        if (!inBounds(x, y, z) || !isValidBlock(b)) continue;
+        if (!(inBounds(x, y, z) || this.underground(client, x, y, z)) || !isValidBlock(b)) continue;
         const old = this.get(x, y, z);
         if (tooFast || !canBuild(this.claims, client.name, x, z) || !this.mayPlace(client, b, old)) {
           // Not allowed: put it back the way it was for this player.
@@ -1118,7 +1160,11 @@ export class GameRoom {
         applied.push(x, y, z, b);
       }
       if (applied.length) {
-        this.broadcast({ t: 'many', cells: applied }, client);
+        // (Anything in the tunnels is only for Tunnel Diggers to know about.)
+        const open = [], secret = [];
+        for (let i = 0; i < applied.length; i += 4) (applied[i + 1] < -1 ? secret : open).push(...applied.slice(i, i + 4));
+        if (open.length) this.broadcast({ t: 'many', cells: open }, client);
+        if (secret.length) this.tellDiggers({ t: 'many', cells: secret }, client);
         this.onDirty();
       }
       if (back.length) client.send({ t: 'many', cells: back });
@@ -1241,6 +1287,7 @@ export class GameRoom {
       v.roll = num(msg.r);
       v.rotor = num(msg.rs);
       v.flags = num(msg.f) & 7; // brake lights, reverse lights, a load in the dump truck
+      if (v.kind === 'dump' && v.loaded && !(v.flags & 4)) this.progress(client, 'tunnel', 'dump'); // (tipped out its load)
       v.loaded = !!(v.flags & 4);
       v.ts = Number.isFinite(msg.ts) ? msg.ts : null;
       v.fresh = true;
@@ -1588,15 +1635,20 @@ export class GameRoom {
     },
 
     // The hammer dug out the ground (down to the bedrock), or someone filled a hole back in.
-    dig(client, { x, z }) {
+    // Digging: a hole in the ground (y -1, or no y), or (Tunnel Diggers) a tunnel further down.
+    dig(client, { x, y, z }) {
+      if (y !== undefined && y !== -1) return this.digTunnel(client, x, y, z, true);
       if (!this.canDig(client, x, z) || this.holes.has(`${x},${z}`) || this.holes.size >= MAX_HOLES) return client.send({ t: 'hole', x, z, on: this.holes.has(`${x},${z}`) });
       this.holes.set(`${x},${z}`, Date.now());
       this.broadcast({ t: 'hole', x, z, on: true });
+      this.progress(client, 'tunnel', 'dig');
       this.onDirty();
     },
 
-    fill(client, { x, z }) {
-      if (!this.canDig(client, x, z) || !this.holes.has(`${x},${z}`)) return client.send({ t: 'hole', x, z, on: this.holes.has(`${x},${z}`) });
+    // Filling it back in with earth (Grass or Dirt).
+    fill(client, { x, y, z }) {
+      if (y !== undefined && y !== -1) return this.digTunnel(client, x, y, z, false);
+      if (!this.canDig(client, x, z, true) || !this.holes.has(`${x},${z}`) || this.get(x, -1, z)) return client.send({ t: 'hole', x, z, on: this.holes.has(`${x},${z}`) });
       this.holes.delete(`${x},${z}`);
       this.broadcast({ t: 'hole', x, z, on: false });
       this.onDirty();
@@ -1690,16 +1742,39 @@ export class GameRoom {
 
   // ---------- Holes in the ground ----------
 
-  canDig(client, x, z) {
+  // under: digging (or filling) from underneath (from a tunnel), so what's on top doesn't matter.
+  canDig(client, x, z, under = false) {
     if (!Number.isInteger(x) || !Number.isInteger(z) || !inBounds(x, 0, z)) return false;
     if (!this.allow(client, 'dig', 4, 8)) return false;
-    if (this.world.has(blockKey(x, 0, z))) return false; // (only bare ground, not under a road or a building)
+    if (!under && client.pos[1] >= -0.5 && this.world.has(blockKey(x, 0, z))) return false; // (only bare ground, not under a road or a building)
     if (Math.hypot(client.pos[0] - x - 0.5, client.pos[2] - z - 0.5) > 12) return false;
     if (!canBuild(this.claims, client.name, x, z)) {
       if (this.allow(client, 'claimMsg', 0.2, 1)) client.send({ t: 'chat', system: true, text: `🚧 This land belongs to ${claimAt(this.claims, x, z).owner}. Only they can dig here.` });
       return false;
     }
     return true;
+  }
+
+  // A Tunnel Digger digging out a spot underground (dig), or filling one back in with earth. It
+  // has to be next to somewhere already open (a hole, or a tunnel), and nobody else's land.
+  digTunnel(client, x, y, z, dig) {
+    const k = tunnelKey(x, y, z);
+    const undo = () => client.send({ t: 'tunnel', x, y, z, on: this.tunnels.has(k) });
+    if (!this.perk(client, 'tunnel') || !isTunnelY(y) || !this.canDig(client, x, z, true)) return undo();
+    if (Math.abs(client.pos[1] - y) > 10) return undo();
+    if (dig) {
+      if (this.tunnels.has(k) || this.tunnels.size >= MAX_TUNNELS) return undo();
+      const open = [[0, 1, 0], [0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]].some(([dx, dy, dz]) => openBelow(this.holes, this.tunnels, x + dx, y + dy, z + dz));
+      if (!open) return undo();
+      this.tunnels.add(k);
+    } else {
+      if (!this.tunnels.has(k) || this.world.has(k)) return undo();
+      // (Not with anybody in it.)
+      if ([...this.clients.values()].some(c => c.joined && Math.floor(c.pos[0]) === x && Math.floor(c.pos[2]) === z && c.pos[1] < y + 1 && c.pos[1] + 1.8 > y)) return undo();
+      this.tunnels.delete(k);
+    }
+    this.tellDiggers({ t: 'tunnel', x, y, z, on: dig });
+    this.onDirty();
   }
 
   // Bare bedrock doesn't stay that way for long: the grass grows back over it (but not while
@@ -1709,7 +1784,8 @@ export class GameRoom {
     for (const [k, t] of this.holes) {
       if (now - t < HOLE_HEAL * 1000) continue;
       const [x, z] = k.split(',').map(Number);
-      const inside = p => Math.floor(p[0]) === x && Math.floor(p[2]) === z && p[1] < 0.5;
+      if (this.world.has(blockKey(x, -1, z))) continue; // (something's been put in it: it stays)
+      const inside = p => Math.floor(p[0]) === x && Math.floor(p[2]) === z && p[1] < 0.5 && p[1] > -1.5;
       if ([...this.clients.values()].some(c => c.joined && inside(c.pos))) {
         this.holes.set(k, now - HOLE_HEAL * 1000 + 10000); // try again in a little while
         continue;

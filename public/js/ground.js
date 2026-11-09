@@ -2,6 +2,18 @@
 // the bedrock, and the soft force field around the edge of the world.
 import * as THREE from 'three';
 import { WORLD, SNOW_LINE } from './shared/blocks.js';
+import { TUNNEL_TOP, TUNNEL_BOTTOM, tunnelKey, earthAt } from './shared/underground.js';
+
+// The six sides of an underground cell: the direction to the neighbor, and the face's corners
+// (seen from inside the cell, so the tunnel's walls face into it).
+const SIDES = [
+  [[0, 1, 0], [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]]],
+  [[0, -1, 0], [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]]],
+  [[1, 0, 0], [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]]],
+  [[-1, 0, 0], [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]]],
+  [[0, 0, 1], [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]]],
+  [[0, 0, -1], [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]]],
+];
 
 const SIZE = WORLD.max - WORLD.min + 1;
 // Where a hole's walls go (and which neighbor has to be ground for there to be one):
@@ -30,6 +42,57 @@ export class Ground {
     this.floorGeometry = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0.5, -1, 0.5);
     this.meshes = [];
     this.capacity = 0;
+    // Secret tunnels (only Tunnel Diggers have any): earth walls up top, rock further down, the
+    // bedrock at the bottom. A little darker than outside: it's underground.
+    this.tunnels = new Set();
+    this.tunnelMaterials = {
+      dirt: new THREE.MeshStandardMaterial({ map: textures.dirt.map, normalMap: textures.dirt.normalMap, roughness: 0.95, color: 0xb8a898, side: THREE.DoubleSide }),
+      stone: new THREE.MeshStandardMaterial({ map: textures.stone.map, normalMap: textures.stone.normalMap, roughness: 0.9, color: 0xa8a8b0, side: THREE.DoubleSide }),
+      bedrock: new THREE.MeshStandardMaterial({ map: textures.bedrock.map, normalMap: textures.bedrock.normalMap, roughness: 0.9, side: THREE.DoubleSide }),
+    };
+    this.tunnelMeshes = [];
+  }
+
+  setTunnels(set) {
+    this.tunnels = set;
+    this.rebuild();
+    this.rebuildTunnels();
+  }
+
+  // Draws the inside of every tunnel: a face wherever a tunnel meets solid earth.
+  rebuildTunnels() {
+    for (const m of this.tunnelMeshes) {
+      this.scene.remove(m);
+      m.geometry.dispose();
+    }
+    this.tunnelMeshes = [];
+    if (!this.tunnels.size) return;
+    const parts = { dirt: { pos: [], uv: [], idx: [] }, stone: { pos: [], uv: [], idx: [] }, bedrock: { pos: [], uv: [], idx: [] } };
+    const solid = (x, y, z) => (y === -1 ? !this.holes.has(`${x},${z}`) : y < TUNNEL_BOTTOM || (y <= TUNNEL_TOP && !this.tunnels.has(tunnelKey(x, y, z))));
+    for (const k of this.tunnels) {
+      const [x, y, z] = k.split(',').map(Number);
+      for (const [[dx, dy, dz], corners] of SIDES) {
+        const ny = y + dy;
+        if (!solid(x + dx, ny, z + dz)) continue;
+        const p = parts[ny < TUNNEL_BOTTOM ? 'bedrock' : earthAt(ny)];
+        const base = p.pos.length / 3;
+        for (const c of corners) p.pos.push(x + c[0], y + c[1], z + c[2]);
+        p.uv.push(0, 0, 1, 0, 1, 1, 0, 1);
+        p.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      }
+    }
+    for (const [name, p] of Object.entries(parts)) {
+      if (!p.idx.length) continue;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(p.pos, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(p.uv, 2));
+      geo.setIndex(p.idx);
+      geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, this.tunnelMaterials[name]);
+      mesh.receiveShadow = true;
+      this.scene.add(mesh);
+      this.tunnelMeshes.push(mesh);
+    }
   }
 
   buildPlane(textures) {
@@ -115,6 +178,7 @@ export class Ground {
     else this.holes.delete(k);
     this.mark(k, on ? 255 : 0);
     this.rebuild();
+    if (this.tunnels.size) this.rebuildTunnels(); // (a tunnel's roof opened, or closed)
   }
 
   mark(k, v) {
@@ -147,7 +211,7 @@ export class Ground {
     for (const k of this.holes) {
       const [x, z] = k.split(',').map(Number);
       m.makeTranslation(x, 0, z);
-      this.meshes[0].setMatrixAt(counts[0]++, m);
+      if (!this.tunnels.has(tunnelKey(x, TUNNEL_TOP, z))) this.meshes[0].setMatrixAt(counts[0]++, m); // (no floor over a tunnel)
       WALLS.forEach(([dx, dz], i) => {
         if (!this.holes.has(`${x + dx},${z + dz}`)) this.meshes[i + 1].setMatrixAt(counts[i + 1]++, m);
       });

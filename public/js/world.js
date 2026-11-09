@@ -7,6 +7,7 @@ import {
   railBoxes, railMask, isSmallProp, itemOf, floorOf, carryPaint, rgbToHex, switchable, lightOff, liftRole, DOOR_OPEN, DOOR_TOP, BED_FOOT,
 } from './shared/blocks.js';
 import { modelGeometry, modelMaterials } from './models.js';
+import { openBelow, isTunnelY, tunnelKey } from './shared/underground.js';
 import { pictureCanvas } from './pictures.js';
 
 const GEOMETRY = {
@@ -338,6 +339,8 @@ export class World {
     this.liftsVersion = 0;
     this.paints = new Map(); // painted sides, by spot (see blocks.js)
     this.holes = new Set(); // "x,z" where the ground has been dug out, down to the bedrock
+    this.tunnels = new Set(); // "x,y,z" dug out further down (only Tunnel Diggers know about these)
+    this.digger = false; // are we a Tunnel Digger (can we dig deeper than the ground)?
     this.liftOpen = new Set(); // elevator doors standing open on this screen (someone's getting in or out)
     this.buried = new Set(); // keys of blocks hidden inside other blocks (not drawn)
     this.revision = 0; // goes up whenever anything changes
@@ -351,10 +354,15 @@ export class World {
     return this.blocks.get(blockKey(x, y, z)) || 0;
   }
 
-  // Ground (below y=0) and the world edges are solid. The ground is one layer deep (y = -1),
-  // and can be dug out; under it is the bedrock, which can't.
+  // Ground (below y=0) and the world edges are solid. The ground (y = -1) can be dug out; under
+  // it is solid earth (with any secret tunnels dug in it), then the bedrock. Anything put in a
+  // hole or a tunnel is solid like anywhere else.
+  openBelow(x, y, z) {
+    return openBelow(this.holes, this.tunnels, x, y, z);
+  }
+
   isSolid(x, y, z) {
-    if (y < 0) return y < -1 || !this.holes.has(`${x},${z}`);
+    if (y < 0) return !this.openBelow(x, y, z) || isSolidBlock(this.get(x, y, z));
     if (x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max) return true;
     return isSolidBlock(this.get(x, y, z));
   }
@@ -367,8 +375,7 @@ export class World {
 
   // Adds the collision boxes of one cell to `out` as [minX, minY, minZ, maxX, maxY, maxZ].
   cellBoxes(x, y, z, out) {
-    if (y < 0 && y === -1 && this.holes.has(`${x},${z}`)) return; // a hole in the ground
-    if (y < 0 || x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max) {
+    if ((y < 0 && !this.openBelow(x, y, z)) || x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max) {
       out.push([x, y, z, x + 1, y + 1, z + 1]);
       return;
     }
@@ -768,7 +775,7 @@ export class World {
 
   isBuried(x, y, z) {
     if (x <= WORLD.min || x >= WORLD.max || z <= WORLD.min || z >= WORLD.max) return false;
-    const below = y > 0 ? opaque(this.blocks.get(blockKey(x, y - 1, z))) : !this.holes.has(`${x},${z}`);
+    const below = y > 0 ? opaque(this.blocks.get(blockKey(x, y - 1, z))) : y === 0 ? !this.holes.has(`${x},${z}`) || opaque(this.blocks.get(blockKey(x, -1, z))) : false;
     if (!below) return false;
     for (const [dx, dy, dz] of SIX) if (dy >= 0 && !opaque(this.blocks.get(blockKey(x + dx, y + dy, z + dz)))) return false;
     return true;
@@ -799,6 +806,20 @@ export class World {
     this.recheckBuried(x, 0, z);
     this.revision++;
     return true;
+  }
+
+  setTunnel(x, y, z, on) {
+    const k = tunnelKey(x, y, z);
+    if (on === this.tunnels.has(k)) return false;
+    if (on) this.tunnels.add(k);
+    else this.tunnels.delete(k);
+    this.revision++;
+    return true;
+  }
+
+  setTunnels(list) {
+    this.tunnels = new Set(list.map(([x, y, z]) => tunnelKey(x, y, z)));
+    this.revision++;
   }
 
   setHoles(list) {
@@ -953,12 +974,13 @@ export class World {
     let t = 0;
 
     while (t <= maxDist) {
-      if (y < 0 && !(y === -1 && this.holes.has(`${x},${z}`))) {
-        // The ground (which can be dug out), or the bedrock at the bottom of a hole.
-        if (normal[1] === -1 || (y === -1 && normal[1] !== 1 && !this.holes.size)) return null;
-        const bedrock = y < -1;
+      if (y < 0 && !this.openBelow(x, y, z)) {
+        // The ground (which anyone can dig out), the earth under it (which Tunnel Diggers can), or
+        // the bedrock at the very bottom. (Looking up at it from above ground: not there.)
+        if ((normal[1] === -1 && origin.y > -0.5) || (y === -1 && normal[1] !== 1 && !this.holes.size && origin.y > -0.5)) return null;
+        const deep = y < -1, diggable = y === -1 || (this.digger && isTunnelY(y));
         return {
-          ground: true, bedrock, dig: bedrock ? null : [x, z], block: [x, y, z], normal,
+          ground: true, bedrock: !diggable, deep, dig: diggable ? [x, y, z] : null, block: [x, y, z], normal,
           place: [x + normal[0], y + normal[1], z + normal[2]], distance: t, point: origin.clone().addScaledVector(dir, t),
         };
       }

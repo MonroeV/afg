@@ -188,7 +188,7 @@ export class PetNav {
   // The pet's body is inside something solid (a block, or the ground)?
   inSolid(p) {
     const r = [p.x - HW + 0.04, p.y + 0.08, p.z - HW + 0.04, p.x + HW - 0.04, p.y + HEIGHT - 0.08, p.z + HW - 0.04];
-    if (p.y < -1.05) return true; // under the bedrock!
+    if (p.y < -9.05) return true; // under the bedrock!
     const out = this.boxes;
     out.length = 0;
     for (let x = Math.floor(r[0]); x <= Math.floor(r[3]); x++)
@@ -461,7 +461,7 @@ export class PetMover {
     if (holding && Math.abs(this.vel.y) < 0.01) this.onGround = this.onGround || nav.support(cx, cy, cz);
     if (this.onGround && !wasOnGround && falling < -1.5) this.landed = Math.min(1, 0.25 - falling / 12); // bigger drops, bigger squash
     this.landed = Math.max(0, this.landed - dt * 5);
-    if (this.pos.y < -3) this.pos.y = 0; // fell out of the world somehow: back on the ground
+    if (this.pos.y < -11) this.pos.y = 0; // fell out of the world somehow: back on the ground
     return Math.min(1, Math.hypot(this.vel.x, this.vel.z) / 3);
   }
 

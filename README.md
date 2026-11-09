@@ -48,10 +48,20 @@ customize your character, drive cars, build anything and play with friends.
   words turn into ♥♥♥
 - **Quick chat**: open the chat (T, or 💬 on a phone) and tap a phrase ("👋 Hi!", "😀 Follow
   me!", "🏠 Nice house!", "🏁 Wanna race?", "🆘 Help!"…) to say it without typing. Rude words in the chat turn into ♥♥♥ too
-- **Dig into the ground**: three hits with the hammer dig out the grass, down to the **bedrock**
-  (which nothing can break). Holes are one block deep. Fill one back in with a Grass or Dirt
-  block, or just wait: after a couple of minutes the grass grows back by itself (never while
-  someone's standing in the hole). Digging on someone else's land isn't allowed
+- **Dig into the ground**: three hits with the hammer dig out the grass. Holes are one block deep.
+  Fill one back in with a Grass or Dirt block, or just wait: after a couple of minutes the grass
+  grows back by itself (never while someone's standing in the hole). Or put **anything else** in
+  it: water for a little pond, glass for a window in the ground, a lamp, a flower pot. Then it
+  stays (break what's in it and it's a plain hole again). Digging on someone else's land isn't
+  allowed
+- **Secret tunnels** ⛏️🤫: under the ground is solid earth, 8 blocks deep, then the bedrock (which
+  nothing can break). Only **Tunnel Diggers** (the ⛏️ club: Digger Dot at Big Rock Quarry) can
+  dig into it: from the bottom of a hole, hammer down (3 hits a block), then dig along, sideways
+  and up, to make tunnels and secret rooms, and build anything down there. It's earth up top and
+  rock further down. Nobody else knows: the server only tells Tunnel Diggers about the tunnels
+  and everything in them, so to anyone else the bottom of a hole is solid as ever. The hole on top
+  grows back over like any hole, hiding the way in; dig back up from below to get out. Fill a
+  tunnel spot back in with Grass or Dirt
 - **Teleporters carry things too**: the ball (it pops out of the next one and rolls off, and a pet
   fetching it dives in after it), your pet (it walks in, or comes along when you go through),
   water balloons in flight, and vehicles: drive into a teleporter (or land the helicopter on it)
@@ -274,6 +284,7 @@ customize your character, drive cars, build anything and play with friends.
   | 🌲 Nature Club | Ranger Rae, at the campground | catch 10 fish, 5 different kinds, plant 2 trees | 15 🪙, a lucky rod (rare fish bite more) |
   | 🏁 Speed Club | Coach Frost, at the ski lodge | drive 2,000 blocks, fly 500, finish a race | 15 🪙, turbo (everything you drive is faster) |
   | 🪙 Gold Club | Mayor Maple | pick up 30 coins, buy something at the Luxe Store, claim land | 20 🪙, a coin magnet and a bigger daily bonus |
+  | ⛏️ Tunnel Diggers | Digger Dot, at Big Rock Quarry | dig 15 holes, put a block in 3 holes, tip out a dump truck of dirt | 15 🪙, secret tunnels under the ground |
   | 🕶️ Secret Agency | Agent Shadow | find the 3 TOP SECRET files | Top Secret clearance |
 
   Each step pops up by the badge counter ("🔧 2/3"), and a new badge gets a big celebration with
@@ -376,7 +387,7 @@ customize your character, drive cars, build anything and play with friends.
 | Flying a drone: WASD, Space, C, mouse, V, click, E | Fly, up, down, look, the drone's camera, sparkles, bring it home |
 | Left click with the Wrench | Fix a damaged vehicle (hold to keep fixing) |
 | Left click a vehicle with the Paint Brush | Paint it your paint color |
-| Left click the ground with the Hammer | Dig it out (3 hits), down to the bedrock |
+| Left click the ground with the Hammer | Dig it out (3 hits). Tunnel Diggers: further down too, for secret tunnels |
 | Right click | Interact: open and close doors, switch lights on and off, turn road lines, get in vehicles (and walk into the RV), pet pets, sit on chairs and couches, sleep in beds, change pictures and music notes, hug teddy bears, fire cannons, ride ski lifts, get a pizza delivery job, take skis from the lodge's ski rack, sit on a fishing stool |
 | Middle click | Copy the block you're looking at |
 | 1–9 or mouse wheel | Choose hotbar slot. Slot 1 always holds the Hammer; anything you pick while slot 1 is selected goes in slot 2 |
@@ -681,6 +692,7 @@ public/
       secretbase.js    The Secret Agency's base, its TOP SECRET files, and who may be inside
       fuel.js          Gas, mud, the gas stations and their car washes
       clubs.js         The clubs: their leaders, tasks and prizes
+      underground.js   Under the ground: holes, and the Tunnel Diggers' secret tunnels
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/
   make-engine-sounds.py  Makes the engine recordings (needs numpy and ffmpeg; run it after changing a voice)

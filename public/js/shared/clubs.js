@@ -47,6 +47,15 @@ export const CLUBS = [
     ],
     reward: { coins: 20, perk: '🧲', perkName: 'Coin magnet, and a bigger daily bonus' },
   },
+  {
+    id: 'tunnel', name: 'Tunnel Diggers', icon: '⛏️', color: '#8d6e63', leader: 'Digger Dot', where: 'at Big Rock Quarry',
+    tasks: [
+      { id: 'dig', icon: '🕳️', goal: 15, what: 'Dig a hole in the ground (hit it 3 times with the hammer)' },
+      { id: 'fill', icon: '🧱', goal: 3, what: 'Put a block in a hole (any block!)' },
+      { id: 'dump', icon: '🚚', goal: 1, what: 'Tip out a dump truck full of dirt (from the quarry\'s chute)' },
+    ],
+    reward: { coins: 15, perk: '⛏️🤫', perkName: 'Secret tunnels: dig deep under the ground' },
+  },
 ];
 
 export const clubById = id => CLUBS.find(c => c.id === id);

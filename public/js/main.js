@@ -50,6 +50,7 @@ import { SecretAgency } from './spy.js';
 import { Weather } from './weather.js';
 import { usesFuel, fillPrice, GAS_CAN_PRICE, PUMP_REACH } from './shared/fuel.js';
 import { TURBO, MAGNET } from './shared/clubs.js';
+import { isTunnelY } from './shared/underground.js';
 import { BadgeBook } from './badges.js';
 
 const $ = id => document.getElementById(id);
@@ -467,8 +468,10 @@ $('join-form').addEventListener('submit', async e => {
   world.load(welcome.world);
   world.loadPaints(welcome.paints);
   world.setHoles(welcome.holes || []);
+  world.setTunnels(welcome.tunnels || []); // (secret: only Tunnel Diggers get these)
   signs.load(welcome.signs || []);
   ground.set(welcome.holes || []);
+  ground.setTunnels(world.tunnels);
   avatars.clear();
   for (const p of welcome.players) avatars.add(p);
   for (const n of welcome.npcs || []) {
@@ -508,14 +511,20 @@ function setHoleHere(x, z, on) {
   ground.setHole(x, z, on);
   if (on) return;
   // Nothing gets stuck in the ground when it grows back: up they pop.
-  const inside = p => p.y < 0 && Math.floor(p.x) === x && Math.floor(p.z) === z;
+  unstick(x, -1, z);
+}
+
+// A spot under the ground filled back in: anything in it pops up out of it.
+function unstick(x, y, z) {
+  const up = y === -1 ? 0 : y + 1;
+  const inside = p => p.y < y + 1 && p.y > y - 1.6 && Math.floor(p.x) === x && Math.floor(p.z) === z;
   if (inside(player.pos)) {
-    player.pos.y = 0;
+    player.pos.y = up;
     player.vel.y = Math.max(0, player.vel.y);
   }
-  if (ball.active && inside(ball.pos)) ball.pos.y = 0.3;
+  if (ball.active && inside(ball.pos)) ball.pos.y = up + 0.3;
   const m = myBody.pet?.mover;
-  if (m && inside(m.pos)) m.place(m.pos.clone().setY(0));
+  if (m && inside(m.pos)) m.place(m.pos.clone().setY(up));
 }
 net.on('hole', ({ x, z, on, grow }) => {
   setHoleHere(x, z, on);
@@ -523,6 +532,17 @@ net.on('hole', ({ x, z, on, grow }) => {
     effects.sparkle(x + 0.5, 0.1, z + 0.5, 6);
     particles.burst(x, -0.6, z, blockMaterial(materials, GRASS_BLOCK), 5);
   }
+});
+
+// Secret tunnels (we only hear about them as Tunnel Diggers).
+net.on('tunnel', ({ x, y, z, on }) => {
+  if (world.setTunnel(x, y, z, on)) ground.setTunnels(world.tunnels);
+  if (!on) unstick(x, y, z);
+});
+net.on('underground', ({ tunnels, blocks }) => {
+  world.setTunnels(tunnels);
+  for (let i = 0; i + 3 < blocks.length; i += 4) world.set(blocks[i], blocks[i + 1], blocks[i + 2], blocks[i + 3]);
+  ground.setTunnels(world.tunnels);
 });
 
 net.on('set', ({ x, y, z, b }) => {
@@ -588,6 +608,7 @@ net.on('wallet', ({ coins, owned, vacation, found = [], agent, can, clubs, badge
   // Club badges, and what they give you: a turbo in everything you drive, a coin magnet.
   perks = new Set(badges || []);
   cars.turbo = perks.has('speed') ? TURBO : 1;
+  world.digger = perks.has('tunnel'); // (Tunnel Diggers can dig down into the earth)
   book.set({ clubs, badges, agent });
   if (!!can !== carryingCan) {
     carryingCan = !!can;
@@ -3057,7 +3078,9 @@ function hitBlock() {
   if (hit?.ground && hit.dig) return digGround(...hit.dig);
   if (hit?.bedrock) {
     sounds.crack();
-    hud.toast("🪨 That's bedrock, the very bottom of the world. Nothing can break it!");
+    // (Under a hole: the earth. Only Tunnel Diggers can dig into it. Further down: the bedrock.)
+    if (hit.deep && isTunnelY(hit.block[1]) && !world.digger) hud.toast('⛏️🔒 Digger Dot 🚚');
+    else hud.toast("🪨 That's bedrock, the very bottom of the world. Nothing can break it!");
     return;
   }
   if (!hit || hit.ground) {
@@ -3115,31 +3138,34 @@ function hitBlock() {
   sounds.break();
 }
 
-// The hammer on the ground: three hits dig out the grass, down to the bedrock.
-function digGround(x, z) {
+// The hammer on the ground: three hits dig out the grass, down to the bedrock. (Tunnel Diggers:
+// further down too, into the earth, to make secret tunnels.)
+function digGround(x, y, z) {
   if (!canBuildAt(x, z)) {
     notifyLand(x, z);
     return;
   }
-  const key = `ground:${x},${z}`;
+  const key = `ground:${x},${y},${z}`;
   if (hitState.key !== key) hitState = { key, count: 0, timer: 0 };
   hitState.count++;
   hitState.timer = 2.5;
   const dirt = blockMaterial(materials, DIRT_BLOCK);
   if (hitState.count < 3) {
     sounds.crack();
-    particles.burst(x, -1, z, dirt, 3);
-    crack.position.set(x + 0.5, -0.5, z + 0.5);
+    particles.burst(x, y, z, dirt, 3);
+    crack.position.set(x + 0.5, y + 0.5, z + 0.5);
     crack.material.opacity = hitState.count === 1 ? 0.45 : 0.9;
     crack.visible = true;
     return;
   }
   hitState.key = null;
   crack.visible = false;
-  setHoleHere(x, z, true);
-  net.send({ t: 'dig', x, z });
-  particles.burst(x, -1, z, dirt, 8);
+  if (y === -1) setHoleHere(x, z, true);
+  else if (world.setTunnel(x, y, z, true)) ground.setTunnels(world.tunnels);
+  net.send({ t: 'dig', x, y, z });
+  particles.burst(x, y, z, dirt, 8);
   sounds.break();
+  if (y < -1) return;
   if (!digTipShown) {
     digTipShown = true;
     hud.toast('🕳️ You dug down to the bedrock! The grass grows back by itself in a couple of minutes (or fill it with Grass or Dirt).');
@@ -3147,25 +3173,26 @@ function digGround(x, z) {
 }
 let digTipShown = false;
 
-// A Grass or Dirt block put into a hole fills it back in.
-function fillHole(item, x, z) {
-  if (!world.holes.has(`${x},${z}`)) return;
-  if (item !== GRASS_BLOCK && item !== DIRT_BLOCK) {
-    hud.toast('🕳️ Fill a hole with Grass or Dirt (or just wait: the grass grows back by itself).');
-    return;
-  }
+// Grass or Dirt put into a hole (or a tunnel) fills it back in with earth. Anything else goes in
+// it like anywhere else: a pond, a glass floor, a lamp in the ground… (and then it stays).
+function fillHole(item, x, y, z) {
+  if (!world.openBelow(x, y, z)) return false;
+  if (item !== GRASS_BLOCK && item !== DIRT_BLOCK) return false; // (place it as usual)
   if (!canBuildAt(x, z)) {
     notifyLand(x, z);
-    return;
+    return true;
   }
-  setHoleHere(x, z, false);
-  net.send({ t: 'fill', x, z });
+  if (world.get(x, y, z) || blockedByPlayer(x, y, z)) return true;
+  if (y === -1) setHoleHere(x, z, false);
+  else if (world.setTunnel(x, y, z, false)) ground.setTunnels(world.tunnels);
+  net.send({ t: 'fill', x, y, z });
   sounds.place();
+  return true;
 }
 
 function placeBlock(item) {
   const def = BLOCKS[item];
-  if (hit.ground && hit.place[1] < 0) return fillHole(item, hit.place[0], hit.place[2]);
+  if (hit.place[1] < 0 && fillHole(item, ...hit.place)) return;
   if (def.shape === 'rail') return placeRail();
   if (def.shape === 'picture') return placePicture(item);
   // Furniture turns to face you, speed pads point the way you're looking, and each new
@@ -3181,7 +3208,7 @@ function placeBlock(item) {
   }
   const shape = BLOCKS[item].shape || 'cube';
   const existing = world.get(x, y, z);
-  if (!inBounds(x, y, z) || (existing && !isReplaceable(existing))) return;
+  if (!(inBounds(x, y, z) || world.openBelow(x, y, z)) || (existing && !isReplaceable(existing))) return;
   if (railMask(existing)) {
     hud.toast('🚧 There\'s a railing there. Take it off with the hammer first.');
     return;
@@ -4840,8 +4867,10 @@ function frame(timestamp) {
       player.sneakers = hud.wearing(SNEAKERS);
       player.update(dt, active ? held : noKeys);
       // (Never inside the ground, even if a hole grew back over us a moment ago.)
-      if (player.pos.y < 0 && world.isSolid(Math.floor(player.pos.x), -1, Math.floor(player.pos.z))) {
-        player.pos.y = 0;
+      if (player.pos.y < 0 && world.isSolid(Math.floor(player.pos.x), Math.floor(player.pos.y + 0.05), Math.floor(player.pos.z))) {
+        let y = Math.floor(player.pos.y + 0.05);
+        while (y < 0 && world.isSolid(Math.floor(player.pos.x), y, Math.floor(player.pos.z))) y++;
+        player.pos.y = y;
         player.vel.y = Math.max(0, player.vel.y);
       }
       if (player.springed) {
