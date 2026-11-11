@@ -271,14 +271,17 @@ customize your character, drive cars, build anything and play with friends.
   (150; claim a second piece of land, see below), and the most expensive thing in the store,
   **Bodyguards** (300, and only for Secret Agency agents with Top Secret clearance): two guards in
   black suits and sunglasses who patrol your land (your home land): round the house, every floor,
-  the yard and the front door. They walk right up to anyone who shouldn't be there, and don't let
+  the yard and the windows, and they take turns standing guard at the front door. They walk right up to anyone who shouldn't be there, and don't let
   anybody else on it, just like the guards at the secret base. Players who
   aren't on your guest list get walked straight back off it, the town's people (and other
   people's pets) can't step onto it, and the guards say so ("🛑 Sorry Bo, you're not on Mia's
   guest list"). Right-click one of your bodyguards for your **guest list**: tick the names saved
   in the Character Gallery (or type in anyone's) and they're let in. **A Family** (160): a family
-  moves into your house (your home land) and lives there, pottering about and coming to say hello
-  when you come home. Your family and your bodyguards really get about: from room to room, up the
+  moves into your house (your home land) and lives there, coming to say hello when you come home.
+  They each go off and do their own thing, spread out round the house: lying on the bed (for a
+  long while at night), sitting on a chair or the couch (sometimes reading a book), reading at a
+  bookshelf, looking out of a window, and now and then wandering to another room, another floor
+  or the yard. Your family and your bodyguards really get about: from room to room, up the
   stairs and ladders to the upper floors, out into the yard and back (opening the doors and shutting
   them behind them), and if your home is a skyscraper, they ride its elevators to every floor. They
   keep away from garage doors. Right-click one of them to name them and choose how each one looks (with the

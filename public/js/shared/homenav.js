@@ -3,7 +3,7 @@
 // on every floor. They walk across rooms, step up stairs, climb ladders, go through doors (and
 // shut them behind them: see npcs.js) and ride elevators to every floor of a tower. Garage
 // doors are for cars: they keep away from those.
-import { blockId, blockMeta, itemOf, shapeOf, DOOR_TOP, ELEVATOR } from './blocks.js';
+import { BLOCKS, blockId, blockMeta, itemOf, shapeOf, DOOR_TOP, ELEVATOR, BED_FOOT } from './blocks.js';
 import { liftColumn, liftStops, liftFront } from './elevator.js';
 
 export const STAND = 1, LADDER = 2, DOOR = 4;
@@ -111,7 +111,61 @@ export function buildMap(w, rect, seed) {
     for (const m of n.to) delete m.cell;
     n.to = n.to.filter(m => nodes.has(m[0]));
   }
-  return { nodes, garages };
+  return { nodes, garages, spots: findSpots(w, rect, nodes) };
+}
+
+// Things to do at home, each with the spot to walk to first (`from`, a node key) and how you
+// are while doing it (pose: where, which way you face):
+//   bed: lie in it; seat: sit on a chair, couch, office chair or throne (sometimes with a book);
+//   shelf: read a book at a bookshelf; window: look out of a window.
+const BED = 64, SHELF = 63, GLASS = 9;
+function findSpots(w, rect, nodes) {
+  const [rx0, rz0, rx1, rz1] = rect, out = [];
+  const standAt = (x, y, z) => {
+    const n = nodes.get(cellKey(x, y, z));
+    return n && n.f === STAND ? cellKey(x, y, z) : null;
+  };
+  // The first of these cells (beside the thing) that you can stand in.
+  const beside = (y, cells) => {
+    for (const [x, z] of cells) {
+      const k = standAt(x, y, z);
+      if (k) return k;
+    }
+    return null;
+  };
+  const around = (x, z) => [[x + 1, z], [x - 1, z], [x, z + 1], [x, z - 1]];
+  const ys = new Set([...nodes.values()].map(n => n.y));
+  for (let x = rx0; x <= rx1; x++)
+    for (let z = rz0; z <= rz1; z++)
+      for (const y of ys) {
+        const v = itemOf(w.get(x, y, z)), id = blockId(v), def = BLOCKS[id];
+        if (!def) continue;
+        const q = blockMeta(v) & 3, a = q * Math.PI / 2, dx = Math.round(Math.sin(a)), dz = Math.round(Math.cos(a));
+        if (id === BED && !(blockMeta(v) & BED_FOOT)) {
+          // A bed: its head here, its foot in front. Lie back with your head on the pillow.
+          const foot = itemOf(w.get(x + dx, y, z + dz));
+          if (blockId(foot) !== BED || !(blockMeta(foot) & BED_FOOT) || (blockMeta(foot) & 3) !== q) continue;
+          if (w.solid(x, y + 1, z) || w.solid(x + dx, y + 1, z + dz)) continue;
+          const from = beside(y, [...around(x + dx, z + dz), ...around(x, z)]);
+          const fx = x + dx + 0.5, fz = z + dz + 0.5;
+          if (from) out.push({ kind: 'bed', id: `${x},${y},${z}`, from, pos: [fx + dx * 0.45, y + 0.58, fz + dz * 0.45], yaw: Math.atan2(-dx, -dz) });
+        } else if (def.seat && !def.fishing && !def.hotTub && !w.solid(x, y + 1, z)) {
+          const from = beside(y, [[x + dx, z + dz], ...around(x, z)]);
+          if (from) out.push({ kind: 'seat', id: `${x},${y},${z}`, from, pos: [x + 0.5 - dx * 0.06, y + def.seat - 0.72, z + 0.5 - dz * 0.06], yaw: a + Math.PI });
+        } else if (id === SHELF || id === GLASS) {
+          // Something at eye height (or just below) to face: from the floor in front of it.
+          for (const fy of [y, y - 1]) {
+            if (!ys.has(fy) || (id === GLASS && fy !== y - 1)) continue;
+            for (const [cx, cz] of around(x, z)) {
+              const k = standAt(cx, fy, cz);
+              if (!k || (id === GLASS && !nodes.get(k).roof)) continue; // (looking out from inside)
+              out.push({ kind: id === SHELF ? 'shelf' : 'window', id: `${x},${y},${z}:${cx},${cz}`, from: k, face: [x + 0.5, z + 0.5] });
+              break;
+            }
+          }
+        }
+      }
+  return out;
 }
 
 // Where you can go from node n.

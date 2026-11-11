@@ -434,6 +434,7 @@ export class Avatar {
       flying: this.flying, crouch: this.crouching && !sitting,
     });
     if (this.holdMic) this.updateMic();
+    if (this.reading || this.book) this.updateBook();
     if (this.fishing || this.rod) this.updateRod(time);
     this.updatePet(dt, time);
   }
@@ -482,6 +483,36 @@ export class Avatar {
       this.mic = mic;
     }
     if (this.mic.parent !== arm) arm.add(this.mic);
+  }
+
+  // A book held open in both hands, in front of them (someone at home, reading).
+  updateBook() {
+    if (!this.book) {
+      const book = new THREE.Group();
+      const cover = new THREE.MeshStandardMaterial({ color: [0xc62828, 0x1565c0, 0x2e7d32, 0x6a1b9a][Math.abs(this.id) % 4], roughness: 0.7 });
+      const pages = new THREE.MeshStandardMaterial({ color: 0xf5f0e1, roughness: 0.9 });
+      for (const s of [-1, 1]) {
+        // Each half: a cover with its pages on top, opening up like a V.
+        const half = new THREE.Group();
+        const c = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.012, 0.24), cover);
+        c.position.x = s * 0.085;
+        const p = new THREE.Mesh(new THREE.BoxGeometry(0.155, 0.02, 0.225), pages);
+        p.position.set(s * 0.085, 0.014, 0);
+        half.add(c, p);
+        half.rotation.z = -s * 0.28;
+        book.add(half);
+      }
+      book.position.set(0, 1.22, -0.34);
+      book.rotation.x = 1.15; // (tipped up toward their face)
+      this.root.add(book);
+      this.book = book;
+    }
+    this.book.visible = !!this.reading && this.lieK < 0.3;
+    if (!this.book.visible) return;
+    // Both arms out in front, holding it.
+    const { armL, armR } = this.character;
+    if (armL) armL.rotation.set(1.2, 0, 0.3);
+    if (armR) armR.rotation.set(1.2, 0, -0.3);
   }
 
   // A pizza box carried in front (out on a delivery).

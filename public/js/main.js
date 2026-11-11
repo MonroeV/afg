@@ -36,7 +36,7 @@ import {
 } from './items.js';
 import { MAX_MANY, MAX_OWNED_VEHICLES } from './shared/game.js';
 import { CHUTE } from './shared/farcountry.js';
-import { NPC_ACT } from './shared/npcs.js';
+import { NPC_ACT, NPC_POSE } from './shared/npcs.js';
 import { Shop } from './shop.js';
 import { Particles, Fireworks, Sounds, Effects } from './effects.js';
 import { Ground } from './ground.js';
@@ -560,13 +560,16 @@ net.on('states', ({ list, cars: carStates, npcs: npcStates, ts }) => {
   avatars.applyStates(list || [], myId);
   cars.applyStates(carStates || [], myCar?.id);
   // The town's people: where they are and what they're doing.
-  for (const [id, x, y, z, yaw, action] of npcStates || []) {
+  for (const [id, x, y, z, yaw, action, pose] of npcStates || []) {
     const a = npcs.get(id);
     if (!a) continue;
-    a.setState(x, y, z, yaw, 0, Number.isFinite(ts) ? ts : null);
+    // Sitting on a chair or the couch (maybe with a book), lying in bed, reading at a bookshelf.
+    const flags = (pose === NPC_POSE.lie ? FLAG.sleeping : pose === NPC_POSE.sit || pose === NPC_POSE.read ? FLAG.sitting : 0) | (action === NPC_ACT.pet ? FLAG.crouching : 0);
+    a.setState(x, y, z, yaw, 0, Number.isFinite(ts) ? ts : null, flags);
+    if (!Number.isFinite(ts)) a.applyFlags(flags);
+    a.reading = pose === NPC_POSE.read || pose === NPC_POSE.readStanding;
     if (action === NPC_ACT.wave && a.wave <= 0) a.emote('wave');
     if (action === NPC_ACT.dance || action === NPC_ACT.cheer) a.dance = Math.max(a.dance, 0.6);
-    a.crouching = action === NPC_ACT.pet;
   }
 });
 net.on('news', ({ place, guest }) => Object.assign(news, { on: true, place, guest, caption: '', cut: true }));

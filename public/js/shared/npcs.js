@@ -4,7 +4,7 @@
 // come near, pet your pet, love your cool stuff, and react to fireworks, explosions,
 // dancing and water balloons.
 import { sanitizeLook } from './avatar.js';
-import { BLOCKS, isSolidBlock, blockId, itemOf, shapeOf, blockMeta, blockKey, toggleDoorValue, DOOR_OPEN, DOOR_TOP, SHOP_TOOLS } from './blocks.js';
+import { BLOCKS, isSolidBlock, blockId, itemOf, shapeOf, blockMeta, blockKey, toggleDoorValue, isNightTime, DOOR_OPEN, DOOR_TOP, SHOP_TOOLS } from './blocks.js';
 import { claimAt } from './claims.js';
 import { liftColumn, liftStops } from './elevator.js';
 import { buildMap, route, nearestNode, cellKey, cellFlags, doorAt, nearGarage, STAND, DOOR, CLIMB, RIDE } from './homenav.js';
@@ -12,6 +12,8 @@ import { inZone } from './secretbase.js';
 import { RESIDENTS } from './residents.js';
 
 export const NPC_ACT = { idle: 0, walk: 1, wave: 2, dance: 3, pet: 4, cheer: 5 };
+// How they're settled (as well as what they're doing): sitting, lying in bed, reading a book.
+export const NPC_POSE = { none: 0, sit: 1, lie: 2, read: 3, readStanding: 4 };
 
 const pickOne = list => list[Math.floor(Math.random() * list.length)];
 const nameKey = name => String(name || '').trim().toLowerCase();
@@ -198,7 +200,7 @@ export class NpcCrew {
 
   states() {
     const r = v => Math.round(v * 100) / 100;
-    return this.list.map(n => [n.id, r(n.pos[0]), r(n.pos[1]), r(n.pos[2]), r(n.yaw), n.action]);
+    return this.list.map(n => [n.id, r(n.pos[0]), r(n.pos[1]), r(n.pos[2]), r(n.yaw), n.action, n.pose || 0]);
   }
 
   // ---------- Where they can walk ----------
@@ -443,33 +445,125 @@ export class NpcCrew {
     return buildMap(this.homeWorld(n), [x0 - M, z0 - M, x1 + M, z1 + M], seed);
   }
 
-  // Somewhere to go next: usually another floor or another room, in the house more often than
-  // out in the yard (bodyguards patrol both, and keep an eye on the front door).
-  homeSpot(n) {
+  // What to do next, and where: lie on a bed, sit on a chair or the couch (maybe with a book),
+  // read at a bookshelf, look out of a window, or just wander off to another room, another
+  // floor or the yard. Always somewhere away from everyone else who lives there, so they spread
+  // out round the house instead of trailing after each other. Bodyguards patrol: the house, the
+  // yard, the front door, and the windows. Returns { key, spot } (spot: null for a stroll).
+  homePlan(n) {
     const map = n.map;
     if (!map?.nodes.size) return null;
-    if (n.post && Math.random() < 0.3) {
-      const k = nearestNode(map, n.post[0], n.post[1], n.post[2], 4);
-      if (k && Math.hypot(n.post[0] - n.pos[0], n.post[2] - n.pos[2]) > 2.5) return k;
+    const guard = !!n.def.land, here = this.cellOf(n);
+    const mates = this.list.filter(o => o !== n && o.nav?.key === n.nav.key);
+    const theirs = [];
+    for (const o of mates) {
+      theirs.push(o.doing?.back || o.pos);
+      const g = o.goalKey && map.nodes.get(o.goalKey);
+      if (g) theirs.push([g.x + 0.5, g.y, g.z + 0.5]);
     }
+    const busy = new Set(mates.flatMap(o => [o.plan?.id, o.doing?.id]).filter(Boolean));
+    // How far from the nearest of them (another floor counts as far).
+    const room = m => theirs.reduce((best, p) => Math.min(best, Math.hypot(p[0] - m.x - 0.5, p[2] - m.z - 0.5) + Math.abs(p[1] - m.y) * 3), 99);
+    const usable = m => m && m.f === STAND && !nearGarage(map.garages, m.x, m.y, m.z, 3) && !m.to.some(e => e[1] === RIDE);
+    const far = m => m.y !== here[1] || Math.hypot(m.x - here[0], m.z - here[2]) > 3;
+    // The best few of some candidates (the roomiest), then one of those at random.
+    const choose = list => {
+      const scored = list.map(c => ({ ...c, room: room(map.nodes.get(c.key)) + Math.random() * 3 })).sort((x, y) => y.room - x.room);
+      const roomy = scored.filter(c => c.room >= 4);
+      const pool = (roomy.length ? roomy : scored).slice(0, 3);
+      return pool.length ? pickOne(pool) : null;
+    };
+    const kinds = { bed: [], seat: [], shelf: [], window: [] };
+    for (const s of map.spots || []) {
+      if (busy.has(s.id) || s.id === n.lastSpot || (guard && s.kind !== 'window')) continue;
+      if (!usable(map.nodes.get(s.from)) && s.kind !== 'bed' && s.kind !== 'seat') continue;
+      kinds[s.kind].push({ key: s.from, spot: s });
+    }
+    // Somewhere to stroll to: usually another floor or another room, in the house more often
+    // than out in the yard.
+    const stroll = [];
     const levels = new Map();
     for (const [k, m] of map.nodes) {
-      if (m.f !== STAND || nearGarage(map.garages, m.x, m.y, m.z, 3)) continue;
-      if (m.to.some(e => e[1] === RIDE)) continue; // (not right in front of an elevator)
-      if (this.list.some(o => o !== n && o.nav && (o.goalKey === k || Math.hypot(o.pos[0] - m.x - 0.5, o.pos[2] - m.z - 0.5) + Math.abs(o.pos[1] - m.y) < 1.5))) continue;
+      if (!usable(m) || !far(m)) continue;
       if (!levels.has(m.y)) levels.set(m.y, []);
-      levels.get(m.y).push([k, m]);
+      levels.get(m.y).push({ key: k, m });
     }
     const floors = [...levels.values()].filter(l => l.length >= 4); // (not the steps of the stairs)
-    if (!floors.length) return null;
-    const y = Math.round(n.pos[1]);
-    const mine = floors.find(l => l[0][1].y === y);
-    const others = floors.filter(l => l !== mine);
-    const level = mine && (!others.length || Math.random() < 0.45) ? mine : pickOne(others);
-    const inside = level.filter(([, m]) => m.roof), outside = level.filter(([, m]) => !m.roof);
-    const pool = inside.length && (!outside.length || Math.random() < (n.def.land ? 0.5 : 0.65)) ? inside : outside;
-    const away = pool.filter(([, m]) => m.y !== y || Math.hypot(m.x + 0.5 - n.pos[0], m.z + 0.5 - n.pos[2]) > 3);
-    return pickOne(away.length ? away : pool)[0];
+    if (floors.length) {
+      const level = pickOne(floors);
+      const inside = level.filter(c => c.m.roof), outside = level.filter(c => !c.m.roof);
+      const pool = inside.length && (!outside.length || Math.random() < (guard ? 0.5 : 0.65)) ? inside : outside;
+      for (let i = 0; i < 24 && pool.length; i++) stroll.push({ key: pickOne(pool).key, spot: null });
+    }
+    if (n.post) {
+      const k = nearestNode(map, n.post[0], n.post[1], n.post[2], 4);
+      // (Standing guard there for a while, looking out.)
+      const ahead = [n.post[0] - Math.sin(n.face) * 4, n.post[2] - Math.cos(n.face) * 4];
+      if (k && !busy.has('post') && Math.hypot(n.post[0] - n.pos[0], n.post[2] - n.pos[2]) > 2.5) kinds.post = [{ key: k, spot: { kind: 'post', id: 'post', face: ahead } }];
+    }
+    const night = isNightTime(this.room.time ?? 0);
+    const weights = guard ? { stroll: 2, window: 1.2, post: 1.6 } : { stroll: 1.2, seat: 2.4, bed: night ? 6 : 1, shelf: 1, window: 0.8 };
+    const options = Object.entries(weights).map(([kind, w]) => [kind === 'stroll' ? stroll : kinds[kind] || [], w]).filter(([l]) => l.length);
+    let total = options.reduce((t, [, w]) => t + w, 0);
+    while (options.length) {
+      let r = Math.random() * total, i = 0;
+      while (i < options.length - 1 && (r -= options[i][1]) > 0) i++;
+      const c = choose(options[i][0]);
+      if (c) return c;
+      total -= options[i][1];
+      options.splice(i, 1);
+    }
+    return null;
+  }
+
+  // Doing something (lying in bed, sitting, reading, looking out of the window) until it's time
+  // to get up. Saying hello to the boss gets them up (unless they're asleep).
+  homeDoing(n, dt, players, now) {
+    const d = n.doing;
+    d.t -= dt;
+    if (n.task?.kind === 'pet') n.task = null; // (too comfy to go and pat pets)
+    const chase = d.kind === 'bed' ? null : this.homeChase(n, players, now);
+    if (d.t <= 0 || chase || !this.stillThere(d)) return this.stopDoing(n);
+    if (d.face) n.yaw = turn(n.yaw, Math.atan2(-(d.face[0] - n.pos[0]), -(d.face[1] - n.pos[2])), dt * 4);
+    n.action = NPC_ACT.idle;
+  }
+
+  // Is the bed (or chair) still there?
+  stillThere(d) {
+    if (d.kind !== 'bed' && d.kind !== 'seat') return true;
+    const [x, y, z] = d.id.split(',').map(Number), def = BLOCKS[blockId(itemOf(this.room.get(x, y, z)))];
+    return d.kind === 'bed' ? def === BLOCKS[64] : !!def?.seat;
+  }
+
+  startDoing(n, spot) {
+    if (!this.stillThere({ kind: spot.kind, id: spot.id })) return this.restAWhile(n);
+    const night = isNightTime(this.room.time ?? 0);
+    const [lo, hi] = { bed: night ? [90, 220] : [40, 110], seat: [25, 75], shelf: [12, 28], window: [8, 20], post: [20, 45] }[spot.kind];
+    n.doing = { kind: spot.kind, id: spot.id, t: lo + Math.random() * (hi - lo), back: n.pos.slice(), face: spot.face || null };
+    n.lastSpot = spot.id;
+    if (spot.pos) {
+      n.pos = spot.pos.slice();
+      n.yaw = spot.yaw;
+    }
+    if (spot.face) this.face(n, spot.face[0], spot.face[1]);
+    n.pose = spot.kind === 'bed' ? NPC_POSE.lie : spot.kind === 'seat' ? (Math.random() < 0.4 ? NPC_POSE.read : NPC_POSE.sit) : spot.kind === 'shelf' ? NPC_POSE.readStanding : NPC_POSE.none;
+    n.action = NPC_ACT.idle;
+  }
+
+  stopDoing(n) {
+    const d = n.doing;
+    n.doing = null;
+    n.pose = NPC_POSE.none;
+    if (d?.back) n.pos = d.back.slice();
+    // (Up, and off somewhere else: not hanging about by the couch.)
+    n.wait = 0.5 + Math.random() * 2;
+    n.action = NPC_ACT.idle;
+  }
+
+  // A little while standing about before the next thing.
+  restAWhile(n) {
+    n.wait = n.def.land ? 8 + Math.random() * 12 : 6 + Math.random() * 16;
+    n.action = NPC_ACT.idle;
   }
 
   // Someone (or something) to go over to: a pet to pat, the boss coming home, or (for
@@ -484,18 +578,23 @@ export class NpcCrew {
     const [x0, z0, x1, z1] = n.nav.rect;
     const onLand = (p, m) => p[0] >= x0 - m && p[0] <= x1 + 1 + m && p[2] >= z0 - m && p[2] <= z1 + 1 + m && Math.abs(p[1] - n.pos[1]) < 9;
     const land = n.def.land && this.lands.find(l => l.key === n.def.land);
-    let best = null;
+    let best = null, bossHome = false;
     for (const c of players) {
       if (!c.pos || c.sleeping) continue;
       const boss = nameKey(c.name) === n.nav.key, seenKey = n.def.land ? `${c.id}:true` : c.id;
       if (land && !this.room.welcomeOn(land, c) && onLand(c.pos, 2)) return { id: c.id, x: c.pos[0], y: c.pos[1], z: c.pos[2], near: 2 };
-      if (boss && onLand(c.pos, 4) && now - (n.seen.get(seenKey) || 0) > 120 * SECOND) best = { id: c.id, x: c.pos[0], y: c.pos[1], z: c.pos[2], near: 3 };
+      if (!boss || !onLand(c.pos, 4)) continue;
+      bossHome = true;
+      // (Just come home: go and say hi. Not every time they walk past, though.)
+      if (now - (n.bossHome ||= now) < 25 * SECOND && now - (n.seen.get(seenKey) || 0) > 120 * SECOND) best = { id: c.id, x: c.pos[0], y: c.pos[1], z: c.pos[2], near: 3 };
     }
+    if (!bossHome) n.bossHome = 0;
     return best;
   }
 
   homeMove(n, dt, players) {
     if (n.ride) return this.rideLift(n, dt);
+    if (n.doing) return this.homeDoing(n, dt, players, Date.now());
     const step = n.path?.[n.pathI];
     const between = step && (step.how === CLIMB || Math.abs(n.pos[1] - Math.round(n.pos[1])) > 0.01);
     if (n.actionT > 0 && n.action !== NPC_ACT.walk && !between) return; // busy waving, dancing, petting
@@ -518,8 +617,10 @@ export class NpcCrew {
         const map = this.homeMap(n);
         const goal = map && nearestNode(map, chase.x, chase.y, chase.z, 5);
         const path = goal && route(map, cellKey(...this.cellOf(n)), goal);
-        if (path?.length) this.setPath(n, path, goal);
-        else if (chase.pet) n.task = null; // (can't get there from here)
+        if (path?.length) {
+          this.setPath(n, path, goal);
+          n.plan = null;
+        } else if (chase.pet) n.task = null; // (can't get there from here)
       }
     } else if (n.chase) [n.path, n.chase] = [null, null];
     if (!n.path) {
@@ -529,13 +630,15 @@ export class NpcCrew {
       if (c) n.yaw = turn(n.yaw, Math.atan2(-(c.pos[0] - n.pos[0]), -(c.pos[2] - n.pos[2])), dt * 4);
       if (n.wait > 0) return;
       const map = this.homeMap(n);
-      const goal = map && this.homeSpot(n);
-      const path = goal && route(map, cellKey(...this.cellOf(n)), goal);
-      if (!path?.length) {
+      const plan = map && this.homePlan(n);
+      const path = plan && route(map, cellKey(...this.cellOf(n)), plan.key);
+      if (!path) {
         n.wait = 2 + Math.random() * 3;
         return;
       }
-      this.setPath(n, path, goal);
+      if (!path.length) return plan.spot ? this.startDoing(n, plan.spot) : this.restAWhile(n);
+      this.setPath(n, path, plan.key);
+      n.plan = plan.spot;
     }
     this.followPath(n, dt);
   }
@@ -566,7 +669,7 @@ export class NpcCrew {
         const shared = this.homeMaps?.get(n.nav.key);
         if (shared) shared.stale = true;
         if (n.ownMap) n.ownMap.stale = true;
-        [n.path, n.chase, n.goalKey] = [null, null, null];
+        [n.path, n.chase, n.goalKey, n.plan] = [null, null, null, null];
         n.wait = 1;
         n.action = NPC_ACT.idle;
         return;
@@ -600,9 +703,10 @@ export class NpcCrew {
     n.pathI++;
     n.stepOk = false;
     if (n.pathI < n.path.length) return;
-    [n.path, n.chase, n.goalKey] = [null, null, null];
-    n.wait = n.def.land ? 2 + Math.random() * 5 : 3 + Math.random() * 9;
-    n.action = NPC_ACT.idle;
+    const plan = n.plan;
+    [n.path, n.chase, n.goalKey, n.plan] = [null, null, null, null];
+    if (plan) this.startDoing(n, plan);
+    else this.restAWhile(n);
   }
 
   // ---------- Doors and elevators at home ----------
@@ -913,7 +1017,7 @@ export class NpcCrew {
         const home = this.findStand(cx, 0, cz, def) || [cx + 0.5, 0, cz + 0.5];
         const n = {
           def, id: def.id, home, area: [x0, z0, x1, z1], face: 0,
-          pos: home.slice(), yaw: Math.random() * Math.PI * 2, goal: null, wait: 2 + i * 2, action: NPC_ACT.idle, actionT: 0, saidAt: 0, look: sanitizeLook(def.look),
+          pos: home.slice(), yaw: Math.random() * Math.PI * 2, goal: null, wait: 3 + Math.random() * 12, action: NPC_ACT.idle, actionT: 0, saidAt: 0, look: sanitizeLook(def.look),
           seen: new Map(), noticed: new Map(), petted: new Map(), task: null,
           nav: { key: fam.key, rect: fam.rect },
         };
