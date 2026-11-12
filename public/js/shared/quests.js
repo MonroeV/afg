@@ -20,8 +20,13 @@ const VISIT = {
 const pick = list => list[Math.floor(Math.random() * list.length)];
 const PILOT = -45; // Captain Leo
 const SECRET_AFTER = 3; // how many of his jobs before he tells you how to fly
-// (See cheat() in main.js: typed in the chat, these switch flying on and off.)
-const pickSecret = () => pick(['🤫 Psst… want to fly like me? Type UP UP AND AWAY in the chat! ✈️', '🤫 Here\'s a secret, just for you: type UP UP AND AWAY in the chat, then you can fly! ✈️']);
+// A riddle, not instructions (see cheat() in main.js: typed in the chat, the words switch
+// flying on and off). You have to work out the rest.
+const pickSecret = () => pick([
+  '🤫 A magic man once told me never to yell "Up Up and Away" too loudly… who knows what might happen? ✈️',
+  '🤫 When I was little, a wizard whispered "Up Up and Away" to me… and I\'ve been a pilot ever since. ✈️',
+  '🤫 Shh… some say the sky listens when you say "Up Up and Away". But don\'t tell anyone I told you! ✈️',
+]);
 
 export class Quests {
   constructor(room) {
@@ -116,15 +121,13 @@ export class Quests {
     this.send(c);
     room.onDirty();
     // Captain Leo the pilot (or, in a town without him, whoever lives in the last house) knows
-    // a secret: the magic words for flying. Do a few of his jobs and he whispers them to you (just
-    // you), with a hint after each one before that, so you know to come back.
+    // a secret: the magic words for flying. Do a few of his jobs and he lets them slip in a
+    // riddle (just to you). Before that he just asks you to come back for another job.
     const list = this.residents(), pilot = list.find(r => r.id === PILOT) || list[list.length - 1];
     if (pilot && q.from === pilot.id) {
       w.pilotJobs = (w.pilotJobs || 0) + 1;
       const left = SECRET_AFTER - w.pilotJobs;
-      const text = left <= 0 ? pickSecret()
-        : left === 1 ? '🤫 You\'re a super helper! Do one more job for me and I\'ll tell you my secret… ✈️'
-        : '✈️ Thank you! Help me again sometime, and maybe I\'ll tell you a secret… 🤫';
+      const text = left <= 0 ? pickSecret() : pick(['✈️ Come back in a bit: I\'ll have another job for you!', '✈️ Thanks, friend! Come and see me again later. I\'ll need more help!']);
       setTimeout(() => c.send({ t: 'npc_say', id: pilot.id, text }), 3500);
     }
     return say;

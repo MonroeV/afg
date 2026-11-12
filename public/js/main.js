@@ -71,6 +71,7 @@ try {
   savedSettings = JSON.parse(localStorage.getItem('buildzone') || '{}') || {};
 } catch { /* storage unavailable */ }
 Object.assign(settings, savedSettings);
+delete settings.canFly; // (flying isn't remembered: the magic words only last while you're connected)
 if (IS_TOUCH && !savedSettings.quality) settings.quality = 'low'; // phones start on the faster graphics
 if (!Array.isArray(settings.hotbar) || settings.hotbar.length !== 9) settings.hotbar = DEFAULT_HOTBAR.slice();
 // Gear (sneakers, jetpack, rainbow trail, skis) used to be held, and Gold Car Paint was a tool: now
@@ -483,6 +484,7 @@ async function playSolo() {
 
 // Out of the game we were in (before starting another one without reloading the page).
 function leaveWorld() {
+  stopFlying();
   if (!inGame) return;
   try {
     getOut();
@@ -599,6 +601,7 @@ $('pause-online').addEventListener('click', async () => {
 
 // Everything that comes with arriving in a world (from the server, or our own).
 function startGame(welcome) {
+  stopFlying(); // (the magic words only last while you're connected)
   // The server has a newer version of the game than this page (it was updated while this
   // tab was open): load the new version (and go straight back in). Only once, so it can never
   // keep reloading.
@@ -1167,6 +1170,7 @@ net.on('time', ({ time }) => {
 });
 net.on('disconnect', () => {
   online = false;
+  stopFlying();
   avatars.clear();
   connectionTrouble('lost');
 });
@@ -1491,30 +1495,37 @@ $('chat-input').addEventListener('keydown', e => {
 
 // ---------- Secret cheat codes ----------
 // Typed in the chat (and never sent to anybody, so they stay secret). Flying is one: the
-// magic words switch it on (F, or tapping jump twice, then flies) and off again. Captain Leo,
-// the pilot who lives in town, whispers them to you once you've done three of his jobs (quests.js).
+// magic words switch it on (F, or tapping jump twice, then flies) and off again. Nothing on the
+// screen says so: the words just show in your own chat like anything you say, and you have to
+// work out the rest. It only lasts while you're connected: it's off again after you leave or
+// lose the connection (or reload). Captain Leo, the pilot who lives in town, drops a hint about
+// the words once you've done three of his jobs (quests.js).
 
 const FLY_CODE = 'upupandaway';
+let canFly = false;
 
 function cheat(text) {
   const said = text.toLowerCase().replace(/[^a-z]/g, '');
   if (said !== FLY_CODE) return false;
-  settings.canFly = !settings.canFly;
-  if (!settings.canFly && player.flying) {
-    player.flying = false;
-    player.vel.y = 0;
-  }
-  saveSettings();
-  sounds.coin?.();
-  effects.sparkle(player.pos.x, player.pos.y + 1, player.pos.z, 30);
-  hud.toast(settings.canFly ? (touch ? '🦸 You can FLY! Tap ⬆ twice to fly.' : '🦸 You can FLY! Press F to fly.') : '🦸 Flying is off.');
+  canFly = !canFly;
+  if (!canFly) stopFlying();
+  hud.addChat({ name: settings.name, color: settings.look?.shirtColor, text }); // (as if it was sent)
   return true;
 }
 
 function toggleFly() {
-  if (riding() || rv.inside || !settings.canFly) return;
+  if (riding() || rv.inside || !canFly) return;
   player.flying = !player.flying;
   player.vel.y = 0;
+}
+
+// No more flying (and down you come).
+function stopFlying() {
+  canFly = false;
+  if (player?.flying) {
+    player.flying = false;
+    player.vel.y = 0;
+  }
 }
 
 // ---------- Input ----------
