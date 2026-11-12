@@ -46,12 +46,14 @@ export class Network {
       };
       ws.onclose = () => {
         clearTimeout(timer);
+        if (!welcomed) reject(new Error('closed'));
         if (welcomed && this.ws === ws && !this.leaving) {
           this.online = this.connected = false;
           this.handlers.disconnect?.();
         }
       };
       ws.onmessage = e => {
+        this.heardAt = performance.now();
         let msg;
         try {
           msg = JSON.parse(e.data);
@@ -65,7 +67,7 @@ export class Network {
           resolve(msg);
         } else if (msg.t === 'full') {
           clearTimeout(timer);
-          reject(new Error('server full'));
+          reject(new Error('full'));
         } else {
           this.dispatch(msg);
         }
@@ -106,8 +108,10 @@ export class Network {
       });
       this.local = { room, client, save };
       this.connected = true;
+      this.online = false;
       let last = performance.now();
-      setInterval(() => {
+      clearInterval(this.ticker);
+      this.ticker = setInterval(() => {
         const now = performance.now();
         room.tick((now - last) / 1000);
         last = now;
@@ -130,6 +134,43 @@ export class Network {
     const { room, client } = this.local;
     if (client.moved) room.rememberSpot(client);
     this.local.save();
+  }
+
+  // Stop talking to the server (quietly: no "disconnected"), e.g. before playing by yourself.
+  drop() {
+    const ws = this.ws;
+    this.ws = null;
+    this.online = this.connected = false;
+    try {
+      ws?.close();
+    } catch { /* already closed */ }
+  }
+
+  // The connection's gone quiet: give up on it, and say so.
+  lost() {
+    if (!this.online) return;
+    this.drop();
+    this.handlers.disconnect?.();
+  }
+
+  // Is the server there? (Asks for the page, without waiting long.)
+  async reachable(timeoutMs = 3000) {
+    const stop = new AbortController();
+    const timer = setTimeout(() => stop.abort(), timeoutMs);
+    try {
+      const res = await fetch(`./?alive=${Date.now()}`, { method: 'HEAD', cache: 'no-store', signal: stop.signal });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // Connected, but nothing heard from the server for a while (wi-fi gone, the server switched
+  // off): the connection's as good as lost. (The server talks to everyone several times a second.)
+  silent(ms = 10000) {
+    return this.online && this.heardAt && performance.now() - this.heardAt > ms;
   }
 
   send(msg) {

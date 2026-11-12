@@ -11,14 +11,14 @@ export const CONTROLS = [
   ['W A S D', 'Move'], ['Mouse', 'Look'], ['Space', 'Jump'], ['Click', 'Use item'],
   ['Right click', 'Doors, cars, pets, beds, sit down'], ['Hammer', '3 hits to break'], ['Middle click', 'Copy block'],
   ['1–9 / Wheel', 'Pick item'], ['X', 'Next style (lamps, chairs, colors…)'], ['Q', 'Swap back to the last item'], ['E', 'Items, gear & Build Book'], ['Shift', 'Sprint'],
-  ['Ctrl / C', "Crouch (you won't fall off edges)"], ['F', 'Fly (Space / C)'],
+  ['Ctrl / C', "Crouch (you won't fall off edges)"],
   ['V', 'Camera view'], ['G', 'Dance! (Driving: siren, camper roof, dump bed, RV awning)'], ['B (in a camper or RV)', 'Sleep'], ['B', 'Wave'], ['T / Enter', 'Chat'], ['R', 'Go home (bed, your land, or town)'],
   ['P', 'Take a photo'], ['H', 'Hide the HUD (for photos)'], ['Z', 'Undo your last Fill or Paste'],
 ];
 
 export const TOUCH_CONTROLS = [
   ['Left thumb', 'Joystick: walk (push it all the way to run)'], ['Right side', 'Drag to look around'],
-  ['Tap', 'Use item (keep your finger still to keep hammering)'], ['⬆', 'Jump (tap twice to fly)'], ['⬇', 'Crouch (or fly down)'],
+  ['Tap', 'Use item (keep your finger still to keep hammering)'], ['⬆', 'Jump'], ['⬇', 'Crouch (or fly down)'],
   ['✋', 'Doors, cars, pets, beds'], ['🚪', 'Get out of a vehicle'], ['Hotbar', 'Tap to pick an item (tap it again: next style)'],
   ['🎒', 'Items & Build Book'], ['🎥', 'Camera view'], ['💃', 'Dance! (Driving, ⭐: siren, pop-up roof, dump bed, awning)'], ['🛏️', 'Sleep (in a parked camper van or RV)'], ['💬', 'Chat'], ['⏸', 'Pause, go home, settings'],
 ];

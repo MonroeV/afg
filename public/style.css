@@ -778,6 +778,15 @@ body.touch #quick-chat button { padding: 4px 7px; font-size: 12px; }
 .sign-colors button.on { border-color: #fff; }
 .sign-buttons { display: flex; gap: 10px; justify-content: flex-end; }
 .ask-text { font-size: 16px; line-height: 1.45; margin: 0; }
+/* Can't reach the server, or lost it: big pictures, few words. */
+#conn { z-index: 60; }
+.conn-panel { width: min(460px, 100%); display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center; }
+.conn-icon { font-size: 64px; line-height: 1; animation: conn-pulse 1.6s ease-in-out infinite; }
+@keyframes conn-pulse { 50% { opacity: 0.45; transform: scale(0.92); } }
+.conn-status { min-height: 1.4em; margin: 0; font-size: 18px; }
+.conn-buttons { display: flex; gap: 10px; width: 100%; }
+.conn-buttons button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 6px; font-size: 13px; }
+.conn-big { font-size: 34px; line-height: 1; }
 
 /* ---------- Elevators ---------- */
 .lift-panel { width: min(360px, 100%); display: flex; flex-direction: column; gap: 10px; align-items: stretch; }

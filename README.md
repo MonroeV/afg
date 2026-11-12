@@ -398,6 +398,20 @@ customize your character, drive cars, build anything and play with friends.
   cars and the town's people move smoothly: their moves are replayed a split second behind, at the
   even pace they really moved, so a bumpy connection doesn't make them jitter or bounce
 - **Single player works too**: with no server, the world runs and saves right in the browser
+- **When the server can't be reached** (pressing Play), or **the connection is lost** while you
+  play, a box says so, with three big buttons: 🔄 try again, 🧍 play by myself (your own world,
+  saved on this device), or 🏠 back to the menu. While the connection's lost it keeps trying by
+  itself, and puts you straight back in the game when the server answers. Playing by yourself,
+  📡 PLAY ONLINE in the pause menu goes back online once the server's there. (It also notices a
+  connection that's gone quiet, like dropped wi-fi, after 10 seconds.)
+- **Updates show up straight away**: the page asks for every file with its version on the end
+  (`js/main.js?v=…`, worked out by the server from what's in each file), so a changed file is
+  fetched fresh and nobody ever needs to clear their browser's cache. Unchanged files come from
+  the browser's own copy without even asking the server.
+- **Flying is a secret**: F (or tapping jump twice on a phone) only flies once you've typed the
+  magic words in the chat (they're never sent to anyone). Captain Leo, the pilot who lives in
+  town, whispers them to you once you've done a job for him. (For grown-ups: they're `FLY_CODE`
+  in `public/js/main.js`. Typing them again switches flying off.)
 - **Plays on phones and tablets** (held sideways): a joystick under your left thumb, drag to look,
   tap to build
 
@@ -424,7 +438,7 @@ customize your character, drive cars, build anything and play with friends.
 | E | Open the item menu and the Build Book, or get in/out of a vehicle you're looking at (the RV: step inside it, or back out) |
 | Shift | Sprint |
 | Ctrl or C | Crouch: slow, and you won't fall off edges |
-| F | Toggle flying (Space = up, C = down) |
+| F | Fly (Space = up, C = down), but only once you know the secret magic words (see below) |
 | V | Switch camera: first person, behind you, in front of you |
 | G | Dance! (on a dance floor it starts a party). Driving: the police car's siren, the camper van's pop-up roof, the dump truck's bed, the RV's awning |
 | J | The badge book: the clubs, what to do for each badge, and how close you are |
@@ -706,6 +720,7 @@ public/
     items.js           Hotbar items, icons, the item in your hand
     effects.js         Particles, fireworks and sound effects
     network.js         Talks to the server (or runs single player)
+    assets.js          Asks for sound files by version (so updates show up straight away)
     shared/            Code used by both the server and the browser
       blocks.js        The list of blocks
       avatar.js        Character options

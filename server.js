@@ -17,7 +17,15 @@ const CHARACTERS_FILE = path.join(DATA_DIR, 'characters.json');
 
 // ---------- Static file serving ----------
 
+const THREE_VERSION = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(ROOT, 'node_modules/three/package.json'), 'utf8')).version;
+  } catch {
+    return '0';
+  }
+})();
 const STATIC_ROOTS = [
+  { prefix: `/vendor/three@${THREE_VERSION}/`, dir: path.join(ROOT, 'node_modules/three'), versioned: true },
   { prefix: '/vendor/three/', dir: path.join(ROOT, 'node_modules/three') },
   { prefix: '/', dir: path.join(ROOT, 'public') },
 ];
@@ -33,22 +41,57 @@ const MIME = {
   '.mp3': 'audio/mpeg',
 };
 
-// Which version of the game files this server has: a fingerprint of every file in public/.
-// Browsers are told it, so one still running older files (a tab left open while the game was
-// updated) can notice and reload itself.
-function fingerprint(dir) {
-  const hash = crypto.createHash('sha1');
+// Which version of each game file this server has: a fingerprint of what's in it. The page
+// asks for every file with its fingerprint on the end (js/main.js?v=3f2a…), so whenever a file
+// changes, browsers fetch the new one straight away (nobody has to clear their cache), and the
+// files that haven't changed come from the browser's own copy without even asking.
+const PUBLIC_DIR = path.join(ROOT, 'public');
+const hashes = new Map(); // file -> { size, mtimeMs, hash }
+function fileVersions() {
+  const out = {};
   const walk = d => {
     for (const name of fs.readdirSync(d).sort()) {
       const f = path.join(d, name), st = fs.statSync(f);
       if (st.isDirectory()) walk(f);
-      else hash.update(`${path.relative(dir, f)}:${st.size}:${st.mtimeMs}\n`);
+      else {
+        let h = hashes.get(f);
+        if (!h || h.size !== st.size || h.mtimeMs !== st.mtimeMs) {
+          h = { size: st.size, mtimeMs: st.mtimeMs, hash: crypto.createHash('sha1').update(fs.readFileSync(f)).digest('hex').slice(0, 10) };
+          hashes.set(f, h);
+        }
+        out[path.relative(PUBLIC_DIR, f).split(path.sep).join('/')] = h.hash;
+      }
     }
   };
-  walk(dir);
-  return hash.digest('hex').slice(0, 12);
+  walk(PUBLIC_DIR);
+  return out;
 }
-const BUILD = fingerprint(path.join(ROOT, 'public'));
+
+// The whole game's version (browsers are told it, so one still running older files, in a tab
+// left open while the game was updated, can notice and reload itself).
+const BUILD = (() => {
+  const all = fileVersions(), hash = crypto.createHash('sha1');
+  for (const [f, h] of Object.entries(all)) hash.update(`${f}:${h}\n`);
+  return hash.update(THREE_VERSION).digest('hex').slice(0, 12);
+})();
+
+// The page, with every file it loads asked for by version: the stylesheet, the game's script,
+// every module it imports (through the import map), three.js, and the sounds (by the list in
+// #bz-files, see js/assets.js).
+function versionedPage(html) {
+  const v = fileVersions();
+  const imports = {
+    three: `./vendor/three@${THREE_VERSION}/build/three.module.js`,
+    'three/addons/': `./vendor/three@${THREE_VERSION}/examples/jsm/`,
+  };
+  for (const [f, h] of Object.entries(v)) if (f.startsWith('js/') && f.endsWith('.js')) imports[`./${f}`] = `./${f}?v=${h}`;
+  const assets = Object.fromEntries(Object.entries(v).filter(([f]) => !f.startsWith('js/') && f !== 'index.html'));
+  return html
+    .replace('%BUILD%', BUILD)
+    .replace(/<script type="importmap">[\s\S]*?<\/script>/, () => `<script type="importmap">${JSON.stringify({ imports })}</script>\n  <script type="application/json" id="bz-files">${JSON.stringify(assets)}</script>`)
+    .replace('href="style.css"', `href="style.css?v=${v['style.css'] || BUILD}"`)
+    .replace('src="js/main.js"', `src="js/main.js?v=${v['js/main.js'] || BUILD}"`);
+}
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
@@ -70,11 +113,16 @@ const server = http.createServer((req, res) => {
       res.writeHead(404).end('Not found');
       return;
     }
-    // Browsers keep a copy, but always check with us first (no-cache) whether it's still the
-    // newest: unchanged files just get a quick "304 Not Modified".
+    // A file asked for by its version (?v=… or a three.js with its version in the path) never
+    // changes: browsers can keep it for good. Anything else (the page itself, and files asked
+    // for without a version) is checked with us every time (unchanged: a quick "304").
+    const versioned = root.versioned || (url.searchParams.has('v') && !file.endsWith('index.html'));
     const etag = `"${st.size}-${Math.round(st.mtimeMs)}-${BUILD}"`;
-    const headers = { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache', ETag: etag };
-    if (req.headers['if-none-match'] === etag) {
+    const headers = { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': versioned ? 'public, max-age=31536000, immutable' : 'no-cache', ETag: etag };
+    // (The page itself is always sent afresh: it's small, and it lists the newest versions.)
+    const page = file.endsWith('index.html');
+    if (page) delete headers.ETag;
+    if (!page && req.headers['if-none-match'] === etag) {
       res.writeHead(304, headers).end();
       return;
     }
@@ -83,7 +131,7 @@ const server = http.createServer((req, res) => {
         res.writeHead(404).end('Not found');
         return;
       }
-      if (file.endsWith('index.html')) data = data.toString().replace('%BUILD%', BUILD);
+      if (file.endsWith('index.html')) data = versionedPage(data.toString());
       res.writeHead(200, headers);
       res.end(data);
     });

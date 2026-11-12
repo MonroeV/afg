@@ -88,6 +88,7 @@
           <option value="0">As fast as possible</option>
         </select>
       </label>
+      <button id="pause-online" class="secondary hidden">📡 PLAY ONLINE</button>
       <button id="go-home" class="secondary">🏠 GO HOME</button>
       <button id="exit-menu" class="secondary">🚪 EXIT TO MENU</button>
       <div class="controls" id="pause-controls"></div>
@@ -129,6 +130,19 @@
   </div>
   <div id="red-flash"></div>
 
+  <div id="conn" class="screen hidden">
+    <div class="panel conn-panel">
+      <div id="conn-icon" class="conn-icon">📡</div>
+      <h2 id="conn-title"></h2>
+      <p id="conn-text" class="ask-text"></p>
+      <p id="conn-status" class="conn-status"></p>
+      <div class="conn-buttons">
+        <button id="conn-retry" type="button"><span class="conn-big">🔄</span>TRY AGAIN</button>
+        <button id="conn-solo" type="button" class="secondary"><span class="conn-big">🧍</span>PLAY BY MYSELF</button>
+        <button id="conn-menu" type="button" class="secondary"><span class="conn-big">🏠</span>MENU</button>
+      </div>
+    </div>
+  </div>
   <div id="ask" class="screen hidden">
     <div class="panel sign-panel">
       <h2 id="ask-title"></h2>

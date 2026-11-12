@@ -18,6 +18,9 @@ const VISIT = {
   shop_toys: 'the Toy Box', shop_pets: 'the Pet Shop',
 };
 const pick = list => list[Math.floor(Math.random() * list.length)];
+const PILOT = -45; // Captain Leo
+// (See cheat() in main.js: typed in the chat, these switch flying on and off.)
+const pickSecret = () => pick(['🤫 Psst… want to fly like me? Type UP UP AND AWAY in the chat! ✈️', '🤫 Here\'s a secret, just for you: type UP UP AND AWAY in the chat, then you can fly! ✈️']);
 
 export class Quests {
   constructor(room) {
@@ -111,6 +114,10 @@ export class Quests {
     room.progress(c, 'neighbor', q.type);
     this.send(c);
     room.onDirty();
+    // Captain Leo the pilot (or, in a town without him, whoever lives in the last house) knows
+    // a secret: the magic words for flying. He whispers them to whoever helped him (just them).
+    const list = this.residents(), pilot = list.find(r => r.id === PILOT) || list[list.length - 1];
+    if (n === pilot) setTimeout(() => c.send({ t: 'npc_say', id: n.id, text: pickSecret() }), 3500);
     return say;
   }
 

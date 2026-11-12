@@ -218,6 +218,7 @@ const avatars = new Avatars(scene);
 let myId = null;
 let online = false;
 let inGame = false;
+let autoJoin = false; // joining by itself (back after a lost connection, or an update)
 let myCar = null; // the vehicle we're driving
 let myRide = null; // the vehicle we're riding in as a passenger
 const riding = () => myCar || myRide;
@@ -379,6 +380,12 @@ async function load() {
   $('join-form').classList.remove('hidden');
   if (!IS_TOUCH) $('name').focus();
   requestAnimationFrame(frame);
+  // Coming back after a lost connection (or an update): straight back into the game.
+  try {
+    autoJoin = sessionStorage.getItem('buildzone-autojoin') === '1';
+    sessionStorage.removeItem('buildzone-autojoin');
+  } catch { /* storage unavailable */ }
+  if (autoJoin) $('join-form').requestSubmit();
 }
 
 // ---------- Joining ----------
@@ -438,24 +445,165 @@ $('join-form').addEventListener('submit', async e => {
   settings.name = $('name').value.trim() || 'Builder';
   saveSettings();
   $('play').disabled = true;
-  await offerToSaveCharacter();
+  if (!autoJoin) await offerToSaveCharacter();
+  autoJoin = false;
   goFullscreen();
-  $('status').textContent = 'Connecting…';
   sounds.ensure();
+  await joinServer();
+});
 
+// ---------- Connecting (and losing the connection) ----------
+// Can't reach the server, or lost it while playing: a box says so (with pictures, not much to
+// read), with three choices: try again, play by yourself (your own world, saved on this
+// device), or go back to the menu. While the connection's lost it keeps trying by itself, and
+// carries on as soon as the server's back.
+
+async function joinServer() {
+  $('status').textContent = 'Connecting…';
   let welcome;
   try {
     welcome = await net.connect(settings.name, settings.look);
-    online = true;
-  } catch {
-    welcome = await net.connectOffline(settings.name, settings.look);
-    online = false;
+  } catch (err) {
+    net.drop();
+    $('status').textContent = '';
+    return connectionTrouble(err?.message === 'full' ? 'full' : 'start');
   }
+  online = true;
+  startGame(welcome);
+}
 
+// Play by yourself: the world that's saved in this browser.
+async function playSolo() {
+  net.drop();
+  leaveWorld();
+  const welcome = await net.connectOffline(settings.name, settings.look);
+  online = false;
+  startGame(welcome);
+}
+
+// Out of the game we were in (before starting another one without reloading the page).
+function leaveWorld() {
+  if (!inGame) return;
+  try {
+    getOut();
+    wakeUp(true);
+  } catch { /* nothing to get out of */ }
+  seated = null;
+  for (const a of npcs.values()) a.dispose();
+  npcs.clear();
+  coinMap.clear();
+  avatars.clear();
+  $('banner').classList.add('hidden');
+}
+
+let conn = null; // the connection box, while it's up: { kind, retry }
+
+function connectionTrouble(kind) {
+  if (conn) return;
+  conn = { kind };
+  keys.clear();
+  unlock();
+  const lost = kind === 'lost';
+  $('conn-icon').textContent = kind === 'full' ? '🚫' : '📡';
+  $('conn-title').textContent = kind === 'full' ? 'The server is full' : lost ? 'Lost the connection' : "Can't reach the server";
+  $('conn-text').textContent = lost ? 'Trying to reconnect…' : kind === 'full' ? 'Try again in a little while.' : 'Is it switched on?';
+  $('conn-status').textContent = '';
+  $('conn').classList.remove('hidden');
+  updateOverlays();
+  sounds.tone?.(330, 220, 0.35, 0.1, 'sine');
+  // Lost while playing: keep trying, and carry on as soon as the server answers.
+  if (lost) conn.retry = setInterval(async () => {
+    if (conn?.kind === 'lost' && !conn.busy && (await net.reachable(2500))) rejoin();
+  }, 4000);
+}
+
+function closeConnection() {
+  if (!conn) return;
+  clearInterval(conn.retry);
+  conn = null;
+  $('conn').classList.add('hidden');
+  updateOverlays();
+}
+
+// Back into the online game: a fresh start of the page that joins straight away (the page
+// comes from the server, so it's the newest one, too).
+function rejoin() {
+  try {
+    sessionStorage.setItem('buildzone-autojoin', '1');
+  } catch { /* storage unavailable */ }
+  net.leave?.();
+  location.reload();
+}
+
+$('conn-retry').addEventListener('click', async () => {
+  if (!conn || conn.busy) return;
+  sounds.click();
+  if (conn.kind !== 'lost') {
+    closeConnection();
+    $('play').disabled = true;
+    return joinServer();
+  }
+  conn.busy = true;
+  $('conn-status').textContent = '🔄';
+  const ok = await net.reachable();
+  if (ok) return rejoin();
+  if (!conn) return;
+  conn.busy = false;
+  $('conn-status').textContent = '❌ Not yet';
+});
+$('conn-solo').addEventListener('click', async () => {
+  if (!conn) return;
+  sounds.click();
+  closeConnection();
+  await playSolo();
+});
+$('conn-menu').addEventListener('click', async () => {
+  if (!conn) return;
+  sounds.click();
+  const lost = conn.kind === 'lost';
+  closeConnection();
+  $('play').disabled = false;
+  if (!lost) return;
+  // (Starting the page again when we can: it's the tidiest way back. If the server's gone,
+  // the page can't be loaded again, so just show the menu.)
+  if (await net.reachable(2000)) {
+    net.leave?.();
+    location.reload();
+    return;
+  }
+  backToMenuHere();
+});
+
+// The menu, without starting the page again.
+function backToMenuHere() {
+  net.drop();
+  leaveWorld();
+  inGame = false;
+  unlock();
+  $('hud').classList.add('hidden');
+  $('pause').classList.add('hidden');
+  $('menu').classList.remove('hidden');
+  $('status').textContent = '';
+  $('play').disabled = false;
+  updateOverlays();
+}
+
+// Playing by yourself: the server's back? Go and play online (from the pause menu).
+$('pause-online').addEventListener('click', async () => {
+  sounds.click();
+  $('pause-online').textContent = '🔄';
+  if (await net.reachable()) return rejoin();
+  $('pause-online').textContent = '📡 ❌';
+  setTimeout(() => ($('pause-online').textContent = '📡 PLAY ONLINE'), 2500);
+});
+
+// Everything that comes with arriving in a world (from the server, or our own).
+function startGame(welcome) {
   // The server has a newer version of the game than this page (it was updated while this
-  // tab was open): load the new version. Only once, so it can never keep reloading.
+  // tab was open): load the new version (and go straight back in). Only once, so it can never
+  // keep reloading.
   const pageBuild = document.querySelector('meta[name="build"]')?.content;
-  if (welcome.build && pageBuild && pageBuild !== '%BUILD%' && welcome.build !== pageBuild) {
+  if (online && welcome.build && pageBuild && pageBuild !== '%BUILD%' && welcome.build !== pageBuild) {
     let tried = null;
     try {
       tried = sessionStorage.getItem('buildzone-update');
@@ -463,8 +611,7 @@ $('join-form').addEventListener('submit', async e => {
     } catch { /* storage unavailable */ }
     if (tried !== welcome.build) {
       $('status').textContent = 'BuildZone was updated! Loading the new version…';
-      net.leave?.();
-      location.reload();
+      rejoin();
       return;
     }
   }
@@ -505,11 +652,14 @@ $('join-form').addEventListener('submit', async e => {
     : 'Tip: right-click a car or the helicopter to drive it. Press E to see the Build Book!' });
 
   inGame = true;
+  $('pause-online').classList.toggle('hidden', online);
   respawn(true, welcome.resume);
   $('menu').classList.add('hidden');
   $('hud').classList.remove('hidden');
+  $('play').disabled = false;
+  $('status').textContent = '';
   lock();
-});
+}
 
 // Holes dug in the ground (and the grass growing back over them).
 function setHoleHere(x, z, on) {
@@ -1018,8 +1168,7 @@ net.on('time', ({ time }) => {
 net.on('disconnect', () => {
   online = false;
   avatars.clear();
-  $('banner').textContent = 'Disconnected from the server. Refresh the page to reconnect.';
-  $('banner').classList.remove('hidden');
+  connectionTrouble('lost');
 });
 
 function loudness(x, y, z, range) {
@@ -1035,6 +1184,7 @@ let editorOpen = false;
 let galleryOpen = false;
 
 function lock() {
+  if (conn) return; // (not while the connection box is up)
   if (touch) {
     // Phones have no mouse to lock: just start taking touches.
     locked = true;
@@ -1068,7 +1218,7 @@ function goFullscreen() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!conn);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -1102,7 +1252,7 @@ $('exit-menu').addEventListener('click', () => {
     location.reload();
   }, 150); // a moment for "I got out of the car" to reach the server
 });
-canvas.addEventListener('click', () => inGame && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !familyEdit && lock());
+canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !familyEdit && lock());
 $('sensitivity').addEventListener('input', e => {
   settings.sensitivity = Number(e.target.value);
   saveSettings();
@@ -1331,12 +1481,41 @@ $('chat-input').addEventListener('keydown', e => {
   e.stopPropagation();
   if (e.key === 'Enter') {
     const text = e.target.value.trim();
-    if (text) net.send({ t: 'chat', text });
+    if (cheat(text)) e.target.value = '';
+    else if (text) net.send({ t: 'chat', text });
     closeChat();
   } else if (e.key === 'Escape') {
     closeChat();
   }
 });
+
+// ---------- Secret cheat codes ----------
+// Typed in the chat (and never sent to anybody, so they stay secret). Flying is one: the
+// magic words switch it on (F, or tapping jump twice, then flies) and off again. Captain Leo,
+// the pilot who lives in town, whispers them to you once you've done a job for him.
+
+const FLY_CODE = 'upupandaway';
+
+function cheat(text) {
+  const said = text.toLowerCase().replace(/[^a-z]/g, '');
+  if (said !== FLY_CODE) return false;
+  settings.canFly = !settings.canFly;
+  if (!settings.canFly && player.flying) {
+    player.flying = false;
+    player.vel.y = 0;
+  }
+  saveSettings();
+  sounds.coin?.();
+  effects.sparkle(player.pos.x, player.pos.y + 1, player.pos.z, 30);
+  hud.toast(settings.canFly ? (touch ? '🦸 You can FLY! Tap ⬆ twice to fly.' : '🦸 You can FLY! Press F to fly.') : '🦸 Flying is off.');
+  return true;
+}
+
+function toggleFly() {
+  if (riding() || rv.inside || !settings.canFly) return;
+  player.flying = !player.flying;
+  player.vel.y = 0;
+}
 
 // ---------- Input ----------
 
@@ -1425,9 +1604,8 @@ window.addEventListener('keydown', e => {
     if (riding()) carView = (carView + 1) % 3;
     else viewMode = (viewMode + 1) % 3;
     danceView = 0;
-  } else if (e.code === 'KeyF' && !riding() && !rv.inside) {
-    player.flying = !player.flying;
-    player.vel.y = 0;
+  } else if (e.code === 'KeyF') {
+    toggleFly();
   } else if (e.code === 'KeyR') {
     respawn();
   } else if (e.code === 'KeyX' && riding()) {
@@ -1519,11 +1697,7 @@ const touch = IS_TOUCH ? new TouchControls({
     if (riding()) getOut();
     else interact();
   },
-  flyToggle: () => {
-    if (riding()) return;
-    player.flying = !player.flying;
-    player.vel.y = 0;
-  },
+  flyToggle: () => toggleFly(),
   pause: () => unlock(),
   items: () => toggleInventory(true),
   camera: () => {
@@ -4928,6 +5102,7 @@ function frameRateNow() {
 
 function frame(timestamp) {
   requestAnimationFrame(frame);
+  if (inGame && online && net.silent()) net.lost(); // (nothing from the server for a while)
   // Skip this screen refresh if it's too soon for the next frame. (A little slack, so a
   // 60 Hz screen doesn't drop to 30 frames a second when it's a touch early.)
   // The next frame is due one interval after the last one was, which keeps fast (120 Hz)

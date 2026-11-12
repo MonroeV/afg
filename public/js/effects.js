@@ -1,6 +1,7 @@
 // Little extras that make the game feel alive: debris, fireworks and sound effects.
 import * as THREE from 'three';
 import { VEHICLES } from './shared/vehicles.js';
+import { asset } from './assets.js';
 
 export class Particles {
   constructor(scene) {
@@ -669,7 +670,7 @@ export class Sounds {
     if (!ctx || !name) return null;
     if (!this.engineInfo) {
       if (!this.engineInfoLoading) {
-        this.engineInfoLoading = fetch('sounds/engines.json').then(r => r.json()).then(info => (this.engineInfo = info)).catch(() => null);
+        this.engineInfoLoading = fetch(asset('sounds/engines.json')).then(r => r.json()).then(info => (this.engineInfo = info)).catch(() => null);
       }
       return null;
     }
@@ -679,7 +680,7 @@ export class Sounds {
     const info = this.engineInfo.voices[name];
     if (!info) return null;
     this.engineBuffers[name] = 'loading';
-    Promise.all(info.layers.map(l => fetch(`sounds/${l.file}`).then(r => r.arrayBuffer()).then(b => ctx.decodeAudioData(b))))
+    Promise.all(info.layers.map(l => fetch(asset(`sounds/${l.file}`)).then(r => r.arrayBuffer()).then(b => ctx.decodeAudioData(b))))
       .then(buffers => (this.engineBuffers[name] = buffers))
       .catch(() => delete this.engineBuffers[name]);
     return null;
