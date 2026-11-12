@@ -19,6 +19,7 @@ const VISIT = {
 };
 const pick = list => list[Math.floor(Math.random() * list.length)];
 const PILOT = -45; // Captain Leo
+const SECRET_AFTER = 3; // how many of his jobs before he tells you how to fly
 // (See cheat() in main.js: typed in the chat, these switch flying on and off.)
 const pickSecret = () => pick(['🤫 Psst… want to fly like me? Type UP UP AND AWAY in the chat! ✈️', '🤫 Here\'s a secret, just for you: type UP UP AND AWAY in the chat, then you can fly! ✈️']);
 
@@ -115,9 +116,17 @@ export class Quests {
     this.send(c);
     room.onDirty();
     // Captain Leo the pilot (or, in a town without him, whoever lives in the last house) knows
-    // a secret: the magic words for flying. He whispers them to whoever helped him (just them).
+    // a secret: the magic words for flying. Do a few of his jobs and he whispers them to you (just
+    // you), with a hint after each one before that, so you know to come back.
     const list = this.residents(), pilot = list.find(r => r.id === PILOT) || list[list.length - 1];
-    if (n === pilot) setTimeout(() => c.send({ t: 'npc_say', id: n.id, text: pickSecret() }), 3500);
+    if (pilot && q.from === pilot.id) {
+      w.pilotJobs = (w.pilotJobs || 0) + 1;
+      const left = SECRET_AFTER - w.pilotJobs;
+      const text = left <= 0 ? pickSecret()
+        : left === 1 ? '🤫 You\'re a super helper! Do one more job for me and I\'ll tell you my secret… ✈️'
+        : '✈️ Thank you! Help me again sometime, and maybe I\'ll tell you a secret… 🤫';
+      setTimeout(() => c.send({ t: 'npc_say', id: pilot.id, text }), 3500);
+    }
     return say;
   }
 

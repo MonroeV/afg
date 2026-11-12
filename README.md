@@ -410,7 +410,8 @@ customize your character, drive cars, build anything and play with friends.
   the browser's own copy without even asking the server.
 - **Flying is a secret**: F (or tapping jump twice on a phone) only flies once you've typed the
   magic words in the chat (they're never sent to anyone). Captain Leo, the pilot who lives in
-  town, whispers them to you once you've done a job for him. (For grown-ups: they're `FLY_CODE`
+  town, whispers them to you once you've done three of his jobs (he drops a hint after each one
+  before that). (For grown-ups: they're `FLY_CODE`
   in `public/js/main.js`. Typing them again switches flying off.)
 - **Plays on phones and tablets** (held sideways): a joystick under your left thumb, drag to look,
   tap to build

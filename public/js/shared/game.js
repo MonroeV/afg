@@ -278,6 +278,7 @@ export class GameRoom {
         streak: Number.isInteger(w.streak) && w.streak > 0 ? w.streak : 0,
         quest: cleanQuest(w.quest), // a resident's job they're doing (quests.js)
         questAt: w.questAt && typeof w.questAt === 'object' ? w.questAt : {},
+        pilotJobs: Number.isInteger(w.pilotJobs) && w.pilotJobs > 0 ? Math.min(w.pilotJobs, 999) : 0, // jobs done for Captain Leo (he has a secret)
         family: cleanFamily(w.family), // their family (from the Luxe Store), if they have one
       };
     }

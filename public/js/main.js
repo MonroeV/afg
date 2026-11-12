@@ -1492,7 +1492,7 @@ $('chat-input').addEventListener('keydown', e => {
 // ---------- Secret cheat codes ----------
 // Typed in the chat (and never sent to anybody, so they stay secret). Flying is one: the
 // magic words switch it on (F, or tapping jump twice, then flies) and off again. Captain Leo,
-// the pilot who lives in town, whispers them to you once you've done a job for him.
+// the pilot who lives in town, whispers them to you once you've done three of his jobs (quests.js).
 
 const FLY_CODE = 'upupandaway';
 
