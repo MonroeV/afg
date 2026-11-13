@@ -1166,6 +1166,12 @@ export class GameRoom {
       this.onDirty();
     },
 
+    // "Still there?" from a browser, every few seconds: yes. (So it knows the connection's fine,
+    // even when nothing else is happening.)
+    ping(client) {
+      if (this.allow(client, 'ping', 1, 4)) client.send({ t: 'pong' });
+    },
+
     chat(client, msg) {
       const text = cleanWords(msg.text, 160); // (rude words become ♥♥♥)
       if (!text || !this.allow(client, 'chat', 1, 5)) return;

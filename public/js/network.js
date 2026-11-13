@@ -21,8 +21,11 @@ export class Network {
     this.handlers[msg.t]?.(msg);
   }
 
-  // Resolves with the server's welcome message, or rejects if there is no server.
-  connect(name, look, timeoutMs = 4000) {
+  // Resolves with the server's welcome message, or rejects if there is no server. A server that
+  // doesn't answer at all within `openMs` isn't there; once it has answered, the world it sends
+  // can take a good while to arrive (a big world, from a Raspberry Pi, over wi-fi, to a slow
+  // computer), so we wait much longer for that. (onOpen: it's answered, the world's on its way.)
+  connect(name, look, { openMs = 8000, welcomeMs = 120000, onOpen = null } = {}) {
     return new Promise((resolve, reject) => {
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       let ws;
@@ -34,12 +37,18 @@ export class Network {
       }
       this.ws = ws;
       let welcomed = false;
-      const timer = setTimeout(() => {
+      const giveUp = ms => setTimeout(() => {
         ws.close();
         reject(new Error('timeout'));
-      }, timeoutMs);
+      }, ms);
+      let timer = giveUp(openMs);
 
-      ws.onopen = () => ws.send(JSON.stringify({ t: 'join', name, look }));
+      ws.onopen = () => {
+        clearTimeout(timer);
+        timer = giveUp(welcomeMs);
+        ws.send(JSON.stringify({ t: 'join', name, look }));
+        onOpen?.();
+      };
       ws.onerror = () => {
         clearTimeout(timer);
         reject(new Error('connection failed'));
@@ -64,6 +73,7 @@ export class Network {
           clearTimeout(timer);
           welcomed = true;
           this.online = this.connected = true;
+          this.heartbeat(ws);
           resolve(msg);
         } else if (msg.t === 'full') {
           clearTimeout(timer);
@@ -167,10 +177,26 @@ export class Network {
     }
   }
 
+  // Every few seconds, "still there?": the server answers, so even a quiet server (nothing
+  // moving, nobody else on) is heard from regularly.
+  heartbeat(ws) {
+    clearInterval(this.beat);
+    this.beat = setInterval(() => {
+      if (this.ws !== ws || !this.online) return clearInterval(this.beat);
+      if (ws.readyState === WebSocket.OPEN) ws.send('{"t":"ping"}');
+    }, 4000);
+  }
+
   // Connected, but nothing heard from the server for a while (wi-fi gone, the server switched
-  // off): the connection's as good as lost. (The server talks to everyone several times a second.)
-  silent(ms = 10000) {
+  // off): the connection's as good as lost.
+  silent(ms = 20000) {
     return this.online && this.heardAt && performance.now() - this.heardAt > ms;
+  }
+
+  // (We were busy, or the tab was put away: whatever the server sent meanwhile is still waiting
+  // to be read, so that's no reason to think it's gone. Start counting again from now.)
+  stillListening() {
+    this.heardAt = performance.now();
   }
 
   send(msg) {

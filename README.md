@@ -403,7 +403,7 @@ customize your character, drive cars, build anything and play with friends.
   saved on this device), or 🏠 back to the menu. While the connection's lost it keeps trying by
   itself, and puts you straight back in the game when the server answers. Playing by yourself,
   📡 PLAY ONLINE in the pause menu goes back online once the server's there. (It also notices a
-  connection that's gone quiet, like dropped wi-fi, after 10 seconds.)
+  connection that's gone quiet, like dropped wi-fi, after about 20 seconds. A big world can take a while to arrive on a slow computer or wi-fi: it waits up to two minutes for it, once the server has answered.)
 - **Updates show up straight away**: the page asks for every file with its version on the end
   (`js/main.js?v=…`, worked out by the server from what's in each file), so a changed file is
   fetched fresh and nobody ever needs to clear their browser's cache. Unchanged files come from

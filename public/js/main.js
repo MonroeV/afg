@@ -463,7 +463,7 @@ async function joinServer() {
   $('status').textContent = 'Connecting…';
   let welcome;
   try {
-    welcome = await net.connect(settings.name, settings.look);
+    welcome = await net.connect(settings.name, settings.look, { onOpen: () => ($('status').textContent = 'Loading the world…') });
   } catch (err) {
     net.drop();
     $('status').textContent = '';
@@ -661,6 +661,7 @@ function startGame(welcome) {
   $('hud').classList.remove('hidden');
   $('play').disabled = false;
   $('status').textContent = '';
+  net.stillListening(); // (setting up the world took a while: we've not been listening)
   lock();
 }
 
@@ -5111,9 +5112,14 @@ function frameRateNow() {
   return settings.fps || 1000;
 }
 
+let lastFrameAt = 0;
 function frame(timestamp) {
   requestAnimationFrame(frame);
-  if (inGame && online && net.silent()) net.lost(); // (nothing from the server for a while)
+  // Nothing from the server for a while: the connection's lost. (Unless we've been too busy to
+  // listen, or the tab was put away: then give it a fresh chance.)
+  if (timestamp - lastFrameAt > 2000) net.stillListening();
+  lastFrameAt = timestamp;
+  if (inGame && online && net.silent()) net.lost();
   // Skip this screen refresh if it's too soon for the next frame. (A little slack, so a
   // 60 Hz screen doesn't drop to 30 frames a second when it's a touch early.)
   // The next frame is due one interval after the last one was, which keeps fast (120 Hz)
