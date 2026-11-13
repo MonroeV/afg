@@ -708,7 +708,7 @@ export class Hud {
   updateInfo({ online, fps, pos, flying, clock }) {
     $('info').innerHTML =
       `<div id="clock">${clock}</div>` +
-      `${online ? '<span style="color:#7dff8a">● Online</span>' : '<span style="color:#ffb3b3">● Single player</span>'} · ${fps} FPS<br>` +
+      `${online === 'reconnecting' ? '<span style="color:#ffd27a">● Reconnecting…</span>' : online ? '<span style="color:#7dff8a">● Online</span>' : '<span style="color:#ffb3b3">● Single player</span>'} · ${fps} FPS<br>` +
       `XYZ ${pos.x.toFixed(0)} ${pos.y.toFixed(0)} ${pos.z.toFixed(0)}${flying ? ' · <b>FLYING</b>' : ''}`;
   }
 

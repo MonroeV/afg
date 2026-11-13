@@ -398,8 +398,12 @@ customize your character, drive cars, build anything and play with friends.
   cars and the town's people move smoothly: their moves are replayed a split second behind, at the
   even pace they really moved, so a bumpy connection doesn't make them jitter or bounce
 - **Single player works too**: with no server, the world runs and saves right in the browser
-- **When the server can't be reached** (pressing Play), or **the connection is lost** while you
-  play, a box says so, with three big buttons: 🔄 try again, 🧍 play by myself (your own world,
+- **A connection that cuts out for a moment** (wi-fi blips) isn't even noticed: the game keeps
+  going, the corner says "Reconnecting…", and it gets back on the server by itself without
+  reloading or moving you (anything that changed meanwhile is caught up). Why it cut out goes in
+  the browser's console.
+- **When the server can't be reached** (pressing Play), or **the connection is lost** for more
+  than 30 seconds while you play, a box says so, with three big buttons: 🔄 try again, 🧍 play by myself (your own world,
   saved on this device), or 🏠 back to the menu. While the connection's lost it keeps trying by
   itself, and puts you straight back in the game when the server answers. Playing by yourself,
   📡 PLAY ONLINE in the pause menu goes back online once the server's there. (It also notices a

@@ -53,8 +53,9 @@ export class Network {
         clearTimeout(timer);
         reject(new Error('connection failed'));
       };
-      ws.onclose = () => {
+      ws.onclose = e => {
         clearTimeout(timer);
+        this.why = `closed (code ${e?.code ?? '?'}${e?.reason ? `: ${e.reason}` : ''})`;
         if (!welcomed) reject(new Error('closed'));
         if (welcomed && this.ws === ws && !this.leaving) {
           this.online = this.connected = false;
@@ -159,6 +160,7 @@ export class Network {
   // The connection's gone quiet: give up on it, and say so.
   lost() {
     if (!this.online) return;
+    this.why = `nothing heard for ${Math.round((performance.now() - this.heardAt) / 1000)} s`;
     this.drop();
     this.handlers.disconnect?.();
   }

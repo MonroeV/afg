@@ -439,6 +439,23 @@ export class World {
     return out;
   }
 
+  // The world as the server has it now, after being away from it for a moment: only the
+  // blocks that changed meanwhile are drawn again.
+  sync(flat) {
+    const want = new Map();
+    for (let i = 0; i + 3 < flat.length; i += 4) want.set(blockKey(flat[i], flat[i + 1], flat[i + 2]), flat[i + 3]);
+    for (const k of [...this.blocks.keys()]) {
+      if (want.has(k)) continue;
+      const [x, y, z] = k.split(',').map(Number);
+      this.set(x, y, z, 0);
+    }
+    for (const [k, v] of want) {
+      if (this.blocks.get(k) === v) continue;
+      const [x, y, z] = k.split(',').map(Number);
+      this.set(x, y, z, v);
+    }
+  }
+
   load(flat) {
     this.loading = true;
     for (const k of [...this.blocks.keys()]) {

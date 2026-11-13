@@ -484,6 +484,7 @@ async function playSolo() {
 
 // Out of the game we were in (before starting another one without reloading the page).
 function leaveWorld() {
+  stopReconnecting();
   stopFlying();
   if (!inGame) return;
   try {
@@ -600,8 +601,10 @@ $('pause-online').addEventListener('click', async () => {
 });
 
 // Everything that comes with arriving in a world (from the server, or our own).
-function startGame(welcome) {
-  stopFlying(); // (the magic words only last while you're connected)
+// resume: back after the connection cut out for a moment: carry on just where you are (only
+// the blocks that changed meanwhile are redrawn, and nobody says welcome again).
+function startGame(welcome, resume = false) {
+  if (!resume) stopFlying(); // (the magic words only last while you're connected)
   // The server has a newer version of the game than this page (it was updated while this
   // tab was open): load the new version (and go straight back in). Only once, so it can never
   // keep reloading.
@@ -619,8 +622,20 @@ function startGame(welcome) {
     }
   }
 
+  if (resume) {
+    // (The server let go of us when the connection went: out of any car, out of bed, and the
+    // town's people and coins come again with the rest.)
+    try {
+      getOut();
+      wakeUp(true);
+    } catch { /* nothing to get out of */ }
+    for (const a of npcs.values()) a.dispose();
+    npcs.clear();
+    coinMap.clear();
+  }
   myId = welcome.id;
-  world.load(welcome.world);
+  if (resume) world.sync(welcome.world);
+  else world.load(welcome.world);
   world.loadPaints(welcome.paints);
   world.setHoles(welcome.holes || []);
   world.setTunnels(welcome.tunnels || []); // (secret: only Tunnel Diggers get these)
@@ -647,6 +662,11 @@ function startGame(welcome) {
   agency.setGuards(welcome.guards);
   weather.rain = weather.target; // (if it's raining when you arrive, it already is)
   sky.time = welcome.time;
+  if (resume) {
+    $('pause-online').classList.toggle('hidden', online);
+    net.stillListening();
+    return;
+  }
   hud.addChat({ system: true, text: online
     ? `Welcome, ${settings.name}! ${welcome.players.length} other builder(s) online.`
     : 'Playing single player. Your world saves in this browser. Run "npm start" to play with friends!' });
@@ -1171,10 +1191,51 @@ net.on('time', ({ time }) => {
 });
 net.on('disconnect', () => {
   online = false;
-  stopFlying();
-  avatars.clear();
-  connectionTrouble('lost');
+  console.info(`BuildZone: the connection cut out (${net.why || 'closed'}): reconnecting…`); // (for grown-ups, in the browser's console)
+  quietlyReconnect();
 });
+
+// The connection cut out: keep playing, and quietly get back on the server (no box, no
+// reloading, you stay where you are). Only if it's not back within half a minute does the box
+// come up (and then it's a real goodbye: flying's off, the other players go).
+const QUIET_FOR = 30000;
+let reconnecting = null; // { since, timer, giveUp }
+
+function quietlyReconnect() {
+  if (reconnecting || conn) return;
+  const r = (reconnecting = { since: performance.now() });
+  r.giveUp = setTimeout(() => {
+    if (reconnecting !== r) return;
+    stopReconnecting();
+    net.drop();
+    stopFlying();
+    avatars.clear();
+    connectionTrouble('lost');
+  }, QUIET_FOR);
+  const attempt = async () => {
+    if (reconnecting !== r) return;
+    let welcome;
+    try {
+      welcome = await net.connect(settings.name, settings.look, { openMs: 5000 });
+    } catch {
+      net.drop();
+      if (reconnecting === r) r.timer = setTimeout(attempt, 2000);
+      return;
+    }
+    if (reconnecting !== r) return net.drop(); // (too late: the box is up, or we've moved on)
+    stopReconnecting();
+    online = true;
+    startGame(welcome, true);
+  };
+  r.timer = setTimeout(attempt, 500);
+}
+
+function stopReconnecting() {
+  if (!reconnecting) return;
+  clearTimeout(reconnecting.timer);
+  clearTimeout(reconnecting.giveUp);
+  reconnecting = null;
+}
 
 function loudness(x, y, z, range) {
   const d = camera.position.distanceTo(new THREE.Vector3(x, y, z));
@@ -5499,7 +5560,7 @@ function frame(timestamp) {
       hudTimer = 0.5;
       fps = Math.round(fpsFrames / Math.max(fpsTime, 1e-3));
       fpsFrames = fpsTime = 0;
-      hud.updateInfo({ online, fps, pos: player.pos, flying: player.flying, clock: sky.clockText() });
+      hud.updateInfo({ online: online || (reconnecting ? 'reconnecting' : false), fps, pos: player.pos, flying: player.flying, clock: sky.clockText() });
       hud.updatePlayers([{ name: settings.name + ' (you)', color: settings.look.shirtColor }, ...[...avatars.list.values()].map(a => ({ name: a.name, color: a.color }))]);
     }
     hud.update(dt);
