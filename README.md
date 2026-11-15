@@ -209,9 +209,16 @@ customize your character, drive cars, build anything and play with friends.
   signs to open the Build Book
 - **The weather station**, by the road round the edge of town (a glass building with a mast on the
   roof, its wind cups spinning and a light blinking on top): talk to Stormy ⛅, pay 25 coins, and
-  it rains TACOS all over town for 45 seconds, for everyone. Little 3D tacos tumble down all
-  around you and land on the ground and the roofs; catch one (stand where it falls) and it's
-  crunched: 🌮 × how many you've caught. The town's people cheer and Skye reports it on BZ Live
+  it rains TACOS all over town, for everyone, while its own song ("Taco Rain BuildZone") plays
+  (1 minute 40). Little 3D tacos tumble down all around you and land on the ground and the roofs;
+  catch one (stand where it falls) and it's crunched: 🌮 × how many you've caught. The town's
+  people cheer and Skye reports it on BZ Live. Someone joining partway through hears the song
+  from the same place as everyone else. The song (`public/sounds/taco-rain.mp3`, 1.6 MB, a 130
+  kbps MP3) isn't fetched at all until the first taco shower; then the browser streams it (it
+  starts playing while the rest is still arriving), and keeps it for next time. The server sends
+  every file a piece at a time straight from the disk (never holding a whole file in memory) and
+  answers "just this part, please" (HTTP Range) requests, which is how a song starts partway
+  through without the whole file first
 - **Doors** that open and close with a right-click (even with the hammer in your hand). Put two
   doors side by side and they become double doors that swing outward; put three or more in a row
   and they become one big garage door that rolls up. A garage door starts 3 blocks tall (so cars

@@ -126,15 +126,44 @@ const server = http.createServer((req, res) => {
       res.writeHead(304, headers).end();
       return;
     }
-    fs.readFile(file, (readErr, data) => {
-      if (readErr) {
-        res.writeHead(404).end('Not found');
+    if (page) {
+      fs.readFile(file, (readErr, data) => {
+        if (readErr) {
+          res.writeHead(404).end('Not found');
+          return;
+        }
+        res.writeHead(200, headers).end(versionedPage(data.toString()));
+      });
+      return;
+    }
+    // Everything else is streamed from the disk a piece at a time (never held whole in memory),
+    // and a browser can ask for just part of a file ("Range"): that's how it plays a song while
+    // it's still arriving, and starts it partway through (someone joining in the middle).
+    headers['Accept-Ranges'] = 'bytes';
+    let start = 0, end = st.size - 1, status = 200;
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+    if (range && (range[1] || range[2])) {
+      if (range[1]) {
+        start = Number(range[1]);
+        if (range[2]) end = Math.min(Number(range[2]), st.size - 1);
+      } else start = Math.max(0, st.size - Number(range[2])); // (the last N bytes)
+      if (start > end || start >= st.size) {
+        res.writeHead(416, { 'Content-Range': `bytes */${st.size}` }).end();
         return;
       }
-      if (file.endsWith('index.html')) data = versionedPage(data.toString());
-      res.writeHead(200, headers);
-      res.end(data);
-    });
+      status = 206;
+      headers['Content-Range'] = `bytes ${start}-${end}/${st.size}`;
+    }
+    headers['Content-Length'] = end - start + 1;
+    res.writeHead(status, headers);
+    if (req.method === 'HEAD') {
+      res.end();
+      return;
+    }
+    const stream = fs.createReadStream(file, { start, end });
+    stream.on('error', () => res.destroy());
+    res.on('close', () => stream.destroy()); // (they stopped listening: stop reading)
+    stream.pipe(res);
   });
 });
 

@@ -11,7 +11,7 @@ const onWall = (wx, wz) => faceDir(-wx, -wz);
 const L = 8, D = 7, MAST = 6;
 
 export const TACO_PRICE = 25; // coins for a taco shower
-export const TACO_SECONDS = 45; // how long it lasts
+export const TACO_SECONDS = 100; // how long it lasts (as long as its song: sounds/taco-rain.mp3)
 
 export function buildWeatherStation({ get, set, canUse }) {
   const roads = exitRoads();

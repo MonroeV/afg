@@ -2,9 +2,12 @@
 // tumble down all around you, land on the ground (and roofs) and lie there a moment before
 // they vanish. Catch one (it hits you) and it's crunched: 🌮 × how many you've caught. Every
 // player sees tacos falling round themselves (not the very same tacos: they're just for fun).
+// And its song, "Taco Rain BuildZone", plays for everyone while it lasts (see TacoSong).
 // Also: the weather station's mast, with its wind cups spinning and a light blinking on top.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { TACO_SECONDS } from './shared/weather.js';
+import { asset } from './assets.js';
 
 const MAX = 360; // tacos at once
 const RATE = 28; // new tacos a second
@@ -52,10 +55,13 @@ export class TacoRain {
     this.v = new THREE.Vector3();
     this.s = new THREE.Vector3();
     this.onCatch = null;
+    this.song = new TacoSong(asset('sounds/taco-rain.mp3'));
   }
 
+  // seconds: how much of the shower is left (all of it, unless we've joined partway through).
   start(seconds) {
     this.until = performance.now() + seconds * 1000;
+    this.song.play(TACO_SECONDS - seconds);
   }
 
   get raining() {
@@ -64,9 +70,13 @@ export class TacoRain {
 
   stop() {
     this.until = 0;
+    this.song.stop(true);
   }
 
-  update(dt, me) {
+  // volume: the game's sound volume (the song follows it).
+  update(dt, me, volume = 0.4) {
+    if (!this.raining) this.song.stop();
+    this.song.update(dt, volume);
     if (this.raining && me) {
       this.carry += RATE * dt;
       while (this.carry >= 1 && this.tacos.length < MAX) {
@@ -119,6 +129,65 @@ export class TacoRain {
     this.tacos = keep;
     this.mesh.count = n;
     this.mesh.instanceMatrix.needsUpdate = true;
+  }
+}
+
+// The taco song. It's not fetched at all until the first taco shower; then the browser streams
+// it from the server (playing as it arrives, asking for just the part it needs if it starts
+// partway through), and keeps it (it's asked for by its version, see assets.js), so the next
+// shower plays straight from the browser's own copy. It fades in and out.
+class TacoSong {
+  constructor(url) {
+    this.url = url;
+    this.audio = null;
+    this.on = false;
+    this.level = 0;
+  }
+
+  // Plays from `at` seconds in (the same bit everyone else is hearing).
+  play(at = 0) {
+    if (!this.audio) {
+      this.audio = new Audio();
+      this.audio.preload = 'none';
+      this.audio.src = this.url;
+    }
+    const a = this.audio;
+    // (Where to start is worked out when it's ready to play: by then a bit more of the song has
+    // gone by for everyone else.)
+    this.startedAt = performance.now() - at * 1000;
+    const seek = () => {
+      try {
+        a.currentTime = Math.max(0, (performance.now() - this.startedAt) / 1000);
+      } catch { /* not seekable yet */ }
+    };
+    if (a.readyState >= 1) seek();
+    else a.addEventListener('loadedmetadata', seek, { once: true });
+    this.on = true;
+    a.play().catch(() => {}); // (a browser that won't play sound yet: no song, the tacos still fall)
+  }
+
+  // Fades out (or stops at once).
+  stop(now = false) {
+    this.on = false;
+    if (now && this.audio) {
+      this.level = 0;
+      this.audio.volume = 0;
+      this.audio.pause();
+    }
+  }
+
+  update(dt, volume) {
+    const a = this.audio;
+    if (!a) return;
+    // (Fades go by the clock, not the frame rate: a slow computer fades just as smoothly.)
+    const now = performance.now();
+    dt = Math.min(1, (now - (this.at || now)) / 1000);
+    this.at = now;
+    const want = this.on ? Math.min(1, volume * 1.5) : 0;
+    const speed = this.on ? 1.5 : 0.4; // (a quick fade in, a slow fade out)
+    this.level += Math.sign(want - this.level) * Math.min(Math.abs(want - this.level), dt * speed);
+    a.volume = Math.max(0, Math.min(1, this.level));
+    if (!this.on && this.level <= 0.001 && !a.paused) a.pause();
   }
 }
 

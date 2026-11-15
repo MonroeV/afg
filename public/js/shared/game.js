@@ -564,7 +564,7 @@ export class GameRoom {
 
   // How many seconds of taco rain are left (0: none).
   tacosLeft() {
-    return Math.max(0, Math.round(((this.tacoUntil || 0) - Date.now()) / 1000));
+    return Math.max(0, Math.round(((this.tacoUntil || 0) - Date.now()) / 100) / 10);
   }
 
   // Families (from the Luxe Store) on their owners' home land.

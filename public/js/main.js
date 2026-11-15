@@ -498,6 +498,7 @@ async function playSolo() {
 function leaveWorld() {
   stopReconnecting();
   stopFlying();
+  tacoRain?.stop();
   if (!inGame) return;
   try {
     getOut();
@@ -770,10 +771,7 @@ net.on('npc_say', ({ id, text }) => {
   if (a.pos.distanceTo(player.pos) < 16) hud.addChat({ name: a.name, color: '#ffd54f', text });
 });
 // Somebody paid Stormy: it's raining tacos!
-net.on('tacos', ({ seconds }) => {
-  tacoRain.start(seconds);
-  sounds.tune?.();
-});
+net.on('tacos', ({ seconds }) => tacoRain.start(seconds)); // (and its song plays)
 // Talking to Stormy at the weather station: make it rain tacos?
 net.on('weather_open', ({ price, coins }) => {
   ask('🌮 Taco rain? ⛅', coins >= price ? `🪙 ${price}` : `🪙 ${price} (you have ${coins})`, '🌮 YES!', 'No thanks', () => net.send({ t: 'taco_rain' }));
@@ -5499,7 +5497,7 @@ function frame(timestamp) {
     updateRace();
     lifts.update(time);
     contraptions.update(dt, time, [...avatars.list.values()], player.pos);
-    tacoRain.update(dt, player.pos);
+    tacoRain.update(dt, player.pos, settings.volume);
     weatherMast?.update(dt, time);
     updateJob(dt, time);
     updateFishing(dt, time);
