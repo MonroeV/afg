@@ -302,6 +302,14 @@ customize your character, drive cars, build anything and play with friends.
 
   Buy something once and you can build with it as much as you like (it's in the item menu, under ⭐
   at the top of its tab)
+- **Build challenges** 🏗️🃏: **Builder Bea**, at the Build Park, has six picture cards: 🏠 a cozy
+  house (a door, a bed, 2 lights, 2 windows), 🌷 a garden (5 flowers, a fountain or birdbath, 3
+  crops), 🛝 a playground (a swing, a trampoline, a hoop), 🐶 a pet corner (a pet bowl, a pet bed, a
+  dog house or cat tree), 🚀 a science fair (a rocket, a volcano, a fish tank) and 🎉 a party (a disco
+  floor, 4 music blocks, a campfire). Build them on your own land (home or vacation), talk to Bea
+  (or press 🔄 on the cards, wherever you are) and the server counts what's there: each part shows
+  how many you have, ✓ when there's enough. A finished card pays 15-20 🪙, and all six make you a
+  **Master Builder** (a club: +25 🪙 and a super hammer that breaks blocks in one hit)
 - **Pet tricks and hats** 🐾: right-click your own pet for its menu: ❤️ to pet it, six tricks
   (🪑 sit, 🌀 spin, ⬆️ jump, 🔄 roll over, 💤 play dead, 💃 dance) and the hats you've bought for it.
   Holding **Pet Treats** (Pet Shop), pick a trick and your pet has a go: it takes three tries to
@@ -377,6 +385,7 @@ customize your character, drive cars, build anything and play with friends.
   | 🌲 Nature Club | Ranger Rae, at the campground | catch 10 fish, 5 different kinds, plant 2 trees, pick 5 crops you grew | 15 🪙, a lucky rod (rare fish bite more) |
   | 🏁 Speed Club | Coach Frost, at the ski lodge | drive 2,000 blocks, fly 500, finish a race | 15 🪙, turbo (everything you drive is faster) |
   | 🪙 Gold Club | Mayor Maple | pick up 30 coins, buy something at the Luxe Store, claim land | 20 🪙, a coin magnet and a bigger daily bonus |
+  | 🏗️ Master Builders | Builder Bea, at the Build Park | build all six of her picture cards on your land | 25 🪙, a super hammer (one hit breaks a block) |
   | 🏡 Good Neighbors | Grandma Rose, in her house | take 3 packages, bring 3 things, go and see 2 places | 20 🪙, neighbors pay you twice as much |
   | ⛏️ Tunnel Diggers | Digger Dot, at Big Rock Quarry | dig 15 holes, put a block in 3 holes, tip out a dump truck of dirt | 15 🪙, secret tunnels under the ground |
   | 🕶️ Secret Agency | Agent Shadow | find the 3 TOP SECRET files | Top Secret clearance |
@@ -786,6 +795,7 @@ public/
     playthings.js      The rocket, volcano, fish tank, merry-go-round, wishing well, rainbow and snowman models
     seasonlook.js      How each season looks: tree leaves, grass, snow, falling leaves, spring flowers
     petmenu.js         Your pet's menu: pet it, tricks, hats
+    challengeui.js     Builder Bea's picture cards (build challenges)
     tacos.js           Raining tacos, and the weather station's spinning mast
     lighting.js        Live reflections and the glow effect
     lightpools.js      Soft pools of light on the ground under every lamp
@@ -825,6 +835,7 @@ public/
       weather.js       The weather station (and what a taco shower costs)
       seasons.js       Which season it is (from the server's day count and the time of day)
       tricks.js        Pet tricks and pet hats
+      challenges.js    Builder Bea's build challenges (what's on each card)
       buildpark.js     The Build Park: one of each of the newest Build Book things, with signs
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/

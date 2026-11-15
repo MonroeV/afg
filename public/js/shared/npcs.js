@@ -65,6 +65,13 @@ const NPCS = [
     hello: n => [`Hi ${n}! Today's forecast: TACOS! 🌮`, `${n}! Want to see something amazing? ⛅🌮`, `Hello ${n}! Sunny, with a chance of tacos! 🌤️🌮`],
     tips: ['⛅🌮'],
   },
+  {
+    // At the Build Park: Builder Bea's picture cards (build challenges: see challenges.js).
+    id: -19, place: 'buildpark', name: 'Builder Bea', title: 'Builder Bea 🏗️', roam: 4, club: 'builder', challenges: true,
+    look: { face: 'grin', hair: 'ponytail', hat: 'cap', shirt: 'jacket', pants: 'jeans', skin: '#e8b088', hairColor: '#8d4a1f', hatColor: '#fdd835', shirtColor: '#fb8c00', shirtColor2: '#fdd835', pantsColor: '#1565c0', shoesColor: '#5d4037' },
+    hello: n => [`Hi ${n}! Want a building challenge? 🏗️`, `${n}! Build something amazing on your land! 🔨`, `Hello ${n}! I've got picture cards for you! 🃏`],
+    tips: ['🏗️🃏', 'Build it on your own land, then show me! 🚩'],
+  },
   // ---------- The other stores' shopkeepers ----------
   {
     id: -15, place: 'shop_garden', name: 'Fern', title: 'Fern 🌻', roam: 2, store: 'garden',
@@ -974,6 +981,9 @@ export class NpcCrew {
       c.send({ t: 'club_open', club: 'agency' });
     } else if (n.def.guard) {
       this.say(n, this.room.cleared(c) ? pickOne([`Welcome back, Agent ${c.name}! 🫡 In you go.`, `Agent ${c.name}! The door's open for you. 🫡`]) : pickOne([`🛑 No clearance, no entry, ${c.name}! Agent Shadow on the town square can tell you how to get some.`, '🛑 This is a TOP SECRET area! Only agents with Top Secret clearance get in.']), true);
+    } else if (n.def.challenges) {
+      this.say(n, pickOne([`Let's see what you've built, ${c.name}! 🔍`, 'Pick a card and build it! 🃏', 'Build it on your land, then show me! 🏗️']), true);
+      this.room.sendChallenges(c);
     } else if (n.def.club) {
       // A club's leader: shows you what to do (in the badge book: pictures, not lots of words).
       const done = this.room.perk(c, n.def.club);

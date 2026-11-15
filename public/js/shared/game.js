@@ -18,6 +18,8 @@ import { buildBuildPark } from './buildpark.js';
 import { seasonAt, WINTER, SEASON_ICONS } from './seasons.js';
 import { Quests, cleanQuest } from './quests.js';
 import { TRICKS, TRICK_TRIES, TREATS, trickIndex, hatItem } from './tricks.js';
+import { CHALLENGES, partCount } from './challenges.js';
+import { Structures } from '../structures.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
 
@@ -290,6 +292,7 @@ export class GameRoom {
         guests: Array.isArray(w.guests) ? w.guests.filter(k => typeof k === 'string').map(nameKey).slice(0, 40) : [], // who their bodyguards let in
         can: w.can ? 1 : 0, // carrying a gas can
         harvest: Number.isInteger(w.harvest) && w.harvest > 0 ? w.harvest : 0, // crops picked, ever
+        challenges: Array.isArray(w.challenges) ? w.challenges.filter(id => CHALLENGES.some(c => c.id === id)) : [], // Builder Bea's cards done
         // Pet tricks: how many tries at each (learned at TRICK_TRIES).
         tricks: Object.fromEntries(TRICKS.map(t => [t.id, Math.min(TRICK_TRIES, Math.max(0, Math.floor(Number(w.tricks?.[t.id]) || 0)))]).filter(([, n]) => n > 0)),
         // Clubs: how far along each club's tasks are, and the badges earned. And how many days in
@@ -852,6 +855,58 @@ export class GameRoom {
     client.send({ t: 'wallet', coins: w.coins, owned: w.owned, found: w.found, vacation: !!this.vacationOf(client), agent: { files: w.agent.files.length, need: this.filesNeeded(), clear: w.agent.clear }, can: w.can, clubs: w.clubs, badges: w.badges, streak: w.streak, tricks: w.tricks || {} });
   }
 
+  // ---------- Build challenges (Builder Bea's cards) ----------
+
+  // What's on someone's land (home and vacation): how many of each block, doors, lights, music
+  // blocks, and Build Book things. Null if they haven't any land.
+  landCounts(client) {
+    const key = nameKey(client.name);
+    const lands = this.claims.filter(c => c.key === key);
+    if (!lands.length) return null;
+    const counts = { blocks: {}, structures: {}, doors: 0, lights: 0, music: 0 };
+    const finder = new Structures({ get: (x, y, z) => this.get(x, y, z) });
+    for (const l of lands) {
+      for (let x = l.x0; x <= l.x1; x++) for (let z = l.z0; z <= l.z1; z++) for (let y = 0; y <= WORLD.maxY; y++) {
+        const v = this.get(x, y, z);
+        if (!v) continue;
+        for (const part of [itemOf(v), floorOf(v)]) {
+          const id = blockId(part);
+          if (!id) continue;
+          counts.blocks[id] = (counts.blocks[id] || 0) + 1;
+          const def = BLOCKS[id];
+          if (def?.shape === 'door' && !(blockMeta(part) & DOOR_TOP)) counts.doors++;
+          if (def?.light) counts.lights++;
+          if (def?.music) counts.music++;
+        }
+        const s = finder.detect(x, y, z);
+        if (s) counts.structures[s.type] = (counts.structures[s.type] || 0) + 1;
+      }
+    }
+    return counts;
+  }
+
+  // Builder Bea's cards, checked against what's on their land: any newly done are paid for.
+  sendChallenges(client) {
+    const counts = this.landCounts(client), w = this.wallet(client), won = [];
+    w.challenges ??= [];
+    const list = CHALLENGES.map(ch => {
+      const have = counts ? ch.parts.map(p => partCount(p, counts)) : ch.parts.map(() => 0);
+      if (counts && !w.challenges.includes(ch.id) && ch.parts.every((p, i) => have[i] >= p.n)) {
+        w.challenges.push(ch.id);
+        w.coins += ch.coins;
+        won.push(ch.id);
+      }
+      return { id: ch.id, have, done: w.challenges.includes(ch.id) };
+    });
+    client.send({ t: 'challenges', land: !!counts, list, won });
+    if (won.length) {
+      this.sendWallet(client);
+      for (const id of won) this.progress(client, 'builder', id);
+      this.broadcast({ t: 'chat', system: true, text: `🏗️ ${client.name} built ${won.map(id => CHALLENGES.find(c => c.id === id).icon).join(' ')}! ⭐` }, client);
+      this.onDirty();
+    }
+  }
+
   // A pet hat is only for those who bought it.
   ownLook(client, look) {
     if (look.petHat !== 'none' && !this.wallet(client).owned.includes(hatItem(look.petHat))) look.petHat = 'none';
@@ -1388,6 +1443,11 @@ export class GameRoom {
         this.updateFamilies();
         if (!this.homeOf(client)) reply('🏡 Plant your Land Flag somewhere and your family moves in!');
       }
+    },
+
+    // Checking Builder Bea's cards again (from the cards, wherever you are).
+    challenges(client) {
+      if (this.allow(client, 'challenges', 0.4, 2)) this.sendChallenges(client);
     },
 
     // A pet trick (holding Pet Treats): each try counts, and after a few it's learned for good

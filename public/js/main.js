@@ -41,6 +41,7 @@ import { TacoRain, WeatherMast } from './tacos.js';
 import { SeasonLook } from './seasonlook.js';
 import { Shop } from './shop.js';
 import { PetMenu } from './petmenu.js';
+import { ChallengeCards } from './challengeui.js';
 import { TRICKS, trickIndex, PET_HATS, hatItem } from './shared/tricks.js';
 import { Particles, Fireworks, Sounds, Effects } from './effects.js';
 import { Ground } from './ground.js';
@@ -210,6 +211,7 @@ const npcs = new Map(); // the town's people (run by the server): id -> Avatar
 const coinMap = new Map(); // gold coins lying about: id -> { x, y, z, value, asked }
 let wallet = { coins: 0, owned: [] };
 let petMenu = null; // your pet's menu (tricks and hats): see petmenu.js
+let cards = null; // Builder Bea's picture cards: see challengeui.js
 let carryingCan = false; // a gas can bought at a gas station, to carry to a vehicle that's out of gas
 let gasStations = []; // where the gas stations are: [name, x, z]
 let landmarks = []; // where the town's places are: [name, x, z]
@@ -1328,7 +1330,7 @@ function goFullscreen() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!conn);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!cards?.open || !!conn);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -1362,7 +1364,7 @@ $('exit-menu').addEventListener('click', () => {
     location.reload();
   }, 150); // a moment for "I got out of the car" to reach the server
 });
-canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !petMenu?.open && !familyEdit && lock());
+canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !petMenu?.open && !cards?.open && !familyEdit && lock());
 $('sensitivity').addEventListener('input', e => {
   settings.sensitivity = Number(e.target.value);
   saveSettings();
@@ -1656,6 +1658,10 @@ window.addEventListener('keydown', e => {
   }
   if (petMenu?.open) {
     if (e.code === 'Escape') petMenu.close();
+    return;
+  }
+  if (cards?.open) {
+    if (e.code === 'Escape') cards.close();
     return;
   }
   if (elevators.panel) {
@@ -2096,6 +2102,29 @@ function openPetMenu(t) {
   petMenu.show({ tricks: myTricks, treats: hud.item === TREATS && hud.usable(TREATS), owned: hud.owned, hat: settings.look.petHat || 'none' });
   updateOverlays();
 }
+
+// ---------- Builder Bea's picture cards (build challenges) ----------
+
+cards = new ChallengeCards({
+  onCheck: () => net.send({ t: 'challenges' }),
+  onClose: () => {
+    lock();
+    updateOverlays();
+  },
+});
+net.on('challenges', msg => {
+  if (!cards.open) {
+    keys.clear();
+    unlock();
+  }
+  cards.show(msg);
+  updateOverlays();
+  if (msg.won?.length) {
+    sounds.coin();
+    effects.sparkle(player.pos.x, player.pos.y + 1, player.pos.z, 40);
+    hud.toast(`🏗️ ${'⭐'.repeat(msg.won.length)} 🪙`);
+  }
+});
 
 // The pet does the trick (or has a go at it, while it's still learning).
 net.on('trick', ({ trick, n, learned, fresh }) => {
@@ -3622,7 +3651,7 @@ function hitBlock() {
   hitState.count++;
   hitState.timer = 2.5;
   // Glass and carpet break with one hit; everything else takes three.
-  const hits = BLOCKS[blockId(hit.value)]?.fragile ? 1 : 3;
+  const hits = BLOCKS[blockId(hit.value)]?.fragile || perks.has('builder') ? 1 : 3; // (Master Builders: one hit)
   if (hitState.count < hits) {
     sounds.crack();
     particles.burst(x, y, z, blockMaterial(materials, hit.value), 3);
@@ -5392,7 +5421,7 @@ let menuSpin = 0, lastFrame = 0, frameCount = 0, crouchK = 0;
 // menu (nothing much is moving then).
 function frameRateNow() {
   if (!inGame) return 30;
-  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel || petMenu?.open) return 12;
+  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel || petMenu?.open || cards?.open) return 12;
   return settings.fps || 1000;
 }
 

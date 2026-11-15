@@ -943,3 +943,22 @@ body.touch #quest-card { top: 96px; left: 8px; font-size: 13px; }
 .pet-hats:empty { display: none; }
 .pet-hat { font-size: 30px; width: 58px; height: 58px; padding: 0; border: 3px solid transparent; }
 .pet-hat.on { border-color: #fff; }
+/* Builder Bea's picture cards. */
+.challenge-panel { position: relative; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.challenge-panel h2 { margin: 0; font-size: 30px; }
+.challenge-noland { font-size: 22px; background: rgba(255, 193, 7, 0.18); padding: 8px 14px; border-radius: 10px; }
+.challenge-noland span { font-size: 15px; }
+.challenge-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; }
+@media (max-width: 560px) { .challenge-grid { grid-template-columns: repeat(2, 1fr); } }
+.challenge-card { background: rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 10px 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; border: 3px solid transparent; }
+.challenge-card.done { background: linear-gradient(180deg, rgba(255, 213, 79, 0.35), rgba(255, 179, 0, 0.25)); border-color: #ffd54f; }
+.challenge-card.won { animation: challenge-won 0.6s ease-in-out 3; }
+@keyframes challenge-won { 50% { transform: scale(1.08); } }
+.challenge-icon { font-size: 44px; line-height: 1; }
+.challenge-parts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.challenge-part { display: flex; flex-direction: column; align-items: center; font-size: 24px; line-height: 1.1; opacity: 0.75; }
+.challenge-part small { font-size: 12px; font-weight: 700; }
+.challenge-part.ok { opacity: 1; }
+.challenge-part.ok small { color: #7CFC8A; }
+.challenge-prize { font-size: 15px; font-weight: 700; }
+.challenge-check { font-size: 22px; padding: 8px 22px; }

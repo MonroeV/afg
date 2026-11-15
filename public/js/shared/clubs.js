@@ -2,6 +2,8 @@
 // tasks (shown as pictures with a count, not words), and once they're all done, its badge, some
 // coins and something special that stays yours for good (a perk: cheaper gas, bigger tips, luckier
 // fishing, a turbo, a coin magnet). The server counts the tasks as you do them.
+import { CHALLENGES } from './challenges.js';
+
 export const CLUBS = [
   {
     id: 'mechanic', name: 'Mechanic Crew', icon: '🔧', color: '#ff8f00', leader: 'Mo', where: 'at the gas station',
@@ -56,6 +58,12 @@ export const CLUBS = [
       { id: 'dump', icon: '🚚', goal: 1, what: 'Tip out a dump truck full of dirt (from the quarry\'s chute)' },
     ],
     reward: { coins: 15, perk: '⛏️🤫', perkName: 'Secret tunnels: dig deep under the ground' },
+  },
+  {
+    // Builder Bea's picture cards (see challenges.js): build each one on your own land.
+    id: 'builder', name: 'Master Builders', icon: '🏗️', color: '#fb8c00', leader: 'Builder Bea', where: 'at the Build Park',
+    tasks: CHALLENGES.map(c => ({ id: c.id, icon: c.icon, goal: 1, what: `Build ${c.name.toLowerCase()} on your land` })),
+    reward: { coins: 25, perk: '🔨⚡', perkName: 'Super hammer: blocks break in one hit' },
   },
   {
     id: 'neighbor', name: 'Good Neighbors', icon: '🏡', color: '#ec407a', leader: 'Grandma Rose', where: 'in her house in town',
