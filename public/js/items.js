@@ -14,6 +14,8 @@ export const SCRAPER = 'scraper';
 export const WRENCH = 'wrench';
 export const LADDER = 53;
 export const WATER_BALLOON = 'waterballoon';
+export const SNOWBALL = 'snowball'; // (winter, and up north)
+export const SLED = 'sled';
 export const BUBBLES = 'bubbles';
 export const BALLOON = 'balloon';
 export const FILL = 'fill';
@@ -29,7 +31,7 @@ export const SKIS = 'skis';
 export const GOGGLES = 'goggles'; // night-vision goggles (from the Secret Agency's vault)
 export const BODYGUARDS = 'bodyguards'; // (a Luxe Store thing: they guard your land)
 export const VACATION = 'vacationflag';
-export const TOOLS = [HAMMER, BRUSH, SCRAPER, WRENCH, BALL, FIREWORKS, CLAIM, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, SHOWTIME, VACATION];
+export const TOOLS = [HAMMER, BRUSH, SCRAPER, WRENCH, BALL, FIREWORKS, CLAIM, WATER_BALLOON, SNOWBALL, SLED, BUBBLES, BALLOON, FILL, COPY, CAMERA, SHOWTIME, VACATION];
 // Things you have to buy at the Luxe Store before you can use them.
 export const fromStore = item => (typeof item === 'number' ? !!BLOCKS[item]?.price : !!SHOP_TOOLS[item]);
 // Everything that can go in the hotbar.
@@ -71,7 +73,7 @@ export const familyOf = item => FAMILY_OF.get(item) || null;
 // shows up once, where its first style is.) Lamps are in Home, outdoor lights in Town.
 const HOME = [94, 60, 74, 95, 61, 62, 73, 64, 63, 65, 66, 78, 67, 68, 39, 40, 41, 42, 44, 43, 21, 53, 103, 54, 25, 35, 20, 75, 76, 77, 79, 80, 81, 86, 92, 126, 127, 128, 129, 130];
 const TOWN = [22, 23, 56, 24, 58, 46, 47, 45, 48, 49, 27, 36, 1, 7, 8, 89, 87, 88, 91, 90, 97, 98, 99, 100, 101, 102, 116, 117, 118, 119, 120];
-const FUN = [93, SHOWTIME, 83, 84, 82, 85, BALL, FIREWORKS, WATER_BALLOON, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28, 121, 122, 123, 124, 125];
+const FUN = [93, SHOWTIME, 83, 84, 82, 85, BALL, FIREWORKS, WATER_BALLOON, SNOWBALL, SLED, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28, 121, 122, 123, 124, 125];
 const listed = new Set([...HOME, ...TOWN, ...FUN]);
 const visible = i => typeof i !== 'number' || !BLOCKS[i].hidden;
 export const TABS = [
@@ -88,7 +90,7 @@ for (const i of BLOCK_IDS) if (visible(i) && !TABS.some(t => t.items?.includes(i
 
 // Extra words the search box understands.
 export const SEARCH_WORDS = {
-  [WATER_BALLOON]: 'throw splash water fight', [BUBBLES]: 'bubble blow', [BALLOON]: 'float fly slow fall', [FILL]: 'fill wall floor big box builder',
+  [WATER_BALLOON]: 'throw splash water fight', [SNOWBALL]: 'snow winter throw fight', [SLED]: 'snow winter sledge toboggan slide hill', [BUBBLES]: 'bubble blow', [BALLOON]: 'float fly slow fall', [FILL]: 'fill wall floor big box builder',
   [COPY]: 'copy paste clone duplicate builder', [WRENCH]: 'fix repair mechanic car truck boat helicopter smoke fire',
   [BRUSH]: 'paint color car', [CAMERA]: 'photo picture screenshot', [CLAIM]: 'land claim home', [BALL]: 'pet dog fetch throw',
   61: 'sofa', 60: 'seat sit', 62: 'desk', 64: 'sleep', 65: 'picture art wall', 66: 'picture art wall cat dog rocket dinosaur', 67: 'plant flower',
@@ -120,6 +122,8 @@ export function itemName(item) {
   if (item === GOGGLES) return 'Night-Vision Goggles';
   if (item === BODYGUARDS) return 'Bodyguards';
   if (item === WATER_BALLOON) return 'Water Balloons';
+  if (item === SNOWBALL) return 'Snowballs';
+  if (item === SLED) return 'Sled';
   if (item === BUBBLES) return 'Bubble Wand';
   if (item === BALLOON) return 'Balloon';
   if (item === FILL) return 'Fill Wand';
@@ -357,6 +361,38 @@ export function makeIcon(item, textures, paint = 1) {
     ctx.beginPath();
     ctx.arc(32, 32, 20, -0.4, 0.4 + Math.PI);
     ctx.stroke();
+    return canvas;
+  }
+  if (item === SNOWBALL) {
+    // A pile of snowballs.
+    for (const [x, y, r] of [[22, 42, 13], [42, 42, 13], [32, 24, 13]]) {
+      const g = ctx.createRadialGradient(x - 4, y - 5, 2, x, y, r);
+      g.addColorStop(0, '#ffffff');
+      g.addColorStop(1, '#a9c6e8');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return canvas;
+  }
+  if (item === SLED) {
+    // A red sled from the side: the seat, and runners curling up at the front.
+    ctx.fillStyle = '#d32f2f';
+    ctx.fillRect(10, 26, 40, 8);
+    ctx.strokeStyle = '#424242';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(8, 44);
+    ctx.lineTo(48, 44);
+    ctx.quadraticCurveTo(60, 44, 56, 30);
+    ctx.stroke();
+    for (const x of [16, 40]) {
+      ctx.beginPath();
+      ctx.moveTo(x, 34);
+      ctx.lineTo(x, 44);
+      ctx.stroke();
+    }
     return canvas;
   }
   if (item === WATER_BALLOON || item === BALLOON) {
@@ -751,6 +787,15 @@ export class ViewModel {
       obj.scale.setScalar(1.15);
       obj.position.set(-0.04, 0.1, 0.05);
       obj.rotation.set(0.15, -0.6, 0.05);
+    } else if (item === SNOWBALL) {
+      obj = new THREE.Mesh(new THREE.SphereGeometry(0.09, 14, 10), new THREE.MeshStandardMaterial({ color: 0xf4f8ff, roughness: 0.9 }));
+      obj.position.y = 0.05;
+    } else if (item === SLED) {
+      obj = new THREE.Group();
+      obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.36), new THREE.MeshStandardMaterial({ color: 0xd32f2f, roughness: 0.5 })));
+      for (const x of [-0.06, 0.06]) obj.add(new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.015, 0.4).translate(x, -0.04, 0), new THREE.MeshStandardMaterial({ color: 0x424242, metalness: 0.5 })));
+      obj.rotation.set(0.6, 0.3, 0);
+      obj.position.set(0, 0.06, 0);
     } else if (item === WATER_BALLOON) {
       obj = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 12).scale(1, 1.15, 1), new THREE.MeshStandardMaterial({ color: 0x42a5f5, roughness: 0.15, transparent: true, opacity: 0.85 }));
       obj.position.y = 0.05;

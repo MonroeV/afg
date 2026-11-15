@@ -154,12 +154,12 @@ export class Player {
       if (y === -1) {
         // (Up north the ground is snowy, but not where there's a floor or a road on it.)
         const on = this.world.get(x, 0, z);
-        if (isSnowyAt(x, z) && this.world.isSolid(x, -1, z) && shapeOf(floorOf(on) || itemOf(on)) !== 'flat') return 'snow';
+        if ((isSnowyAt(x, z) || this.winter) && this.world.isSolid(x, -1, z) && shapeOf(floorOf(on) || itemOf(on)) !== 'flat') return 'snow';
         continue;
       }
       const id = blockId(itemOf(this.world.get(x, y, z)));
       if (id === 88) return 'ice';
-      if (id === 87) return 'snow';
+      if (id === 87 || (this.winter && id === 1)) return 'snow'; // (in winter the grass is under snow)
     }
     return null;
   }

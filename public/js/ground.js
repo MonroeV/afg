@@ -95,7 +95,17 @@ export class Ground {
     }
   }
 
+  // The season (see seasons.js): snow (0..1) all over, and a tint for the grass.
+  setSeason(snow, tint) {
+    this.seasonSnow ??= { value: 0 };
+    this.seasonTint ??= { value: new THREE.Color(1, 1, 1) };
+    this.seasonSnow.value = snow;
+    this.seasonTint.value.copy(tint);
+  }
+
   buildPlane(textures) {
+    this.seasonSnow ??= { value: 0 };
+    this.seasonTint ??= { value: new THREE.Color(1, 1, 1) };
     const groundTex = textures.grass_top;
     const repeat = 1000;
     const map = groundTex.map.clone();
@@ -121,17 +131,20 @@ export class Ground {
       shader.uniforms.holeMap = { value: holeMap };
       shader.uniforms.holeRect = { value: new THREE.Vector3(WORLD.min, WORLD.min, SIZE) };
       shader.uniforms.snowLine = { value: SNOW_LINE };
+      shader.uniforms.seasonSnow = this.seasonSnow; // (winter: snow everywhere)
+      shader.uniforms.seasonTint = this.seasonTint; // (spring greener, fall golden)
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec2 vGround;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGround = (modelMatrix * vec4(transformed, 1.0)).xz;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec2 vGround;\nuniform sampler2D holeMap;\nuniform vec3 holeRect;\nuniform float snowLine;')
+        .replace('#include <common>', '#include <common>\nvarying vec2 vGround;\nuniform sampler2D holeMap;\nuniform vec3 holeRect;\nuniform float snowLine;\nuniform float seasonSnow;\nuniform vec3 seasonTint;')
         .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
           vec2 huv = (vGround - holeRect.xy) / holeRect.z;
           if (huv.x >= 0.0 && huv.y >= 0.0 && huv.x < 1.0 && huv.y < 1.0 && texture2D(holeMap, huv).r > 0.5) discard;`)
         .replace('#include <map_fragment>', `#include <map_fragment>
           // Up north the grass is under snow (with a wavy edge, not a straight line).
-          float snowK = smoothstep(snowLine + 5.0, snowLine - 5.0, vGround.y + sin(vGround.x * 0.09) * 4.0 + sin(vGround.x * 0.27) * 1.5);
+          diffuseColor.rgb *= seasonTint;
+          float snowK = max(seasonSnow, smoothstep(snowLine + 5.0, snowLine - 5.0, vGround.y + sin(vGround.x * 0.09) * 4.0 + sin(vGround.x * 0.27) * 1.5));
           float lum = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.8, 0.85, 0.93) * (0.82 + lum * 0.7), snowK);`);
     };

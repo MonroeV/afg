@@ -3,10 +3,10 @@
 // moving parts; riding them happens in your own game, and everyone else just sees you move
 // (sitting on the swing, hanging off the zip line, up in your balloon).
 import * as THREE from 'three';
-import { rocketModel, parachuteModel, volcanoModel, fishTankModel, carouselModel, CAROUSEL_R, wellModel, coinModel, rainbowModel, RAINBOW_R } from './playthings.js';
+import { rocketModel, parachuteModel, volcanoModel, fishTankModel, carouselModel, CAROUSEL_R, wellModel, coinModel, rainbowModel, RAINBOW_R, snowmanModel } from './playthings.js';
 
 // The newer Build Book things (playthings.js draws them).
-const TOYS = ['rocket', 'volcano', 'fishtank', 'carousel', 'well', 'rainbow'];
+const TOYS = ['rocket', 'volcano', 'fishtank', 'carousel', 'well', 'rainbow', 'snowman'];
 const ROCKET_UP = 55; // how high a rocket goes
 const WISHES = ['a pony 🐴', 'a giant ice cream 🍦', 'a rainbow dragon 🐉', 'a castle made of candy 🍭', 'a trip to the moon 🌙', 'a puppy that can talk 🐶', 'a mountain of pizza 🍕', 'a magic unicorn 🦄', 'a treehouse in the clouds ☁️', 'a pet dinosaur 🦕'];
 const SWING_R = 2.3; // rope length
@@ -189,7 +189,12 @@ export class Contraptions {
       r = 0.9;
     } else if (s.type === 'carousel') [group, r] = [carouselModel(), 2];
     else if (s.type === 'well') [group, r] = [wellModel(), 1.3];
-    else {
+    else if (s.type === 'snowman') {
+      group = snowmanModel();
+      c.y -= 1; // (from the bottom of the bottom block)
+      group.rotation.y = Math.atan2(s.fx, s.fz);
+      r = 1.2;
+    } else {
       group = rainbowModel();
       c.set(s.x + 0.5 + s.ax * RAINBOW_R, s.y + 0.6, s.z + 0.5 + s.az * RAINBOW_R);
       group.rotation.y = s.ax ? 0 : Math.PI / 2;
@@ -274,6 +279,10 @@ export class Contraptions {
         item.next = 45 + Math.random() * 40;
         this.erupt(item, 2.5);
       }
+    } else if (s.type === 'snowman') {
+      // Waving its stick arms (when someone says hi), or just a little sway.
+      item.wave = Math.max(0, (item.wave || 0) - dt);
+      for (const arm of group.arms) arm.rotation.z = arm.side * (0.35 + (item.wave > 0 ? 0.5 + Math.sin(time * 14) * 0.45 : Math.sin(time * 1.3 + item.seed) * 0.04));
     } else if (s.type === 'rainbow') {
       group.children.forEach((b, i) => (b.material.opacity = 0.45 + Math.sin(time * 1.2 + i * 0.5) * 0.12));
     } else if (s.type === 'rocket') {
@@ -330,6 +339,12 @@ export class Contraptions {
       this.effects.heartsAt(c.x, c.y + 0.6, c.z, 4);
       this.sounds.tone?.(880, 1320, 0.15, 0.08, 'sine');
       return '🐠 Yum!';
+    }
+    if (s.type === 'snowman') {
+      item.wave = 2;
+      this.effects.sparkle(c.x, c.y + 2.6, c.z, 16);
+      this.sounds.tone?.(784, 1046, 0.25, 0.1, 'triangle');
+      return ['⛄ Hi!', '⛄ Brrr! 🥶', '⛄ I love winter! ❄️'][Math.floor(Math.random() * 3)];
     }
     if (s.type === 'well') {
       // Toss a coin: it arcs up and plops into the water.

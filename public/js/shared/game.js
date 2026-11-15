@@ -15,6 +15,7 @@ import { buildShops } from './shops.js';
 import { findHomes } from './residents.js';
 import { buildWeatherStation, TACO_PRICE, TACO_SECONDS } from './weather.js';
 import { buildBuildPark } from './buildpark.js';
+import { seasonAt, WINTER, SEASON_ICONS } from './seasons.js';
 import { Quests, cleanQuest } from './quests.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
@@ -99,6 +100,7 @@ export class GameRoom {
     this.nextVehicleId = 1;
     this.nextHomeId = 1;
     this.time = DAY_LENGTH * 0.08; // start in the morning
+    this.day = 0; // how many days have gone by (for the seasons: see seasons.js)
     this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0, holes: 5 };
     this.isSolid = (x, y, z) =>
       y < 0 || x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max ||
@@ -223,6 +225,7 @@ export class GameRoom {
     const b = data.blocks;
     for (let i = 0; i + 3 < b.length; i += 4) this.world.set(blockKey(b[i], b[i + 1], b[i + 2]), b[i + 3]);
     if (Number.isFinite(data.time)) this.time = data.time % DAY_LENGTH;
+    this.day = Number.isInteger(data.day) && data.day >= 0 ? data.day : 0;
     if (data.version <= 2) {
       // Older saves had player-spawned cars; use the town's parking spots instead, and
       // add the helipad wherever the ground is still empty (it never replaces anything).
@@ -461,12 +464,13 @@ export class GameRoom {
     const was = w.rain;
     w.rain = rain;
     w.left = between(rain ? RAIN_SHOWER : RAIN_CALM);
-    this.broadcast({ t: 'weather', rain });
+    const snow = this.snowing(); // (in winter it snows instead)
+    this.broadcast({ t: 'weather', rain, snow });
     if (rain && !was) {
-      this.log('It\'s raining');
-      this.npcs.breaking(rain > 0.85 ? 'BREAKING NEWS: a big rainstorm over BuildZone! Head indoors, everybody! ⛈️' : 'This just in: it\'s raining in BuildZone! Don\'t forget your umbrella! ☔');
+      this.log(snow ? 'It\'s snowing' : 'It\'s raining');
+      this.npcs.breaking(snow ? 'This just in: it\'s SNOWING in BuildZone! Snowball fight! ❄️⛄' : rain > 0.85 ? 'BREAKING NEWS: a big rainstorm over BuildZone! Head indoors, everybody! ⛈️' : 'This just in: it\'s raining in BuildZone! Don\'t forget your umbrella! ☔');
     } else if (!rain && was) {
-      this.npcs.breaking('The rain has stopped! Look up: is that a rainbow? 🌈');
+      this.npcs.breaking(snow ? 'The snow has stopped. Time to build a snowman! ⛄' : 'The rain has stopped! Look up: is that a rainbow? 🌈');
     }
   }
 
@@ -618,6 +622,7 @@ export class GameRoom {
     return {
       version: SAVE_VERSION,
       time: Math.round(this.time),
+      day: this.day,
       blocks: this.flatBlocks(),
       homes: [...this.homes.values()],
       vehicles: [...this.vehicles.values()].map(({ home, kind, color, x, y, z, h, hp, fuel, dirt }) => ({ home, kind, color, x, y, z, h, hp: Math.round(hp), fuel: round3(fuel), dirt: round3(dirt) })),
@@ -993,6 +998,8 @@ export class GameRoom {
       resume: this.spots[nameKey(client.name)]?.slice(0, 4) || null,
       coins: [...this.coins].map(([id, c]) => [id, ...c]),
       rain: this.weather?.rain || 0, // (raining right now?)
+      snow: this.snowing(), // (it's winter: that's snow, not rain)
+      day: this.day, // (for the seasons)
       guards: this.guardedLands(), // land with bodyguards (and who may go in)
       // The Secret Agency's base (its inside, its lasers) and where the TOP SECRET files are.
       base: this.places?.base || null,
@@ -1983,14 +1990,36 @@ export class GameRoom {
     return layer >= 2;
   }
 
+  // ---------- Days and seasons ----------
+
+  // Morning: another day gone by (and maybe a new season: Skye says so).
+  newDay() {
+    const was = seasonAt(this.day, this.time).i;
+    this.day++;
+    const now = seasonAt(this.day, this.time).i;
+    if (now !== was) {
+      this.broadcast({ t: 'time', time: this.time, day: this.day });
+      this.npcs.breaking(['🌸 Spring is here! Look at all the flowers! 🌷', '☀️ Summer is here! Sunny days ahead! 😎', '🍂 It\'s fall! The leaves are turning red and gold! 🍁', '❄️ Winter is here! Snowball fight, anyone? ⛄'][now]);
+      this.broadcast({ t: 'chat', system: true, text: SEASON_ICONS[now] });
+      if (this.weather?.rain) this.broadcast({ t: 'weather', rain: this.weather.rain, snow: now === WINTER });
+      this.log(`A new season: ${['spring', 'summer', 'fall', 'winter'][now]}`);
+    }
+    this.onDirty();
+  }
+
+  snowing() {
+    return seasonAt(this.day, this.time).i === WINTER;
+  }
+
   // ---------- Sleeping ----------
 
   checkSleep() {
     const players = [...this.clients.values()].filter(c => c.joined);
     if (!players.length || !isNightTime(this.time) || !players.every(c => c.sleeping)) return;
     this.time = DAY_LENGTH * 0.01;
+    this.newDay();
     for (const c of players) c.sleeping = false;
-    this.broadcast({ t: 'time', time: this.time });
+    this.broadcast({ t: 'time', time: this.time, day: this.day });
     this.broadcast({ t: 'wake' });
     this.broadcast({ t: 'chat', system: true, text: '☀️ Everyone slept through the night. Good morning!' });
   }
@@ -2056,14 +2085,16 @@ export class GameRoom {
 
   tick(dt) {
     const now = Date.now();
+    const before = this.time;
     this.time = (this.time + dt) % DAY_LENGTH;
+    if (this.time < before) this.newDay();
     this.updateWeather(dt);
     const t = this.timers;
     for (const k in t) t[k] -= dt;
 
     if (t.sync <= 0) {
       t.sync = 10;
-      this.broadcast({ t: 'time', time: this.time });
+      this.broadcast({ t: 'time', time: this.time, day: this.day });
     }
     if (t.names <= 0) {
       t.names = 60;

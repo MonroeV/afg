@@ -676,6 +676,154 @@ const NORMAL_STRENGTH = {
   door_bottom: 3, door_top: 3, garage: 3, asphalt: 2, sidewalk: 3, roof: 4, rainbow: 2, water: 1,
 };
 
+// ---------- The seasons ----------
+// Leaves, grass, flowers and roofs look different through the year (see shared/seasons.js):
+// spring, summer (their usual looks), fall and winter.
+
+function leavesSpring(u, v) {
+  const l = leaves(u, v);
+  if (!l.a) return l;
+  // Fresh light-green leaves, and blossom here and there.
+  const b = worley(u, v, 14, 83);
+  if (b.d1 < 0.16 && b.id > 0.45) return { c: b.d1 < 0.06 ? [1, 0.92, 0.55] : mixc([1, 0.72, 0.84], [0.98, 0.55, 0.72], b.id), h: 1, a: 1 };
+  return { ...l, c: mixc(l.c, [0.55, 0.85, 0.35], 0.45) };
+}
+
+function leavesFall(u, v) {
+  const w = worley(u, v, 10, 80);
+  const n = fbm(u, v, 8, 4, 81);
+  const leaf = 1 - w.d1 * 1.6;
+  // Red, orange and gold (and a few brown ones), a little thinner than in summer.
+  const pick = hash(Math.floor(w.id * 997), 0, 84);
+  const base = pick < 0.3 ? [0.78, 0.16, 0.08] : pick < 0.6 ? [0.95, 0.45, 0.08] : pick < 0.88 ? [0.98, 0.72, 0.12] : [0.5, 0.3, 0.14];
+  const c = shade(base, 0.75 + n * 0.45 + leaf * 0.15);
+  const a = leaf + n * 0.5 > 0.55 ? 1 : 0;
+  return { c, h: clamp(leaf), a };
+}
+
+function leavesWinter(u, v) {
+  // Bare: just twigs (with a little snow on them), and sky between.
+  const t1 = Math.abs(fbm(u, v, 3, 3, 85) - 0.5), t2 = Math.abs(fbm(u, v, 6, 3, 86) - 0.5);
+  if (t1 < 0.018 || t2 < 0.01) {
+    const snowy = fbm(u, v, 9, 2, 87) > 0.62;
+    return { c: snowy ? [0.92, 0.95, 1] : [0.33, 0.24, 0.16], h: 0.8, a: 1 };
+  }
+  return { c: [0.3, 0.22, 0.15], h: 0, a: 0 };
+}
+
+function grassSpring(u, v) {
+  const g = grassTop(u, v);
+  // Bright new grass, with little flowers all over it.
+  const f = worley(u, v, 26, 88);
+  if (f.d1 < 0.11 && f.id > 0.55) return { c: [[1, 1, 1], [1, 0.9, 0.25], [1, 0.6, 0.8], [0.7, 0.6, 1]][Math.floor(f.id * 9) % 4], h: 1 };
+  return { ...g, c: mixc(g.c, [0.35, 0.72, 0.2], 0.3) };
+}
+
+function grassFall(u, v) {
+  const g = grassTop(u, v);
+  // Golden, drier grass, with fallen leaves on it.
+  const f = worley(u, v, 18, 89);
+  if (f.d1 < 0.13 && f.id > 0.4) return { c: [[0.82, 0.25, 0.08], [0.95, 0.55, 0.1], [0.9, 0.75, 0.15]][Math.floor(f.id * 7) % 3], h: 0.9 };
+  return { ...g, c: mixc(g.c, [0.62, 0.55, 0.22], 0.45) };
+}
+
+// A grass block's side, with whatever's on top of it.
+const grassSideWith = top => (u, v) => {
+  const d = dirt(u, v);
+  const edge = 0.16 + vnoise(u, 0, 24, 1, 11) * 0.12 + (hash(Math.floor(u * SIZE / 4), 0, 12) * 0.08);
+  if (v < edge) {
+    const g = top(u, v);
+    return { c: shade(g.c, 0.9 + (v / edge) * 0.1), h: g.h * 0.6 + 0.4 };
+  }
+  if (v < edge + 0.03) return { c: shade(d.c, 0.7), h: d.h * 0.5 };
+  return d;
+};
+
+function roofSnow(u, v) {
+  const r = roofTiles(u, v);
+  // Snow on the roof, with the tiles' bottom edges showing through.
+  const fy = (v * 6) % 1;
+  if (fy > 0.82 && fbm(u, v, 10, 2, 92) > 0.45) return r;
+  return { c: shade(snow(u, v).c, 0.95 + fy * 0.05), h: 0.4 + fy * 0.3 };
+}
+
+function flowersSpring(u, v) {
+  // More flowers, and bigger ones.
+  for (let i = 0; i < 6; i++) {
+    const sx = 0.1 + i * 0.16 + Math.sin(v * 6 + i) * 0.02, top = 0.18 + hash(i, 1, 193) * 0.3;
+    const d = Math.hypot(u - sx, (v - top) * 1.1);
+    if (d < 0.11) return { c: d < 0.04 ? [1, 0.9, 0.3] : [[0.95, 0.2, 0.3], [1, 0.85, 0.2], [0.95, 0.45, 0.85], [0.6, 0.45, 1], [1, 1, 1], [1, 0.55, 0.2]][i], h: 1 - d * 5 };
+    if (Math.abs(u - sx) < 0.018 && v > top) return { c: [0.2, 0.55, 0.15], h: 0.5 };
+  }
+}
+
+function flowersFall(u, v) {
+  const f = flowers(u, v);
+  if (!f) return f;
+  // Faded: browny-orange heads, yellowing stems.
+  return { ...f, c: mixc(f.c, f.c[1] > f.c[0] ? [0.62, 0.55, 0.2] : [0.75, 0.42, 0.15], 0.6) };
+}
+
+function flowersWinter(u, v) {
+  // Just a couple of dry stalks poking out of the snow.
+  for (const sx of [0.3, 0.7]) {
+    if (Math.abs(u - sx - Math.sin(v * 5) * 0.02) < 0.014 && v > 0.45) return { c: [0.45, 0.36, 0.22], h: 0.5 };
+  }
+}
+
+const SEASONAL = {
+  leaves: [leavesSpring, leaves, leavesFall, leavesWinter],
+  grass_top: [grassSpring, grassTop, grassFall, snow],
+  grass_side: [grassSideWith(grassSpring), grassSide, grassSideWith(grassFall), grassSideWith(snow)],
+  roof: [roofTiles, roofTiles, roofTiles, roofSnow],
+  flowers: [flowersSpring, flowers, flowersFall, flowersWinter],
+};
+const seasonCache = new Map();
+
+// One season's look of one texture (just its colors). It's worked out a few rows at a time
+// (prepareSeason, a little every frame, so the game never stutters), then kept.
+const pending = new Map();
+function seasonColor(name, season) {
+  return seasonCache.get(`${name}:${season}`);
+}
+
+// Works on a texture's season look for `rows` more rows. True once it's ready.
+export function prepareSeason(name, season, rows = 16) {
+  const key = `${name}:${season}`;
+  if (seasonCache.has(key)) return true;
+  let job = pending.get(key);
+  if (!job) pending.set(key, (job = { y: 0, color: new Uint8ClampedArray(SIZE * SIZE * 4) }));
+  const gen = SEASONAL[name][season];
+  for (const end = Math.min(SIZE, job.y + rows); job.y < end; job.y++) {
+    for (let x = 0; x < SIZE; x++) {
+      const i = (job.y * SIZE + x) * 4;
+      const p = gen((x + 0.5) / SIZE, (job.y + 0.5) / SIZE) || { c: [0, 0, 0], a: 0 };
+      job.color[i] = clamp(p.c[0]) * 255;
+      job.color[i + 1] = clamp(p.c[1]) * 255;
+      job.color[i + 2] = clamp(p.c[2]) * 255;
+      job.color[i + 3] = (p.a ?? 1) * 255;
+    }
+  }
+  if (job.y < SIZE) return false;
+  seasonCache.set(key, job.color);
+  pending.delete(key);
+  return true;
+}
+
+export const SEASONAL_TEXTURES = Object.keys(SEASONAL);
+
+// Shows one of the seasonal textures part way from one season's look to the next's (mix 0..1).
+export function paintSeason(textures, name, from, to, mix) {
+  const t = textures[name];
+  if (!t) return;
+  const a = seasonColor(name, from), b = seasonColor(name, to);
+  if (!a || !b) return;
+  const out = new Uint8ClampedArray(a.length);
+  for (let i = 0; i < a.length; i++) out[i] = a[i] + (b[i] - a[i]) * mix;
+  t.canvas.getContext('2d').putImageData(new ImageData(out, SIZE, SIZE), 0, 0);
+  t.map.needsUpdate = true;
+}
+
 // ---------- Building THREE textures ----------
 
 function render(name) {

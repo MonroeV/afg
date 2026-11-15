@@ -26,6 +26,8 @@ export class Weather {
     this.revision = -1;
     this.setQuality(1000);
     this.splashes = this.makeSplashes(scene);
+    this.snow = false; // (winter: it snows instead of raining)
+    this.flakes = this.makeFlakes(scene);
     this.rainbowMesh = makeRainbow();
     scene.add(this.rainbowMesh);
     scene.add(this.lines);
@@ -60,11 +62,32 @@ export class Weather {
     return { pts, life: new Float32Array(n), next: 0 };
   }
 
-  // The server says: raining (how hard), or not.
-  set(rain) {
+  // Snowflakes: soft white dots drifting down (in winter, and up north).
+  makeFlakes(scene) {
+    const n = 1200, pos = new Float32Array(n * 3).fill(-999);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const c = document.createElement('canvas');
+    c.width = c.height = 32;
+    const ctx = c.getContext('2d'), g = ctx.createRadialGradient(16, 16, 0, 16, 16, 15);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.5, 'rgba(255,255,255,0.8)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 32, 32);
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.16, map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, opacity: 0.95 }));
+    pts.frustumCulled = false;
+    pts.visible = false;
+    scene.add(pts);
+    return pts;
+  }
+
+  // The server says: raining (how hard), or not; and whether it's snow (it's winter).
+  set(rain, snow = this.snow) {
     const was = this.target;
     this.target = Math.max(0, Math.min(1, rain || 0));
-    if (was > 0 && !this.target) this.rainbow = 50; // (the rain's stopped: a rainbow)
+    if (was > 0 && !this.target && !this.snow) this.rainbow = 50; // (the rain's stopped: a rainbow)
+    this.snow = !!snow;
   }
 
   get raining() {
@@ -137,6 +160,33 @@ export class Weather {
     return this.top(Math.floor(x), Math.floor(z)) > y + 0.5 || this.vehicleTop(x, z) > y + 0.5;
   }
 
+  // Snow drifting down round you (it stops on roofs and the ground, like the rain).
+  updateSnow(dt, c) {
+    const drops = this.drops, n = Math.min(drops.length, Math.round(1200 * Math.min(1, this.rain * 1.2)));
+    const a = this.flakes.geometry.attributes.position.array;
+    this.cover = this.vehicles().filter(b => b[3] > c.x - R - 2 && b[0] < c.x + R + 2 && b[5] > c.z - R - 2 && b[2] < c.z + R + 2);
+    const t = performance.now() / 1000;
+    for (let i = 0; i < Math.min(n, a.length / 3); i++) {
+      const d = drops[i];
+      if (!this.flakesPlaced || d.y < d.stop || Math.abs(d.x - c.x) > R || Math.abs(d.z - c.z) > R) {
+        d.x = c.x + (Math.random() * 2 - 1) * R;
+        d.z = c.z + (Math.random() * 2 - 1) * R;
+        d.y = this.flakesPlaced ? c.y + 12 + Math.random() * 6 : c.y - 6 + Math.random() * 24;
+        d.stop = Math.max(this.top(Math.floor(d.x), Math.floor(d.z)), this.vehicleTop(d.x, d.z));
+        if (d.stop >= d.y) d.y = d.stop = -999;
+      }
+      // Slowly, swaying from side to side.
+      d.y -= (1.6 + (d.v - 18) * 0.12) * dt;
+      d.x += Math.sin(t * 0.9 + i) * 0.35 * dt;
+      d.z += Math.cos(t * 0.7 + i * 1.3) * 0.25 * dt;
+      a.set(d.y < -500 ? [0, -999, 0] : [d.x, d.y, d.z], i * 3);
+    }
+    for (let i = n; i < a.length / 3; i++) a[i * 3 + 1] = -999;
+    this.flakesPlaced = true;
+    this.placed = false;
+    this.flakes.geometry.attributes.position.needsUpdate = true;
+  }
+
   // ---------- Every frame ----------
 
   // camera: where you are. Returns how dark the rain makes things (0..1), for the sky.
@@ -145,12 +195,18 @@ export class Weather {
     if (this.target === 0 && this.rain < 0.01) this.rain = 0;
     this.rainbow = Math.max(0, this.rainbow - dt);
     const c = camera.position;
-    const snowy = isSnowyAt(c.x, c.z); // (up north it snows instead)
-    const show = this.rain > 0.01 && !snowy;
+    const snowing = this.rain > 0.01 && (this.snow || isSnowyAt(c.x, c.z)); // (up north, and in winter, it snows)
+    const show = this.rain > 0.01 && !snowing;
     this.lines.visible = show;
     this.splashes.pts.visible = show;
+    this.flakes.visible = snowing;
     this.updateSound(dt, c, show);
     this.updateRainbow(c);
+    if (snowing) {
+      this.updateSnow(dt, c);
+      return this.rain * 0.6;
+    }
+    this.flakesPlaced = false;
     if (!show) {
       this.placed = false;
       return this.rain;

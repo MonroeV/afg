@@ -202,11 +202,32 @@ customize your character, drive cars, build anything and play with friends.
   - **Wishing Well**: Water with Cobblestone on all four sides. A little roof and a bucket appear:
     right-click to toss in a coin and make a wish (a pony? a pet dinosaur?)
   - **Rainbow**: a Rainbow block on top of Sky Paint. A big glowing rainbow arches out of it
+  - **Snowman** ⛄: three Snow blocks stacked up. Eyes, a carrot nose, a top hat, a red scarf and
+    stick arms appear, and it waves. Right-click it to say hi
   Signposts around the map ("Build a SWING here!", by the playground pad, the basketball court,
   the balloon field and the rocky mountain) show where's good to build them and how. And the
   **Build Park**, near town, has one of each of the newest six, working, with a noticeboard by each
   saying what it's made of: try them, then build your own (there's room). Right-click any of its
   signs to open the Build Book
+- **Seasons** 🌸☀️🍂❄️: spring, summer, fall and winter, two game days each (a whole year in 80
+  minutes), shown by the little picture next to the clock. Each season comes in slowly over its
+  first half day. Skye announces each new one on BZ Live.
+  - **Spring**: the trees are covered in buds and pink blossom, the grass turns fresh green, and
+    wildflowers pop up all over the grass around you
+  - **Summer**: green trees, green grass
+  - **Fall**: the trees turn red, orange and gold, the grass goes golden, and leaves blow around
+    and tumble down from the trees
+  - **Winter**: the trees are bare twigs with snow on them, and snow covers the whole map: the
+    ground, the grass and the roofs. Rain falls as **snow** (soft drifting flakes that stop at
+    roofs, and no rainbow afterwards). In spring the snow melts away again
+  The server counts the days (saved with the world), and everyone's screen works out the season
+  from the day and the time, so everyone sees the same season.
+- **Snow day** (in winter anywhere, and up north at any time; both are in the 🎉 Fun tab):
+  - **Snowballs**: click to throw one. It bursts in a puff of snow, and if it hits someone their
+    screen goes white for a moment: ❄️ SPLAT!
+  - **Sled** 🛷: click to hop on, sitting down on a red sled, and slide like on skis: downhill gets
+    faster and faster, W steers toward where you look, S slows down. Space (or putting the sled
+    away, or sliding off the snow) hops off. Everyone sees you sledding
 - **The weather station**, by the road round the edge of town (a glass building with a mast on the
   roof, its wind cups spinning and a light blinking on top): talk to Stormy ⛅, pay 25 coins, and
   it rains TACOS all over town, for everyone, while its own song ("Taco Rain BuildZone") plays
@@ -744,7 +765,8 @@ public/
     signs.js           The writing on signs
     contraptions.js    Swings, zip lines, basketball hoops, hot air balloons, and riding and
                        playing with the rocket, volcano, fish tank, merry-go-round and wishing well
-    playthings.js      The rocket, volcano, fish tank, merry-go-round, wishing well and rainbow models
+    playthings.js      The rocket, volcano, fish tank, merry-go-round, wishing well, rainbow and snowman models
+    seasonlook.js      How each season looks: tree leaves, grass, snow, falling leaves, spring flowers
     tacos.js           Raining tacos, and the weather station's spinning mast
     lighting.js        Live reflections and the glow effect
     lightpools.js      Soft pools of light on the ground under every lamp
@@ -782,6 +804,7 @@ public/
       residents.js     The residents and the houses they live in
       quests.js        The residents' quests
       weather.js       The weather station (and what a taco shower costs)
+      seasons.js       Which season it is (from the server's day count and the time of day)
       buildpark.js     The Build Park: one of each of the newest Build Book things, with signs
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/

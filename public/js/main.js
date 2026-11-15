@@ -31,13 +31,14 @@ import { QuestHud } from './questui.js';
 import { MAX_CHARACTERS } from './shared/characters.js';
 import { Hud, renderControls, CUSTOM_PAINT } from './hud.js';
 import {
-  HAMMER, FIREWORKS, BALL, CLAIM, VACATION, BRUSH, SCRAPER, WRENCH, SKIS, GOGGLES, GOLDPAINT, SNEAKERS, LADDER, WATER_BALLOON, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME,
+  HAMMER, FIREWORKS, BALL, CLAIM, VACATION, BRUSH, SCRAPER, WRENCH, SKIS, GOGGLES, GOLDPAINT, SNEAKERS, LADDER, WATER_BALLOON, SNOWBALL, SLED, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME,
   ALL_ITEMS, ICON_ITEMS, GEAR, DEFAULT_HOTBAR, FAMILIES, itemName, makeIcon, ViewModel,
 } from './items.js';
 import { MAX_MANY, MAX_OWNED_VEHICLES } from './shared/game.js';
 import { CHUTE } from './shared/farcountry.js';
 import { NPC_ACT, NPC_POSE } from './shared/npcs.js';
 import { TacoRain, WeatherMast } from './tacos.js';
+import { SeasonLook } from './seasonlook.js';
 import { Shop } from './shop.js';
 import { Particles, Fireworks, Sounds, Effects } from './effects.js';
 import { Ground } from './ground.js';
@@ -221,6 +222,7 @@ let myId = null;
 let online = false;
 let inGame = false;
 let tacoRain = null, weatherMast = null; // it's raining tacos! (and the weather station's mast)
+let seasonLook = null, worldDay = 0; // the seasons (the server counts the days)
 let autoJoin = false; // joining by itself (back after a lost connection, or an update)
 let myCar = null; // the vehicle we're driving
 let myRide = null; // the vehicle we're riding in as a passenger
@@ -313,6 +315,7 @@ async function load() {
   });
   elevators = new Elevators(scene, world, sounds);
   weather = new Weather(scene, world, sounds, () => cars.boxes());
+  seasonLook = new SeasonLook({ scene, textures, ground, effects, world });
   weather.setQuality(RAINDROPS[settings.quality] || RAINDROPS.high);
   agency = new SecretAgency({
     scene, world, sounds, effects, hud, net, headlight,
@@ -671,7 +674,8 @@ function startGame(welcome, resume = false) {
   agency.setWorld({ base: welcome.base, files: welcome.files, landmarks: welcome.landmarks });
   gasStations = (welcome.landmarks || []).filter(([k]) => /^gas\d/.test(k));
   landmarks = welcome.landmarks || [];
-  weather.set(welcome.rain || 0);
+  worldDay = welcome.day || 0;
+  weather.set(welcome.rain || 0, welcome.snow);
   agency.setGuards(welcome.guards);
   weather.rain = weather.target; // (if it's raining when you arrive, it already is)
   sky.time = welcome.time;
@@ -791,7 +795,7 @@ net.on('lift_doors', ({ x, z, y, open, ding }) => {
     sounds.tone(1046, 1046, 0.7, 0.09, 'sine', 0.22);
   }
 });
-net.on('weather', ({ rain }) => weather.set(rain));
+net.on('weather', ({ rain, snow }) => weather.set(rain, snow));
 // Bodyguards: whose land they guard (and who may go in), and the town's people coming and going.
 net.on('guards', ({ lands }) => {
   agency.setGuards(lands);
@@ -1206,7 +1210,8 @@ net.on('horn', ({ id }) => {
   const car = cars.list.get(id);
   if (car) sounds.horn(loudness(car.pos.x, car.pos.y, car.pos.z, 60), hornPitch(car));
 });
-net.on('time', ({ time }) => {
+net.on('time', ({ time, day }) => {
+  if (Number.isInteger(day)) worldDay = day;
   // (A big jump, like everyone sleeping through the night: retake the reflections right away,
   // instead of the world snapping brighter a few seconds later.)
   if (Math.abs(time - sky.time) > 5) reflections.timer = 0;
@@ -2923,7 +2928,7 @@ function sendState() {
   const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
   const balloon = hud.item === BALLOON && !riding() && !sleeping;
   const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
-    (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) |
+    (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) | (sledding && !balloon ? FLAG.sled : 0) |
     (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
   net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item, drone: agency.droneState(player.yaw) });
 }
@@ -3752,6 +3757,8 @@ function useItem() {
   myBody.swing = 0;
   // Things you throw, blow or point work wherever you're looking.
   if (item === WATER_BALLOON) return throwWaterBalloon();
+  if (item === SNOWBALL) return throwSnowball();
+  if (item === SLED) return sled();
   if (item === BUBBLES) return blowBubbles(1);
   if (item === CAMERA) return takePhoto();
   if (item === SHOWTIME) return fireworkShow();
@@ -3880,7 +3887,7 @@ function interact() {
     if (s?.type === 'bed') return goToBed(s);
     if (s?.type === 'cannon') return fireCannon(s);
     if (s && ['swing', 'zipline', 'balloon'].includes(s.type)) return startContraption(s);
-    if (s && ['rocket', 'carousel', 'volcano', 'fishtank', 'well'].includes(s.type)) return playWith(s);
+    if (s && ['rocket', 'carousel', 'volcano', 'fishtank', 'well', 'snowman'].includes(s.type)) return playWith(s);
     if (s?.type === 'tv') {
       const name = tvs.nextChannel(s);
       if (name) {
@@ -4641,6 +4648,37 @@ function launchWater(p, v, color, by) {
   flying.push({ kind: 'water', mesh, pos: p.clone(), vel: v.clone(), by, age: 0, color });
 }
 
+// ---------- Snow day ----------
+// Snowballs and sledding: in winter (when there's snow all over), and up north any time.
+
+const SNOW_COLOR = '#f4f8ff'; // (a snowball: thrown like a water balloon, but white)
+let sledding = false;
+
+function snowyHere() {
+  return !!seasonLook?.winter || isSnowyAt(player.pos.x, player.pos.z);
+}
+
+function throwSnowball() {
+  if (!snowyHere()) return hud.toast('❄️❓');
+  const p = eye.clone().addScaledVector(lookDir, 0.6);
+  p.y -= 0.15;
+  const v = lookDir.clone().multiplyScalar(18).add(new THREE.Vector3(0, 2.5, 0)).addScaledVector(player.vel, 0.5);
+  launchWater(p, v, SNOW_COLOR, myId);
+  const r = n => Math.round(n * 100) / 100;
+  net.send({ t: 'throw', p: [r(p.x), r(p.y), r(p.z)], v: [r(v.x), r(v.y), r(v.z)], color: SNOW_COLOR });
+  sounds.swing();
+}
+
+// Hop on your sled (or off again). It slides like skis (downhill gets faster and faster; W steers
+// toward where you look, S slows down) and you sit on it. Space hops off.
+function sled(on = !sledding) {
+  if (on && (riding() || sleeping || seated)) return;
+  if (on && !(player.onGround && snowyHere())) return hud.toast('🛷❄️❓');
+  sledding = on;
+  player.vel.y = 0;
+  if (on) sounds.whoosh?.();
+}
+
 function throwWaterBalloon() {
   const color = BALLOON_COLORS[Math.floor(Math.random() * BALLOON_COLORS.length)];
   const p = eye.clone().addScaledVector(lookDir, 0.6);
@@ -4688,15 +4726,21 @@ function updateFlying(dt) {
         if (world.isSolid(Math.floor(f.pos.x), Math.floor(f.pos.y), Math.floor(f.pos.z))) done = true;
         else if (f.by !== myId && !riding() && touches(f.pos, player.pos, player.crouching)) {
           done = true;
-          splashed(f.by);
+          splashed(f.by, f.color === SNOW_COLOR);
         } else if ([...avatars.list.values(), ...npcs.values()].some(a => a.id !== f.by && !a.seat && touches(f.pos, a.pos))) done = true;
       }
       f.mesh.position.copy(f.pos);
       if (done || f.age > 6) {
         done = true;
         const c = new THREE.Color(f.color);
-        effects.splash(f.pos.x, Math.max(0.1, f.pos.y), f.pos.z, [0.4 + c.r * 0.3, 0.6 + c.g * 0.3, 0.9 + c.b * 0.1]);
-        sounds.splash(loudness(f.pos.x, f.pos.y, f.pos.z, 30));
+        if (f.color === SNOW_COLOR) {
+          // A snowball: a white puff.
+          for (let k = 0; k < 6; k++) effects.powder(f.pos.x, Math.max(0.1, f.pos.y), f.pos.z, 1.2);
+          sounds.noiseHit?.(900, 0.12, 0.25 * loudness(f.pos.x, f.pos.y, f.pos.z, 30));
+        } else {
+          effects.splash(f.pos.x, Math.max(0.1, f.pos.y), f.pos.z, [0.4 + c.r * 0.3, 0.6 + c.g * 0.3, 0.9 + c.b * 0.1]);
+          sounds.splash(loudness(f.pos.x, f.pos.y, f.pos.z, 30));
+        }
       }
     }
     if (done) {
@@ -4707,14 +4751,16 @@ function updateFlying(dt) {
 }
 
 // We got hit by somebody's water balloon!
-function splashed(by) {
+function splashed(by, snow = false) {
   const el = $('splash');
+  el.classList.toggle('snow', snow);
   el.classList.remove('show');
   void el.offsetWidth; // restart the animation
   el.classList.add('show');
   sounds.splash(1.2);
   const who = avatars.list.get(by)?.name;
-  hud.toast(who ? `💦 SPLASH! ${who} got you!` : '💦 SPLASH!');
+  if (snow) hud.toast(who ? `❄️ SPLAT! ${who} got you!` : '❄️ SPLAT!');
+  else hud.toast(who ? `💦 SPLASH! ${who} got you!` : '💦 SPLASH!');
   net.send({ t: 'splashed', by });
 }
 
@@ -5194,7 +5240,7 @@ function updateCamera(dt) {
     return;
   }
   player.eye(eye);
-  eye.y -= CROUCH_DROP * crouchK;
+  eye.y -= CROUCH_DROP * crouchK + (sledding ? 0.5 : 0);
   lookDir.set(-Math.sin(player.yaw) * Math.cos(player.pitch), Math.sin(player.pitch), -Math.cos(player.yaw) * Math.cos(player.pitch));
   if (rv.bed >= 0) {
     // Asleep in the RV: a view of it from outside, under the night sky.
@@ -5334,9 +5380,13 @@ function frame(timestamp) {
       player.stick = touch?.enabled && active ? touch.stick : null;
       player.balloon = hud.item === BALLOON;
       player.jetpack = hud.wearing(JETPACK);
-      player.skis = hud.wearing(SKIS);
+      if (sledding && (hud.item !== SLED || (held.has('Space') && active) || player.flying)) sled(false);
+      player.skis = hud.wearing(SKIS) || sledding;
+      player.sledding = sledding;
+      player.winter = !!seasonLook?.winter;
       player.sneakers = hud.wearing(SNEAKERS);
       player.update(dt, active ? held : noKeys);
+      if (sledding && player.onGround && !player.surface()) sled(false); // (off the snow: off the sled)
       // (Never inside the ground, even if a hole grew back over us a moment ago.)
       if (player.pos.y < 0 && world.isSolid(Math.floor(player.pos.x), Math.floor(player.pos.y + 0.05), Math.floor(player.pos.z))) {
         let y = Math.floor(player.pos.y + 0.05);
@@ -5533,6 +5583,7 @@ function frame(timestamp) {
     lifts.update(time);
     contraptions.update(dt, time, [...avatars.list.values()], player.pos);
     tacoRain.update(dt, player.pos, settings.volume);
+    seasonLook.update(dt, worldDay, sky.time, player.pos);
     weatherMast?.update(dt, time);
     updateJob(dt, time);
     updateFishing(dt, time);
@@ -5592,6 +5643,7 @@ function frame(timestamp) {
     myBody.swing = view.swingT;
     myBody.sitting = !!seated || !!liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel';
     myBody.hotair = contraptions.riding === 'balloon';
+    myBody.sledding = sledding;
     myBody.crouching = player.crouching && !riding();
     myBody.pizza = !!job;
     myBody.balloon = hud.item === BALLOON && !riding() && !sleeping ? paintHex() : null;
@@ -5643,7 +5695,7 @@ function frame(timestamp) {
       hudTimer = 0.5;
       fps = Math.round(fpsFrames / Math.max(fpsTime, 1e-3));
       fpsFrames = fpsTime = 0;
-      hud.updateInfo({ online: online || (reconnecting ? 'reconnecting' : false), fps, pos: player.pos, flying: player.flying, clock: sky.clockText() });
+      hud.updateInfo({ online: online || (reconnecting ? 'reconnecting' : false), fps, pos: player.pos, flying: player.flying, clock: `${seasonLook.season.icon} ${sky.clockText()}` });
       hud.updatePlayers([{ name: settings.name + ' (you)', color: settings.look.shirtColor }, ...[...avatars.list.values()].map(a => ({ name: a.name, color: a.color }))]);
     }
     hud.update(dt);
@@ -5818,6 +5870,8 @@ window.buildzone = {
   get signs() { return signs; },
   get contraptions() { return contraptions; },
   get tacoRain() { return tacoRain; },
+  get seasonLook() { return seasonLook; },
+  setDay: d => (worldDay = d), // (for trying out the seasons)
   kickBall: () => kickBall(),
   usePump: (x, y, z) => usePump(x, y, z),
   get book() { return book; },

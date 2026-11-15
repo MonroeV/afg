@@ -232,3 +232,54 @@ export function rainbowModel() {
   });
   return g;
 }
+
+// ---------- The snowman ----------
+// On three snow blocks (the group's origin is the bottom of the bottom one, facing +z): coal eyes
+// and smile, a carrot nose, a top hat, a red scarf, and stick arms (they wave: see contraptions.js).
+export function snowmanModel() {
+  const g = new THREE.Group();
+  const coal = new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.8 });
+  for (const s of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), coal);
+    eye.position.set(s * 0.17, 2.68, 0.51);
+    g.add(eye);
+  }
+  for (let i = 0; i < 5; i++) {
+    const a = -0.6 + i * 0.3;
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 5), coal);
+    dot.position.set(Math.sin(a) * 0.22, 2.38 - Math.cos(a) * 0.07, 0.51);
+    g.add(dot);
+  }
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.38, 10), mat(0xff7a1a));
+  nose.rotation.x = Math.PI / 2;
+  nose.position.set(0, 2.52, 0.68);
+  const brim = cyl(0.42, 0.42, 0.05, coal, 18);
+  brim.position.y = 3.03;
+  const top = cyl(0.27, 0.27, 0.5, coal, 18);
+  top.position.y = 3.3;
+  const band = cyl(0.275, 0.275, 0.08, M.red, 18);
+  band.position.y = 3.1;
+  const scarf = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.16, 1.08), mat(0xc62828, { roughness: 0.9 }));
+  scarf.position.y = 2.04;
+  const tail = box(0.18, 0.5, 0.06, mat(0xc62828, { roughness: 0.9 }));
+  tail.position.set(0.25, 1.78, 0.55);
+  tail.rotation.z = 0.15;
+  g.add(nose, brim, top, band, scarf, tail);
+  g.arms = [];
+  for (const s of [-1, 1]) {
+    const arm = new THREE.Group();
+    const stick = box(0.75, 0.05, 0.05, M.wood);
+    stick.position.x = s * 0.38;
+    const twig = box(0.2, 0.035, 0.035, M.wood);
+    twig.position.set(s * 0.62, 0.08, 0);
+    twig.rotation.z = s * 0.7;
+    arm.add(stick, twig);
+    arm.position.set(s * 0.5, 1.55, 0);
+    arm.rotation.z = s * 0.35;
+    arm.side = s;
+    g.add(arm);
+    g.arms.push(arm);
+  }
+  g.traverse(o => o.isMesh && (o.castShadow = true));
+  return g;
+}

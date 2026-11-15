@@ -38,7 +38,7 @@ function nameTag(name, color) {
 
 // What a player is doing, sent with their position: bits of `flags`. The top 24 bits are
 // the color of the balloon they're holding.
-export const FLAG = { sleeping: 1, sitting: 2, crouching: 4, balloon: 8, jet: 16, trail: 32, pizza: 64, hotair: 128 };
+export const FLAG = { sleeping: 1, sitting: 2, crouching: 4, balloon: 8, jet: 16, trail: 32, pizza: 64, hotair: 128, sled: 256 }; // (sled: only without a balloon, whose color takes those bits)
 
 // A speech bubble: rounded and white, with up to two lines of text and a little tail.
 function speechBubble(text) {
@@ -77,6 +77,8 @@ function speechBubble(text) {
 }
 
 // A character in the world that can walk, dance, wave and sit in cars.
+const SLED_DROP = 0.5; // (how much lower you sit on a sled than you stand)
+
 export class Avatar {
   constructor(scene, info, { tag = true } = {}) {
     this.scene = scene;
@@ -356,6 +358,7 @@ export class Avatar {
     this.trail = !!(flags & FLAG.trail);
     this.pizza = !!(flags & FLAG.pizza);
     this.hotair = !!(flags & FLAG.hotair);
+    this.sledding = !(flags & FLAG.balloon) && !!(flags & FLAG.sled);
   }
 
   emote(kind) {
@@ -399,11 +402,13 @@ export class Avatar {
     if (this.speed > 0.3 && !this.seat) this.dance = 0;
 
     this.root.position.copy(this.pos);
+    if (this.sledding) this.root.position.y -= SLED_DROP; // (sitting down low, on the sled)
+    this.updateSled();
     this.root.rotation.order = 'YXZ';
     this.root.rotation.y = this.yaw;
     // Lying back into bed (or sitting up out of it), and sitting down, happen smoothly.
     this.lieK = (this.lieK ?? 0) + ((this.lying ? 1 : 0) - (this.lieK ?? 0)) * Math.min(1, dt * 3.2);
-    this.sitK = (this.sitK ?? 0) + ((this.sitting ? 1 : 0) - (this.sitK ?? 0)) * Math.min(1, dt * 7);
+    this.sitK = (this.sitK ?? 0) + ((this.sitting || this.sledding ? 1 : 0) - (this.sitK ?? 0)) * Math.min(1, dt * 7);
     this.root.rotation.x = this.lieK * Math.PI / 2; // asleep in bed, on our back
     this.root.scale.setScalar(this.seat ? SEAT_SCALE : 1);
     if (this.tag) {
@@ -423,7 +428,7 @@ export class Avatar {
       this.bubble.material.opacity = Math.min(1, this.bubbleT * 2);
       if (this.bubbleT <= 0) this.unsay();
     }
-    const sitting = !!this.seat || this.sitting;
+    const sitting = !!this.seat || this.sitting || this.sledding;
     // Climbing into bed (or out) your knees bend as you sit on the edge, then straighten as you
     // lie back (or stand up).
     // (Asleep in a camper van: lying in its bed, not sitting.)
@@ -513,6 +518,37 @@ export class Avatar {
     const { armL, armR } = this.character;
     if (armL) armL.rotation.set(1.2, 0, 0.3);
     if (armR) armR.rotation.set(1.2, 0, -0.3);
+  }
+
+  // A red sled under them (sledding).
+  updateSled() {
+    if (!this.sledding && !this.sled) return;
+    if (!this.sled) {
+      const g = new THREE.Group();
+      const red = new THREE.MeshStandardMaterial({ color: 0xd32f2f, roughness: 0.5 });
+      const metal = new THREE.MeshStandardMaterial({ color: 0x424242, roughness: 0.4, metalness: 0.6 });
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.06, 1.15), red);
+      seat.position.y = 0.16;
+      g.add(seat);
+      for (const x of [-0.22, 0.22]) {
+        const runner = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 1.25), metal);
+        runner.position.set(x, 0.03, 0);
+        const curl = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.02, 6, 10, Math.PI), metal);
+        curl.rotation.y = Math.PI / 2;
+        curl.position.set(x, 0.15, -0.62);
+        g.add(runner, curl);
+        for (const z of [-0.35, 0.35]) {
+          const leg = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.12, 0.03), metal);
+          leg.position.set(x, 0.09, z);
+          g.add(leg);
+        }
+      }
+      g.position.set(0, SLED_DROP - 0.02, -0.15);
+      g.traverse(o => o.isMesh && (o.castShadow = true));
+      this.root.add(g);
+      this.sled = g;
+    }
+    this.sled.visible = !!this.sledding;
   }
 
   // A pizza box carried in front (out on a delivery).

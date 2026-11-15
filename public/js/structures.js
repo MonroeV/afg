@@ -2,8 +2,8 @@
 // Every player's game spots these patterns by itself, so no server work is needed.
 import { blockId, blockKey, blockMeta, BED_FOOT } from './shared/blocks.js';
 
-const B = { concrete: 13, log: 7, cobble: 4, lamp: 18, rainbow: 28, metal: 11, black: 17, water: 36, marble: 12, tiles: 20, bounce: 19, glass: 9, bed: 64, planks: 6, lantern: 45, stone: 3, red: 14, yellow: 16, sky: 31, orange: 32 };
-const TYPES = ['bed', 'trampoline', 'campfire', 'teleporter', 'cannon', 'fountain', 'tv', 'disco', 'swing', 'zipline', 'hoop', 'balloon', 'rocket', 'volcano', 'fishtank', 'carousel', 'well', 'rainbow'];
+const B = { concrete: 13, log: 7, cobble: 4, lamp: 18, rainbow: 28, metal: 11, black: 17, water: 36, marble: 12, tiles: 20, bounce: 19, glass: 9, bed: 64, planks: 6, lantern: 45, stone: 3, red: 14, yellow: 16, sky: 31, orange: 32, snow: 87 };
+const TYPES = ['bed', 'trampoline', 'campfire', 'teleporter', 'cannon', 'fountain', 'tv', 'disco', 'swing', 'zipline', 'hoop', 'balloon', 'rocket', 'volcano', 'fishtank', 'carousel', 'well', 'rainbow', 'snowman'];
 const PAINTS = new Set([14, 15, 16, 17, 29, 30, 31, 32, 33, 34]);
 const SIDES = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const AROUND = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
@@ -27,6 +27,7 @@ export const RECIPES = [
   { type: 'carousel', icon: '🎠', name: 'Merry-go-round', grid: [[16, 16, 16], [16, 28, 16], [16, 16, 16]], how: 'A Rainbow block in the middle of eight Yellow Paint blocks.', use: 'It goes round and round! Right-click to ride a horse. Space hops off.' },
   { type: 'well', icon: '⭐', name: 'Wishing Well', grid: [[0, 4, 0], [4, 36, 4], [0, 4, 0]], how: 'Water with Cobblestone on all four sides.', use: 'Right-click to toss in a coin and make a wish!' },
   { type: 'rainbow', icon: '🌈', name: 'Rainbow', grid: [[28]], side: [[28], [31]], how: 'A Rainbow block on top of a Sky Paint block.', use: 'A real rainbow arches across the sky from it!' },
+  { type: 'snowman', icon: '⛄', name: 'Snowman', grid: [[87]], side: [[87], [87], [87]], how: 'Three Snow blocks stacked up.', use: 'Eyes, a carrot nose, a hat, a scarf and stick arms appear! Right-click it to say hi.' },
   { type: 'balloon', icon: '🎈', name: 'Hot Air Balloon', grid: [[6, 6, 6], [6, 45, 6], [6, 6, 6]], how: 'A Lantern in the middle of eight Planks.', use: 'A balloon floats above it. Right-click to fly! Space fires the burner (up), Shift lets air out (down), WASD steers.' },
 ];
 
@@ -91,6 +92,10 @@ export class Structures {
         if (sides(B.marble)) return { type: 'fountain', x, y, z };
         if (sides(B.glass)) return { type: 'fishtank', x, y, z };
         if (sides(B.cobble)) return { type: 'well', x, y, z };
+        return null;
+      case B.snow:
+        // A snowman: three snow blocks, one on top of another (found from the bottom one).
+        if (this.id(x, y - 1, z) !== B.snow && this.id(x, y + 1, z) === B.snow && this.id(x, y + 2, z) === B.snow && this.empty(x, y + 3, z)) return { type: 'snowman', x, y, z, ...this.hoopFacing(x, y, z) };
         return null;
       case B.orange:
         return AROUND.every(([dx, dz]) => this.id(x + dx, y, z + dz) === B.stone) && this.empty(x, y + 1, z) ? { type: 'volcano', x, y, z } : null;
@@ -170,7 +175,7 @@ export class Structures {
   scan() {
     this.version = (this.version || 0) + 1;
     this.list.clear();
-    const anchors = new Set([B.concrete, B.bounce, B.log, B.lamp, B.metal, B.water, B.glass, B.bed, B.lantern, B.orange, B.rainbow]);
+    const anchors = new Set([B.concrete, B.bounce, B.log, B.lamp, B.metal, B.water, B.glass, B.bed, B.lantern, B.orange, B.rainbow, B.snow]);
     for (const [k, v] of this.world.blocks) {
       if (!anchors.has(blockId(v))) continue;
       const [x, y, z] = k.split(',').map(Number);
@@ -193,6 +198,7 @@ export class Structures {
       // (Any block of these: the middle, or what's round it.)
       if (['rocket', 'volcano', 'fishtank', 'carousel', 'well'].includes(s.type) && s.y === y && Math.abs(x - s.x) <= 1 && Math.abs(z - s.z) <= 1) return s;
       if (s.type === 'rainbow' && s.x === x && s.z === z && (y === s.y || y === s.y - 1)) return s;
+      if (s.type === 'snowman' && s.x === x && s.z === z && y >= s.y && y <= s.y + 2) return s;
       if (s.type === 'swing') {
         for (let i = 0; i <= 2; i++) {
           const cx = s.x + s.ax * i, cz = s.z + s.az * i;

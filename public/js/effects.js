@@ -328,6 +328,21 @@ export const SPRITES = {
     ctx.bezierCurveTo(56, 8, 60, 34, 32, 54);
     ctx.fill();
   }),
+  // A leaf (tinted red, orange or gold as it's spawned): blowing about in the fall.
+  leaf: () => spriteTexture(ctx => {
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.moveTo(32, 6);
+    ctx.bezierCurveTo(54, 16, 52, 44, 32, 58);
+    ctx.bezierCurveTo(12, 44, 10, 16, 32, 6);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(32, 10);
+    ctx.lineTo(32, 60);
+    ctx.stroke();
+  }),
   note: () => spriteTexture(ctx => {
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 50px sans-serif';
@@ -458,10 +473,17 @@ export class Effects {
     this.notes = new Emitter(scene, 'note', { max: 200 });
     this.zzz = new Emitter(scene, 'z', { max: 60 });
     this.bubbles = new Emitter(scene, 'bubble', { max: 300 });
+    this.leaves = new Emitter(scene, 'leaf', { max: 260 });
+  }
+
+  // A leaf blowing about (in the fall), drifting with the breeze (wx, wz) and tumbling down.
+  fallingLeaf(x, y, z, wx = 1, wz = 0.3) {
+    const c = [[0.85, 0.22, 0.08], [0.95, 0.5, 0.1], [0.98, 0.76, 0.15], [0.55, 0.32, 0.14]][Math.floor(Math.random() * 4)];
+    this.leaves.spawn({ x, y, z, vx: wx * (0.8 + Math.random()), vy: -0.6 - Math.random() * 0.6, vz: wz * (0.8 + Math.random()) + (Math.random() - 0.5), life: 5 + Math.random() * 3, size: 0.22 + Math.random() * 0.1, color: c, gravity: 0.2, drag: 0.3 });
   }
 
   update(dt, camera, height) {
-    for (const e of [this.glow, this.smoke, this.hearts, this.notes, this.zzz, this.bubbles]) e.update(dt, camera, height);
+    for (const e of [this.glow, this.smoke, this.hearts, this.notes, this.zzz, this.bubbles, this.leaves]) e.update(dt, camera, height);
   }
 
   // Soap bubbles blown from (x, y, z) in direction dir: they float, wobble and drift up.
