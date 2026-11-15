@@ -5,7 +5,7 @@ import {
   railMask, railBoxes, nearestRailEdge, canHoldItem, stack, itemOf, floorOf, turnLine, blockKey, faceIndex, hexToRgb,
   switchable, lightOff, toggleLight, setDoorOpen, isWaterBlock, facingTowards,
   PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP, BED_FOOT, NOTE_NAMES, NOTE_FREQS, PICTURES, isSnowyAt, SNOW_LINE, SIGN, SIGN_LENGTH,
-  GOLD_PAINT, GOLD_HEX, ELEVATOR,
+  GOLD_PAINT, GOLD_HEX, ELEVATOR, isCrop, cropStage, cropWet, CROP_RIPE,
 } from './shared/blocks.js';
 import { generateWorld } from './shared/worldgen.js';
 import { randomLook, sanitizeLook, cleanName } from './shared/avatar.js';
@@ -31,7 +31,7 @@ import { QuestHud } from './questui.js';
 import { MAX_CHARACTERS } from './shared/characters.js';
 import { Hud, renderControls, CUSTOM_PAINT } from './hud.js';
 import {
-  HAMMER, FIREWORKS, BALL, CLAIM, VACATION, BRUSH, SCRAPER, WRENCH, SKIS, GOGGLES, GOLDPAINT, SNEAKERS, LADDER, WATER_BALLOON, SNOWBALL, SLED, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME,
+  HAMMER, FIREWORKS, BALL, CLAIM, VACATION, BRUSH, SCRAPER, WRENCH, SKIS, GOGGLES, GOLDPAINT, SNEAKERS, LADDER, WATER_BALLOON, SNOWBALL, SLED, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME, WATERING_CAN,
   ALL_ITEMS, ICON_ITEMS, GEAR, DEFAULT_HOTBAR, FAMILIES, itemName, makeIcon, ViewModel,
 } from './items.js';
 import { MAX_MANY, MAX_OWNED_VEHICLES } from './shared/game.js';
@@ -897,12 +897,21 @@ net.on('fx', ({ kind, x, y, z, color, seed, dir }) => {
   else if (kind === 'bubbles') effects.blowBubbles(x, y, z, dir || [0, 0.3, 0], 4);
   else if (kind === 'balloon') letBalloonGo(x, y, z, color);
   else if (kind === 'sparkle') effects.sparkle(x, y, z, 30);
+  else if (kind === 'water') effects.splash(x, y, z);
+  else if (kind === 'harvest') effects.sparkle(x + 0.5, y + 0.5, z + 0.5, 14);
   else if (['volcano', 'feed', 'wish', 'rocket'].includes(kind)) contraptions.remote(kind, x, y, z);
   else if (fireworks.launch(x, y, z, color, seed)) {
     sounds.launch(loudness(x, y, z, 80));
   }
 });
 // A vehicle (re)appeared.
+// Picked a crop (or tried to pick someone else's).
+net.on('harvested', ({ x, y, z, mine, icon, coins }) => {
+  if (!mine) return hud.toast('🙅🌱');
+  effects.sparkle(x + 0.5, y + 0.5, z + 0.5, 24);
+  sounds.coin();
+  hud.toast(`${icon} +${coins} 🪙`);
+});
 net.on('car', ({ car }) => {
   cars.add(car);
   if (loudness(car.x, car.y, car.z, 40) > 0) {
@@ -3645,7 +3654,13 @@ function placeBlock(item) {
   // music block plays the next note up.
   const placed = def.speedPad ? makeBlock(item, facingTowards(player.yaw + Math.PI))
     : def.facing ? makeBlock(item, facingTowards(player.yaw)) : def.music ? makeBlock(item, nextNote) : item;
-  if (def.shape === 'model' && item !== BED && placeOnFloor(placed)) return;
+  if (def.crop) {
+    // Seeds: in grass or dirt (the ground, or a Grass or Dirt block), with nothing there yet.
+    const [x, y, z] = hit.place;
+    const below = y === 0 ? (world.isSolid(x, -1, z) ? 1 : 0) : blockId(world.get(x, y - 1, z));
+    if (below !== 1 && below !== 2) return hud.toast('🌱👉 🟩🟫');
+  }
+  if (def.shape === 'model' && item !== BED && !def.crop && placeOnFloor(placed)) return;
   if (def.shape === 'flat' && placeUnder(item)) return;
   let [x, y, z] = hit.value && isReplaceable(hit.value) ? hit.block : hit.place;
   if (!canBuildAt(x, z)) {
@@ -3762,6 +3777,7 @@ function useItem() {
   if (item === BUBBLES) return blowBubbles(1);
   if (item === CAMERA) return takePhoto();
   if (item === SHOWTIME) return fireworkShow();
+  if (item === WATERING_CAN) return waterPlants();
   if (target?.npc) return;
   if (item === BALLOON) {
     const p = eye.clone().addScaledVector(lookDir, 0.8);
@@ -3842,6 +3858,11 @@ function interact() {
         return hud.toast('🔒 Locked! TOP SECRET: agents with clearance only. (Agent Shadow on the town square can tell you how to get it. 🕶️)');
       }
       return toggleDoor(...hit.block);
+    }
+    if (isCrop(hit.value) && hit.part !== 'floor') {
+      if (cropStage(hit.value) >= CROP_RIPE) return net.send({ t: 'harvest', x: hit.block[0], y: hit.block[1], z: hit.block[2] });
+      if (hud.item === WATERING_CAN) return waterPlants();
+      return hud.toast(cropWet(hit.value) ? '💧🌱⏳' : '🌱💧❓');
     }
     if (switchable(hit.value) && hit.part !== 'floor') {
       // Light switch: off, and on again.
@@ -4667,6 +4688,16 @@ function throwSnowball() {
   const r = n => Math.round(n * 100) / 100;
   net.send({ t: 'throw', p: [r(p.x), r(p.y), r(p.z)], v: [r(v.x), r(v.y), r(v.z)], color: SNOW_COLOR });
   sounds.swing();
+}
+
+// The Watering Can: a shower of water where you're pointing, and (on the server) the crops in a
+// little patch round there are watered.
+function waterPlants() {
+  const cell = hit && (hit.ground || !isCrop(hit.value) ? hit.place : hit.block);
+  if (!cell || eye.distanceTo(new THREE.Vector3(cell[0] + 0.5, cell[1] + 0.5, cell[2] + 0.5)) > 6.5) return hud.toast('💧👉🌱');
+  for (let i = 0; i < 3; i++) effects.splash(cell[0] + 0.2 + Math.random() * 0.6, cell[1] + 0.5, cell[2] + 0.2 + Math.random() * 0.6);
+  sounds.noiseHit(1200, 0.35, 0.25, 'highpass');
+  net.send({ t: 'water', x: cell[0], y: cell[1], z: cell[2] });
 }
 
 // Hop on your sled (or off again). It slides like skis (downhill gets faster and faster; W steers
@@ -5529,6 +5560,7 @@ function frame(timestamp) {
       else if (def?.hug && !tool) hint = '🧸 Right-click for a hug';
       else if (def?.art === 'sign' && !tool) hint = signs.get(...hit.block) ? `🪧 "${signs.get(...hit.block)}" · Right-click to change it` : '🪧 Right-click to write on it';
       else if (def?.shape === 'picture' && !tool) hint = '🖼️ Right-click to hang a different picture';
+      else if (def?.crop) hint = cropStage(hit.value) >= CROP_RIPE ? `${def.crop.icon} Right-click to pick it!` : cropWet(hit.value) ? '💧🌱 Growing…' : item === WATERING_CAN ? '💧 Click to water it!' : '🌱 It needs water! (Watering Can 💧, or rain)';
       else if (def?.music && !tool) hint = `🎵 ${NOTE_NAMES[blockMeta(hit.value)]} · Walk on it to play · Right-click: next note`;
       else if (def?.speedPad && item !== HAMMER) hint = '⚡ Run (or drive) over it the way the arrows point!';
       else if (def?.shop && !tool) hint = '🛍️ Right-click to open the Luxe Store';
@@ -5551,6 +5583,8 @@ function frame(timestamp) {
       else if (item === BALLOON) hint = player.onGround ? '🎈 Jump off something high and float down! Click to let a balloon go' : '🎈 Wheee!';
       else if (item === CAMERA) hint = '📸 Click (or press P) to take a photo · H hides the HUD';
       else if (item === SHOWTIME) hint = '🎇 Click for a fireworks show! (Best at night)';
+      else if (item === WATERING_CAN) hint = '💧 Click on your seeds to water them!';
+      else if (BLOCKS[item]?.crop) hint = `🌱 Plant ${BLOCKS[item].crop.icon} on grass or dirt, then water it 💧`;
       else if (player.jetting) hint = '🚀 WHOOSH!';
       else if (hud.wearing(SKIS) && player.skiing) hint = '⛷️ W: carve where you look · S: slow down · Space: jump';
       else if (hud.wearing(SKIS) && player.onGround && player.surface()) hint = '⛷️ Point downhill and go! (W carves, S slows)';

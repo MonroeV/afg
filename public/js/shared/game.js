@@ -1,7 +1,7 @@
 // The game "room": the world, players, vehicles, land claims, growing trees and the clock.
 // The Node server runs one of these for everybody. When there is no server,
 // the browser runs its own copy so single player works exactly the same way.
-import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, isExclusive, DOOR_OPEN, DOOR_TOP, DAY_LENGTH, WORLD, isNightTime, SHOP_ITEMS, BLOCKS, SHOP_TOOLS, FOUND_GEAR, HOLE_HEAL, SIGN, cleanSignText, cleanWords } from './blocks.js';
+import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, isExclusive, DOOR_OPEN, DOOR_TOP, DAY_LENGTH, WORLD, isNightTime, SHOP_ITEMS, BLOCKS, SHOP_TOOLS, FOUND_GEAR, HOLE_HEAL, SIGN, cleanSignText, cleanWords, isCrop, cropStage, cropWet, CROP_RIPE, CROP_WET, makeBlock, blockMeta } from './blocks.js';
 import { sanitizeLook, cleanName, randomLook } from './avatar.js';
 import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines, buildStore, furnishHouses, furnishTowers, elevatorTowers } from './worldgen.js';
 import { buildSecretBase, hideSecretFiles, AGENCY, AGENT_SPOT, FILES_NEEDED, FILE_HINTS, inZone } from './secretbase.js';
@@ -46,6 +46,14 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const RAIN_CALM = [30 * 60, 75 * 60], RAIN_SHOWER = [90, 210];
 const between = ([a, b]) => a + Math.random() * (b - a);
 const LOG = 7, LEAVES = 8, GRASS = 1, DIRT = 2, RACE_FINISH = 72;
+// The garden: how long a crop takes to grow a step once it's been watered (spring is quickest;
+// fall is slow; in winter it waits for spring), how many crops there can be, and how close you
+// have to be to water or pick one.
+const CROP_GROW = 70 * 1000;
+const CROP_SPEED = [0.7, 1, 1.7, 0];
+const MAX_CROPS = 400, MAX_CROPS_EACH = 48;
+const GARDEN_REACH = 7;
+const WATERING_CAN = 'wateringcan';
 export const MAX_OWNED_VEHICLES = 3; // vehicles one person can have of their own
 export const MAX_MANY = 4096; // the most blocks one Fill or Paste can change
 
@@ -84,6 +92,7 @@ export class GameRoom {
     this.names = {}; // lowercase name -> last time someone played with it
     this.spots = {}; // lowercase name -> where they were when they left: [x, y, z, yaw, when]
     this.saplings = []; // logs growing into trees
+    this.crops = []; // the garden: { x, y, z, by (who planted it), at (when it grows next: 0 = needs water) }
     this.races = {}; // finish line "x,y,z" -> best times [{ name, key, time }]
     this.places = null; // where the store, the tower lobby and the town square are (for the NPCs)
     this.wallets = {}; // name key -> { coins, owned: [items], day }
@@ -101,7 +110,7 @@ export class GameRoom {
     this.nextHomeId = 1;
     this.time = DAY_LENGTH * 0.08; // start in the morning
     this.day = 0; // how many days have gone by (for the seasons: see seasons.js)
-    this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0, holes: 5 };
+    this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0, holes: 5, crops: 2 };
     this.isSolid = (x, y, z) =>
       y < 0 || x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max ||
       blocksVehicles(this.world.get(blockKey(x, y, z)) || 0);
@@ -262,6 +271,8 @@ export class GameRoom {
       if (Array.isArray(p) && p.length >= 5 && p.every(Number.isFinite)) this.spots[k] = p.slice(0, 5);
     }
     this.saplings = data.saplings || [];
+    this.crops = (Array.isArray(data.crops) ? data.crops : []).filter(c => c && [c.x, c.y, c.z].every(Number.isInteger) && isCrop(this.get(c.x, c.y, c.z)))
+      .map(c => ({ x: c.x, y: c.y, z: c.z, by: String(c.by || ''), at: Number(c.at) || 0 }));
     this.races = {};
     for (const [k, list] of Object.entries(data.races && typeof data.races === 'object' ? data.races : {})) {
       if (Array.isArray(list)) this.races[k] = list.filter(r => r && typeof r.name === 'string' && Number.isFinite(r.time)).slice(0, 5);
@@ -277,6 +288,7 @@ export class GameRoom {
         agent: { files: Array.isArray(w.agent?.files) ? w.agent.files.filter(k => typeof k === 'string').slice(0, 8) : [], clear: !!w.agent?.clear },
         guests: Array.isArray(w.guests) ? w.guests.filter(k => typeof k === 'string').map(nameKey).slice(0, 40) : [], // who their bodyguards let in
         can: w.can ? 1 : 0, // carrying a gas can
+        harvest: Number.isInteger(w.harvest) && w.harvest > 0 ? w.harvest : 0, // crops picked, ever
         // Clubs: how far along each club's tasks are, and the badges earned. And how many days in
         // a row they've come to play.
         clubs: cleanClubs(w.clubs),
@@ -630,6 +642,7 @@ export class GameRoom {
       names: this.names,
       spots: this.spots,
       saplings: this.saplings,
+      crops: this.crops,
       paints: [...this.paints],
       // Best race times, for finish lines that are still there.
       races: Object.fromEntries(Object.entries(this.races).filter(([k]) => this.isFinish(k))),
@@ -1172,6 +1185,17 @@ export class GameRoom {
         }
         return;
       }
+      // The garden: seeds go in grass or dirt (in an empty spot); after that a crop only changes
+      // by growing (or being dug up with the hammer).
+      const planting = isCrop(b) && !isCrop(old);
+      if (planting || (isCrop(old) && b !== 0)) {
+        if (!planting || old || blockMeta(b) || !this.soilUnder(x, y, z) || this.crops.length >= MAX_CROPS || this.crops.filter(c => c.by === nameKey(client.name)).length >= MAX_CROPS_EACH) {
+          client.send({ t: 'set', x, y, z, b: old });
+          return;
+        }
+      }
+      if (isCrop(old)) this.crops = this.crops.filter(c => c.x !== x || c.y !== y || c.z !== z);
+      if (planting) this.crops.push({ x, y, z, by: nameKey(client.name), at: 0 });
       const k = blockKey(x, y, z);
       if (b === 0) this.world.delete(k);
       else this.world.set(k, b);
@@ -1782,6 +1806,40 @@ export class GameRoom {
       this.onDirty();
     },
 
+    // The Watering Can: it waters the crops in a little patch (3 x 3) round where it's pointed, and
+    // each grows a step a little while later.
+    water(client, { x, y, z }) {
+      if (![x, y, z].every(Number.isInteger) || !this.wallet(client).owned.includes(WATERING_CAN) || !this.allow(client, 'water', 6, 15)) return;
+      let n = 0;
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+        const crop = this.cropAt(x + dx, y, z + dz), v = this.get(x + dx, y, z + dz);
+        if (!crop || !this.nearCrop(client, crop) || cropWet(v) || cropStage(v) >= CROP_RIPE) continue;
+        this.waterCrop(crop, v);
+        n++;
+      }
+      if (n) this.broadcast({ t: 'fx', kind: 'water', x: x + 0.5, y: y + 0.6, z: z + 0.5 }, client);
+    },
+
+    // Picking a ripe crop (yours, or one on your land): coins, and it's planted again.
+    harvest(client, { x, y, z }) {
+      if (!this.allow(client, 'harvest', 8, 20)) return;
+      const crop = this.cropAt(x, y, z), v = this.get(x, y, z);
+      if (!crop || !this.nearCrop(client, crop) || cropStage(v) < CROP_RIPE) return;
+      const mine = crop.by === nameKey(client.name) || (claimAt(this.claims, x, z) && canBuild(this.claims, client.name, x, z));
+      if (!mine) return client.send({ t: 'harvested', x, y, z, mine: false });
+      const def = BLOCKS[blockId(v)].crop;
+      const w = this.wallet(client);
+      w.coins += def.coins;
+      w.harvest = (w.harvest || 0) + 1;
+      this.sendWallet(client);
+      crop.at = 0;
+      this.serverSet(x, y, z, makeBlock(blockId(v), 0)); // (seeds again: water them and it grows back)
+      this.progress(client, 'nature', 'harvest');
+      client.send({ t: 'harvested', x, y, z, mine: true, icon: def.icon, coins: def.coins, total: w.harvest });
+      this.broadcast({ t: 'fx', kind: 'harvest', x, y, z, icon: def.icon, id: client.id }, client);
+      this.onDirty();
+    },
+
     fish_stop(client) {
       client.fish = null;
     },
@@ -1959,6 +2017,59 @@ export class GameRoom {
     if (this.saplings.length > 200) return;
     this.saplings.push({ x, y, z, stage: 0, height: 4 + Math.floor(Math.random() * 3), at: Date.now() + 8000 });
     return true;
+  }
+
+  // ---------- The garden ----------
+
+  // Seeds need grass or dirt under them (the ground counts, unless there's a hole in it).
+  soilUnder(x, y, z) {
+    const below = y === 0 ? (this.holes.has(`${x},${z}`) ? 0 : GRASS) : blockId(this.get(x, y - 1, z));
+    return below === GRASS || below === DIRT;
+  }
+
+  cropAt(x, y, z) {
+    return isCrop(this.get(x, y, z)) ? this.crops.find(c => c.x === x && c.y === y && c.z === z) : null;
+  }
+
+  nearCrop(client, c) {
+    const p = client.pos;
+    return !!p && Math.hypot(p[0] - (c.x + 0.5), p[2] - (c.z + 0.5)) <= GARDEN_REACH && Math.abs(p[1] - c.y) <= GARDEN_REACH;
+  }
+
+  // Watered: the soil goes dark, and in a while (quicker in spring, slower in fall) it grows.
+  waterCrop(c, v = this.get(c.x, c.y, c.z)) {
+    const season = seasonAt(this.day, this.time).i;
+    c.at = Date.now() + CROP_GROW * (CROP_SPEED[season] || 1) * (0.85 + Math.random() * 0.3);
+    this.serverSet(c.x, c.y, c.z, makeBlock(blockId(v), cropStage(v) | CROP_WET));
+  }
+
+  // Nothing over it, so the rain gets to it?
+  underSky(x, y, z) {
+    for (let k = y + 1; k < y + 48; k++) if (this.get(x, k, z)) return false;
+    return true;
+  }
+
+  // Every couple of seconds: watered crops grow when their time comes (not in winter: they wait
+  // for spring), and the rain waters the ones outside.
+  updateCrops() {
+    if (!this.crops.length) return;
+    const now = Date.now(), season = seasonAt(this.day, this.time).i;
+    const raining = this.weather?.rain > 0 && !this.snowing();
+    for (const c of [...this.crops]) {
+      const v = this.get(c.x, c.y, c.z);
+      if (!isCrop(v)) {
+        this.crops.splice(this.crops.indexOf(c), 1);
+        continue;
+      }
+      if (season === WINTER) continue;
+      const stage = cropStage(v);
+      if (c.at && now >= c.at) {
+        c.at = 0;
+        this.serverSet(c.x, c.y, c.z, makeBlock(blockId(v), Math.min(CROP_RIPE, stage + 1)));
+      } else if (!c.at && raining && stage < CROP_RIPE && this.underSky(c.x, c.y, c.z)) {
+        this.waterCrop(c, v);
+      }
+    }
   }
 
   growSapling(s) {
@@ -2174,6 +2285,10 @@ export class GameRoom {
       }
     }
 
+    if (t.crops <= 0) {
+      t.crops = 2;
+      this.updateCrops();
+    }
     for (const s of this.saplings.filter(s => s.at <= now)) {
       if (this.growSapling(s)) this.saplings.splice(this.saplings.indexOf(s), 1);
     }

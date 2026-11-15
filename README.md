@@ -294,11 +294,21 @@ customize your character, drive cars, build anything and play with friends.
   are clear enough to see in and out, with just a little reflection
 - **More stores** 🛍️: by the roads out of town, each with its shopkeeper (right-click them, or
   the cash register) and its things on display:
-  - 🌻 **Green Thumb Garden Center** (Fern): Sunflower 3, Rose Bush 4, Garden Gnome 8, Birdbath 10, Fountain 25
+  - 🌻 **Green Thumb Garden Center** (Fern): Sunflower 3, Rose Bush 4, Garden Gnome 8, Birdbath 10, Fountain 25,
+    and for the garden: Carrots 2, Strawberries 3, Sunflower Seeds 4, Pumpkins 6 and a Watering Can 5
   - 🧸 **The Toy Box** (Mr. Jingles): Rubber Duck 3, Beach Ball 4, Toy Robot 10, Toy Train 15, Rocking Horse 18 (you can sit on it)
   - 🐾 **Happy Paws Pet Shop** (Pip): Pet Bowl 3, Pet Bed 6, Fish Bowl 8, Cat Tree 12, Dog House 20
 
-  Buy something once and you can build with it as much as you like (it's in the item menu)
+  Buy something once and you can build with it as much as you like (it's in the item menu, under ⭐
+  at the top of its tab)
+- **A growing garden** 🌱: plant seeds from the Garden Center on grass or dirt (as many as you
+  like, up to 48), then water them with the **Watering Can** 💧 (it waters a little 3 × 3 patch
+  at a time; rain waters everything outside too). Watered soil goes dark, and a minute or so
+  later the plants grow a step: seeds, a sprout, growing, then ripe. Three waterings and they're
+  ready: right-click to pick them for coins (🥕 2, 🍓 2, 🌻 3, 🎃 4) and they're planted again.
+  They grow quickest in spring and slowly in fall, and in winter they wait for spring. Only the one
+  who planted them (or whoever owns the land) can pick them. The server keeps track of the garden
+  (it's saved with the world)
 - **Neighbors and their quests** 🏡: six residents live in houses around town (Grandma Rose,
   Grandpa Joe, Lily, Sam the Baker, Dr. Maya and Captain Leo). A 💬 floats over anyone with a job
   for you (you can see it through walls). Right-click them and they ask for a little help: take
@@ -356,7 +366,7 @@ customize your character, drive cars, build anything and play with friends.
   |---|---|---|---|
   | 🔧 Mechanic Crew | Mo, at the gas station | fix 3 vehicles good as new, fill up 3 times, wash 2 | 15 🪙, gas costs half |
   | 🍕 Pizza Pro | Chef Rosa | deliver 5 pizzas, 3 of them fast | 10 🪙, +2 coins on every delivery |
-  | 🌲 Nature Club | Ranger Rae, at the campground | catch 10 fish, 5 different kinds, plant 2 trees | 15 🪙, a lucky rod (rare fish bite more) |
+  | 🌲 Nature Club | Ranger Rae, at the campground | catch 10 fish, 5 different kinds, plant 2 trees, pick 5 crops you grew | 15 🪙, a lucky rod (rare fish bite more) |
   | 🏁 Speed Club | Coach Frost, at the ski lodge | drive 2,000 blocks, fly 500, finish a race | 15 🪙, turbo (everything you drive is faster) |
   | 🪙 Gold Club | Mayor Maple | pick up 30 coins, buy something at the Luxe Store, claim land | 20 🪙, a coin magnet and a bigger daily bonus |
   | 🏡 Good Neighbors | Grandma Rose, in her house | take 3 packages, bring 3 things, go and see 2 places | 20 🪙, neighbors pay you twice as much |

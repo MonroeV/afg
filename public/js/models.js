@@ -593,6 +593,67 @@ MODELS.bedFoot = bed(true);
 
 const cache = {};
 
+// ---------- Crops (the garden) ----------
+// Four looks for each: 0 seeds in a little mound of soil, 1 a sprout, 2 growing, 3 ripe.
+// body: the soil, accent: the leaves and stems, trim: the carrots, berries, pumpkin or petals,
+// glow: the sunflower's middle. (Just watered, the soil is darker: see world.js.)
+const soil = () => [box(0.76, 0.06, 0.76, 0.5, 0.03, 0.5), box(0.6, 0.04, 0.6, 0.5, 0.08, 0.5)];
+const seeds = () => [[0.35, 0.4], [0.62, 0.36], [0.45, 0.64], [0.66, 0.62]].map(([x, z]) => ball(0.025, x, 0.1, z));
+const sprout = (x, z, h) => [cyl(0.012, 0.015, h, x, 0.1 + h / 2, z, 5), box(0.09, 0.012, 0.045, x - 0.04, 0.1 + h, z), box(0.09, 0.012, 0.045, x + 0.04, 0.1 + h * 0.85, z)];
+// A tuft of leaves: three thin cones leaning out.
+const leafTuft = (x, z, h) => [-0.35, 0, 0.35].map((a, i) => new THREE.ConeGeometry(0.035, h, 4).translate(0, h / 2, 0).rotateZ(a).rotateY(i * 1.1).translate(x, 0.1, z));
+const CROP_COLORS = {
+  carrot: { body: 0x6d4c33, accent: 0x43a047, trim: 0xff7a1a, metal: 0 },
+  strawberry: { body: 0x6d4c33, accent: 0x2e7d32, trim: 0xe53935, glow: 0xfff59d, metal: 0 },
+  sunflowerCrop: { body: 0x6d4c33, accent: 0x4caf50, trim: 0xffd600, glow: 0x5d4037, metal: 0 },
+  pumpkinCrop: { body: 0x6d4c33, accent: 0x388e3c, trim: 0xf57c00, metal: 0 },
+};
+const SPOTS = [[0.33, 0.33], [0.67, 0.33], [0.33, 0.67], [0.67, 0.67]];
+const CROPS = {
+  carrot: [
+    { body: soil(), trim: seeds() },
+    { body: soil(), accent: SPOTS.flatMap(([x, z]) => sprout(x, z, 0.08)) },
+    { body: soil(), accent: SPOTS.flatMap(([x, z]) => leafTuft(x, z, 0.2)) },
+    { body: soil(), accent: SPOTS.flatMap(([x, z]) => leafTuft(x, z, 0.32)), trim: SPOTS.map(([x, z]) => cyl(0.085, 0.05, 0.11, x, 0.145, z, 10)) },
+  ],
+  strawberry: [
+    { body: soil(), trim: seeds() },
+    { body: soil(), accent: SPOTS.flatMap(([x, z]) => sprout(x, z, 0.08)) },
+    { body: soil(), accent: [ball(0.2, 0.5, 0.18, 0.5).scale(1, 0.6, 1), ball(0.13, 0.32, 0.16, 0.66), ball(0.13, 0.68, 0.16, 0.34)] },
+    {
+      body: soil(),
+      accent: [ball(0.24, 0.5, 0.2, 0.5).scale(1, 0.65, 1), ball(0.15, 0.3, 0.17, 0.68), ball(0.15, 0.7, 0.17, 0.32), ball(0.14, 0.7, 0.16, 0.7)],
+      trim: [[0.28, 0.2, 0.42], [0.72, 0.18, 0.55], [0.5, 0.2, 0.76], [0.42, 0.22, 0.25], [0.62, 0.3, 0.42], [0.36, 0.28, 0.6], [0.78, 0.15, 0.78]].map(([x, y, z]) => new THREE.ConeGeometry(0.05, 0.09, 8).rotateX(Math.PI).translate(x, y, z)),
+      glow: [[0.28, 0.25, 0.42], [0.72, 0.23, 0.55], [0.5, 0.25, 0.76]].map(([x, y, z]) => ball(0.008, x + 0.03, y, z + 0.03)),
+    },
+  ],
+  sunflowerCrop: [
+    { body: soil(), trim: seeds() },
+    { body: soil(), accent: sprout(0.5, 0.5, 0.14) },
+    { body: soil(), accent: [cyl(0.025, 0.03, 0.5, 0.5, 0.35, 0.5, 6), box(0.16, 0.015, 0.07, 0.42, 0.3, 0.5), box(0.16, 0.015, 0.07, 0.58, 0.45, 0.5)], trim: [ball(0.06, 0.5, 0.62, 0.5)] },
+    {
+      body: soil(),
+      accent: [cyl(0.03, 0.035, 0.85, 0.5, 0.52, 0.5, 6), box(0.2, 0.02, 0.09, 0.4, 0.4, 0.5), box(0.2, 0.02, 0.09, 0.6, 0.6, 0.5)],
+      trim: [...Array(12)].map((_, i) => box(0.1, 0.05, 0.02, 0.5 + Math.cos(i * Math.PI / 6) * 0.15, 0.9 + Math.sin(i * Math.PI / 6) * 0.15, 0.53)),
+      glow: [new THREE.CylinderGeometry(0.1, 0.1, 0.04, 14).rotateX(Math.PI / 2).translate(0.5, 0.9, 0.55)],
+    },
+  ],
+  pumpkinCrop: [
+    { body: soil(), trim: seeds() },
+    { body: soil(), accent: sprout(0.5, 0.5, 0.1) },
+    { body: soil(), accent: [box(0.6, 0.02, 0.05, 0.5, 0.11, 0.5), ...[0.3, 0.55, 0.75].map(x => ball(0.08, x, 0.15, 0.5).scale(1, 0.4, 1).translate(0, 0.09, 0))], trim: [ball(0.08, 0.5, 0.17, 0.62)] },
+    {
+      body: soil(),
+      accent: [box(0.7, 0.02, 0.05, 0.5, 0.11, 0.25), ...[0.2, 0.8].map(x => ball(0.1, x, 0.15, 0.25).scale(1, 0.4, 1).translate(0, 0.09, 0)), cyl(0.03, 0.04, 0.12, 0.5, 0.66, 0.55, 6)],
+      trim: [0, 1, 2, 3].map(i => new THREE.SphereGeometry(0.26, 12, 9).scale(0.75, 0.82, 1.2).rotateY(i * Math.PI / 4).translate(0.5, 0.36, 0.55)),
+    },
+  ],
+};
+for (const [name, stages] of Object.entries(CROPS)) {
+  stages.forEach((parts, i) => (MODELS[`${name}${i}`] = { ...parts, colors: CROP_COLORS[name] }));
+  MODELS[name] = MODELS[`${name}3`]; // (its picture in the item menu: all grown)
+}
+
 // A part with nothing in it: its group draws nothing (and costs no draw call).
 function emptyPart() {
   const g = new THREE.BufferGeometry();

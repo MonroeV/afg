@@ -196,7 +196,20 @@ export const BLOCKS = {
   128: { name: 'Fish Bowl', shape: 'model', model: 'fishBowl', price: 8, store: 'pets', box: [0.2, 0, 0.2, 0.8, 0.65, 0.8], light: { color: 0x66d9ff, power: 0.15, range: 3, always: true, y: 0.4 } },
   129: { name: 'Cat Tree', shape: 'model', model: 'catTree', price: 12, store: 'pets', box: [0.1, 0, 0.1, 0.9, 1, 0.9] },
   130: { name: 'Dog House', shape: 'model', model: 'dogHouse', facing: true, price: 20, store: 'pets', box: [0, 0, 0, 1, 1, 1] },
+  // ---------- The garden: seeds from the Garden Center (`crop`) ----------
+  // Plant them on grass or dirt and water them (the Watering Can, or the rain): each time they're
+  // watered they grow a bit more (meta bits 0-1: seeds, sprout, growing, ripe; bit 2: just watered).
+  // Ripe? Right-click to pick it, for coins. Fastest in spring, slow in fall; asleep in winter.
+  131: { name: 'Carrots', shape: 'model', model: 'carrot', crop: { coins: 2, icon: '🥕' }, price: 2, store: 'garden' },
+  132: { name: 'Strawberries', shape: 'model', model: 'strawberry', crop: { coins: 2, icon: '🍓' }, price: 3, store: 'garden' },
+  133: { name: 'Sunflower Seeds', shape: 'model', model: 'sunflowerCrop', crop: { coins: 3, icon: '🌻' }, price: 4, store: 'garden' },
+  134: { name: 'Pumpkins', shape: 'model', model: 'pumpkinCrop', crop: { coins: 4, icon: '🎃' }, price: 6, store: 'garden' },
 };
+// Crops: how grown (0 seeds .. 3 ripe) and whether they've just been watered.
+export const CROP_RIPE = 3, CROP_WET = 4;
+export const isCrop = v => !!BLOCKS[v & 255]?.crop;
+export const cropStage = v => blockMeta(v) & 3;
+export const cropWet = v => (blockMeta(v) & CROP_WET) !== 0;
 // Elevator shaft parts (in the meta, above the facing bits).
 export const ELEVATOR = 103;
 export const LIFT_SHAFT = 0, LIFT_DOOR = 1, LIFT_DOOR_TOP = 2;
@@ -235,6 +248,8 @@ export const SHOP_TOOLS = {
   // A family who lives on your land (home land): name them and choose how they look.
   family: { name: 'A Family', price: 160, about: 'A family moves into your house! Name them and choose how each of them looks.', got: 'They live on your land now! Right-click one of them to change their names and looks.' },
   // A surprise: something from one of the stores that you don't have yet. (Used up: buy as many as you like.)
+  // The Garden Center's watering can: water your seeds so they grow.
+  wateringcan: { name: 'Watering Can', price: 5, store: 'garden', about: 'Water your seeds and watch them grow! (The rain waters them too.)', got: "It's in your items now (press E, 🌳 Town tab)." },
   mysterybox: { name: 'Mystery Box', price: 12, again: true, about: 'A surprise from one of the stores: something you don\'t have yet!', got: '' },
   vacationflag: { name: 'Vacation Flag', price: 150, about: 'Claim a second piece of land for a vacation home! It stays where you plant it.', got: 'Hold your Land Flag and press X to switch it to vacation land.' },
 };
@@ -256,6 +271,8 @@ export const SHOP_ABOUT = {
   124: 'Choo choo! All aboard!', 125: 'Giddy up! Right-click to ride it.',
   126: 'Dinner time for your pet!', 127: 'A comfy bed for a sleepy pet.', 128: 'A bowl with a goldfish in it.',
   129: 'For cats to climb, scratch and nap on.', 130: 'A cozy house for a dog.',
+  131: 'Plant them on grass, water them, and pick crunchy carrots!', 132: 'Plant them on grass, water them, and pick sweet strawberries!',
+  133: 'Plant them on grass, water them, and grow a giant sunflower!', 134: 'Plant them on grass, water them, and grow a big orange pumpkin!',
 };
 // The stores (each has its own building and shopkeeper in town). Blocks and things for sale say which
 // store has them (`store`); anything that doesn't is at the Luxe Store.
@@ -323,6 +340,7 @@ export function isValidBlock(v) {
   if (def.shape === 'door' || def.shape === 'flat') return true;
   if (def.shape === 'rail') return meta > 0;
   if (def.light && (v & 255) !== STREET_LAMP) return meta === 0 || meta === LIGHT_OFF;
+  if (def.crop) return meta < 8; // (how grown, and watered)
   if (def.music || def.shape === 'picture') return true; // the note, or which way and which picture
   if (def.facing) return meta < ((v & 255) === BED ? 8 : 4);
   return def.shape === 'ladder' ? meta < 4 : meta === 0;

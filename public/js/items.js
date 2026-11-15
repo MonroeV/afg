@@ -31,7 +31,8 @@ export const SKIS = 'skis';
 export const GOGGLES = 'goggles'; // night-vision goggles (from the Secret Agency's vault)
 export const BODYGUARDS = 'bodyguards'; // (a Luxe Store thing: they guard your land)
 export const VACATION = 'vacationflag';
-export const TOOLS = [HAMMER, BRUSH, SCRAPER, WRENCH, BALL, FIREWORKS, CLAIM, WATER_BALLOON, SNOWBALL, SLED, BUBBLES, BALLOON, FILL, COPY, CAMERA, SHOWTIME, VACATION];
+export const WATERING_CAN = 'wateringcan'; // (from the Garden Center)
+export const TOOLS = [HAMMER, BRUSH, SCRAPER, WRENCH, BALL, FIREWORKS, CLAIM, WATER_BALLOON, SNOWBALL, SLED, BUBBLES, BALLOON, FILL, COPY, CAMERA, SHOWTIME, VACATION, WATERING_CAN];
 // Things you have to buy at the Luxe Store before you can use them.
 export const fromStore = item => (typeof item === 'number' ? !!BLOCKS[item]?.price : !!SHOP_TOOLS[item]);
 // Everything that can go in the hotbar.
@@ -72,7 +73,7 @@ export const familyOf = item => FAMILY_OF.get(item) || null;
 // The tabs of the item menu. Blocks not listed anywhere go under Blocks. (Each family of styles
 // shows up once, where its first style is.) Lamps are in Home, outdoor lights in Town.
 const HOME = [94, 60, 74, 95, 61, 62, 73, 64, 63, 65, 66, 78, 67, 68, 39, 40, 41, 42, 44, 43, 21, 53, 103, 54, 25, 35, 20, 75, 76, 77, 79, 80, 81, 86, 92, 126, 127, 128, 129, 130];
-const TOWN = [22, 23, 56, 24, 58, 46, 47, 45, 48, 49, 27, 36, 1, 7, 8, 89, 87, 88, 91, 90, 97, 98, 99, 100, 101, 102, 116, 117, 118, 119, 120];
+const TOWN = [22, 23, 56, 24, 58, 46, 47, 45, 48, 49, 27, 36, 1, 7, 8, 89, 87, 88, 91, 90, 97, 98, 99, 100, 101, 102, 116, 117, 118, 119, 120, WATERING_CAN, 131, 132, 133, 134];
 const FUN = [93, SHOWTIME, 83, 84, 82, 85, BALL, FIREWORKS, WATER_BALLOON, SNOWBALL, SLED, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28, 121, 122, 123, 124, 125];
 const listed = new Set([...HOME, ...TOWN, ...FUN]);
 const visible = i => typeof i !== 'number' || !BLOCKS[i].hidden;
@@ -90,6 +91,7 @@ for (const i of BLOCK_IDS) if (visible(i) && !TABS.some(t => t.items?.includes(i
 
 // Extra words the search box understands.
 export const SEARCH_WORDS = {
+  [WATERING_CAN]: 'garden water grow plant seeds', 131: 'garden seeds grow plant vegetable orange', 132: 'garden seeds grow plant fruit red berry', 133: 'garden seeds grow plant flower yellow tall', 134: 'garden seeds grow plant halloween orange big',
   [WATER_BALLOON]: 'throw splash water fight', [SNOWBALL]: 'snow winter throw fight', [SLED]: 'snow winter sledge toboggan slide hill', [BUBBLES]: 'bubble blow', [BALLOON]: 'float fly slow fall', [FILL]: 'fill wall floor big box builder',
   [COPY]: 'copy paste clone duplicate builder', [WRENCH]: 'fix repair mechanic car truck boat helicopter smoke fire',
   [BRUSH]: 'paint color car', [CAMERA]: 'photo picture screenshot', [CLAIM]: 'land claim home', [BALL]: 'pet dog fetch throw',
@@ -361,6 +363,32 @@ export function makeIcon(item, textures, paint = 1) {
     ctx.beginPath();
     ctx.arc(32, 32, 20, -0.4, 0.4 + Math.PI);
     ctx.stroke();
+    return canvas;
+  }
+  if (item === WATERING_CAN) {
+    // A green watering can with its long spout, and a few drops.
+    ctx.fillStyle = '#43a047';
+    ctx.fillRect(14, 26, 28, 26);
+    ctx.fillStyle = '#2e7d32';
+    ctx.fillRect(14, 48, 28, 4);
+    ctx.strokeStyle = '#43a047';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(28, 26, 10, Math.PI, 0);
+    ctx.stroke();
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(40, 44);
+    ctx.lineTo(54, 22);
+    ctx.stroke();
+    ctx.fillStyle = '#66bb6a';
+    ctx.fillRect(50, 16, 10, 7);
+    ctx.fillStyle = '#4fc3f7';
+    for (const [x, y] of [[56, 30], [60, 38], [54, 42]]) {
+      ctx.beginPath();
+      ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
     return canvas;
   }
   if (item === SNOWBALL) {
@@ -787,6 +815,15 @@ export class ViewModel {
       obj.scale.setScalar(1.15);
       obj.position.set(-0.04, 0.1, 0.05);
       obj.rotation.set(0.15, -0.6, 0.05);
+    } else if (item === WATERING_CAN) {
+      obj = new THREE.Group();
+      const green = new THREE.MeshStandardMaterial({ color: 0x43a047, roughness: 0.4, metalness: 0.3 });
+      obj.add(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 0.18, 14), green));
+      obj.add(new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.014, 6, 12, Math.PI).translate(0, 0.09, 0), green)); // the handle
+      obj.add(new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.022, 0.24, 8).rotateZ(-0.9).translate(0.17, 0.04, 0), green)); // the spout
+      obj.add(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.025, 0.03, 10).rotateZ(-0.9).translate(0.27, 0.11, 0), new THREE.MeshStandardMaterial({ color: 0x66bb6a, roughness: 0.5 })));
+      obj.rotation.set(0.1, -0.5, 0);
+      obj.position.set(-0.04, 0.05, 0);
     } else if (item === SNOWBALL) {
       obj = new THREE.Mesh(new THREE.SphereGeometry(0.09, 14, 10), new THREE.MeshStandardMaterial({ color: 0xf4f8ff, roughness: 0.9 }));
       obj.position.y = 0.05;

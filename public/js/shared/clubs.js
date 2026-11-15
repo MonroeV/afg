@@ -26,6 +26,7 @@ export const CLUBS = [
       { id: 'fish', icon: '🐟', goal: 10, what: 'Catch a fish' },
       { id: 'kinds', icon: '🐠', goal: 5, what: 'Catch different kinds of fish' },
       { id: 'trees', icon: '🌳', goal: 2, what: 'Plant a tree (a log on the grass)' },
+      { id: 'harvest', icon: '🥕', goal: 5, what: 'Pick crops you grew (seeds from the Garden Center)' },
     ],
     reward: { coins: 15, perk: '🎣✨', perkName: 'Lucky rod: rare fish bite more' },
   },

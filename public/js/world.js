@@ -76,6 +76,7 @@ function modelName(v, renderKey) {
   const variant = renderKey?.split(':')[1];
   if (def.connects && variant !== undefined) return `couch${variant}`;
   if (blockId(v) === BED) return blockMeta(v) & BED_FOOT ? 'bedFoot' : 'bed';
+  if (def.crop) return `${def.model}${blockMeta(v) & 3}`; // (how grown)
   if (def.elevator) return (['elevator', 'elevatorDoor', 'elevatorDoorTop'][liftRole(v)] || 'elevator') + (variant?.endsWith('o') ? 'Open' : '');
   return def.model;
 }
@@ -267,6 +268,14 @@ export function createBlockMaterials(textures) {
       paintable(materials[id][0]);
       paintable(materials[id][2]);
       paintable(materials[id][3]);
+      if (def.crop) {
+        // Just watered: dark, damp soil with a little shine.
+        const wet = [materials[id][0].clone(), ...materials[id].slice(1)];
+        wet[0].color.multiplyScalar(0.55);
+        wet[0].roughness = 0.35;
+        paintable(wet[0]);
+        for (let stage = 0; stage < 4; stage++) materials[`${id}:${stage}w`] = wet;
+      }
       if (switchable(Number(id))) {
         // Switched off: the shade or bulb is just a dull, unlit color.
         const off = modelMaterials(def.model);
@@ -639,6 +648,7 @@ export class World {
     if (shapeOf(v) === 'picture') return `${id}:${(blockMeta(v) >> 2) & 3}`;
     if (BLOCKS[id].connects) return `${id}:${x === undefined ? 'ab' : this.couchArms(v, x, y, z)}`;
     if (id === BED) return `${id}:${blockMeta(v) & BED_FOOT ? 'foot' : 'head'}`;
+    if (BLOCKS[id].crop) return `${id}:${blockMeta(v) & 3}${blockMeta(v) & 4 ? 'w' : ''}`; // (how grown; just watered)
     if (BLOCKS[id].elevator) {
       const role = liftRole(v);
       return `${id}:${role}${role && x !== undefined && this.liftOpen.has(blockKey(x, y, z)) ? 'o' : ''}`;

@@ -411,6 +411,13 @@ export class Hud {
       const mine = tab.items.filter(i => fromStore(i) && this.owned.has(i));
       this.section(grid, mine.length ? '⭐ From the Luxe Store' : '⭐ Collect gold coins around town and buy amazing things at the Luxe Store!');
       this.items(grid, mine, 'store');
+    } else {
+      // Things you bought at the stores that belong in this tab (seeds and the watering can in Town…).
+      const mine = this.collapse(tab.items.filter(i => fromStore(i) && this.owned.has(i)));
+      if (mine.length) {
+        this.section(grid, '⭐');
+        this.items(grid, mine, 'store');
+      }
     }
     this.section(grid, `${tab.icon} ${tab.name}`);
     this.items(grid, this.collapse(tab.items.filter(i => !fromStore(i) || familyOf(i))));
