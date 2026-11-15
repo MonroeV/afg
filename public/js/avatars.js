@@ -113,6 +113,44 @@ export class Avatar {
     scene.add(this.root);
   }
 
+  // In a game on the town square: 'it' (tag: a glowing red ring round their feet and 👉 over
+  // their head), 'seeker' (hide-and-seek: 👀), or null.
+  setGameMark(mark) {
+    if (mark === (this.gameMark?.kind ?? null)) return;
+    if (this.gameMark) {
+      this.root.remove(this.gameMark.group);
+      this.gameMark.group.traverse(o => {
+        o.geometry?.dispose();
+        o.material?.map?.dispose();
+        o.material?.dispose();
+      });
+      this.gameMark = null;
+    }
+    if (!mark) return;
+    const group = new THREE.Group();
+    if (mark === 'it') {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.06, 8, 32).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff2a2a, transparent: true, opacity: 0.9 }));
+      ring.position.y = 0.06;
+      group.add(ring);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.font = '50px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(mark === 'it' ? '👉' : '👀', 32, 36);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const icon = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+    icon.scale.set(0.6, 0.6, 1);
+    icon.position.y = 2.95;
+    icon.renderOrder = 11;
+    group.add(icon);
+    this.root.add(group);
+    this.gameMark = { kind: mark, group, icon };
+  }
+
   get color() {
     return this.character.look.shirtColor;
   }
@@ -439,6 +477,7 @@ export class Avatar {
   }
 
   update(dt, time) {
+    if (this.gameMark) this.gameMark.icon.position.y = 2.95 + Math.sin(time * 5) * 0.08; // (a little bob)
     const k = 1 - Math.exp(-12 * dt);
     const before = this.pos.clone();
     const s = this.snap ? null : this.track.sample(this.clock.tick(dt));

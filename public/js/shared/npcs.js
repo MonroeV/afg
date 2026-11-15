@@ -72,6 +72,32 @@ const NPCS = [
     hello: n => [`Hi ${n}! Want a building challenge? 🏗️`, `${n}! Build something amazing on your land! 🔨`, `Hello ${n}! I've got picture cards for you! 🃏`],
     tips: ['🏗️🃏', 'Build it on your own land, then show me! 🚩'],
   },
+  {
+    // On the town square: Coach Kai starts games of Tag and Hide-and-seek (see playground.js).
+    id: -20, place: 'coach', name: 'Coach Kai', title: 'Coach Kai 🏃', roam: 3, coach: true,
+    look: { face: 'grin', hair: 'spiky', hat: 'cap', shirt: 'jersey', pants: 'sweatpants', skin: '#b07548', hairColor: '#1b1209', hatColor: '#e53935', shirtColor: '#e53935', shirtColor2: '#ffffff', pantsColor: '#283593', shoesColor: '#ffffff' },
+    hello: n => [`Hey ${n}! Want to play a game? 🏃🙈`, `${n}! Tag or hide-and-seek? 🏃`, `Hi ${n}! Let's play! 🎉`],
+    tips: ['🏃🙈'],
+  },
+  // The town's kids: they play on the square, and join in the games when there aren't many players.
+  {
+    id: -21, place: 'kids', name: 'Max', title: 'Max 🧢', roam: 5, kid: true,
+    look: { face: 'grin', hair: 'short', hat: 'cap', shirt: 'tshirt', pants: 'shorts', skin: '#f5c9a0', hairColor: '#c9a35a', hatColor: '#1e88e5', shirtColor: '#43a047', pantsColor: '#5d4037', shoesColor: '#ffffff' },
+    hello: n => [`Hi ${n}! Wanna play tag? 🏃`, `${n}! Ask Coach Kai for a game! 🙈`],
+    tips: ['Tag! You\'re it! 👉', 'I\'m super fast! 🏃💨'],
+  },
+  {
+    id: -22, place: 'kids', name: 'Zoe', title: 'Zoe 🎀', roam: 5, kid: true,
+    look: { face: 'smile', hair: 'buns', shirt: 'dress', pants: 'skirt', skin: '#8d5a34', hairColor: '#1b1209', shirtColor: '#ec407a', shirtColor2: '#ffffff', pantsColor: '#ec407a', shoesColor: '#fdd835' },
+    hello: n => [`Hi ${n}! I'm the best at hiding! 🙈`, `${n}! Let's play hide-and-seek! 👀`],
+    tips: ['I know the BEST hiding spots! 🤫', 'Hee hee! 🙈'],
+  },
+  {
+    id: -23, place: 'kids', name: 'Ava', title: 'Ava 🌟', roam: 5, kid: true,
+    look: { face: 'starry', hair: 'long', shirt: 'striped', pants: 'jeans', skin: '#e8b088', hairColor: '#e0b04a', shirtColor: '#7e57c2', shirtColor2: '#ffffff', pantsColor: '#1565c0', shoesColor: '#e53935' },
+    hello: n => [`Hi ${n}! Play with us! 🌟`, `${n}! Bet you can't catch me! 🏃`],
+    tips: ['Ready, set, GO! 🏃', 'Tag is my favorite! 🌟'],
+  },
   // ---------- The other stores' shopkeepers ----------
   {
     id: -15, place: 'shop_garden', name: 'Fern', title: 'Fern 🌻', roam: 2, store: 'garden',
@@ -196,7 +222,10 @@ export class NpcCrew {
     this.zone = places?.base?.zone || null; // the Secret Agency's base: clearance only
     this.familySig = null; // (families come back in a moment: see syncFamilies)
     for (const def of NPCS) {
-      const place = def.place === 'plaza' ? { x: 4.5, y: 0, z: 6.5, face: 0, area: [-7, -7, 7, 7] } : places?.[def.place];
+      const place = def.place === 'plaza' ? { x: 4.5, y: 0, z: 6.5, face: 0, area: [-7, -7, 7, 7] }
+        : def.place === 'coach' ? { x: -4.5, y: 0, z: 6.5, face: 0, area: [-7, -7, 7, 7] }
+          : def.place === 'kids' ? { x: -3.5 + (def.id % 3) * 2, y: 0, z: -3.5, face: Math.PI, area: [-9, -9, 9, 9] }
+            : places?.[def.place];
       if (!place) continue;
       const home = this.findStand(place.x, place.y ?? 0, place.z, def) || [place.x, place.y ?? 0, place.z];
       this.list.push({
@@ -294,6 +323,7 @@ export class NpcCrew {
     for (const n of this.list) {
       n.actionT -= dt;
       if (n.actionT <= 0 && n.action !== NPC_ACT.walk) n.action = NPC_ACT.idle;
+      if (n.game) continue; // (a kid in a game of tag or hide-and-seek: playground.js moves them)
       if (n.def.reporter) this.report(n, dt, players);
       this.notice(n, players, now);
       if (n.nav) this.homeMove(n, dt, players);
@@ -981,6 +1011,13 @@ export class NpcCrew {
       c.send({ t: 'club_open', club: 'agency' });
     } else if (n.def.guard) {
       this.say(n, this.room.cleared(c) ? pickOne([`Welcome back, Agent ${c.name}! 🫡 In you go.`, `Agent ${c.name}! The door's open for you. 🫡`]) : pickOne([`🛑 No clearance, no entry, ${c.name}! Agent Shadow on the town square can tell you how to get some.`, '🛑 This is a TOP SECRET area! Only agents with Top Secret clearance get in.']), true);
+    } else if (n.def.coach) {
+      const g = this.room.playground.game;
+      this.say(n, g ? pickOne([`A game's on! Jump in, ${c.name}! 🏃`, 'Go go go! 🎉']) : pickOne([`Tag or hide-and-seek, ${c.name}? 🏃🙈`, 'Pick a game! 🎉']), true);
+      if (g) this.room.playground.join(c);
+      else c.send({ t: 'games_open' });
+    } else if (n.def.kid && this.room.playground.game?.ids.includes(n.id)) {
+      this.say(n, pickOne(['Hee hee! 😆', 'Can\'t catch me! 🏃']), true);
     } else if (n.def.challenges) {
       this.say(n, pickOne([`Let's see what you've built, ${c.name}! 🔍`, 'Pick a card and build it! 🃏', 'Build it on your land, then show me! 🏗️']), true);
       this.room.sendChallenges(c);

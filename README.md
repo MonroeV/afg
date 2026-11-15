@@ -302,6 +302,18 @@ customize your character, drive cars, build anything and play with friends.
 
   Buy something once and you can build with it as much as you like (it's in the item menu, under ⭐
   at the top of its tab)
+- **Tag and hide-and-seek** 🏃🙈: **Coach Kai** on the town square starts a game for everyone
+  nearby (right-click him and pick 🏃 or 🙈; anyone who comes along later joins in). When there
+  aren't many players, the town's kids **Max, Zoe and Ava** join in, so there are always at least
+  three playing.
+  - **Tag** (2 minutes): whoever's it has a red ring round their feet and 👉 over their head; get
+    close to someone to tag them (no tagging straight back). Whoever was it for the least time wins
+  - **Hide-and-seek**: the seeker's screen goes dark while they count to 20 and everyone hides;
+    then they've 100 seconds to find everyone (get close to them). The kids find good spots
+    tucked in behind walls and trees, and a kid seeker looks around and gets "warmer" as time goes
+    on. Find everyone and the seeker wins; otherwise whoever's still hidden wins
+  A banner at the top shows who's it and the time left (✖ stops playing). Winners get 3 🪙. The
+  server runs the games (who's it, the tagging, the kids), so everyone sees the same thing
 - **Build challenges** 🏗️🃏: **Builder Bea**, at the Build Park, has six picture cards: 🏠 a cozy
   house (a door, a bed, 2 lights, 2 windows), 🌷 a garden (5 flowers, a fountain or birdbath, 3
   crops), 🛝 a playground (a swing, a trampoline, a hoop), 🐶 a pet corner (a pet bowl, a pet bed, a
@@ -796,6 +808,7 @@ public/
     seasonlook.js      How each season looks: tree leaves, grass, snow, falling leaves, spring flowers
     petmenu.js         Your pet's menu: pet it, tricks, hats
     challengeui.js     Builder Bea's picture cards (build challenges)
+    gameui.js          Coach Kai's games on your screen: picking one, the banner, counting
     tacos.js           Raining tacos, and the weather station's spinning mast
     lighting.js        Live reflections and the glow effect
     lightpools.js      Soft pools of light on the ground under every lamp
@@ -836,6 +849,7 @@ public/
       seasons.js       Which season it is (from the server's day count and the time of day)
       tricks.js        Pet tricks and pet hats
       challenges.js    Builder Bea's build challenges (what's on each card)
+      playground.js    Tag and hide-and-seek: the rounds, tagging, finding, and the kids who play
       buildpark.js     The Build Park: one of each of the newest Build Book things, with signs
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/
@@ -845,7 +859,6 @@ tools/
 ### Ideas for what to add next
 
 - Signs you can write on
-- Hide and seek, or tag
 - Water you can swim in
 - Trains between the towns
 - More Build Book recipes: a slide, a jukebox, a Ferris wheel

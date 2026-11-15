@@ -42,6 +42,7 @@ import { SeasonLook } from './seasonlook.js';
 import { Shop } from './shop.js';
 import { PetMenu } from './petmenu.js';
 import { ChallengeCards } from './challengeui.js';
+import { GameUI } from './gameui.js';
 import { TRICKS, trickIndex, PET_HATS, hatItem } from './shared/tricks.js';
 import { Particles, Fireworks, Sounds, Effects } from './effects.js';
 import { Ground } from './ground.js';
@@ -212,6 +213,7 @@ const coinMap = new Map(); // gold coins lying about: id -> { x, y, z, value, as
 let wallet = { coins: 0, owned: [] };
 let petMenu = null; // your pet's menu (tricks and hats): see petmenu.js
 let cards = null; // Builder Bea's picture cards: see challengeui.js
+let gameUI = null; // Coach Kai's games (tag, hide-and-seek): see gameui.js
 let carryingCan = false; // a gas can bought at a gas station, to carry to a vehicle that's out of gas
 let gasStations = []; // where the gas stations are: [name, x, z]
 let landmarks = []; // where the town's places are: [name, x, z]
@@ -1330,7 +1332,7 @@ function goFullscreen() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!cards?.open || !!conn);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!cards?.open || !!gameUI?.pickerOpen || !!conn);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -1364,7 +1366,7 @@ $('exit-menu').addEventListener('click', () => {
     location.reload();
   }, 150); // a moment for "I got out of the car" to reach the server
 });
-canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !petMenu?.open && !cards?.open && !familyEdit && lock());
+canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !petMenu?.open && !cards?.open && !gameUI?.pickerOpen && !familyEdit && lock());
 $('sensitivity').addEventListener('input', e => {
   settings.sensitivity = Number(e.target.value);
   saveSettings();
@@ -1662,6 +1664,10 @@ window.addEventListener('keydown', e => {
   }
   if (cards?.open) {
     if (e.code === 'Escape') cards.close();
+    return;
+  }
+  if (gameUI?.pickerOpen) {
+    if (e.code === 'Escape') gameUI.closePicker();
     return;
   }
   if (elevators.panel) {
@@ -2123,6 +2129,67 @@ net.on('challenges', msg => {
     sounds.coin();
     effects.sparkle(player.pos.x, player.pos.y + 1, player.pos.z, 40);
     hud.toast(`🏗️ ${'⭐'.repeat(msg.won.length)} 🪙`);
+  }
+});
+
+// ---------- Coach Kai's games: tag and hide-and-seek ----------
+
+gameUI = new GameUI({
+  onPick: kind => net.send({ t: 'game_start', kind }),
+  onQuit: () => net.send({ t: 'game_quit' }),
+  onClose: () => {
+    lock();
+    updateOverlays();
+  },
+});
+net.on('games_open', () => {
+  keys.clear();
+  unlock();
+  gameUI.openPicker();
+  updateOverlays();
+});
+// Who's it (or seeking): a red ring and 👉 (or 👀) over them, for everyone to see.
+function markGame() {
+  const s = gameUI.state;
+  const markOf = id => (!s || s.phase === 'over' ? null : s.kind === 'tag' ? (s.it === id ? 'it' : null) : s.seeker === id ? 'seeker' : null);
+  myBody.setGameMark(markOf(myId));
+  for (const [id, a] of avatars.list) a.setGameMark(markOf(id));
+  for (const [id, a] of npcs) a.setGameMark(markOf(id));
+}
+net.on('game', msg => {
+  const was = gameUI.state;
+  gameUI.set(msg, myId);
+  markGame();
+  const s = gameUI.state;
+  if (!s || !gameUI.playing) return;
+  if (!was || was.kind !== s.kind || (was.phase !== s.phase)) {
+    if (s.phase === 'play') gameUI.shout(s.it === myId ? '👉 YOU\'RE IT!' : '🏃 RUN!');
+    else if (s.phase === 'hide') gameUI.shout(s.seeker === myId ? '🙈 ...' : '🙈 HIDE!');
+    else if (s.phase === 'seek') gameUI.shout(s.seeker === myId ? '👀 GO FIND THEM!' : '🤫 SHHH!');
+    else if (s.phase === 'over') {
+      const won = (s.winners || []).includes(settings.name);
+      gameUI.shout(won ? '🏆 YOU WIN! 🪙' : `🏆 ${(s.winners || []).join(' & ')}`, 3);
+      if (won) {
+        sounds.coin();
+        fireworks.launch(player.pos.x, player.pos.y + 1, player.pos.z, '#ffd54f');
+      }
+    }
+  }
+});
+net.on('game_tag', ({ it, by }) => {
+  if (it === myId) {
+    gameUI.shout('👉 YOU\'RE IT!');
+    sounds.tone(660, 330, 0.25, 0.2, 'square');
+  } else if (by === myId) {
+    gameUI.shout('✋ TAG!');
+    sounds.pop();
+  }
+});
+net.on('game_found', ({ id, by }) => {
+  if (id === myId) gameUI.shout('👀 FOUND YOU!');
+  else if (by === myId) {
+    gameUI.shout('👀 FOUND!');
+    sounds.pop();
   }
 });
 
@@ -5421,7 +5488,7 @@ let menuSpin = 0, lastFrame = 0, frameCount = 0, crouchK = 0;
 // menu (nothing much is moving then).
 function frameRateNow() {
   if (!inGame) return 30;
-  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel || petMenu?.open || cards?.open) return 12;
+  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel || petMenu?.open || cards?.open || gameUI?.pickerOpen) return 12;
   return settings.fps || 1000;
 }
 
@@ -5898,6 +5965,7 @@ function frame(timestamp) {
   for (const a of avatars.list.values()) a.fishing = a.sitting && !!BLOCKS[blockId(itemOf(world.get(Math.floor(a.pos.x), Math.floor(a.pos.y + 0.5), Math.floor(a.pos.z))))]?.fishing;
   avatars.update(dt, time);
   for (const a of npcs.values()) a.update(dt, time);
+  gameUI.update(); // (the game's countdown)
   if (inGame) {
     updateCoins(dt, time);
     updateSparkly(dt, time);

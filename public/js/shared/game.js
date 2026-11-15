@@ -19,6 +19,7 @@ import { seasonAt, WINTER, SEASON_ICONS } from './seasons.js';
 import { Quests, cleanQuest } from './quests.js';
 import { TRICKS, TRICK_TRIES, TREATS, trickIndex, hatItem } from './tricks.js';
 import { CHALLENGES, partCount } from './challenges.js';
+import { Playground } from './playground.js';
 import { Structures } from '../structures.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
@@ -107,6 +108,7 @@ export class GameRoom {
     this.coinTimers = []; // when to put new coins out
     this.nextCoin = 1;
     this.npcs = new NpcCrew(this);
+    this.playground = new Playground(this); // games of Tag and Hide-and-seek on the town square
     this.quests = new Quests(this);
     this.nextId = 1;
     this.nextVehicleId = 1;
@@ -810,6 +812,7 @@ export class GameRoom {
       this.onDirty();
     }
     this.leaveVehicle(client);
+    this.playground.leave(client.id);
     this.seen(client.name);
     this.broadcast({ t: 'leave', id: client.id });
     if (!back) this.broadcast({ t: 'chat', system: true, text: `${client.name} left` });
@@ -1100,6 +1103,7 @@ export class GameRoom {
     }
     this.sendWallet(client);
     this.quests.send(client);
+    if (this.playground.game) this.playground.send(client); // (a game on the square: they can see who's it)
     this.broadcast({ t: 'join', ...publicPlayer(client) }, client);
     this.broadcast({ t: 'chat', system: true, text: `${client.name} joined` });
     this.log(`${client.name} joined (${this.clients.size} online)`);
@@ -1443,6 +1447,15 @@ export class GameRoom {
         this.updateFamilies();
         if (!this.homeOf(client)) reply('🏡 Plant your Land Flag somewhere and your family moves in!');
       }
+    },
+
+    // Coach Kai's games: start one (for everyone near the square), or stop playing.
+    game_start(client, { kind }) {
+      if (this.allow(client, 'game', 0.2, 2)) this.playground.start(client, kind);
+    },
+    game_quit(client) {
+      this.playground.leave(client.id);
+      client.send({ t: 'game', kind: null });
     },
 
     // Checking Builder Bea's cards again (from the cards, wherever you are).
@@ -2383,7 +2396,10 @@ export class GameRoom {
       this.coinTimers.splice(this.coinTimers.indexOf(at), 1);
       this.dropCoin();
     }
-    if (this.clients.size) this.npcs.update(dt);
+    if (this.clients.size) {
+      this.playground.update(dt);
+      this.npcs.update(dt);
+    }
 
     // Where everyone is. Players' and drivers' updates are passed on as soon as they come in
     // (every tick), so none get skipped or bunched up; the town's people go out 15 times a second.
