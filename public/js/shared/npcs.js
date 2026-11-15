@@ -472,6 +472,9 @@ export class NpcCrew {
       if (g) theirs.push([g.x + 0.5, g.y, g.z + 0.5]);
     }
     const busy = new Set(mates.flatMap(o => [o.plan?.id, o.doing?.id]).filter(Boolean));
+    // (Not a bed somebody's asleep in.)
+    const sleepers = [...this.room.clients.values()].filter(c => c.joined && (c.sleeping || c.flags & 1) && c.pos); // (1: lying down, see FLAG in avatars.js)
+    for (const sp of map.spots || []) if (sp.kind === 'bed' && sleepers.some(c => Math.hypot(c.pos[0] - sp.pos[0], c.pos[2] - sp.pos[2]) < 1.5 && Math.abs(c.pos[1] - sp.pos[1]) < 1)) busy.add(sp.id);
     // How far from the nearest of them (another floor counts as far).
     const room = m => theirs.reduce((best, p) => Math.min(best, Math.hypot(p[0] - m.x - 0.5, p[2] - m.z - 0.5) + Math.abs(p[1] - m.y) * 3), 99);
     const usable = m => m && m.f === STAND && !nearGarage(map.garages, m.x, m.y, m.z, 3) && !m.to.some(e => e[1] === RIDE);
@@ -526,11 +529,33 @@ export class NpcCrew {
     return null;
   }
 
+  // Someone wants this bed: whoever's lying in it sits up on the edge, then gets out (and says
+  // night night, and goes off somewhere else).
+  helpUp(c, id) {
+    const n = this.list.find(m => m.id === id), d = n?.doing;
+    if (!d || d.kind !== 'bed' || !c.pos || Math.hypot(c.pos[0] - n.pos[0], c.pos[2] - n.pos[2]) > 4) return;
+    const back = d.back;
+    n.pos = [n.pos[0] + (back[0] - n.pos[0]) * 0.45, back[1] - 0.16, n.pos[2] + (back[2] - n.pos[2]) * 0.45]; // (on the edge of the bed)
+    this.face(n, back[0], back[2]);
+    n.pose = NPC_POSE.sit;
+    n.doing = { kind: 'up', id: d.id, t: 1.3, back, face: null, helper: c.name };
+    this.say(n, pickOne(['Oh! Is it your turn? 😴', 'Yawn… okay, okay! 😄', 'Mmm… bedtime already? 😊']), true);
+  }
+
   // Doing something (lying in bed, sitting, reading, looking out of the window) until it's time
   // to get up. Saying hello to the boss gets them up (unless they're asleep).
   homeDoing(n, dt, players, now) {
     const d = n.doing;
     d.t -= dt;
+    if (d.kind === 'up') {
+      // Out of bed, a wave goodnight, and off they go in a moment.
+      if (d.t > 0) return;
+      this.stopDoing(n);
+      this.act(n, NPC_ACT.wave, 1.5);
+      this.say(n, pickOne([`Night night, ${d.helper}! 🌙`, 'Sweet dreams! 💤', 'Sleep tight! 🌙']), true);
+      n.wait = 2;
+      return;
+    }
     if (n.task?.kind === 'pet') n.task = null; // (too comfy to go and pat pets)
     const chase = d.kind === 'bed' ? null : this.homeChase(n, players, now);
     if (d.t <= 0 || chase || !this.stillThere(d)) return this.stopDoing(n);

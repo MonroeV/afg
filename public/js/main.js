@@ -2550,16 +2550,41 @@ function fireCannon(s) {
   hud.toast('💥 WHEEEE!');
 }
 
+let helping = null; // helping someone out of bed (then it's our turn): { bed, until }
+
 function goToBed(bed) {
-  if (riding()) return;
+  if (riding() || sleeping || helping) return;
   const px = bed.x + 0.5, pz = bed.z + 0.5, bx = bed.x + bed.dx + 0.5, bz = bed.z + bed.dz + 0.5;
   const dir = { x: px - bx, z: pz - bz };
   const top = bed.top ?? bed.y + 1;
-  sleeping = { bed, standAt: bedsideSpot(bed) || [bx, top, bz] };
+  const lie = new THREE.Vector3(bx - dir.x * 0.45, bed.lieY ?? top + 0.15, bz - dir.z * 0.45);
+  // Somebody in it already (one of the family)? Go round to the side, help them up, and then
+  // climb in yourself.
+  for (const [id, a] of npcs) {
+    if (!a.lying || a.pos.distanceTo(lie) > 0.9) continue;
+    const at = bedsideSpot(bed) || [bx, top, bz];
+    helping = { bed };
+    keys.clear();
+    net.send({ t: 'npc_bed', id });
+    const mid = new THREE.Vector3(bx + dir.x * 0.5, 0, bz + dir.z * 0.5); // (the middle of the bed)
+    scriptMove(at, Math.atan2(-(mid.x - at[0]), -(mid.z - at[2])), 0.6, { then: () => myBody.emote('wave') });
+    setTimeout(() => {
+      const ok = helping?.bed === bed && inGame && !riding() && player.pos.distanceTo(new THREE.Vector3(...at)) < 2.5;
+      helping = null;
+      if (ok) goToBed(bed);
+    }, 2600);
+    return;
+  }
+  const yaw = Math.atan2(dir.x, dir.z); // (lying with your head on the pillow)
+  sleeping = { bed, standAt: bedsideSpot(bed) || [bx, top, bz], yaw, lie };
   // Climb in and lie back, head on the pillow (the body tips back as it goes, see avatars.js).
+  // Then the mouse just moves the camera (round the bed): you stay lying where you are.
   player.vel.set(0, 0, 0);
   player.flying = false;
-  scriptMove([bx - dir.x * 0.45, bed.lieY ?? top + 0.15, bz - dir.z * 0.45], Math.atan2(dir.x, dir.z), 1.1, { arc: 0.45 });
+  scriptMove(lie.toArray(), yaw, 1.1, { arc: 0.45, then: () => {
+    player.yaw = yaw + Math.PI; // (the camera starts off past your feet, looking up the bed at you)
+    player.pitch = -0.75;
+  } });
   myBody.lying = true;
   settings.bed = { x: bed.x, y: bed.y, z: bed.z };
   saveSettings();
@@ -2583,7 +2608,7 @@ function bedsideSpot(bed) {
 // sent home or shoved).
 function wakeUp(instant = false) {
   if (!sleeping) return;
-  const [x, y, z] = sleeping.standAt;
+  const [x, y, z] = sleeping.standAt, yaw = sleeping.yaw;
   sleeping = null;
   myBody.lying = false;
   net.send({ t: 'sleep', on: false });
@@ -2591,9 +2616,12 @@ function wakeUp(instant = false) {
     move = null;
     player.pos.set(x, y, z);
   } else {
-    scriptMove([x, y, z], player.yaw + Math.PI, 0.9, { arc: 0.35 });
+    scriptMove([x, y, z], yaw + Math.PI, 0.9, { arc: 0.35 });
   }
 }
+
+// In bed (not climbing in): you lie still; the mouse only moves the camera.
+const inBed = () => !!sleeping && !move;
 
 // ---------- Sleeping in a camper van (or the RV) ----------
 // Parked in one, press B (or tap 🛏️) to lie down in its bed. It counts just like a bed for
@@ -2891,7 +2919,7 @@ function resumeAt([x, y, z, yaw]) {
 // Where we are and what we're doing, for everyone else (and for picking up here next time).
 function sendState() {
   const r = v => Math.round(v * 100) / 100;
-  const rot = myCar ? [r(myCar.h), 0] : [r(player.yaw), r(player.pitch)];
+  const rot = myCar ? [r(myCar.h), 0] : inBed() ? [r(sleeping.yaw), 0] : [r(player.yaw), r(player.pitch)];
   const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
   const balloon = hud.item === BALLOON && !riding() && !sleeping;
   const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
@@ -5172,13 +5200,20 @@ function updateCamera(dt) {
     // Asleep in the RV: a view of it from outside, under the night sky.
     vanSleepView(rv.car);
   } else if (sleeping) {
-    // Looking down at yourself sleeping, from above the foot of the bed (beds have
-    // headboards). Worked out from where you'll be lying, even while you're climbing in.
-    const lie = move ? move.to : player.pos, yaw = move ? move.toYaw : player.yaw;
-    const dir = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)); // feet to head
-    const above = lie.clone().addScaledVector(dir, 0.9).add(new THREE.Vector3(0, 0.8, 0));
-    sleepCam.pos.copy(avoidWalls(above, lie.clone().addScaledVector(dir, -0.7).add(new THREE.Vector3(0, 2.1, 0))));
-    sleepCam.quat.setFromRotationMatrix(tmpMatrix.lookAt(sleepCam.pos, tmp.set(lie.x + dir.x * 1.2, lie.y + 0.2, lie.z + dir.z * 1.2), camera.up));
+    // Looking at yourself sleeping. Climbing in: from above the foot of the bed (beds have
+    // headboards), worked out from where you'll be lying. Then the mouse moves the camera round
+    // the bed (you stay lying where you are).
+    const lie = sleeping.lie, dir = new THREE.Vector3(Math.sin(sleeping.yaw), 0, Math.cos(sleeping.yaw)); // feet to head
+    const middle = lie.clone().addScaledVector(dir, 0.8).add(new THREE.Vector3(0, 0.3, 0));
+    if (move) {
+      const above = lie.clone().addScaledVector(dir, 0.9).add(new THREE.Vector3(0, 0.8, 0));
+      sleepCam.pos.copy(avoidWalls(above, lie.clone().addScaledVector(dir, -0.7).add(new THREE.Vector3(0, 2.1, 0))));
+    } else {
+      const up = Math.max(0.12, Math.min(1.35, -player.pitch)), R = 2.6;
+      const want = middle.clone().add(new THREE.Vector3(Math.sin(player.yaw) * Math.cos(up) * R, Math.sin(up) * R, Math.cos(player.yaw) * Math.cos(up) * R));
+      sleepCam.pos.copy(avoidWalls(middle, want));
+    }
+    sleepCam.quat.setFromRotationMatrix(tmpMatrix.lookAt(sleepCam.pos, middle, camera.up));
   }
   if (viewMode === 0 || rv.inside || elevators.riding) {
     camera.position.copy(eye);
@@ -5551,8 +5586,8 @@ function frame(timestamp) {
     myBody.seat = riding() ? cars.seat(riding(), mySeat()) : null;
     myBody.petAboard = (rv.inside && !!rv.car.driver) || elevators.riding; // (your pet comes along in the RV while it's driven, and in elevators)
     myBody.target.copy(player.pos);
-    myBody.targetYaw = player.yaw;
-    myBody.targetPitch = player.pitch;
+    myBody.targetYaw = inBed() ? sleeping.yaw : player.yaw;
+    myBody.targetPitch = inBed() ? 0 : player.pitch;
     myBody.flying = player.flying;
     myBody.swing = view.swingT;
     myBody.sitting = !!seated || !!liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel';
@@ -5764,6 +5799,7 @@ window.buildzone = {
   get ball() { return ball; },
   get claims() { return claims; },
   get sleeping() { return sleeping; },
+  goToBed: bed => goToBed(bed),
   get seated() { return seated; },
   get npcs() { return npcs; },
   get coinMap() { return coinMap; },

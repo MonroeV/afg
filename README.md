@@ -389,8 +389,11 @@ customize your character, drive cars, build anything and play with friends.
   sit on it (you turn round and lower yourself onto it; move or jump to get up), and everyone
   sees you sitting. Put couches side by side and
   they join into one long couch, with arms only on the ends. A bed is two blocks long: right-click
-  to climb in (you sit on the edge and lie back, and the camera floats up to look down at you),
-  move to get up again (you sit up and step out beside the bed) (it's your home spot, like the Build Book bed), and it's a little bit bouncy.
+  to climb in (you sit on the edge and lie back, and the camera floats up to look down at you;
+  the mouse then moves the camera round the bed while you stay lying in it, for you and for
+  everyone watching). If one of your family is asleep in it, you go round to the side and wave,
+  they sit up, get out ("Night night!") and go off, and you climb in (and they won't climb into a
+  bed somebody's sleeping in). Move to get up again (you sit up and step out beside the bed) (it's your home spot, like the Build Book bed), and it's a little bit bouncy.
   Hang a painting or poster on any wall (sunsets, mountains, flowers, a starry night, a cat, a
   puppy, a rocket and a dinosaur) and right-click it to change the picture. Tables are just the
   right height for a lamp or a teddy bear, and you can hug the teddy bear (right-click)

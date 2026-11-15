@@ -1217,6 +1217,11 @@ export class GameRoom {
       this.onDirty();
     },
 
+    // Wanting a bed that one of the family is asleep in: they get up for you.
+    npc_bed(client, { id }) {
+      if (this.allow(client, 'npcBed', 0.5, 2)) this.npcs.helpUp(client, num(id));
+    },
+
     // "Still there?" from a browser, every few seconds: yes. (So it knows the connection's fine,
     // even when nothing else is happening.)
     ping(client) {
