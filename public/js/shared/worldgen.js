@@ -8,6 +8,8 @@ import { buildSecretBase, hideSecretFiles, AGENT_SPOT } from './secretbase.js';
 import { buildGasStations } from './fuel.js';
 import { buildShops } from './shops.js';
 import { findHomes } from './residents.js';
+import { buildWeatherStation } from './weather.js';
+import { buildBuildPark } from './buildpark.js';
 
 const B = {
   grass: 1, dirt: 2, stone: 3, cobble: 4, brick: 5, planks: 6, log: 7, leaves: 8, glass: 9,
@@ -471,7 +473,12 @@ export function generateWorld(seed = 2024) {
   // The Garden Center, the Toy Box and the Pet Shop; and residents in some of the town's houses.
   const shops = buildShops({ get: getB, set: put, canUse: free });
   for (const a of shops.areas) markUsed(...a);
-  const owned = [store?.claim, pizza?.claim, ...gas.claims, ...shops.claims].filter(Boolean);
+  // The weather station (pay Stormy and it rains tacos), and the Build Park.
+  const weather = buildWeatherStation({ get: getB, set: put, canUse: free });
+  if (weather) markUsed(...weather.area);
+  const buildPark = buildBuildPark({ get: getB, set: put, canUse: free });
+  if (buildPark) markUsed(...buildPark.area);
+  const owned = [store?.claim, pizza?.claim, ...gas.claims, ...shops.claims, weather?.claim].filter(Boolean);
   const homes = findHomes({ each, get: getB, canUse: (x, z) => !owned.some(c => x >= c.x0 && x <= c.x1 && z >= c.z0 && z <= c.z1) });
   const frontier = buildFrontier({ get: getB, set: put, canUse: free, canPave: () => true });
   for (const a of frontier.areas) markUsed(...a);
@@ -488,7 +495,7 @@ export function generateWorld(seed = 2024) {
   // The Secret Agency's base, out in the south-east.
   const base = buildSecretBase({ get: getB, set: put, canUse: free });
   if (base) markUsed(...base.area);
-  const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null, pizza: pizza?.place || null, lodge: frontier.places.lodge, ...far.places, ...(base?.places || {}), ...gas.places, ...shops.places, ...Object.fromEntries(homes.map((h, i) => [`home${i + 1}`, h])), agent: AGENT_SPOT };
+  const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null, pizza: pizza?.place || null, lodge: frontier.places.lodge, ...far.places, ...(base?.places || {}), ...gas.places, ...shops.places, weather: weather?.place || null, buildpark: buildPark?.place || null, ...Object.fromEntries(homes.map((h, i) => [`home${i + 1}`, h])), agent: AGENT_SPOT };
   // The three TOP SECRET files (find them all for Top Secret clearance).
   places.files = hideSecretFiles({ get: getB, set: put, canUse: () => true, places });
 
@@ -545,7 +552,7 @@ export function generateWorld(seed = 2024) {
     const [x, y, z] = k.split(',').map(Number);
     blocks.push([x, y, z, v]);
   }
-  return { blocks, cars: placed, places, claims: [store?.claim, pizza?.claim, ...gas.claims, ...shops.claims, ...frontier.claims, ...far.claims, base?.claim].filter(Boolean), signs: [...posts.signs, ...fishing.signs, ...far.signs, ...(base?.signs || []), ...gas.signs, ...shops.signs] };
+  return { blocks, cars: placed, places, claims: [store?.claim, pizza?.claim, ...gas.claims, ...shops.claims, ...frontier.claims, ...far.claims, base?.claim, weather?.claim].filter(Boolean), signs: [...posts.signs, ...fishing.signs, ...far.signs, ...(base?.signs || []), ...gas.signs, ...shops.signs, ...(weather?.signs || []), ...(buildPark?.signs || [])] };
 }
 
 // Saved worlds from before the new lamps: put proper lamp heads on the town's street lamps

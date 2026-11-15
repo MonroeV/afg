@@ -13,11 +13,13 @@ import { buildGasStations, usesFuel, getsDirty, TANK_RANGE, GAS_PUMP, GAS_CAN, G
 import { MAX_TUNNELS, isTunnelY, tunnelKey, openBelow } from './underground.js';
 import { buildShops } from './shops.js';
 import { findHomes } from './residents.js';
+import { buildWeatherStation, TACO_PRICE, TACO_SECONDS } from './weather.js';
+import { buildBuildPark } from './buildpark.js';
 import { Quests, cleanQuest } from './quests.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
 
-export const SAVE_VERSION = 15;
+export const SAVE_VERSION = 16;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -238,6 +240,7 @@ export class GameRoom {
       this.upgradeTo13();
       this.upgradeTo14();
       this.upgradeTo15();
+      this.upgradeTo16();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -310,6 +313,7 @@ export class GameRoom {
     if (data.version < 13) this.upgradeTo13();
     if (data.version < 14) this.upgradeTo14();
     if (data.version < 15) this.upgradeTo15();
+    if (data.version < 16) this.upgradeTo16();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -537,6 +541,30 @@ export class GameRoom {
     this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...shops.places, ...Object.fromEntries(homes.map((h, i) => [`home${i + 1}`, h])) };
     this.log(`Added ${shops.built.length} stores (${shops.built.join(', ')}) and ${homes.length} residents`);
     this.onDirty();
+  }
+
+  // Worlds saved before version 16: the weather station (Stormy makes it rain tacos) and the
+  // Build Park (one of each of the newer things to build). Only on empty land nobody's claimed.
+  upgradeTo16() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const weather = buildWeatherStation({ get, set, canUse: this.freeLand() });
+    if (weather) {
+      this.claims.push(weather.claim);
+      for (const [x, y, z, text] of weather.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+    }
+    const park = buildBuildPark({ get, set, canUse: this.freeLand() });
+    for (const [x, y, z, text] of park?.signs || []) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+    this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), weather: weather?.place || null, buildpark: park?.place || null };
+    this.log(`Added the weather station (${weather ? 'yes' : 'no room'}) and the Build Park (${park ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
+  // How many seconds of taco rain are left (0: none).
+  tacosLeft() {
+    return Math.max(0, Math.round(((this.tacoUntil || 0) - Date.now()) / 1000));
   }
 
   // Families (from the Luxe Store) on their owners' home land.
@@ -969,6 +997,8 @@ export class GameRoom {
       // The Secret Agency's base (its inside, its lasers) and where the TOP SECRET files are.
       base: this.places?.base || null,
       files: (this.places?.files || []).map(f => f.slice(0, 3)),
+      tacos: this.tacosLeft(), // (raining tacos? for how much longer)
+      mast: this.places?.weather?.mast || null, // the weather station's mast (its cups spin)
       landmarks: Object.entries(this.places || {}).filter(([, p]) => p && Number.isFinite(p.x) && Number.isFinite(p.z)).map(([k, p]) => [k, p.x, p.z]),
     });
     // Coins: your wallet, and a little present the first time you play each day.
@@ -1166,6 +1196,27 @@ export class GameRoom {
       this.onDirty();
     },
 
+    // Paying Stormy at the weather station: it rains TACOS (all over town, for everyone).
+    taco_rain(client) {
+      if (!this.allow(client, 'tacos', 0.5, 2)) return;
+      const stormy = this.npcs.list.find(n => n.def.weather);
+      if (!stormy || Math.hypot(client.pos[0] - stormy.pos[0], client.pos[2] - stormy.pos[2]) > 12) return;
+      if (this.tacosLeft() > 0) return client.send({ t: 'chat', system: true, text: '🌮🌮🌮' });
+      const w = this.wallet(client);
+      if (w.coins < TACO_PRICE) {
+        this.npcs.say(stormy, `You need ${TACO_PRICE} 🪙 for tacos! 🌮`, true);
+        return;
+      }
+      w.coins -= TACO_PRICE;
+      this.sendWallet(client);
+      this.tacoUntil = Date.now() + TACO_SECONDS * 1000;
+      this.broadcast({ t: 'tacos', seconds: TACO_SECONDS, by: client.name });
+      this.broadcast({ t: 'chat', system: true, text: `🌮 ${client.name} made it rain TACOS! 🌮` });
+      this.npcs.onTacos(client.name);
+      this.log(`${client.name} made it rain tacos`);
+      this.onDirty();
+    },
+
     // "Still there?" from a browser, every few seconds: yes. (So it knows the connection's fine,
     // even when nothing else is happening.)
     ping(client) {
@@ -1196,7 +1247,7 @@ export class GameRoom {
     },
 
     fx(client, msg) {
-      if (!['firework', 'hearts', 'sparkle', 'bubbles', 'balloon'].includes(msg.kind) || !this.allow(client, 'fx', 5, 10)) return;
+      if (!['firework', 'hearts', 'sparkle', 'bubbles', 'balloon', 'volcano', 'feed', 'wish', 'rocket'].includes(msg.kind) || !this.allow(client, 'fx', 5, 10)) return;
       const color = /^#[0-9a-f]{6}$/i.test(msg.color) ? msg.color : '#ffffff';
       this.broadcast({ t: 'fx', kind: msg.kind, x: num(msg.x), y: num(msg.y), z: num(msg.z), color, seed: num(msg.seed), dir: numbers(msg.dir, 3) || undefined }, client);
       if (msg.kind === 'firework') setTimeout(() => this.npcs.onFirework(num(msg.x), num(msg.y) + 30, num(msg.z)), 1600);

@@ -37,6 +37,7 @@ import {
 import { MAX_MANY, MAX_OWNED_VEHICLES } from './shared/game.js';
 import { CHUTE } from './shared/farcountry.js';
 import { NPC_ACT, NPC_POSE } from './shared/npcs.js';
+import { TacoRain, WeatherMast } from './tacos.js';
 import { Shop } from './shop.js';
 import { Particles, Fireworks, Sounds, Effects } from './effects.js';
 import { Ground } from './ground.js';
@@ -219,6 +220,7 @@ const avatars = new Avatars(scene);
 let myId = null;
 let online = false;
 let inGame = false;
+let tacoRain = null, weatherMast = null; // it's raining tacos! (and the weather station's mast)
 let autoJoin = false; // joining by itself (back after a lost connection, or an update)
 let myCar = null; // the vehicle we're driving
 let myRide = null; // the vehicle we're riding in as a passenger
@@ -244,6 +246,16 @@ async function load() {
   structures = new Structures(world);
   lifts = new SkiLifts(scene, world);
   contraptions = new Contraptions({ scene, world, structures, effects, sounds });
+  // (A rocket: everyone sees it take off, and fireworks at the top. A wish: what you wished for.)
+  contraptions.onLaunch = s => net.send({ t: 'fx', kind: 'rocket', x: s.x, y: s.y, z: s.z });
+  contraptions.onApex = (x, y, z) => {
+    const color = `#${new THREE.Color().setHSL(Math.random(), 1, 0.6).getHexString()}`, seed = Math.random();
+    if (fireworks.launch(x, y - 26, z, color, seed)) sounds.launch(1);
+    net.send({ t: 'fx', kind: 'firework', x, y: y - 26, z, color, seed });
+  };
+  contraptions.onSay = text => hud.toast(text);
+  tacoRain = new TacoRain(scene, world, sounds);
+  tacoRain.onCatch = n => hud.toast(`🌮 × ${n}`);
   signs = new SignTexts(scene, world);
   world.onChange = (x, y, z) => {
     structures.changed(x, y, z);
@@ -662,6 +674,9 @@ function startGame(welcome, resume = false) {
   agency.setGuards(welcome.guards);
   weather.rain = weather.target; // (if it's raining when you arrive, it already is)
   sky.time = welcome.time;
+  if (welcome.tacos > 0) tacoRain.start(welcome.tacos);
+  else tacoRain.stop();
+  if (welcome.mast && !weatherMast) weatherMast = new WeatherMast(scene, welcome.mast);
   if (resume) {
     $('pause-online').classList.toggle('hidden', online);
     net.stillListening();
@@ -753,6 +768,15 @@ net.on('npc_say', ({ id, text }) => {
   a.say(text);
   if (id === REPORTER) Object.assign(news, { on: true, caption: text, captionT: timer.getElapsed() });
   if (a.pos.distanceTo(player.pos) < 16) hud.addChat({ name: a.name, color: '#ffd54f', text });
+});
+// Somebody paid Stormy: it's raining tacos!
+net.on('tacos', ({ seconds }) => {
+  tacoRain.start(seconds);
+  sounds.tune?.();
+});
+// Talking to Stormy at the weather station: make it rain tacos?
+net.on('weather_open', ({ price, coins }) => {
+  ask('🌮 Taco rain? ⛅', coins >= price ? `🪙 ${price}` : `🪙 ${price} (you have ${coins})`, '🌮 YES!', 'No thanks', () => net.send({ t: 'taco_rain' }));
 });
 net.on('npc_pet', () => myBody.brain?.cheer()); // somebody petted our pet: it's so happy!
 // Someone who lives in a tower riding its elevator: its doors slide open (ding!) and shut.
@@ -871,6 +895,7 @@ net.on('fx', ({ kind, x, y, z, color, seed, dir }) => {
   else if (kind === 'bubbles') effects.blowBubbles(x, y, z, dir || [0, 0.3, 0], 4);
   else if (kind === 'balloon') letBalloonGo(x, y, z, color);
   else if (kind === 'sparkle') effects.sparkle(x, y, z, 30);
+  else if (['volcano', 'feed', 'wish', 'rocket'].includes(kind)) contraptions.remote(kind, x, y, z);
   else if (fireworks.launch(x, y, z, color, seed)) {
     sounds.launch(loudness(x, y, z, 80));
   }
@@ -1394,6 +1419,13 @@ async function openGallery() {
 }
 $('gallery-open').addEventListener('click', openGallery);
 $('pause-gallery').addEventListener('click', openGallery);
+
+// The Build Book: every special thing you can make out of blocks.
+function openBuildBook() {
+  toggleInventory(true);
+  hud.showTab('book');
+  sounds.click();
+}
 
 function toggleInventory(open) {
   inventoryOpen = open;
@@ -2864,7 +2896,7 @@ function sendState() {
   const rot = myCar ? [r(myCar.h), 0] : [r(player.yaw), r(player.pitch)];
   const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
   const balloon = hud.item === BALLOON && !riding() && !sleeping;
-  const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
+  const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
     (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) |
     (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
   net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item, drone: agency.droneState(player.yaw) });
@@ -3004,6 +3036,16 @@ function startContraption(s) {
   if (riding() || sleeping || seated || liftRide) return;
   const msg = contraptions.start(s, player);
   if (msg) hud.toast(msg);
+}
+
+// A rocket or the merry-go-round: ride it. A volcano, a fish tank, a wishing well: play with it
+// (and everyone nearby sees it too).
+function playWith(s) {
+  if (s.type === 'rocket' || s.type === 'carousel') return startContraption(s);
+  const msg = contraptions.use(s);
+  if (msg) hud.toast(msg);
+  const kind = { volcano: 'volcano', fishtank: 'feed', well: 'wish' }[s.type];
+  if (kind) net.send({ t: 'fx', kind, x: s.x, y: s.y, z: s.z });
 }
 
 function rideContraption(dt, keys) {
@@ -3757,6 +3799,9 @@ function interact() {
     net.send({ t: 'npc_talk', id: target.npc.id });
     return;
   }
+  // Pointing at a rocket, a volcano, a merry-go-round… (their models, not just their blocks).
+  const toy = contraptions.pick(camera.position, lookDir, hit && !hit.ground ? camera.position.distanceTo(new THREE.Vector3(hit.block[0] + 0.5, hit.block[1] + 0.5, hit.block[2] + 0.5)) + 0.5 : 7);
+  if (toy) return playWith(toy);
   if (hit && !hit.ground) {
     if (shapeOf(hit.value) === 'door' && hit.part !== 'floor') {
       if (agency.lockedDoor(...hit.block)) {
@@ -3775,6 +3820,8 @@ function interact() {
     if (hit.part !== 'floor') {
       if (def?.seat) return sitOn(...hit.block, itemOf(hit.value));
       if (def?.hug) return hugTeddy(...hit.block);
+      // (The Build Park's signs open the Build Book: everything you can build.)
+      if (def?.art === 'sign' && /BUILD PARK|ROCKET|VOLCANO|FISH TANK|MERRY-GO-ROUND|WISHING WELL|RAINBOW/.test(signs.get(...hit.block))) return openBuildBook();
       if (def?.art === 'sign') return openSign(...hit.block);
       if (def?.shape === 'picture') return nextPicture(...hit.block, hit.value);
       if (def?.music) return changeNote(...hit.block, hit.value);
@@ -3807,6 +3854,7 @@ function interact() {
     if (s?.type === 'bed') return goToBed(s);
     if (s?.type === 'cannon') return fireCannon(s);
     if (s && ['swing', 'zipline', 'balloon'].includes(s.type)) return startContraption(s);
+    if (s && ['rocket', 'carousel', 'volcano', 'fishtank', 'well'].includes(s.type)) return playWith(s);
     if (s?.type === 'tv') {
       const name = tvs.nextChannel(s);
       if (name) {
@@ -5450,7 +5498,9 @@ function frame(timestamp) {
     for (const a of avatars.list.values()) if (!a.seat) stepMusic(a.id, a.pos);
     updateRace();
     lifts.update(time);
-    contraptions.update(dt, time, [...avatars.list.values()]);
+    contraptions.update(dt, time, [...avatars.list.values()], player.pos);
+    tacoRain.update(dt, player.pos);
+    weatherMast?.update(dt, time);
     updateJob(dt, time);
     updateFishing(dt, time);
     updateDumpTruck(dt);
@@ -5507,7 +5557,7 @@ function frame(timestamp) {
     myBody.targetPitch = player.pitch;
     myBody.flying = player.flying;
     myBody.swing = view.swingT;
-    myBody.sitting = !!seated || !!liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip';
+    myBody.sitting = !!seated || !!liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel';
     myBody.hotair = contraptions.riding === 'balloon';
     myBody.crouching = player.crouching && !riding();
     myBody.pizza = !!job;
@@ -5733,6 +5783,7 @@ window.buildzone = {
   get job() { return job; },
   get signs() { return signs; },
   get contraptions() { return contraptions; },
+  get tacoRain() { return tacoRain; },
   kickBall: () => kickBall(),
   usePump: (x, y, z) => usePump(x, y, z),
   get book() { return book; },

@@ -387,7 +387,7 @@ export class Emitter {
       fragmentShader: `
         uniform sampler2D map; varying vec3 vColor; varying float vAlpha;
         void main() {
-          vec4 t = texture2D(map, gl_PointCoord);
+          vec4 t = texture2D(map, vec2(gl_PointCoord.x, 1.0 - gl_PointCoord.y)); // (points count down from the top; pictures count up)
           gl_FragColor = vec4(vColor * t.rgb, t.a * vAlpha);
         }`,
       transparent: true,

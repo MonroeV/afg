@@ -3,7 +3,12 @@
 // moving parts; riding them happens in your own game, and everyone else just sees you move
 // (sitting on the swing, hanging off the zip line, up in your balloon).
 import * as THREE from 'three';
+import { rocketModel, parachuteModel, volcanoModel, fishTankModel, carouselModel, CAROUSEL_R, wellModel, coinModel, rainbowModel, RAINBOW_R } from './playthings.js';
 
+// The newer Build Book things (playthings.js draws them).
+const TOYS = ['rocket', 'volcano', 'fishtank', 'carousel', 'well', 'rainbow'];
+const ROCKET_UP = 55; // how high a rocket goes
+const WISHES = ['a pony 🐴', 'a giant ice cream 🍦', 'a rainbow dragon 🐉', 'a castle made of candy 🍭', 'a trip to the moon 🌙', 'a puppy that can talk 🐶', 'a mountain of pizza 🍕', 'a magic unicorn 🦄', 'a treehouse in the clouds ☁️', 'a pet dinosaur 🦕'];
 const SWING_R = 2.3; // rope length
 const SWING_W = Math.sqrt(28 / SWING_R); // how fast it swings (like a real pendulum)
 const ZIP_RANGE = 80; // how far apart two zip line posts can be
@@ -90,17 +95,17 @@ export class Contraptions {
   // Puts in what's new, takes out what's gone (only when the blocks change).
   rebuild() {
     const want = new Map();
-    for (const s of this.structures.list.values()) if (['swing', 'hoop', 'balloon'].includes(s.type)) want.set(this.key(s), s);
+    for (const s of this.structures.list.values()) if (['swing', 'hoop', 'balloon', ...TOYS].includes(s.type)) want.set(this.key(s), s);
     for (const [k, item] of this.items) {
       const s = want.get(k);
-      if (s && (s.type !== 'hoop' || (s.fx === item.s.fx && s.fz === item.s.fz))) continue;
+      if (s && (s.type !== 'hoop' || (s.fx === item.s.fx && s.fz === item.s.fz)) && (s.type !== 'rainbow' || (s.ax === item.s.ax && s.az === item.s.az))) continue;
       this.scene.remove(item.group);
       this.items.delete(k);
-      if (this.ride?.item === item && item.s.type !== 'balloon') this.end();
+      if (this.ride?.item === item && item.s.type !== 'balloon' && item.s.type !== 'rocket') this.end();
     }
     for (const [k, s] of want) {
       if (this.items.has(k)) continue;
-      const item = s.type === 'swing' ? this.makeSwing(s) : s.type === 'hoop' ? this.makeHoop(s) : this.makeBalloon(s);
+      const item = s.type === 'swing' ? this.makeSwing(s) : s.type === 'hoop' ? this.makeHoop(s) : s.type === 'balloon' ? this.makeBalloon(s) : this.makeToy(s);
       this.scene.add(item.group);
       this.items.set(k, item);
     }
@@ -171,13 +176,41 @@ export class Contraptions {
     return { s, group, seed: s.x * 7 + s.z * 13 };
   }
 
-  update(dt, time, others = []) {
+  // The newer things: a rocket, a volcano, a fish tank, a merry-go-round, a wishing well, a rainbow.
+  makeToy(s) {
+    const c = new THREE.Vector3(s.x + 0.5, s.y + 1, s.z + 0.5);
+    const seed = Math.abs(s.x * 7 + s.z * 13);
+    let group, r = 1.6;
+    if (s.type === 'rocket') [group, r] = [rocketModel(), 1.4];
+    else if (s.type === 'volcano') [group, r] = [volcanoModel(), 1.7];
+    else if (s.type === 'fishtank') {
+      group = fishTankModel(seed);
+      c.y -= 0.5; // (in the water)
+      r = 0.9;
+    } else if (s.type === 'carousel') [group, r] = [carouselModel(), 2];
+    else if (s.type === 'well') [group, r] = [wellModel(), 1.3];
+    else {
+      group = rainbowModel();
+      c.set(s.x + 0.5 + s.ax * RAINBOW_R, s.y + 0.6, s.z + 0.5 + s.az * RAINBOW_R);
+      group.rotation.y = s.ax ? 0 : Math.PI / 2;
+      r = 0;
+    }
+    group.position.copy(c);
+    return { s, group, c, r, seed, t: 0, next: 30 + (seed % 40) };
+  }
+
+  update(dt, time, others = [], me = null) {
     if (this.version !== this.structures.version) {
       this.version = this.structures.version;
       this.rebuild();
     }
+    this.updateCoins(dt);
     for (const item of this.items.values()) {
       const t = item.s.type;
+      if (TOYS.includes(t)) {
+        this.updateToy(item, dt, time, me);
+        continue;
+      }
       if (t === 'swing') {
         let theta = Math.sin(time * 1.3 + item.s.x) * 0.05;
         if (this.ride?.item === item) theta = this.ride.theta;
@@ -201,6 +234,152 @@ export class Contraptions {
         item.group.visible = this.ride?.item !== item;
         item.group.envelope.position.y = 5.4 + Math.sin(time * 0.8 + item.seed) * 0.15;
       }
+    }
+  }
+
+  updateToy(item, dt, time, me) {
+    const { s, group, c } = item;
+    const near = me ? Math.hypot(me.x - c.x, me.z - c.z) < 60 : true;
+    if (s.type === 'carousel') {
+      group.spin.rotation.y = time * 0.55;
+      for (const h of group.horses) h.horse.position.y = 0.95 + Math.sin(time * 2.2 + h.a * 2) * 0.16;
+    } else if (s.type === 'fishtank') {
+      const fast = item.fed > 0 ? 2.2 : 1;
+      item.fed = Math.max(0, (item.fed || 0) - dt);
+      item.swim = (item.swim || 0) + dt * fast;
+      group.fish.forEach((f, i) => {
+        const a = item.swim * (0.7 + i * 0.25) + i * 2.1, r = 0.22 + i * 0.05;
+        f.position.set(Math.cos(a) * r, -0.15 + i * 0.12 + Math.sin(item.swim * 2 + i) * 0.04 + (item.fed > 0 ? 0.12 : 0), Math.sin(a) * r);
+        f.rotation.y = -a - Math.PI / 2;
+      });
+      for (const [i, w] of (group.weeds || []).entries()) w.rotation.z = Math.sin(time * 1.5 + i) * 0.15;
+      if (near && Math.random() < dt * 0.8) this.effects.fizz(c.x + (Math.random() - 0.5) * 0.5, c.y - 0.3, c.z + (Math.random() - 0.5) * 0.5);
+    } else if (s.type === 'volcano') {
+      const top = c.y + 1.75;
+      item.erupt = Math.max(0, (item.erupt || 0) - dt);
+      const glow = item.erupt > 0 ? 1 : 0.75 + Math.sin(time * 3 + item.seed) * 0.15;
+      group.lava.material.color.setRGB(1, 0.35 + glow * 0.25, 0.08 * glow);
+      if (!near) return;
+      if (item.erupt > 0) {
+        // Lava blobs flying out, and lots of smoke.
+        for (let i = 0; i < 3; i++) {
+          const a = Math.random() * Math.PI * 2, sp = 1 + Math.random() * 3;
+          this.effects.glow.spawn({ x: c.x, y: top, z: c.z, vx: Math.cos(a) * sp, vy: 6 + Math.random() * 6, vz: Math.sin(a) * sp, life: 1.4 + Math.random() * 0.6, size: 0.45, grow: -0.15, color: [1, 0.3 + Math.random() * 0.45, 0.05], gravity: 9, alpha: 0.95 });
+        }
+        if (Math.random() < dt * 14) this.effects.smokePuff(c.x, top + 0.3, c.z, 0.85);
+      } else if (Math.random() < dt * 0.6) this.effects.smokePuff(c.x, top + 0.2, c.z, 0.4);
+      // Now and then it rumbles all by itself.
+      item.next -= dt;
+      if (item.next <= 0 && me && Math.hypot(me.x - c.x, me.z - c.z) < 35) {
+        item.next = 45 + Math.random() * 40;
+        this.erupt(item, 2.5);
+      }
+    } else if (s.type === 'rainbow') {
+      group.children.forEach((b, i) => (b.material.opacity = 0.45 + Math.sin(time * 1.2 + i * 0.5) * 0.12));
+    } else if (s.type === 'rocket') {
+      if (item.show) {
+        // Someone else's rocket taking off (they're in it): up it goes, then it's back.
+        item.show.t += dt;
+        const k = item.show.t;
+        if (k < 3) group.position.y = c.y + Math.sin(k * 40) * 0.02;
+        else if (k < 7) {
+          group.position.y = c.y + 0.5 * 14 * (k - 3) * (k - 3);
+          this.effects.flame(group.position.x, group.position.y - 0.1, group.position.z, 1.2);
+          if (Math.random() < 0.5) this.effects.smokePuff(group.position.x, group.position.y - 0.4, group.position.z, 0.3);
+        } else {
+          group.visible = false;
+          if (k > 12) {
+            item.show = null;
+            group.position.copy(c);
+            group.visible = true;
+            this.effects.sparkle(c.x, c.y, c.z, 20);
+          }
+        }
+      }
+    }
+  }
+
+  // ---------- Playing with the toys ----------
+
+  // The nearest of the toys you're pointing at (the ray from your eye), if it's close.
+  pick(origin, dir, max = 7) {
+    let best = null, bestD = max;
+    for (const item of this.items.values()) {
+      if (!TOYS.includes(item.s.type) || !item.r) continue;
+      const c = item.c.clone();
+      if (item.s.type !== 'fishtank') c.y += item.r * 0.6;
+      const to = c.sub(origin), along = to.dot(dir);
+      if (along < 0 || along > bestD) continue;
+      if (to.lengthSq() - along * along < item.r * item.r) [best, bestD] = [item.s, along];
+    }
+    return best;
+  }
+
+  // Right-clicked a volcano, a fish tank or a wishing well. Returns what to tell the player.
+  use(s) {
+    const item = this.items.get(this.key(s));
+    if (!item) return null;
+    const { c } = item;
+    if (s.type === 'volcano') {
+      this.erupt(item, 4);
+      return '🌋 KABOOM!';
+    }
+    if (s.type === 'fishtank') {
+      item.fed = 6;
+      for (let i = 0; i < 14; i++) this.effects.glow.spawn({ x: c.x + (Math.random() - 0.5) * 0.5, y: c.y + 0.55, z: c.z + (Math.random() - 0.5) * 0.5, vx: 0, vy: -0.25 - Math.random() * 0.2, vz: 0, life: 2.2, size: 0.07, color: [0.75, 0.5, 0.25] });
+      this.effects.heartsAt(c.x, c.y + 0.6, c.z, 4);
+      this.sounds.tone?.(880, 1320, 0.15, 0.08, 'sine');
+      return '🐠 Yum!';
+    }
+    if (s.type === 'well') {
+      // Toss a coin: it arcs up and plops into the water.
+      const coin = coinModel();
+      coin.position.set(c.x, c.y + 1.4, c.z);
+      this.scene.add(coin);
+      item.coin = { mesh: coin, t: 0, mine: true };
+      this.sounds.tone?.(1568, 2093, 0.12, 0.1, 'triangle');
+      return null; // (the wish comes when it lands)
+    }
+    return null;
+  }
+
+  // Someone else played with one: their eruption, their fish food, their wish, their rocket.
+  remote(kind, x, y, z) {
+    for (const item of this.items.values()) {
+      const { s } = item;
+      if (Math.abs(s.x - x) > 1 || Math.abs(s.z - z) > 1 || Math.abs(s.y - y) > 1) continue;
+      if (kind === 'volcano' && s.type === 'volcano') this.erupt(item, 4);
+      else if (kind === 'feed' && s.type === 'fishtank') this.use(s);
+      else if (kind === 'wish' && s.type === 'well') this.effects.sparkle(item.c.x, item.c.y, item.c.z, 24);
+      else if (kind === 'rocket' && s.type === 'rocket' && !item.show && this.ride?.item !== item) item.show = { t: 0 };
+    }
+  }
+
+  erupt(item, seconds) {
+    item.erupt = Math.max(item.erupt || 0, seconds);
+    const { c } = item;
+    this.sounds.noiseHit?.(70, 1.4, 0.35, 'lowpass');
+    this.sounds.boom?.(0.5);
+    for (let i = 0; i < 10; i++) this.effects.smokePuff(c.x + (Math.random() - 0.5), c.y + 1.9, c.z + (Math.random() - 0.5), 0.9);
+  }
+
+  // A coin flying into a well (then the wish).
+  updateCoins(dt) {
+    for (const item of this.items.values()) {
+      const k = item.coin;
+      if (!k) continue;
+      k.t += dt;
+      const p = Math.min(1, k.t / 0.8);
+      k.mesh.position.set(item.c.x, item.c.y + 1.4 + Math.sin(p * Math.PI) * 0.8 - p * 1.6, item.c.z);
+      k.mesh.rotation.y += dt * 12;
+      if (p < 1) continue;
+      this.scene.remove(k.mesh);
+      item.coin = null;
+      this.effects.splash(item.c.x, item.c.y - 0.1, item.c.z);
+      this.effects.sparkle(item.c.x, item.c.y, item.c.z, 30);
+      this.effects.heartsAt(item.c.x, item.c.y + 0.5, item.c.z, 5);
+      this.sounds.tone?.(1046, 1568, 0.5, 0.12, 'sine');
+      if (k.mine) this.onSay?.(`⭐ You wished for ${WISHES[Math.floor(Math.random() * WISHES.length)]}`);
     }
   }
 
@@ -262,6 +441,28 @@ export class Contraptions {
       this.sounds.whoosh();
       return '🧗 Wheeeee!';
     }
+    if (s.type === 'rocket' && item) {
+      if (item.show) return null;
+      // Into the rocket (your head pokes out of the top), and the countdown starts.
+      player.pos.set(item.c.x, item.c.y + 0.9, item.c.z);
+      player.flying = false;
+      this.ride = { kind: 'rocket', item, phase: 'count', t: 0, v: 0, beeps: 0, top: Math.min(60, item.c.y + ROCKET_UP) };
+      return '🚀 3… 2… 1…';
+    }
+    if (s.type === 'carousel' && item) {
+      // Onto the nearest horse.
+      let best = 0, bestD = Infinity;
+      item.group.horses.forEach((h, i) => {
+        const p = new THREE.Vector3();
+        h.horse.getWorldPosition(p);
+        const d = p.distanceTo(player.pos);
+        if (d < bestD) [best, bestD] = [i, d];
+      });
+      player.flying = false;
+      this.ride = { kind: 'carousel', item, horse: item.group.horses[best], space: true };
+      this.sounds.tone?.(523, 784, 0.25, 0.1, 'triangle');
+      return '🎠 Wheee! (Space hops off)';
+    }
     if (s.type === 'balloon' && item) {
       const model = balloonModel(item.seed, true);
       this.scene.add(model);
@@ -276,6 +477,11 @@ export class Contraptions {
 
   end() {
     if (this.ride?.model) this.scene.remove(this.ride.model);
+    if (this.ride?.chute) this.scene.remove(this.ride.chute);
+    if (this.ride?.kind === 'rocket') {
+      this.ride.item.group.position.copy(this.ride.item.c);
+      this.ride.item.group.visible = true;
+    }
     this.ride = null;
   }
 
@@ -326,6 +532,24 @@ export class Contraptions {
       }
       return true;
     }
+    if (r.kind === 'carousel') {
+      const p = new THREE.Vector3();
+      r.horse.horse.getWorldPosition(p);
+      // Sitting on the saddle (hips on it), riding round.
+      player.pos.set(p.x, p.y + 0.17 - 0.72, p.z);
+      const space = keys.has('Space');
+      if (space && !r.space) {
+        // Hop off, outward.
+        const c = r.item.c, out = new THREE.Vector3(p.x - c.x, 0, p.z - c.z).normalize();
+        player.pos.set(c.x + out.x * (CAROUSEL_R + 1.4), c.y, c.z + out.z * (CAROUSEL_R + 1.4));
+        player.vel.set(out.x * 2, 4, out.z * 2);
+        this.end();
+        return false;
+      }
+      r.space = space;
+      return true;
+    }
+    if (r.kind === 'rocket') return this.rideRocket(r, dt, keys, player);
     if (r.kind === 'balloon') {
       r.t += dt;
       const up = keys.has('Space'), down = keys.has('ShiftLeft') || keys.has('ShiftRight') || keys.has('KeyC');
@@ -369,6 +593,75 @@ export class Contraptions {
     return false;
   }
 }
+
+// (Riding a rocket: the countdown, blast off, the fireworks at the top, then down you float.)
+Contraptions.prototype.rideRocket = function (r, dt, keys, player) {
+  const it = r.item, c = it.c, model = it.group;
+  r.t += dt;
+  const solid = (x, y, z) => this.world.isSolid(Math.floor(x), Math.floor(y), Math.floor(z));
+  if (r.phase === 'count') {
+    // 3, 2, 1: a beep a second, smoke round the bottom, and a shake.
+    if (r.t >= r.beeps) {
+      r.beeps++;
+      this.sounds.tone?.(r.beeps > 3 ? 1320 : 660, r.beeps > 3 ? 1320 : 660, 0.15, 0.14, 'square');
+    }
+    if (Math.random() < dt * 12) this.effects.smokePuff(c.x + (Math.random() - 0.5) * 1.2, c.y + 0.1, c.z + (Math.random() - 0.5) * 1.2, 0.2);
+    model.position.set(c.x + (Math.random() - 0.5) * 0.03 * r.t, c.y, c.z + (Math.random() - 0.5) * 0.03 * r.t);
+    player.pos.set(model.position.x, c.y + 0.9, model.position.z);
+    if (r.t >= 3) {
+      r.phase = 'up';
+      r.t = 0;
+      this.sounds.whoosh?.();
+      this.sounds.boom?.(0.4);
+      this.onLaunch?.(it.s);
+    }
+    return true;
+  }
+  if (r.phase === 'up') {
+    r.v = Math.min(26, r.v + 16 * dt);
+    let y = model.position.y + r.v * dt;
+    const blocked = solid(c.x, y + 3.2, c.z);
+    model.position.set(c.x, y, c.z);
+    player.pos.set(c.x, y + 0.9, c.z);
+    this.effects.flame(c.x, y - 0.05, c.z, 1.3);
+    this.effects.flame(c.x, y - 0.3, c.z, 1);
+    if (Math.random() < dt * 25) this.effects.smokePuff(c.x, y - 0.6, c.z, 0.25);
+    if (y >= r.top || blocked) {
+      // The top: fireworks! And out you pop, with a parachute.
+      y = model.position.y;
+      this.onApex?.(c.x, y + 3, c.z);
+      this.effects.sparkle(c.x, y + 2.5, c.z, 40);
+      model.visible = false;
+      r.chute = parachuteModel();
+      this.scene.add(r.chute);
+      r.phase = 'chute';
+      r.t = 0;
+      player.pos.set(c.x, y + 2.6, c.z);
+      this.said = '🪂 WASD steers!';
+    }
+    return true;
+  }
+  // Floating down: slowly, steering with WASD, until you touch the ground.
+  const f = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0), s = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
+  const sin = Math.sin(player.yaw), cos = Math.cos(player.yaw), p = player.pos;
+  const nx = p.x + (-sin * f + cos * s) * 3.5 * dt, nz = p.z + (-cos * f - sin * s) * 3.5 * dt;
+  if (!solid(nx, p.y + 0.5, nz) && !solid(nx, p.y + 1.5, nz)) p.set(nx, p.y, nz);
+  const ny = p.y - 3 * dt;
+  r.chute.position.set(p.x, ny, p.z);
+  r.chute.rotation.z = Math.sin(r.t * 1.5) * 0.06;
+  if (solid(p.x, ny - 0.05, p.z) || ny < -0.5) {
+    p.y = Math.max(0, Math.floor(ny - 0.05) + 1);
+    this.scene.remove(r.chute);
+    model.position.copy(c);
+    model.visible = true; // (a new one, on the pad)
+    this.ride = null;
+    this.sounds.land?.();
+    this.said = '🚀 What a trip!';
+    return false;
+  }
+  p.y = ny;
+  return true;
+};
 
 // The cable between two zip line posts: from the top of each, sagging a little in the middle.
 function cablePoints(a, b) {

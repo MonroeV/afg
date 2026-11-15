@@ -15,7 +15,7 @@ const FETCH = [27, 67, 68, 39, 65, 63, 116, 117, 121, 122, 126, 128, 118];
 const VISIT = {
   plaza: 'the town square', tower: 'the tower', store: 'the Luxe Store', pizza: 'the Pizza Palace', lodge: 'the ski lodge',
   camp: 'the campground', quarry: 'the quarry', farm: 'the farm', gas1: 'the gas station', shop_garden: 'the Garden Center',
-  shop_toys: 'the Toy Box', shop_pets: 'the Pet Shop',
+  shop_toys: 'the Toy Box', shop_pets: 'the Pet Shop', weather: 'the weather station', buildpark: 'the Build Park',
 };
 const pick = list => list[Math.floor(Math.random() * list.length)];
 const PILOT = -45; // Captain Leo

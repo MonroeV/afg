@@ -180,7 +180,7 @@ customize your character, drive cars, build anything and play with friends.
 - **Logs grow into trees**: put a lone log on the grass and watch it grow
 - **Build Book**: special things you can make out of blocks: beds, trampolines, campfires,
   teleporters, cannons, fountains, dance floors and TVs (with cartoons, news, weather, silly
-  commercials and BZ Live), and four you can ride or play with:
+  commercials and BZ Live), and ten you can ride or play with:
   - **Swing**: two Log posts, 3 tall and 2 apart, with 3 Logs across the top. A swing hangs
     from it: right-click to sit, hold W to swing higher, press Space to jump off and fly
   - **Zip Line**: three Logs with a Metal Plate on top. Build two, one up high (a hill, a roof, a
@@ -190,8 +190,28 @@ customize your character, drive cars, build anything and play with friends.
   - **Hot Air Balloon**: a Lantern in the middle of eight Planks. A striped balloon floats over
     it: right-click to climb in and fly. Space fires the burner, Shift lets air out, WASD
     steers, and you land wherever you come down
+  - **Rocket**: a Metal Plate with Red Paint on all four sides. A rocket stands on it: right-click
+    it, and 3, 2, 1, blast off! Up you go with flames and smoke, fireworks burst at the top, and
+    you float back down under a parachute (WASD steers). Everyone nearby sees it take off
+  - **Volcano**: Orange Paint in the middle of eight Stone blocks. A smoking volcano grows on top:
+    right-click it and it ERUPTS (lava flying, smoke, a rumble). Now and then it goes off by itself
+  - **Fish Tank**: Water with Glass on all four sides. Little fish swim round in it (and bubbles
+    rise): right-click to feed them
+  - **Merry-go-round**: a Rainbow block in the middle of eight Yellow Paint blocks. A striped
+    merry-go-round turns on top, its horses going up and down: right-click to ride one, Space hops off
+  - **Wishing Well**: Water with Cobblestone on all four sides. A little roof and a bucket appear:
+    right-click to toss in a coin and make a wish (a pony? a pet dinosaur?)
+  - **Rainbow**: a Rainbow block on top of Sky Paint. A big glowing rainbow arches out of it
   Signposts around the map ("Build a SWING here!", by the playground pad, the basketball court,
-  the balloon field and the rocky mountain) show where's good to build them and how
+  the balloon field and the rocky mountain) show where's good to build them and how. And the
+  **Build Park**, near town, has one of each of the newest six, working, with a noticeboard by each
+  saying what it's made of: try them, then build your own (there's room). Right-click any of its
+  signs to open the Build Book
+- **The weather station**, by the road round the edge of town (a glass building with a mast on the
+  roof, its wind cups spinning and a light blinking on top): talk to Stormy ⛅, pay 25 coins, and
+  it rains TACOS all over town for 45 seconds, for everyone. Little 3D tacos tumble down all
+  around you and land on the ground and the roofs; catch one (stand where it falls) and it's
+  crunched: 🌮 × how many you've caught. The town's people cheer and Skye reports it on BZ Live
 - **Doors** that open and close with a right-click (even with the hammer in your hand). Put two
   doors side by side and they become double doors that swing outward; put three or more in a row
   and they become one big garage door that rolls up. A garage door starts 3 blocks tall (so cars
@@ -657,7 +677,8 @@ go on empty land, and where one meets an old road, just that bit of sidewalk bec
 the far country (out past the old edge of the 448 × 448 world, where nobody could build before:
 the beach, the campground, the quarry, the farm and the rest of the ski mountain, with its roads
 out there only on empty land, going round anything built or claimed, and only turning a bit of
-sidewalk into road where one joins an old road), the "Build it here!" signposts (on empty land), fishing stools on the docks with a noticeboard
+sidewalk into road where one joins an old road), the weather station and the Build Park (on
+empty land nobody has claimed), the "Build it here!" signposts (on empty land), fishing stools on the docks with a noticeboard
 by each (only in empty spots, or among a dock's own railings, on land nobody has claimed),
 and furniture: only in houses and towers that are exactly as the town was first
 built (nobody has changed or claimed them), and only in their empty spots, and in the ski lodge
@@ -711,7 +732,10 @@ public/
     ground.js          The ground (snowy up north), holes dug in it, the edge of the world
     lifts.js           Ski lift cables, chairs and rides
     signs.js           The writing on signs
-    contraptions.js    Swings, zip lines, basketball hoops and hot air balloons
+    contraptions.js    Swings, zip lines, basketball hoops, hot air balloons, and riding and
+                       playing with the rocket, volcano, fish tank, merry-go-round and wishing well
+    playthings.js      The rocket, volcano, fish tank, merry-go-round, wishing well and rainbow models
+    tacos.js           Raining tacos, and the weather station's spinning mast
     lighting.js        Live reflections and the glow effect
     lightpools.js      Soft pools of light on the ground under every lamp
     models.js          3D models for the lamps and furniture
@@ -747,6 +771,8 @@ public/
       shops.js         The Garden Center, the Toy Box and the Pet Shop (what they sell is in blocks.js)
       residents.js     The residents and the houses they live in
       quests.js        The residents' quests
+      weather.js       The weather station (and what a taco shower costs)
+      buildpark.js     The Build Park: one of each of the newest Build Book things, with signs
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/
   make-engine-sounds.py  Makes the engine recordings (needs numpy and ffmpeg; run it after changing a voice)
@@ -759,5 +785,6 @@ tools/
 - Water you can swim in
 - Trains between the towns
 - More Build Book recipes: a slide, a jukebox, a Ferris wheel
+- More weather to buy: snow in summer, a thunderstorm, raining pizza
 
 Built with [three.js](https://threejs.org) and [ws](https://github.com/websockets/ws).

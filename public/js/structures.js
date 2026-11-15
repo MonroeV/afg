@@ -2,8 +2,8 @@
 // Every player's game spots these patterns by itself, so no server work is needed.
 import { blockId, blockKey, blockMeta, BED_FOOT } from './shared/blocks.js';
 
-const B = { concrete: 13, log: 7, cobble: 4, lamp: 18, rainbow: 28, metal: 11, black: 17, water: 36, marble: 12, tiles: 20, bounce: 19, glass: 9, bed: 64, planks: 6, lantern: 45 };
-const TYPES = ['bed', 'trampoline', 'campfire', 'teleporter', 'cannon', 'fountain', 'tv', 'disco', 'swing', 'zipline', 'hoop', 'balloon'];
+const B = { concrete: 13, log: 7, cobble: 4, lamp: 18, rainbow: 28, metal: 11, black: 17, water: 36, marble: 12, tiles: 20, bounce: 19, glass: 9, bed: 64, planks: 6, lantern: 45, stone: 3, red: 14, yellow: 16, sky: 31, orange: 32 };
+const TYPES = ['bed', 'trampoline', 'campfire', 'teleporter', 'cannon', 'fountain', 'tv', 'disco', 'swing', 'zipline', 'hoop', 'balloon', 'rocket', 'volcano', 'fishtank', 'carousel', 'well', 'rainbow'];
 const PAINTS = new Set([14, 15, 16, 17, 29, 30, 31, 32, 33, 34]);
 const SIDES = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const AROUND = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
@@ -21,6 +21,12 @@ export const RECIPES = [
   { type: 'swing', icon: '🛝', name: 'Swing', grid: [[7, 7, 7]], side: [[7, 7, 7], [7, 0, 7], [7, 0, 7], [7, 0, 7]], how: 'Two Log posts, 3 tall and 2 apart, with 3 Logs across the top.', use: 'A swing hangs from it! Right-click to sit, hold W to swing higher, and press Space to jump off and fly.' },
   { type: 'zipline', icon: '🧗', name: 'Zip Line', grid: [[11]], side: [[11], [7], [7], [7]], how: 'Three Logs with a Metal Plate on top. Build two: one up high (on a hill or a roof) and one lower down.', use: 'A cable joins them. Right-click the high one and zoom down!' },
   { type: 'hoop', icon: '🏀', name: 'Basketball Hoop', grid: [[11]], side: [[11], [11], [11]], how: 'Three Metal Plates stacked up.', use: 'A hoop and backboard appear on top. Throw the Pet Ball through the hoop to score!' },
+  { type: 'rocket', icon: '🚀', name: 'Rocket', grid: [[0, 14, 0], [14, 11, 14], [0, 14, 0]], how: 'A Metal Plate with Red Paint on all four sides (and nothing on top).', use: 'A rocket appears! Right-click it: 3, 2, 1, blast off! Float back down with your parachute (WASD steers).' },
+  { type: 'volcano', icon: '🌋', name: 'Volcano', grid: [[3, 3, 3], [3, 32, 3], [3, 3, 3]], how: 'Orange Paint in the middle of eight Stone blocks.', use: 'A volcano grows on top. Right-click it to make it ERUPT! (Sometimes it rumbles all by itself.)' },
+  { type: 'fishtank', icon: '🐠', name: 'Fish Tank', grid: [[0, 9, 0], [9, 36, 9], [0, 9, 0]], how: 'Water with Glass on all four sides.', use: 'Fish swim in it! Right-click to feed them.' },
+  { type: 'carousel', icon: '🎠', name: 'Merry-go-round', grid: [[16, 16, 16], [16, 28, 16], [16, 16, 16]], how: 'A Rainbow block in the middle of eight Yellow Paint blocks.', use: 'It goes round and round! Right-click to ride a horse. Space hops off.' },
+  { type: 'well', icon: '⭐', name: 'Wishing Well', grid: [[0, 4, 0], [4, 36, 4], [0, 4, 0]], how: 'Water with Cobblestone on all four sides.', use: 'Right-click to toss in a coin and make a wish!' },
+  { type: 'rainbow', icon: '🌈', name: 'Rainbow', grid: [[28]], side: [[28], [31]], how: 'A Rainbow block on top of a Sky Paint block.', use: 'A real rainbow arches across the sky from it!' },
   { type: 'balloon', icon: '🎈', name: 'Hot Air Balloon', grid: [[6, 6, 6], [6, 45, 6], [6, 6, 6]], how: 'A Lantern in the middle of eight Planks.', use: 'A balloon floats above it. Right-click to fly! Space fires the burner (up), Shift lets air out (down), WASD steers.' },
 ];
 
@@ -73,6 +79,8 @@ export class Structures {
         if (AROUND.every(([dx, dz]) => this.id(x + dx, y, z + dz) === B.tiles)) return { type: 'disco', x, y, z };
         return null;
       case B.metal:
+        // A rocket on its launch pad: room above for the rocket.
+        if (sides(B.red) && [1, 2, 3].every(d => this.empty(x, y + d, z))) return { type: 'rocket', x, y, z };
         if (this.id(x, y + 1, z) === B.black) return { type: 'cannon', x, y, z };
         // A zip line post: three logs with the metal plate on top.
         if ([1, 2, 3].every(d => this.id(x, y - d, z) === B.log) && this.empty(x, y + 1, z)) return { type: 'zipline', x, y, z };
@@ -80,7 +88,16 @@ export class Structures {
         if (this.id(x, y - 1, z) !== B.metal && this.id(x, y + 1, z) === B.metal && this.id(x, y + 2, z) === B.metal && this.empty(x, y + 3, z)) return { type: 'hoop', x, y, z, ...this.hoopFacing(x, y, z) };
         return null;
       case B.water:
-        return sides(B.marble) ? { type: 'fountain', x, y, z } : null;
+        if (sides(B.marble)) return { type: 'fountain', x, y, z };
+        if (sides(B.glass)) return { type: 'fishtank', x, y, z };
+        if (sides(B.cobble)) return { type: 'well', x, y, z };
+        return null;
+      case B.orange:
+        return AROUND.every(([dx, dz]) => this.id(x + dx, y, z + dz) === B.stone) && this.empty(x, y + 1, z) ? { type: 'volcano', x, y, z } : null;
+      case B.rainbow:
+        if (AROUND.every(([dx, dz]) => this.id(x + dx, y, z + dz) === B.yellow) && this.empty(x, y + 1, z)) return { type: 'carousel', x, y, z };
+        if (this.id(x, y - 1, z) === B.sky && this.empty(x, y + 1, z)) return { type: 'rainbow', x, y, z, ...this.rainbowFacing(x, y, z) };
+        return null;
       case B.glass:
         return this.detectTV(x, y, z);
     }
@@ -98,6 +115,17 @@ export class Structures {
       return { type: 'swing', x, y, z, ax, az };
     }
     return null;
+  }
+
+  // Which way a rainbow goes: along whichever way is more open (it lands about 14 blocks away).
+  rainbowFacing(x, y, z) {
+    let best = { ax: 1, az: 0 }, most = -1;
+    for (const [ax, az] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      let open = 0;
+      for (let d = 1; d <= 14; d++) if (this.empty(x + ax * d, y + 1, z + az * d)) open++;
+      if (open > most) [best, most] = [{ ax, az }, open];
+    }
+    return best;
   }
 
   // Which way a hoop faces: toward the most open ground around it (where people throw from).
@@ -142,7 +170,7 @@ export class Structures {
   scan() {
     this.version = (this.version || 0) + 1;
     this.list.clear();
-    const anchors = new Set([B.concrete, B.bounce, B.log, B.lamp, B.metal, B.water, B.glass, B.bed, B.lantern]);
+    const anchors = new Set([B.concrete, B.bounce, B.log, B.lamp, B.metal, B.water, B.glass, B.bed, B.lantern, B.orange, B.rainbow]);
     for (const [k, v] of this.world.blocks) {
       if (!anchors.has(blockId(v))) continue;
       const [x, y, z] = k.split(',').map(Number);
@@ -162,6 +190,9 @@ export class Structures {
       if (s.type === 'zipline' && s.x === x && s.z === z && y <= s.y && y >= s.y - 3) return s;
       if (s.type === 'hoop' && s.x === x && s.z === z && y >= s.y && y <= s.y + 2) return s;
       if (s.type === 'balloon' && s.y === y && Math.abs(x - s.x) <= 1 && Math.abs(z - s.z) <= 1) return s;
+      // (Any block of these: the middle, or what's round it.)
+      if (['rocket', 'volcano', 'fishtank', 'carousel', 'well'].includes(s.type) && s.y === y && Math.abs(x - s.x) <= 1 && Math.abs(z - s.z) <= 1) return s;
+      if (s.type === 'rainbow' && s.x === x && s.z === z && (y === s.y || y === s.y - 1)) return s;
       if (s.type === 'swing') {
         for (let i = 0; i <= 2; i++) {
           const cx = s.x + s.ax * i, cz = s.z + s.az * i;

@@ -7,6 +7,7 @@ import { sanitizeLook } from './avatar.js';
 import { BLOCKS, isSolidBlock, blockId, itemOf, shapeOf, blockMeta, blockKey, toggleDoorValue, isNightTime, DOOR_OPEN, DOOR_TOP, SHOP_TOOLS } from './blocks.js';
 import { claimAt } from './claims.js';
 import { liftColumn, liftStops } from './elevator.js';
+import { TACO_PRICE } from './weather.js';
 import { buildMap, route, nearestNode, cellKey, cellFlags, doorAt, nearGarage, STAND, DOOR, CLIMB, RIDE } from './homenav.js';
 import { inZone } from './secretbase.js';
 import { RESIDENTS } from './residents.js';
@@ -56,6 +57,13 @@ const NPCS = [
     look: { face: 'cool', hair: 'short', hat: 'beanie', shirt: 'hoodie', pants: 'jeans', skin: '#f2c6a5', hairColor: '#c9b38a', hatColor: '#1e88e5', shirtColor: '#e53935', shirtColor2: '#ffffff', pantsColor: '#283593', shoesColor: '#111111' },
     hello: n => [`Hey ${n}! Ready to hit the slopes? ⛷️`, `Welcome to the lodge, ${n}! Warm up by the fire! 🔥`, `${n}! The snow is perfect today! ❄️`],
     tips: ['Grab a pair of skis from the rack by the door, then ride down the slope! ⛷️', 'Right-click the chair at the bottom of the ski lift to ride up to the top! 🚡', 'On skis: hold W to carve toward where you look, S to slow down.', 'The ice rink is super slippery. Have fun skating! ⛸️', 'Try a jump on skis! Press Space! 🏂'],
+  },
+  {
+    // At the weather station: pay Stormy and it rains tacos.
+    id: -18, place: 'weather', name: 'Stormy', title: 'Stormy ⛅', roam: 2, weather: true,
+    look: { face: 'grin', hair: 'afro', hat: 'none', shirt: 'jacket', pants: 'jeans', skin: '#c68642', hairColor: '#2b1a10', shirtColor: '#1e88e5', shirtColor2: '#fdd835', pantsColor: '#37474f', shoesColor: '#fdd835' },
+    hello: n => [`Hi ${n}! Today's forecast: TACOS! 🌮`, `${n}! Want to see something amazing? ⛅🌮`, `Hello ${n}! Sunny, with a chance of tacos! 🌤️🌮`],
+    tips: ['⛅🌮'],
   },
   // ---------- The other stores' shopkeepers ----------
   {
@@ -146,6 +154,8 @@ const COOL = {
 const BEATS = {
   plaza: { label: 'at the town square', lines: ["Good day, BuildZone! I'm live at the town square!", 'Mayor Maple says the flowers have never looked better!', 'Builders are busy all over town today. Just look at it!', 'Remember: gold coins are hiding all over town! 🪙'] },
   store: { label: 'at the Luxe Store', lines: ["I'm live at the Luxe Store, the fanciest shop in town! ✨", 'Is that... a real diamond block? Wow! 💎', 'Shoppers say the Jetpack is out of this world! 🚀', 'Penny says there\'s something sparkly for everyone!'] },
+  weather: { label: 'at the weather station', lines: ["I'm live at the weather station! Today's forecast: sunny, with a chance of TACOS! 🌮", 'Stormy says the tacos fall when you pay! ⛅🌮', 'Look at that mast spin! That\'s a lot of wind! 🌬️'] },
+  buildpark: { label: 'at the Build Park', lines: ["I'm at the Build Park! Rockets, volcanoes, fish tanks and a merry-go-round! 🚀🌋🐠🎠", 'Try them all, then build your own! 🧱', 'I just made a wish at the wishing well! ⭐'] },
   pizza: { label: 'at the Pizza Palace', lines: ['Live from the Pizza Palace, where the ovens never sleep! 🍕', 'Chef Rosa needs delivery helpers. Coins for pizza!', 'Mmm, can you smell that? Fresh pizza! 😋', 'Pizzas are flying out the door today!'] },
   tower: { label: 'at the tower', lines: ["I'm here at the tower, the tallest building in town! 🏢", "There's a grand piano all the way up at the top! 🎹", 'The view from the roof is amazing. Take the elevator! 🛗'] },
   camp: { label: 'at Sunny Shores Campground', lines: ['Live from Sunny Shores Campground! The campfires are crackling! 🔥', 'Camper vans as far as the eye can see! 🚐', 'In a camper van, press G and the roof pops up! ⛺', "The beach is just down the path. Surf's up! 🏖️"] },
@@ -858,6 +868,19 @@ export class NpcCrew {
     this.breaking(pickOne(['BREAKING NEWS: a car just went BOOM! Don\'t worry, everyone is OK! 💥', 'This just in: an explosion in town! A new car is on its way! 🚗', 'BREAKING NEWS: KABOOM! Somebody call the mechanic! 🔧']));
   }
 
+  // It's raining tacos! Everyone near a player cheers (and Skye reports it).
+  onTacos(who) {
+    const players = [...this.room.clients.values()].filter(c => c.joined && c.pos);
+    for (const n of this.list) {
+      if (!players.some(c => this.near(n, c.pos[0], c.pos[1], c.pos[2], 30))) continue;
+      this.face(n, n.pos[0], n.pos[2] - 1);
+      this.act(n, NPC_ACT.cheer, 3);
+      n.goal = null;
+      this.say(n, pickOne(['TACOS! 🌮', 'Yum yum! 🌮😋', "It's raining tacos! 🌮🌮", 'Catch one! 🌮']), true);
+    }
+    this.breaking(`BREAKING NEWS: it's raining TACOS all over BuildZone, thanks to ${who}! 🌮🌮🌮`);
+  }
+
   onDance(c) {
     const [x, y, z] = c.pos;
     for (const n of this.list) {
@@ -908,6 +931,10 @@ export class NpcCrew {
         this.say(n, pickOne([`Hi! 🏡`, `What's up? 😊`, `Love you! 💖`]), true);
         c.send({ t: 'family_open', members: this.room.wallet(c).family || [] });
       } else this.say(n, pickOne([`Hi ${c.name}! This is ${n.def.owner}'s house! 🏡`, `Hello! Are you a friend of ${n.def.owner}'s? 👋`]), true);
+    } else if (n.def.weather) {
+      const raining = this.room.tacosLeft() > 0;
+      this.say(n, raining ? 'Look up! 🌮🌮🌮' : pickOne([`Taco rain, ${c.name}? 🌮`, 'Make it rain tacos? 🌮⛅']), true);
+      if (!raining) c.send({ t: 'weather_open', price: TACO_PRICE, coins: this.room.wallet(c).coins });
     } else if (n.def.place === 'pizza') {
       this.room.startJob(c);
     } else if (n.def.land) {
