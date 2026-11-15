@@ -250,6 +250,13 @@ export const SHOP_TOOLS = {
   // A surprise: something from one of the stores that you don't have yet. (Used up: buy as many as you like.)
   // The Garden Center's watering can: water your seeds so they grow.
   wateringcan: { name: 'Watering Can', price: 5, store: 'garden', about: 'Water your seeds and watch them grow! (The rain waters them too.)', got: "It's in your items now (press E, 🌳 Town tab)." },
+  // The Pet Shop: treats (to teach your pet tricks) and hats for your pet.
+  treats: { name: 'Pet Treats', price: 4, store: 'pets', about: 'Teach your pet tricks! Hold the treats and right-click your pet.', got: "Hold them (press E, 🎉 Fun tab) and right-click your pet!" },
+  pethat_party: { name: 'Pet Party Hat', price: 6, store: 'pets', petHat: 'party', about: 'A party hat for your pet!', got: 'Your pet is wearing it! (Right-click your pet to change hats.)' },
+  pethat_bow: { name: 'Pet Bow', price: 6, store: 'pets', petHat: 'bow', about: 'A big pink bow for your pet!', got: 'Your pet is wearing it! (Right-click your pet to change hats.)' },
+  pethat_shades: { name: 'Pet Sunglasses', price: 9, store: 'pets', petHat: 'shades', about: 'Super cool sunglasses for your pet!', got: 'Your pet is wearing them! (Right-click your pet to change hats.)' },
+  pethat_cape: { name: 'Pet Super Cape', price: 12, store: 'pets', petHat: 'cape', about: 'A super cape: your pet is a superhero!', got: 'Your pet is wearing it! (Right-click your pet to change hats.)' },
+  pethat_crown: { name: 'Pet Crown', price: 15, store: 'pets', petHat: 'crown', about: 'A golden crown fit for a royal pet!', got: 'Your pet is wearing it! (Right-click your pet to change hats.)' },
   mysterybox: { name: 'Mystery Box', price: 12, again: true, about: 'A surprise from one of the stores: something you don\'t have yet!', got: '' },
   vacationflag: { name: 'Vacation Flag', price: 150, about: 'Claim a second piece of land for a vacation home! It stays where you plant it.', got: 'Hold your Land Flag and press X to switch it to vacation land.' },
 };

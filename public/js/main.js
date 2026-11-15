@@ -31,7 +31,7 @@ import { QuestHud } from './questui.js';
 import { MAX_CHARACTERS } from './shared/characters.js';
 import { Hud, renderControls, CUSTOM_PAINT } from './hud.js';
 import {
-  HAMMER, FIREWORKS, BALL, CLAIM, VACATION, BRUSH, SCRAPER, WRENCH, SKIS, GOGGLES, GOLDPAINT, SNEAKERS, LADDER, WATER_BALLOON, SNOWBALL, SLED, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME, WATERING_CAN,
+  HAMMER, FIREWORKS, BALL, CLAIM, VACATION, BRUSH, SCRAPER, WRENCH, SKIS, GOGGLES, GOLDPAINT, SNEAKERS, LADDER, WATER_BALLOON, SNOWBALL, SLED, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME, WATERING_CAN, TREATS,
   ALL_ITEMS, ICON_ITEMS, GEAR, DEFAULT_HOTBAR, FAMILIES, itemName, makeIcon, ViewModel,
 } from './items.js';
 import { MAX_MANY, MAX_OWNED_VEHICLES } from './shared/game.js';
@@ -40,6 +40,8 @@ import { NPC_ACT, NPC_POSE } from './shared/npcs.js';
 import { TacoRain, WeatherMast } from './tacos.js';
 import { SeasonLook } from './seasonlook.js';
 import { Shop } from './shop.js';
+import { PetMenu } from './petmenu.js';
+import { TRICKS, trickIndex, PET_HATS, hatItem } from './shared/tricks.js';
 import { Particles, Fireworks, Sounds, Effects } from './effects.js';
 import { Ground } from './ground.js';
 import { SkiLifts, along } from './lifts.js';
@@ -207,6 +209,7 @@ let elevators, agency; // elevators (riding them), and the Secret Agency (its ba
 const npcs = new Map(); // the town's people (run by the server): id -> Avatar
 const coinMap = new Map(); // gold coins lying about: id -> { x, y, z, value, asked }
 let wallet = { coins: 0, owned: [] };
+let petMenu = null; // your pet's menu (tricks and hats): see petmenu.js
 let carryingCan = false; // a gas can bought at a gas station, to carry to a vehicle that's out of gas
 let gasStations = []; // where the gas stations are: [name, x, z]
 let landmarks = []; // where the town's places are: [name, x, z]
@@ -826,7 +829,11 @@ net.on('secret_file', ({ again, found, need, clear, left = [] }) => {
   }
 });
 net.on('shop_open', ({ store }) => openShop(store));
-net.on('wallet', ({ coins, owned, vacation, found = [], agent, can, clubs, badges }) => {
+net.on('wallet', ({ coins, owned, vacation, found = [], agent, can, clubs, badges, tricks }) => {
+  if (tricks) myTricks = { ...tricks };
+  // Just bought a hat for your pet? It puts it straight on.
+  const newHat = wallet.loaded && PET_HATS.find(h => owned.includes(hatItem(h)) && !wallet.owned.includes(hatItem(h)));
+  if (newHat) petMenu.onHat(newHat);
   const more = coins > wallet.coins;
   // Club badges, and what they give you: a turbo in everything you drive, a coin magnet.
   perks = new Set(badges || []);
@@ -841,7 +848,7 @@ net.on('wallet', ({ coins, owned, vacation, found = [], agent, can, clubs, badge
     if (agent.clear !== agency.agent.clear) myBody.petNav?.cache.clear(); // (your pet may go in now)
     agency.agent = agent;
   }
-  wallet = { coins, owned };
+  wallet = { coins, owned, loaded: true };
   hud.setOwned(owned, found);
   // (Gold paint is only for those who bought it.)
   if (settings.paint === GOLD_PAINT && !owned.includes(GOLDPAINT)) {
@@ -1321,7 +1328,7 @@ function goFullscreen() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!conn);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!conn);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -1355,7 +1362,7 @@ $('exit-menu').addEventListener('click', () => {
     location.reload();
   }, 150); // a moment for "I got out of the car" to reach the server
 });
-canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !familyEdit && lock());
+canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !petMenu?.open && !familyEdit && lock());
 $('sensitivity').addEventListener('input', e => {
   settings.sensitivity = Number(e.target.value);
   saveSettings();
@@ -1645,6 +1652,10 @@ window.addEventListener('keydown', e => {
   if (!inGame || hud.chatOpen || editorOpen || galleryOpen || signOpen || askOpen) return;
   if (guestPanel) {
     if (e.code === 'Escape') closeGuestList(false);
+    return;
+  }
+  if (petMenu?.open) {
+    if (e.code === 'Escape') petMenu.close();
     return;
   }
   if (elevators.panel) {
@@ -2054,6 +2065,60 @@ function petRaycast(origin, dir, max) {
   for (const a of avatars.list.values()) check(a);
   return best;
 }
+
+// ---------- Your pet's menu: tricks and hats ----------
+
+let myTricks = {}; // how many tries at each trick (from the server)
+let petTarget = null;
+petMenu = new PetMenu({
+  onPet: () => petTarget && petThePet(petTarget),
+  onTrick: trick => {
+    if (!trick) return hud.toast('🦴❓ 🛍️🐾'); // (practicing needs Pet Treats, from the Pet Shop)
+    net.send({ t: 'trick', trick });
+  },
+  onHat: hat => {
+    settings.look = { ...settings.look, petHat: hat };
+    saveSettings();
+    myBody.setLook(settings.look);
+    if (inGame) net.send({ t: 'look', look: settings.look });
+    sounds.pop();
+  },
+  onClose: () => {
+    lock();
+    updateOverlays();
+  },
+});
+
+function openPetMenu(t) {
+  petTarget = t;
+  keys.clear();
+  unlock();
+  petMenu.show({ tricks: myTricks, treats: hud.item === TREATS && hud.usable(TREATS), owned: hud.owned, hat: settings.look.petHat || 'none' });
+  updateOverlays();
+}
+
+// The pet does the trick (or has a go at it, while it's still learning).
+net.on('trick', ({ trick, n, learned, fresh }) => {
+  myTricks[trick] = n;
+  myBody.doTrick(trickIndex(trick), learned);
+  const icon = TRICKS.find(t => t.id === trick)?.icon || '';
+  const pet = myBody.pet;
+  setTimeout(() => {
+    if (!myBody.pet) return;
+    const p = myBody.pet.pos;
+    if (fresh) {
+      effects.sparkle(p.x, p.y + 0.5, p.z, 30);
+      effects.heartsAt(p.x, p.y + 0.7, p.z, 10);
+      sounds.coin();
+      hud.toast(`⭐ ${icon} ⭐`);
+    } else if (learned) {
+      effects.heartsAt(p.x, p.y + 0.7, p.z, 5);
+      sounds.pet(pet.kind);
+    } else {
+      hud.toast(`${icon} ${'🐾'.repeat(n)}${'⚪'.repeat(Math.max(0, 3 - n))}`);
+    }
+  }, learned ? 2000 : 1300);
+});
 
 function petThePet(t) {
   sounds.pet(t.pet.kind);
@@ -3843,7 +3908,7 @@ function interact() {
   if (target?.car && carryingCan && usesFuel(target.car.kind) && target.car.fuel < 0.995) return net.send({ t: 'pour', id: target.car.id });
   if (target?.car?.kind === 'rv' && !riding()) return enterRV(target.car);
   if (target?.car) return requestEnter(target.car);
-  if (target?.pet) return petThePet(target);
+  if (target?.pet) return target.avatar === myBody ? openPetMenu(target) : petThePet(target);
   if (target?.npc) {
     net.send({ t: 'npc_talk', id: target.npc.id });
     return;
@@ -5327,7 +5392,7 @@ let menuSpin = 0, lastFrame = 0, frameCount = 0, crouchK = 0;
 // menu (nothing much is moving then).
 function frameRateNow() {
   if (!inGame) return 30;
-  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel) return 12;
+  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel || petMenu?.open) return 12;
   return settings.fps || 1000;
 }
 
@@ -5584,6 +5649,7 @@ function frame(timestamp) {
       else if (item === CAMERA) hint = '📸 Click (or press P) to take a photo · H hides the HUD';
       else if (item === SHOWTIME) hint = '🎇 Click for a fireworks show! (Best at night)';
       else if (item === WATERING_CAN) hint = '💧 Click on your seeds to water them!';
+      else if (item === TREATS) hint = myBody.pet ? '🦴 Right-click your pet to teach it tricks!' : '🦴 Get a pet first (🎨 Customize → Pet)';
       else if (BLOCKS[item]?.crop) hint = `🌱 Plant ${BLOCKS[item].crop.icon} on grass or dirt, then water it 💧`;
       else if (player.jetting) hint = '🚀 WHOOSH!';
       else if (hud.wearing(SKIS) && player.skiing) hint = '⛷️ W: carve where you look · S: slow down · Space: jump';
@@ -5905,6 +5971,8 @@ window.buildzone = {
   get contraptions() { return contraptions; },
   get tacoRain() { return tacoRain; },
   get seasonLook() { return seasonLook; },
+  get petMenu() { return petMenu; },
+  openPetMenu: () => myBody.pet && openPetMenu({ avatar: myBody, pet: myBody.pet, point: myBody.pet.pos.clone() }),
   setDay: d => (worldDay = d), // (for trying out the seasons)
   kickBall: () => kickBall(),
   usePump: (x, y, z) => usePump(x, y, z),

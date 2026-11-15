@@ -929,3 +929,17 @@ body.touch #quest-card { top: 96px; left: 8px; font-size: 13px; }
 .family-row button { font-size: 20px; padding: 6px 12px; }
 .family-buttons { display: flex; gap: 10px; justify-content: center; }
 .family-buttons button { font-size: 22px; min-width: 70px; }
+/* The pet menu: pet it, tricks, hats. */
+.pet-panel { position: relative; width: min(440px, 100%); display: flex; flex-direction: column; gap: 14px; align-items: center; }
+.pet-close { position: absolute; top: 10px; right: 10px; width: 40px; height: 40px; padding: 0; font-size: 18px; }
+.pet-love { font-size: 40px; width: 84px; height: 84px; padding: 0; border-radius: 50%; }
+.pet-tricks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; }
+.pet-trick { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px; }
+.pet-trick .big { font-size: 38px; line-height: 1; }
+.pet-trick .paws { font-size: 14px; letter-spacing: 1px; }
+.pet-trick.learned { background: linear-gradient(180deg, #ffd54f, #ffb300); color: #3a2a00; }
+.pet-trick.locked { opacity: 0.45; }
+.pet-hats { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.pet-hats:empty { display: none; }
+.pet-hat { font-size: 30px; width: 58px; height: 58px; padding: 0; border: 3px solid transparent; }
+.pet-hat.on { border-color: #fff; }

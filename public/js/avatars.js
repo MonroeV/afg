@@ -1,6 +1,7 @@
 // Other players: a customizable character with a floating name tag.
 import * as THREE from 'three';
-import { buildCharacter, animateCharacter, buildPet, animatePet } from './character.js';
+import { buildCharacter, animateCharacter, buildPet, animatePet, setPetHat } from './character.js';
+import { TRICK_TIME } from './shared/tricks.js';
 import { SEAT_SCALE } from './cars.js';
 import { PET_HAPPY, PET_CARRYING, PET_BOW, PET_POUNCE } from './pets.js';
 import { PetMover } from './petmove.js';
@@ -8,7 +9,7 @@ import { PlayClock, Track } from './smooth.js';
 import { balloonModel } from './contraptions.js';
 
 // Extra bits in a pet's action number (sent to other players): jumping or falling, climbing.
-const PET_AIR = 8, PET_CLIMB = 16;
+const PET_AIR = 8, PET_CLIMB = 16, PET_TRICK = 5; // (and the trick it's doing, in bits 5-7)
 const PET_RANGE = 30; // farther from you than this (in blocks), and your pet pops back in beside you
 
 function nameTag(name, color) {
@@ -144,6 +145,13 @@ export class Avatar {
       this.pet.head.add(this.pet.ball);
       this.scene.add(this.pet.group);
     }
+    if (this.pet) setPetHat(this.pet, this.character.look.petHat || 'none');
+  }
+
+  // Our pet does a trick (1-6, from shared/tricks.js): ok, it gets it right; otherwise it tries
+  // (and doesn't quite manage it yet).
+  doTrick(id, ok) {
+    if (this.pet) this.pet.trick = { id, t: 0, ok };
   }
 
   // A ball this (other) player threw, as their game reports it.
@@ -168,7 +176,7 @@ export class Avatar {
     const p = this.pet;
     if (!p) return 0;
     const r = v => Math.round(v * 100) / 100;
-    return [r(p.pos.x), r(p.pos.y), r(p.pos.z), r(p.yaw), p.action | (p.air ? PET_AIR : 0) | (p.climb ? PET_CLIMB : 0)];
+    return [r(p.pos.x), r(p.pos.y), r(p.pos.z), r(p.yaw), p.action | (p.air ? PET_AIR : 0) | (p.climb ? PET_CLIMB : 0) | ((p.trick?.id || 0) << PET_TRICK)];
   }
 
   // Another player's pet, as they sent it (ts: when, on their clock).
@@ -184,6 +192,8 @@ export class Avatar {
     this.pet.action = bits & 7;
     this.pet.air = !!(bits & PET_AIR);
     this.pet.climb = !!(bits & PET_CLIMB);
+    const trick = (bits >> PET_TRICK) & 7;
+    if (trick !== (this.pet.trick?.id || 0)) this.pet.trick = trick ? { id: trick, t: 0, ok: true } : null;
   }
 
   setName(name) {
@@ -207,7 +217,21 @@ export class Avatar {
       return;
     }
     let moving = 0;
-    if (this.brain) {
+    if (pet.trick) {
+      pet.trick.t += dt;
+      if (this.brain && pet.trick.t > TRICK_TIME) pet.trick = null; // (others' pets: until their owner's game says it's done)
+    }
+    if (this.brain && pet.trick) {
+      // Doing a trick: it stays put, facing us.
+      const m = pet.mover;
+      if (m) {
+        let dy = Math.atan2(-(this.pos.x - m.pos.x), -(this.pos.z - m.pos.z)) - m.yaw;
+        dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+        m.yaw += dy * Math.min(1, dt * 6);
+        pet.yaw = m.yaw;
+      }
+      pet.action = 0;
+    } else if (this.brain) {
       // Our own pet thinks for itself, and moves for real: it finds a way round walls, hops
       // up steps, jumps down (not too far), climbs ladders and bumps into cars.
       if (!pet.mover) {
@@ -308,6 +332,54 @@ export class Avatar {
       else pet.head.rotation.x = 0.25 + Math.sin(time * 6) * 0.1;
     } else if (pet.sniff) {
       pet.head.rotation.x = -0.5 + Math.sin(time * 12) * 0.08;
+    }
+    pet.body.rotation.z = 0;
+    pet.body.position.x = 0;
+    pet.legs.forEach(l => (l.rotation.z = 0));
+    if (pet.trick) this.poseTrick(pet, pet.trick, time);
+  }
+
+  // The tricks. t: seconds into it. A try that doesn't work out goes half way, then flops.
+  poseTrick(pet, { id, t, ok }, time) {
+    const k = Math.min(1, t / 0.35) * Math.min(1, Math.max(0, (TRICK_TIME - t) / 0.35)); // (eases in and out)
+    const amt = ok ? 1 : t < 1.1 ? 0.55 : 0.15; // (a try: half way, then it gives up)
+    const w = k * amt;
+    const lift = pet.bodyY || 0.3;
+    const roll = a => {
+      // Turn the body round its middle (not its feet).
+      pet.body.rotation.z = a;
+      pet.body.position.x = lift * Math.sin(a);
+      pet.body.position.y += lift * (1 - Math.cos(a)) - Math.abs(Math.sin(a)) * (pet.size?.w || 0.3) * 0.5;
+    };
+    switch (id) {
+      case 1: // sit: front up, bottom down, a wag
+        pet.body.rotation.x = 0.55 * w;
+        pet.body.position.y -= 0.06 * w;
+        pet.legs.forEach((l, i) => (l.rotation.x = i % 2 ? -1.2 * w : 0.5 * w));
+        pet.tail.rotation.y = Math.sin(time * 16) * 0.6;
+        break;
+      case 2: // spin round twice
+        pet.group.rotation.y = pet.yaw + (ok ? 1 : 0.4) * Math.min(1, t / (TRICK_TIME - 0.4)) * Math.PI * 4;
+        break;
+      case 3: // jump: two big hops
+        pet.body.position.y += Math.abs(Math.sin(Math.min(t, TRICK_TIME - 0.3) * Math.PI / 1.1)) * 0.75 * w;
+        pet.legs.forEach((l, i) => (l.rotation.x = (i % 2 ? -0.7 : 0.7) * w));
+        break;
+      case 4: // roll over
+        roll(Math.min(1, t / (TRICK_TIME - 0.5)) * Math.PI * 2 * (ok ? 1 : 0.3));
+        break;
+      case 5: // play dead: flop over, paws up, then pop back up
+        roll((Math.PI / 2) * w);
+        pet.legs.forEach(l => (l.rotation.z = 0.4 * w));
+        pet.head.rotation.x = 0.3 * w;
+        break;
+      case 6: // dance: up on its back legs, swaying, front paws waving
+        pet.body.rotation.x = 1.1 * w;
+        pet.body.position.y += 0.08 * w;
+        pet.body.rotation.z = Math.sin(time * 9) * 0.35 * w;
+        pet.legs.forEach((l, i) => (l.rotation.x = i % 2 ? -1.1 * w : 0.6 * w + Math.sin(time * 14 + i) * 0.7 * w));
+        pet.tail.rotation.y = Math.sin(time * 22) * 0.8;
+        break;
     }
   }
 

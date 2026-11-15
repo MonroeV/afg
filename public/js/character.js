@@ -687,6 +687,8 @@ export function buildPet(kind, color) {
       break;
     }
   }
+  pet.size = sizes;
+  pet.bodyY = by;
   group.traverse(o => o.isMesh && (o.castShadow = true));
   pet.dispose = () => group.traverse(o => {
     if (!o.isMesh) return;
@@ -697,6 +699,73 @@ export function buildPet(kind, color) {
     }
   });
   return pet;
+}
+
+// A hat (or bow, sunglasses or cape) from the Pet Shop on a pet: 'none' takes it off.
+export function setPetHat(pet, hat) {
+  if (pet.hat === hat) return;
+  if (pet.hatGroup) {
+    pet.hatGroup.parent.remove(pet.hatGroup);
+    pet.hatGroup.traverse(o => o.isMesh && (o.geometry.dispose(), o.material.dispose()));
+    pet.hatGroup = null;
+  }
+  pet.hat = hat;
+  if (!hat || hat === 'none') return;
+  const g = new THREE.Group();
+  const hs = pet.size.head / 2;
+  const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.55, ...extra });
+  const add = (geo, m, x, y, z) => {
+    const mesh = new THREE.Mesh(geo, m);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    g.add(mesh);
+    return mesh;
+  };
+  switch (hat) {
+    case 'party': {
+      add(new THREE.ConeGeometry(0.075, 0.2, 14), mat('#e040fb'), 0, hs + 0.1, 0.02).rotation.z = 0.15;
+      add(new THREE.SphereGeometry(0.03, 8, 6), mat('#ffeb3b'), -0.015, hs + 0.205, 0.02);
+      for (let i = 0; i < 3; i++) add(new THREE.TorusGeometry(0.06 - i * 0.017, 0.008, 4, 14).rotateX(Math.PI / 2), mat(['#ffeb3b', '#4dd0e1', '#ff7043'][i]), 0.006 * i, hs + 0.035 + i * 0.05, 0.02);
+      break;
+    }
+    case 'crown': {
+      const gold = mat('#ffc107', { metalness: 0.8, roughness: 0.25 });
+      add(new THREE.CylinderGeometry(0.085, 0.085, 0.06, 12, 1, true), new THREE.MeshStandardMaterial({ color: '#ffc107', metalness: 0.8, roughness: 0.25, side: THREE.DoubleSide }), 0, hs + 0.03, 0);
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2;
+        add(new THREE.ConeGeometry(0.022, 0.06, 4), gold, Math.cos(a) * 0.08, hs + 0.085, Math.sin(a) * 0.08);
+      }
+      add(new THREE.SphereGeometry(0.018, 8, 6), mat('#e53935', { emissive: '#5a0000' }), 0, hs + 0.03, -0.085);
+      break;
+    }
+    case 'bow': {
+      const pink = mat('#ff4f9a');
+      for (const x of [-1, 1]) add(new THREE.ConeGeometry(0.075, 0.13, 4).rotateZ(-x * Math.PI / 2), pink, x * 0.075, hs + 0.05, 0.02); // (the two loops, pointing in)
+      add(new THREE.SphereGeometry(0.042, 8, 6), pink, 0, hs + 0.05, 0.02);
+      break;
+    }
+    case 'shades': {
+      const black = mat('#111111', { roughness: 0.15, metalness: 0.4 });
+      for (const x of [-1, 1]) add(new THREE.BoxGeometry(0.085, 0.055, 0.02), black, x * 0.06, 0.04, -hs - 0.012);
+      add(new THREE.BoxGeometry(0.05, 0.015, 0.02), black, 0, 0.055, -hs - 0.012);
+      for (const x of [-1, 1]) add(new THREE.BoxGeometry(0.012, 0.015, hs * 1.6), black, x * (hs + 0.004), 0.055, -hs * 0.2);
+      break;
+    }
+    case 'cape': {
+      // On the back, not the head: hung from the shoulders and flowing out behind.
+      const red = new THREE.MeshStandardMaterial({ color: '#e53935', roughness: 0.6, side: THREE.DoubleSide });
+      const cape = new THREE.Mesh(new THREE.PlaneGeometry(pet.size.w + 0.08, pet.size.d * 0.9).rotateX(-Math.PI / 2 + 0.25), red);
+      cape.position.set(0, pet.bodyY + pet.size.h / 2 + 0.02, 0.02);
+      cape.castShadow = true;
+      g.add(cape);
+      add(new THREE.BoxGeometry(pet.size.w + 0.04, 0.04, 0.05), mat('#ffd54f'), 0, pet.bodyY + pet.size.h / 2 + 0.01, -pet.size.d / 2 + 0.06);
+      pet.body.add(g);
+      pet.hatGroup = g;
+      return;
+    }
+  }
+  pet.head.add(g);
+  pet.hatGroup = g;
 }
 
 // moving: 0..1, time in seconds

@@ -297,10 +297,18 @@ customize your character, drive cars, build anything and play with friends.
   - 🌻 **Green Thumb Garden Center** (Fern): Sunflower 3, Rose Bush 4, Garden Gnome 8, Birdbath 10, Fountain 25,
     and for the garden: Carrots 2, Strawberries 3, Sunflower Seeds 4, Pumpkins 6 and a Watering Can 5
   - 🧸 **The Toy Box** (Mr. Jingles): Rubber Duck 3, Beach Ball 4, Toy Robot 10, Toy Train 15, Rocking Horse 18 (you can sit on it)
-  - 🐾 **Happy Paws Pet Shop** (Pip): Pet Bowl 3, Pet Bed 6, Fish Bowl 8, Cat Tree 12, Dog House 20
+  - 🐾 **Happy Paws Pet Shop** (Pip): Pet Bowl 3, Pet Bed 6, Fish Bowl 8, Cat Tree 12, Dog House 20,
+    and for your pet: Pet Treats 4, and hats: Party Hat 6, Bow 6, Sunglasses 9, Super Cape 12, Crown 15
 
   Buy something once and you can build with it as much as you like (it's in the item menu, under ⭐
   at the top of its tab)
+- **Pet tricks and hats** 🐾: right-click your own pet for its menu: ❤️ to pet it, six tricks
+  (🪑 sit, 🌀 spin, ⬆️ jump, 🔄 roll over, 💤 play dead, 💃 dance) and the hats you've bought for it.
+  Holding **Pet Treats** (Pet Shop), pick a trick and your pet has a go: it takes three tries to
+  learn one (🐾🐾⚪), then it's learned for good ⭐ (sparkles and hearts!) and your pet does it any
+  time, treats or not. The server remembers which tricks your pet knows. A **hat** (party hat,
+  bow, sunglasses, super cape or crown) goes straight on when you buy it; change it in the menu.
+  Everyone sees your pet's hat and its tricks
 - **A growing garden** 🌱: plant seeds from the Garden Center on grass or dirt (as many as you
   like, up to 48), then water them with the **Watering Can** 💧 (it waters a little 3 × 3 patch
   at a time; rain waters everything outside too). Watered soil goes dark, and a minute or so
@@ -777,6 +785,7 @@ public/
                        playing with the rocket, volcano, fish tank, merry-go-round and wishing well
     playthings.js      The rocket, volcano, fish tank, merry-go-round, wishing well, rainbow and snowman models
     seasonlook.js      How each season looks: tree leaves, grass, snow, falling leaves, spring flowers
+    petmenu.js         Your pet's menu: pet it, tricks, hats
     tacos.js           Raining tacos, and the weather station's spinning mast
     lighting.js        Live reflections and the glow effect
     lightpools.js      Soft pools of light on the ground under every lamp
@@ -815,6 +824,7 @@ public/
       quests.js        The residents' quests
       weather.js       The weather station (and what a taco shower costs)
       seasons.js       Which season it is (from the server's day count and the time of day)
+      tricks.js        Pet tricks and pet hats
       buildpark.js     The Build Park: one of each of the newest Build Book things, with signs
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/

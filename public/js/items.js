@@ -32,7 +32,9 @@ export const GOGGLES = 'goggles'; // night-vision goggles (from the Secret Agenc
 export const BODYGUARDS = 'bodyguards'; // (a Luxe Store thing: they guard your land)
 export const VACATION = 'vacationflag';
 export const WATERING_CAN = 'wateringcan'; // (from the Garden Center)
-export const TOOLS = [HAMMER, BRUSH, SCRAPER, WRENCH, BALL, FIREWORKS, CLAIM, WATER_BALLOON, SNOWBALL, SLED, BUBBLES, BALLOON, FILL, COPY, CAMERA, SHOWTIME, VACATION, WATERING_CAN];
+export const TREATS = 'treats'; // (from the Pet Shop: teach your pet tricks)
+const PET_HAT_ITEMS = ['pethat_party', 'pethat_bow', 'pethat_shades', 'pethat_cape', 'pethat_crown'];
+export const TOOLS = [HAMMER, BRUSH, SCRAPER, WRENCH, BALL, FIREWORKS, CLAIM, WATER_BALLOON, SNOWBALL, SLED, BUBBLES, BALLOON, FILL, COPY, CAMERA, SHOWTIME, VACATION, WATERING_CAN, TREATS];
 // Things you have to buy at the Luxe Store before you can use them.
 export const fromStore = item => (typeof item === 'number' ? !!BLOCKS[item]?.price : !!SHOP_TOOLS[item]);
 // Everything that can go in the hotbar.
@@ -40,7 +42,7 @@ export const ALL_ITEMS = [...TOOLS, ...BLOCK_IDS];
 // Gear isn't held: you wear it (put it on and take it off in the item menu's 🎒 Gear).
 export const GEAR = [SNEAKERS, JETPACK, TRAIL, SKIS, GOGGLES];
 // Everything that needs a little picture: the hotbar things, gear, and Gold Car Paint (for the store).
-export const ICON_ITEMS = [...ALL_ITEMS, ...GEAR, GOLDPAINT, BODYGUARDS, 'family', 'mysterybox'];
+export const ICON_ITEMS = [...ALL_ITEMS, ...GEAR, GOLDPAINT, BODYGUARDS, 'family', 'mysterybox', ...PET_HAT_ITEMS];
 
 // ---------- Styles ----------
 // Look-alikes share one place in the item menu. Pick one, then choose its style: X in the game
@@ -74,7 +76,7 @@ export const familyOf = item => FAMILY_OF.get(item) || null;
 // shows up once, where its first style is.) Lamps are in Home, outdoor lights in Town.
 const HOME = [94, 60, 74, 95, 61, 62, 73, 64, 63, 65, 66, 78, 67, 68, 39, 40, 41, 42, 44, 43, 21, 53, 103, 54, 25, 35, 20, 75, 76, 77, 79, 80, 81, 86, 92, 126, 127, 128, 129, 130];
 const TOWN = [22, 23, 56, 24, 58, 46, 47, 45, 48, 49, 27, 36, 1, 7, 8, 89, 87, 88, 91, 90, 97, 98, 99, 100, 101, 102, 116, 117, 118, 119, 120, WATERING_CAN, 131, 132, 133, 134];
-const FUN = [93, SHOWTIME, 83, 84, 82, 85, BALL, FIREWORKS, WATER_BALLOON, SNOWBALL, SLED, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28, 121, 122, 123, 124, 125];
+const FUN = [93, SHOWTIME, 83, 84, 82, 85, BALL, TREATS, FIREWORKS, WATER_BALLOON, SNOWBALL, SLED, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28, 121, 122, 123, 124, 125];
 const listed = new Set([...HOME, ...TOWN, ...FUN]);
 const visible = i => typeof i !== 'number' || !BLOCKS[i].hidden;
 export const TABS = [
@@ -91,7 +93,7 @@ for (const i of BLOCK_IDS) if (visible(i) && !TABS.some(t => t.items?.includes(i
 
 // Extra words the search box understands.
 export const SEARCH_WORDS = {
-  [WATERING_CAN]: 'garden water grow plant seeds', 131: 'garden seeds grow plant vegetable orange', 132: 'garden seeds grow plant fruit red berry', 133: 'garden seeds grow plant flower yellow tall', 134: 'garden seeds grow plant halloween orange big',
+  [TREATS]: 'pet dog cat trick teach bone food', [WATERING_CAN]: 'garden water grow plant seeds', 131: 'garden seeds grow plant vegetable orange', 132: 'garden seeds grow plant fruit red berry', 133: 'garden seeds grow plant flower yellow tall', 134: 'garden seeds grow plant halloween orange big',
   [WATER_BALLOON]: 'throw splash water fight', [SNOWBALL]: 'snow winter throw fight', [SLED]: 'snow winter sledge toboggan slide hill', [BUBBLES]: 'bubble blow', [BALLOON]: 'float fly slow fall', [FILL]: 'fill wall floor big box builder',
   [COPY]: 'copy paste clone duplicate builder', [WRENCH]: 'fix repair mechanic car truck boat helicopter smoke fire',
   [BRUSH]: 'paint color car', [CAMERA]: 'photo picture screenshot', [CLAIM]: 'land claim home', [BALL]: 'pet dog fetch throw',
@@ -170,6 +172,18 @@ export function makeIcon(item, textures, paint = 1) {
     return canvas;
   }
 
+  if (item === TREATS || PET_HAT_ITEMS.includes(item)) {
+    // A bone (treats), or the pet hat.
+    ctx.font = '44px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText({ treats: '🦴', pethat_party: '🥳', pethat_bow: '🎀', pethat_shades: '😎', pethat_cape: '🦸', pethat_crown: '👑' }[item], 32, 34);
+    if (item !== TREATS) {
+      ctx.font = '22px sans-serif';
+      ctx.fillText('🐾', 50, 52);
+    }
+    return canvas;
+  }
   if (item === 'family' || item === 'mysterybox') {
     // A family (a little house with hearts), or a wrapped present with a question mark.
     ctx.font = '44px sans-serif';
@@ -815,6 +829,14 @@ export class ViewModel {
       obj.scale.setScalar(1.15);
       obj.position.set(-0.04, 0.1, 0.05);
       obj.rotation.set(0.15, -0.6, 0.05);
+    } else if (item === TREATS) {
+      // A dog bone.
+      obj = new THREE.Group();
+      const bone = new THREE.MeshStandardMaterial({ color: 0xf3e5c8, roughness: 0.7 });
+      obj.add(new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.2, 8).rotateZ(Math.PI / 2), bone));
+      for (const x of [-0.1, 0.1]) for (const y of [-0.025, 0.025]) obj.add(new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6).translate(x, y, 0), bone));
+      obj.rotation.set(0.3, 0.5, 0.4);
+      obj.position.set(0, 0.05, 0);
     } else if (item === WATERING_CAN) {
       obj = new THREE.Group();
       const green = new THREE.MeshStandardMaterial({ color: 0x43a047, roughness: 0.4, metalness: 0.3 });

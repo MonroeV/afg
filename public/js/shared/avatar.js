@@ -8,6 +8,7 @@ export const LOOK_OPTIONS = {
   pants: ['jeans', 'shorts', 'skirt', 'sweatpants'],
   extra: ['none', 'backpack', 'cape', 'wings'],
   pet: ['none', 'dog', 'cat', 'bunny', 'pig', 'dragon'],
+  petHat: ['none', 'party', 'crown', 'bow', 'shades', 'cape'], // (from the Pet Shop: see shared/tricks.js)
 };
 
 export const LOOK_COLORS = ['skin', 'eyes', 'hairColor', 'hatColor', 'shirtColor', 'shirtColor2', 'pantsColor', 'shoesColor', 'extraColor', 'petColor'];
@@ -37,7 +38,7 @@ export const PALETTE = [
 export const HAIR_COLORS = ['#1b1209', '#3b2314', '#6b3e1f', '#a0632b', '#d9a441', '#f3d98b', '#c23b22', '#e8e8e8', '#ff5fa2', '#4fc3f7', '#7c4dff', '#66bb6a'];
 
 export const DEFAULT_LOOK = {
-  face: 'smile', hair: 'short', hat: 'none', shirt: 'tshirt', pants: 'jeans', extra: 'none', pet: 'none',
+  face: 'smile', hair: 'short', hat: 'none', shirt: 'tshirt', pants: 'jeans', extra: 'none', pet: 'none', petHat: 'none',
   skin: '#f5c9a0', eyes: '#3b2314', hairColor: '#3b2314', hatColor: '#e53935',
   shirtColor: '#1e88e5', shirtColor2: '#ffffff', pantsColor: '#3949ab', shoesColor: '#ffffff', extraColor: '#e53935',
   petColor: '#d7a86e',

@@ -17,6 +17,7 @@ import { buildWeatherStation, TACO_PRICE, TACO_SECONDS } from './weather.js';
 import { buildBuildPark } from './buildpark.js';
 import { seasonAt, WINTER, SEASON_ICONS } from './seasons.js';
 import { Quests, cleanQuest } from './quests.js';
+import { TRICKS, TRICK_TRIES, TREATS, trickIndex, hatItem } from './tricks.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
 
@@ -289,6 +290,8 @@ export class GameRoom {
         guests: Array.isArray(w.guests) ? w.guests.filter(k => typeof k === 'string').map(nameKey).slice(0, 40) : [], // who their bodyguards let in
         can: w.can ? 1 : 0, // carrying a gas can
         harvest: Number.isInteger(w.harvest) && w.harvest > 0 ? w.harvest : 0, // crops picked, ever
+        // Pet tricks: how many tries at each (learned at TRICK_TRIES).
+        tricks: Object.fromEntries(TRICKS.map(t => [t.id, Math.min(TRICK_TRIES, Math.max(0, Math.floor(Number(w.tricks?.[t.id]) || 0)))]).filter(([, n]) => n > 0)),
         // Clubs: how far along each club's tasks are, and the badges earned. And how many days in
         // a row they've come to play.
         clubs: cleanClubs(w.clubs),
@@ -846,7 +849,13 @@ export class GameRoom {
 
   sendWallet(client) {
     const w = this.wallet(client);
-    client.send({ t: 'wallet', coins: w.coins, owned: w.owned, found: w.found, vacation: !!this.vacationOf(client), agent: { files: w.agent.files.length, need: this.filesNeeded(), clear: w.agent.clear }, can: w.can, clubs: w.clubs, badges: w.badges, streak: w.streak });
+    client.send({ t: 'wallet', coins: w.coins, owned: w.owned, found: w.found, vacation: !!this.vacationOf(client), agent: { files: w.agent.files.length, need: this.filesNeeded(), clear: w.agent.clear }, can: w.can, clubs: w.clubs, badges: w.badges, streak: w.streak, tricks: w.tricks || {} });
+  }
+
+  // A pet hat is only for those who bought it.
+  ownLook(client, look) {
+    if (look.petHat !== 'none' && !this.wallet(client).owned.includes(hatItem(look.petHat))) look.petHat = 'none';
+    return look;
   }
 
   // ---------- Clubs ----------
@@ -979,7 +988,7 @@ export class GameRoom {
 
   join(client, msg) {
     client.name = cleanName(msg.name);
-    client.look = sanitizeLook(msg.look);
+    client.look = this.ownLook(client, sanitizeLook(msg.look));
     client.joined = true;
     // Still "here" on an old page that's gone quiet? That's them, back after closing the browser
     // or tablet without the server hearing (a sleeping phone, dropped wi-fi): carry on from where
@@ -1268,9 +1277,9 @@ export class GameRoom {
     // A new look, and optionally a new name (when someone picks a saved character).
     look(client, msg) {
       if (!this.allow(client, 'look', 1, 5)) return;
-      client.look = sanitizeLook(msg.look);
       const oldName = client.name;
       if (msg.name !== undefined) client.name = cleanName(msg.name);
+      client.look = this.ownLook(client, sanitizeLook(msg.look));
       this.seen(client.name);
       this.broadcast({ t: 'look', id: client.id, look: client.look, name: client.name }, client);
       if (client.name !== oldName) this.broadcast({ t: 'chat', system: true, text: `${oldName} is now ${client.name}` });
@@ -1379,6 +1388,23 @@ export class GameRoom {
         this.updateFamilies();
         if (!this.homeOf(client)) reply('🏡 Plant your Land Flag somewhere and your family moves in!');
       }
+    },
+
+    // A pet trick (holding Pet Treats): each try counts, and after a few it's learned for good
+    // (then it can do it any time, treats or not).
+    trick(client, { trick }) {
+      if (!trickIndex(trick) || !this.allow(client, 'trick', 0.5, 2)) return;
+      const w = this.wallet(client);
+      w.tricks ??= {};
+      const was = w.tricks[trick] || 0;
+      if (was < TRICK_TRIES) {
+        if (!w.owned.includes(TREATS)) return;
+        w.tricks[trick] = was + 1;
+        this.onDirty();
+      }
+      const n = w.tricks[trick];
+      client.send({ t: 'trick', trick, n, learned: n >= TRICK_TRIES, fresh: n >= TRICK_TRIES && was < TRICK_TRIES });
+      if (n >= TRICK_TRIES && was < TRICK_TRIES) this.sendWallet(client);
     },
 
     // Changing your family (names, looks, how many of them).
