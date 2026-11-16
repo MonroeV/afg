@@ -13,7 +13,7 @@ import { buildGasStations, usesFuel, getsDirty, TANK_RANGE, GAS_PUMP, GAS_CAN, G
 import { MAX_TUNNELS, isTunnelY, tunnelKey, openBelow } from './underground.js';
 import { buildShops } from './shops.js';
 import { findHomes } from './residents.js';
-import { buildWeatherStation, TACO_PRICE, TACO_SECONDS } from './weather.js';
+import { buildWeatherStation, SHOWERS } from './weather.js';
 import { buildBuildPark } from './buildpark.js';
 import { seasonAt, WINTER, SEASON_ICONS } from './seasons.js';
 import { Quests, cleanQuest } from './quests.js';
@@ -586,9 +586,9 @@ export class GameRoom {
     this.onDirty();
   }
 
-  // How many seconds of taco rain are left (0: none).
-  tacosLeft() {
-    return Math.max(0, Math.round(((this.tacoUntil || 0) - Date.now()) / 100) / 10);
+  // How many seconds are left of whatever's raining down (0: nothing).
+  showerLeft() {
+    return Math.max(0, Math.round(((this.shower?.until || 0) - Date.now()) / 100) / 10);
   }
 
   // Families (from the Luxe Store) on their owners' home land.
@@ -1084,7 +1084,7 @@ export class GameRoom {
       // The Secret Agency's base (its inside, its lasers) and where the TOP SECRET files are.
       base: this.places?.base || null,
       files: (this.places?.files || []).map(f => f.slice(0, 3)),
-      tacos: this.tacosLeft(), // (raining tacos? for how much longer)
+      shower: this.showerLeft() > 0 ? { kind: this.shower.kind, left: this.showerLeft() } : null, // (raining tacos, or ice cream…? for how much longer)
       mast: this.places?.weather?.mast || null, // the weather station's mast (its cups spin)
       landmarks: Object.entries(this.places || {}).filter(([, p]) => p && Number.isFinite(p.x) && Number.isFinite(p.z)).map(([k, p]) => [k, p.x, p.z]),
     });
@@ -1295,24 +1295,26 @@ export class GameRoom {
       this.onDirty();
     },
 
-    // Paying Stormy at the weather station: it rains TACOS (all over town, for everyone).
-    taco_rain(client) {
-      if (!this.allow(client, 'tacos', 0.5, 2)) return;
+    // Paying Stormy at the weather station: it rains TACOS (or ice cream, pizza, donuts, or cats and
+    // dogs), all over town, for everyone.
+    shower(client, { kind }) {
+      const def = SHOWERS[kind];
+      if (!def || !this.allow(client, 'shower', 0.5, 2)) return;
       const stormy = this.npcs.list.find(n => n.def.weather);
-      if (!stormy || Math.hypot(client.pos[0] - stormy.pos[0], client.pos[2] - stormy.pos[2]) > 12) return;
-      if (this.tacosLeft() > 0) return client.send({ t: 'chat', system: true, text: '🌮🌮🌮' });
+      if (!stormy || !client.pos || Math.hypot(client.pos[0] - stormy.pos[0], client.pos[2] - stormy.pos[2]) > 12) return;
+      if (this.showerLeft() > 0) return client.send({ t: 'chat', system: true, text: SHOWERS[this.shower.kind].icon.repeat(3) });
       const w = this.wallet(client);
-      if (w.coins < TACO_PRICE) {
-        this.npcs.say(stormy, `You need ${TACO_PRICE} 🪙 for tacos! 🌮`, true);
+      if (w.coins < def.price) {
+        this.npcs.say(stormy, `You need ${def.price} 🪙 for that! ${def.icon}`, true);
         return;
       }
-      w.coins -= TACO_PRICE;
+      w.coins -= def.price;
       this.sendWallet(client);
-      this.tacoUntil = Date.now() + TACO_SECONDS * 1000;
-      this.broadcast({ t: 'tacos', seconds: TACO_SECONDS, by: client.name });
-      this.broadcast({ t: 'chat', system: true, text: `🌮 ${client.name} made it rain TACOS! 🌮` });
-      this.npcs.onTacos(client.name);
-      this.log(`${client.name} made it rain tacos`);
+      this.shower = { kind, until: Date.now() + def.seconds * 1000 };
+      this.broadcast({ t: 'shower', kind, seconds: def.seconds, by: client.name });
+      this.broadcast({ t: 'chat', system: true, text: `${def.icon} ${client.name} made it rain! ${def.icon}` });
+      this.npcs.onShower(kind, client.name);
+      this.log(`${client.name} made it rain (${kind})`);
       this.onDirty();
     },
 

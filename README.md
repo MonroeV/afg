@@ -229,17 +229,28 @@ customize your character, drive cars, build anything and play with friends.
     faster and faster, W steers toward where you look, S slows down. Space (or putting the sled
     away, or sliding off the snow) hops off. Everyone sees you sledding
 - **The weather station**, by the road round the edge of town (a glass building with a mast on the
-  roof, its wind cups spinning and a light blinking on top): talk to Stormy ⛅, pay 25 coins, and
-  it rains TACOS all over town, for everyone, while its own song ("Taco Rain BuildZone") plays
-  (1 minute 40). Little 3D tacos tumble down all around you and land on the ground and the roofs;
-  catch one (stand where it falls) and it's crunched: 🌮 × how many you've caught. The town's
-  people cheer and Skye reports it on BZ Live. Someone joining partway through hears the song
-  from the same place as everyone else. The song (`public/sounds/taco-rain.mp3`, 1.6 MB, a 130
-  kbps MP3) isn't fetched at all until the first taco shower; then the browser streams it (it
-  starts playing while the rest is still arriving), and keeps it for next time. The server sends
-  every file a piece at a time straight from the disk (never holding a whole file in memory) and
-  answers "just this part, please" (HTTP Range) requests, which is how a song starts partway
-  through without the whole file first
+  roof, its wind cups spinning and a light blinking on top): talk to Stormy ⛅ and pick what it
+  rains (big pictures with prices; the ones you can't afford yet are dimmed). It rains all over
+  town, for everyone:
+  - 🌮 **Tacos** (25 🪙, 1 minute 40) while their song "Taco Rain BuildZone" plays
+  - 🍦 **Ice cream** (25 🪙, 54 seconds): cones of strawberry, chocolate, vanilla and mint (one or
+    two scoops, with a cherry on top) while its own song "Ice Cream Rain BuildZone" plays (a
+    bubbly ukulele-and-glockenspiel jingle: "It's raining ice cream! Yum, yum, yum!")
+  - 🍕 **Pizza** (20 🪙, 1 minute): pepperoni slices
+  - 🍩 **Donuts** (20 🪙, 1 minute): pink, chocolate and vanilla frosted, with sprinkles
+  - 🐱🐶 **Cats and dogs** (30 🪙, 1 minute): it's raining cats and dogs! Little puppies and kittens
+    float down on striped parachutes, and when they land they run off to play
+
+  Little 3D things tumble down all around you and land on the ground and the roofs; catch one
+  (stand where it falls) and it's yours: 🍦 × how many you've caught (a cat or dog gets a 💕). The
+  town's people cheer and Skye reports it on BZ Live. Only one shower at a time. Someone joining
+  partway through hears the song from the same place as everyone else. The songs
+  (`public/sounds/taco-rain.mp3`, 1.6 MB, and `public/sounds/ice-cream-rain.mp3`, 0.84 MB, both
+  about 128 kbps MP3s) aren't fetched at all until the first time it rains that; then the
+  browser streams it (it starts playing while the rest is still arriving), and keeps it for next
+  time. The server sends every file a piece at a time straight from the disk (never holding a
+  whole file in memory) and answers "just this part, please" (HTTP Range) requests, which is how
+  a song starts partway through without the whole file first
 - **Doors** that open and close with a right-click (even with the hammer in your hand). Put two
   doors side by side and they become double doors that swing outward; put three or more in a row
   and they become one big garage door that rolls up. A garage door starts 3 blocks tall (so cars
@@ -809,7 +820,8 @@ public/
     petmenu.js         Your pet's menu: pet it, tricks, hats
     challengeui.js     Builder Bea's picture cards (build challenges)
     gameui.js          Coach Kai's games on your screen: picking one, the banner, counting
-    tacos.js           Raining tacos, and the weather station's spinning mast
+    tacos.js           Raining tacos, ice cream, pizza, donuts and cats & dogs; the station's spinning mast
+    weatherui.js       Stormy's menu: what shall it rain?
     lighting.js        Live reflections and the glow effect
     lightpools.js      Soft pools of light on the ground under every lamp
     models.js          3D models for the lamps and furniture
@@ -845,7 +857,7 @@ public/
       shops.js         The Garden Center, the Toy Box and the Pet Shop (what they sell is in blocks.js)
       residents.js     The residents and the houses they live in
       quests.js        The residents' quests
-      weather.js       The weather station (and what a taco shower costs)
+      weather.js       The weather station, and its showers (prices, how long, songs)
       seasons.js       Which season it is (from the server's day count and the time of day)
       tricks.js        Pet tricks and pet hats
       challenges.js    Builder Bea's build challenges (what's on each card)
@@ -862,6 +874,6 @@ tools/
 - Water you can swim in
 - Trains between the towns
 - More Build Book recipes: a slide, a jukebox, a Ferris wheel
-- More weather to buy: snow in summer, a thunderstorm, raining pizza
+- More weather to buy: snow in summer, a thunderstorm
 
 Built with [three.js](https://threejs.org) and [ws](https://github.com/websockets/ws).

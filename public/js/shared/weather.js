@@ -1,7 +1,8 @@
 // The weather station: a little white building by a road out of town, with a tall mast on the
 // roof (its wind cups spin, and a light blinks at the top), screens and a desk inside, and
-// Stormy the weather-person. Pay Stormy and it rains TACOS, all over town, for everyone (see
-// tacoRain in game.js, and tacos.js for the falling tacos).
+// Stormy the weather-person. Pay Stormy and it rains TACOS (or ice cream, pizza, donuts, or cats
+// and dogs!) all over town, for everyone (see the shower handler in game.js, and tacos.js for the
+// falling things).
 import { DOOR_TOP, makeBlock, stack } from './blocks.js';
 import { exitRoads, makeSite, siteFree } from './worldgen.js';
 
@@ -10,8 +11,16 @@ const faceDir = (dx, dz) => (dz > 0 ? 0 : dx > 0 ? 1 : dz < 0 ? 2 : 3);
 const onWall = (wx, wz) => faceDir(-wx, -wz);
 const L = 8, D = 7, MAST = 6;
 
-export const TACO_PRICE = 25; // coins for a taco shower
-export const TACO_SECONDS = 100; // how long it lasts (as long as its song: sounds/taco-rain.mp3)
+// What Stormy can make it rain: its picture, its price (coins), how long it lasts, and its song
+// (a shower with a song lasts as long as the song).
+export const SHOWERS = {
+  taco: { icon: '🌮', price: 25, seconds: 100, song: 'sounds/taco-rain.mp3' }, // "Taco Rain BuildZone"
+  icecream: { icon: '🍦', price: 25, seconds: 54, song: 'sounds/ice-cream-rain.mp3' }, // "Ice Cream Rain BuildZone"
+  pizza: { icon: '🍕', price: 20, seconds: 60 },
+  donut: { icon: '🍩', price: 20, seconds: 60 },
+  pets: { icon: '🐱🐶', price: 30, seconds: 60 }, // it's raining cats and dogs! (on little parachutes)
+};
+export const SHOWER_KINDS = Object.keys(SHOWERS);
 
 export function buildWeatherStation({ get, set, canUse }) {
   const roads = exitRoads();

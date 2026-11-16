@@ -7,7 +7,7 @@ import { sanitizeLook } from './avatar.js';
 import { BLOCKS, isSolidBlock, blockId, itemOf, shapeOf, blockMeta, blockKey, toggleDoorValue, isNightTime, DOOR_OPEN, DOOR_TOP, SHOP_TOOLS } from './blocks.js';
 import { claimAt } from './claims.js';
 import { liftColumn, liftStops } from './elevator.js';
-import { TACO_PRICE } from './weather.js';
+import { SHOWERS } from './weather.js';
 import { buildMap, route, nearestNode, cellKey, cellFlags, doorAt, nearGarage, STAND, DOOR, CLIMB, RIDE } from './homenav.js';
 import { inZone } from './secretbase.js';
 import { RESIDENTS } from './residents.js';
@@ -931,16 +931,27 @@ export class NpcCrew {
   }
 
   // It's raining tacos! Everyone near a player cheers (and Skye reports it).
-  onTacos(who) {
+  // It's raining something (paid for at the weather station): everyone near a player cheers, and
+  // Skye reports it.
+  onShower(kind, who) {
+    const lines = {
+      taco: ['TACOS! 🌮', 'Yum yum! 🌮😋', "It's raining tacos! 🌮🌮", 'Catch one! 🌮'],
+      icecream: ['ICE CREAM! 🍦', 'Ice cream! 😋🍦', 'I want the strawberry one! 🍓🍦', 'Brain freeze! 🥶🍦'],
+      pizza: ['PIZZA! 🍕', 'Pepperoni from the sky! 🍕😋', 'Pizza party! 🍕🎉', 'Catch a slice! 🍕'],
+      donut: ['DONUTS! 🍩', 'Sprinkles! 🍩✨', 'Donut worry, be happy! 🍩😄', 'Yum! 🍩'],
+      pets: ['Puppies! 🐶', 'Kitties! 🐱', "It's raining cats and dogs! 🐱🐶", 'Look, little parachutes! 🪂'],
+    }[kind] || ['Wow! ⛅'];
     const players = [...this.room.clients.values()].filter(c => c.joined && c.pos);
     for (const n of this.list) {
       if (!players.some(c => this.near(n, c.pos[0], c.pos[1], c.pos[2], 30))) continue;
       this.face(n, n.pos[0], n.pos[2] - 1);
       this.act(n, NPC_ACT.cheer, 3);
       n.goal = null;
-      this.say(n, pickOne(['TACOS! 🌮', 'Yum yum! 🌮😋', "It's raining tacos! 🌮🌮", 'Catch one! 🌮']), true);
+      this.say(n, pickOne(lines), true);
     }
-    this.breaking(`BREAKING NEWS: it's raining TACOS all over BuildZone, thanks to ${who}! 🌮🌮🌮`);
+    const what = { taco: 'TACOS', icecream: 'ICE CREAM', pizza: 'PIZZA', donut: 'DONUTS', pets: 'CATS AND DOGS (on little parachutes!)' }[kind] || 'something amazing';
+    const icon = SHOWERS[kind]?.icon || '⛅';
+    this.breaking(`BREAKING NEWS: it's raining ${what} all over BuildZone, thanks to ${who}! ${icon}${icon}`);
   }
 
   onDance(c) {
@@ -994,9 +1005,9 @@ export class NpcCrew {
         c.send({ t: 'family_open', members: this.room.wallet(c).family || [] });
       } else this.say(n, pickOne([`Hi ${c.name}! This is ${n.def.owner}'s house! 🏡`, `Hello! Are you a friend of ${n.def.owner}'s? 👋`]), true);
     } else if (n.def.weather) {
-      const raining = this.room.tacosLeft() > 0;
-      this.say(n, raining ? 'Look up! 🌮🌮🌮' : pickOne([`Taco rain, ${c.name}? 🌮`, 'Make it rain tacos? 🌮⛅']), true);
-      if (!raining) c.send({ t: 'weather_open', price: TACO_PRICE, coins: this.room.wallet(c).coins });
+      const raining = this.room.showerLeft() > 0 ? this.room.shower.kind : null;
+      this.say(n, raining ? `Look up! ${SHOWERS[raining].icon.repeat(3)}` : pickOne([`What shall it rain, ${c.name}? ⛅`, 'Tacos? Ice cream? Cats and dogs? ⛅🌮🍦🐶']), true);
+      if (!raining) c.send({ t: 'weather_open', coins: this.room.wallet(c).coins });
     } else if (n.def.place === 'pizza') {
       this.room.startJob(c);
     } else if (n.def.land) {

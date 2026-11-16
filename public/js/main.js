@@ -37,7 +37,9 @@ import {
 import { MAX_MANY, MAX_OWNED_VEHICLES } from './shared/game.js';
 import { CHUTE } from './shared/farcountry.js';
 import { NPC_ACT, NPC_POSE } from './shared/npcs.js';
-import { TacoRain, WeatherMast } from './tacos.js';
+import { ShowerRain, WeatherMast } from './tacos.js';
+import { WeatherPicker } from './weatherui.js';
+import { SHOWERS } from './shared/weather.js';
 import { SeasonLook } from './seasonlook.js';
 import { Shop } from './shop.js';
 import { PetMenu } from './petmenu.js';
@@ -228,7 +230,8 @@ const avatars = new Avatars(scene);
 let myId = null;
 let online = false;
 let inGame = false;
-let tacoRain = null, weatherMast = null; // it's raining tacos! (and the weather station's mast)
+let showers = null, weatherMast = null; // it's raining tacos (or ice cream, or cats and dogs…)! (and the weather station's mast)
+let weatherPicker = null; // Stormy's menu: what shall it rain?
 let seasonLook = null, worldDay = 0; // the seasons (the server counts the days)
 let autoJoin = false; // joining by itself (back after a lost connection, or an update)
 let myCar = null; // the vehicle we're driving
@@ -263,8 +266,11 @@ async function load() {
     net.send({ t: 'fx', kind: 'firework', x, y: y - 26, z, color, seed });
   };
   contraptions.onSay = text => hud.toast(text);
-  tacoRain = new TacoRain(scene, world, sounds);
-  tacoRain.onCatch = n => hud.toast(`🌮 × ${n}`);
+  showers = new ShowerRain(scene, world, sounds);
+  showers.onCatch = (kind, n, pet) => {
+    if (pet) sounds.pet(pet); // (a cat or a dog, safe in your arms)
+    hud.toast(pet ? `${pet === 'cat' ? '🐱' : '🐶'} 💕 × ${n}` : `${SHOWERS[kind].icon} × ${n}`);
+  };
   signs = new SignTexts(scene, world);
   world.onChange = (x, y, z) => {
     structures.changed(x, y, z);
@@ -508,7 +514,7 @@ async function playSolo() {
 function leaveWorld() {
   stopReconnecting();
   stopFlying();
-  tacoRain?.stop();
+  showers?.stop();
   if (!inGame) return;
   try {
     getOut();
@@ -686,8 +692,8 @@ function startGame(welcome, resume = false) {
   agency.setGuards(welcome.guards);
   weather.rain = weather.target; // (if it's raining when you arrive, it already is)
   sky.time = welcome.time;
-  if (welcome.tacos > 0) tacoRain.start(welcome.tacos);
-  else tacoRain.stop();
+  if (welcome.shower?.left > 0) showers.start(welcome.shower.kind, welcome.shower.left);
+  else showers.stop();
   if (welcome.mast && !weatherMast) weatherMast = new WeatherMast(scene, welcome.mast);
   if (resume) {
     $('pause-online').classList.toggle('hidden', online);
@@ -781,11 +787,21 @@ net.on('npc_say', ({ id, text }) => {
   if (id === REPORTER) Object.assign(news, { on: true, caption: text, captionT: timer.getElapsed() });
   if (a.pos.distanceTo(player.pos) < 16) hud.addChat({ name: a.name, color: '#ffd54f', text });
 });
-// Somebody paid Stormy: it's raining tacos!
-net.on('tacos', ({ seconds }) => tacoRain.start(seconds)); // (and its song plays)
-// Talking to Stormy at the weather station: make it rain tacos?
-net.on('weather_open', ({ price, coins }) => {
-  ask('🌮 Taco rain? ⛅', coins >= price ? `🪙 ${price}` : `🪙 ${price} (you have ${coins})`, '🌮 YES!', 'No thanks', () => net.send({ t: 'taco_rain' }));
+// Somebody paid Stormy: it's raining tacos (or ice cream, or pizza…)!
+net.on('shower', ({ kind, seconds }) => showers.start(kind, seconds)); // (and its song plays, if it has one)
+// Talking to Stormy at the weather station: what shall it rain?
+weatherPicker = new WeatherPicker({
+  onPick: kind => net.send({ t: 'shower', kind }),
+  onClose: () => {
+    lock();
+    updateOverlays();
+  },
+});
+net.on('weather_open', ({ coins }) => {
+  keys.clear();
+  unlock();
+  weatherPicker.show(coins);
+  updateOverlays();
 });
 net.on('npc_pet', () => myBody.brain?.cheer()); // somebody petted our pet: it's so happy!
 // Someone who lives in a tower riding its elevator: its doors slide open (ding!) and shut.
@@ -1332,7 +1348,7 @@ function goFullscreen() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!cards?.open || !!gameUI?.pickerOpen || !!conn);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!cards?.open || !!gameUI?.pickerOpen || !!weatherPicker?.open || !!conn);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -1366,7 +1382,7 @@ $('exit-menu').addEventListener('click', () => {
     location.reload();
   }, 150); // a moment for "I got out of the car" to reach the server
 });
-canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !petMenu?.open && !cards?.open && !gameUI?.pickerOpen && !familyEdit && lock());
+canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !petMenu?.open && !cards?.open && !gameUI?.pickerOpen && !weatherPicker?.open && !familyEdit && lock());
 $('sensitivity').addEventListener('input', e => {
   settings.sensitivity = Number(e.target.value);
   saveSettings();
@@ -1668,6 +1684,10 @@ window.addEventListener('keydown', e => {
   }
   if (gameUI?.pickerOpen) {
     if (e.code === 'Escape') gameUI.closePicker();
+    return;
+  }
+  if (weatherPicker?.open) {
+    if (e.code === 'Escape') weatherPicker.close();
     return;
   }
   if (elevators.panel) {
@@ -5488,7 +5508,7 @@ let menuSpin = 0, lastFrame = 0, frameCount = 0, crouchK = 0;
 // menu (nothing much is moving then).
 function frameRateNow() {
   if (!inGame) return 30;
-  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel || petMenu?.open || cards?.open || gameUI?.pickerOpen) return 12;
+  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel || petMenu?.open || cards?.open || gameUI?.pickerOpen || weatherPicker?.open) return 12;
   return settings.fps || 1000;
 }
 
@@ -5778,7 +5798,7 @@ function frame(timestamp) {
     updateRace();
     lifts.update(time);
     contraptions.update(dt, time, [...avatars.list.values()], player.pos);
-    tacoRain.update(dt, player.pos, settings.volume);
+    showers.update(dt, player.pos, settings.volume);
     seasonLook.update(dt, worldDay, sky.time, player.pos);
     weatherMast?.update(dt, time);
     updateJob(dt, time);
@@ -6066,7 +6086,8 @@ window.buildzone = {
   get job() { return job; },
   get signs() { return signs; },
   get contraptions() { return contraptions; },
-  get tacoRain() { return tacoRain; },
+  get showers() { return showers; },
+  get weatherPicker() { return weatherPicker; },
   get seasonLook() { return seasonLook; },
   get petMenu() { return petMenu; },
   openPetMenu: () => myBody.pet && openPetMenu({ avatar: myBody, pet: myBody.pet, point: myBody.pet.pos.clone() }),
