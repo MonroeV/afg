@@ -983,3 +983,12 @@ body.touch #quest-card { top: 96px; left: 8px; font-size: 13px; }
 .weather-choices button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 4px; font-size: 15px; font-weight: 800; }
 .weather-choices .big { font-size: 46px; line-height: 1; }
 .weather-choices button.poor { opacity: 0.5; }
+/* Someone asked your bodyguards to let them in. */
+.guard-panel { width: min(440px, 100%); }
+.guard-panel h2 { margin: 0; font-size: 26px; }
+.guard-time { width: 100%; height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.15); overflow: hidden; }
+.guard-time div { height: 100%; width: 100%; background: #ffd54f; transform-origin: left; }
+@keyframes guard-time { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.guard-choices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; }
+.guard-choices button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 4px; font-size: 18px; }
+.guard-choices .big { font-size: 40px; line-height: 1; }

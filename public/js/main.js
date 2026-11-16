@@ -45,6 +45,8 @@ import { Shop } from './shop.js';
 import { PetMenu } from './petmenu.js';
 import { ChallengeCards } from './challengeui.js';
 import { GameUI } from './gameui.js';
+import { GuardCatch } from './guardcatch.js';
+import { GuardAsk } from './guardui.js';
 import { TRICKS, trickIndex, PET_HATS, hatItem } from './shared/tricks.js';
 import { Particles, Fireworks, Sounds, Effects } from './effects.js';
 import { Ground } from './ground.js';
@@ -216,6 +218,7 @@ let wallet = { coins: 0, owned: [] };
 let petMenu = null; // your pet's menu (tricks and hats): see petmenu.js
 let cards = null; // Builder Bea's picture cards: see challengeui.js
 let gameUI = null; // Coach Kai's games (tag, hide-and-seek): see gameui.js
+let guardCatch = null, guardAsk = null; // bodyguards keeping you off their land, and someone asking yours to let them in
 let carryingCan = false; // a gas can bought at a gas station, to carry to a vehicle that's out of gas
 let gasStations = []; // where the gas stations are: [name, x, z]
 let landmarks = []; // where the town's places are: [name, x, z]
@@ -340,6 +343,7 @@ async function load() {
     nightK: () => 1 - sky.dayK,
     avoidWalls: (focus, want) => avoidWalls(focus, want),
   });
+  guardCatch = makeGuardCatch();
   editor = new Editor();
   gallery = new Gallery(new CharacterClient(), sounds);
   myBody = new Avatar(scene, { id: 0, name: '', look: settings.look }, { tag: false });
@@ -690,6 +694,7 @@ function startGame(welcome, resume = false) {
   worldDay = welcome.day || 0;
   weather.set(welcome.rain || 0, welcome.snow);
   agency.setGuards(welcome.guards);
+  if (guardCatch) guardCatch.cooldown = 1.5; // (not until the server knows where we are)
   weather.rain = weather.target; // (if it's raining when you arrive, it already is)
   sky.time = welcome.time;
   if (welcome.shower?.left > 0) showers.start(welcome.shower.kind, welcome.shower.left);
@@ -925,6 +930,7 @@ net.on('fx', ({ kind, x, y, z, color, seed, dir }) => {
   else if (kind === 'balloon') letBalloonGo(x, y, z, color);
   else if (kind === 'sparkle') effects.sparkle(x, y, z, 30);
   else if (kind === 'water') effects.splash(x, y, z);
+  else if (kind === 'slam') sounds.door(false); // (a bodyguard slamming a door shut)
   else if (kind === 'harvest') effects.sparkle(x + 0.5, y + 0.5, z + 0.5, 14);
   else if (['volcano', 'feed', 'wish', 'rocket'].includes(kind)) contraptions.remote(kind, x, y, z);
   else if (fireworks.launch(x, y, z, color, seed)) {
@@ -1348,7 +1354,7 @@ function goFullscreen() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!cards?.open || !!gameUI?.pickerOpen || !!weatherPicker?.open || !!conn);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!cards?.open || !!gameUI?.pickerOpen || !!weatherPicker?.open || !!guardAsk?.open || !!conn);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -1382,7 +1388,7 @@ $('exit-menu').addEventListener('click', () => {
     location.reload();
   }, 150); // a moment for "I got out of the car" to reach the server
 });
-canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !petMenu?.open && !cards?.open && !gameUI?.pickerOpen && !weatherPicker?.open && !familyEdit && lock());
+canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !petMenu?.open && !cards?.open && !gameUI?.pickerOpen && !weatherPicker?.open && !guardAsk?.open && !familyEdit && lock());
 $('sensitivity').addEventListener('input', e => {
   settings.sensitivity = Number(e.target.value);
   saveSettings();
@@ -1690,6 +1696,7 @@ window.addEventListener('keydown', e => {
     if (e.code === 'Escape') weatherPicker.close();
     return;
   }
+  if (guardAsk?.open) return; // (answer it with the buttons)
   if (elevators.panel) {
     elevators.panelKey(e);
     return;
@@ -2212,6 +2219,47 @@ net.on('game_found', ({ id, by }) => {
     sounds.pop();
   }
 });
+
+// ---------- Bodyguards: asking to come in, and keeping you out ----------
+
+// (Made once the game's set up: see where the Secret Agency's made.)
+const makeGuardCatch = () => new GuardCatch({
+  agency, player, hud, sounds, effects, net,
+  shout: text => gameUI.shout(text, 1.6),
+  splash: () => {
+    const el = $('splash');
+    el.classList.remove('snow', 'show');
+    void el.offsetWidth;
+    el.classList.add('show');
+    sounds.splash(1.4);
+  },
+});
+net.on('guard_caught', msg => guardCatch?.caught(msg));
+net.on('guard_shoo', () => guardCatch?.shoo());
+// Not on the list: shall the bodyguard ask the owner?
+net.on('guard_offer', ({ key, owner }) => ask('🛡️🔔', `${owner} 🚪❓`, '🔔 Ask!', 'No thanks', () => net.send({ t: 'guard_ask', key })));
+net.on('guard_reply', ({ answer, owner }) => {
+  const text = { list: `✅ ${owner} put you on the guest list! Come on in! 🏡`, visit: `🚪 ${owner} says come on in (just this visit)! 🏡`, no: `❌ ${owner} said no. 🙁`, block: '🙅', none: '🤷 No answer.' }[answer];
+  if (text) hud.toast(text);
+  if (answer === 'list' || answer === 'visit') sounds.coin();
+});
+// Someone's asking your bodyguards to let them in.
+guardAsk = new GuardAsk({
+  onAnswer: (id, answer) => net.send({ t: 'guard_answer', id, answer }),
+  onClose: () => {
+    lock();
+    updateOverlays();
+  },
+});
+net.on('guard_request', msg => {
+  keys.clear();
+  unlock();
+  guardAsk.show(msg);
+  sounds.tone(880, 880, 0.15, 0.15, 'sine');
+  sounds.tone(1175, 1175, 0.25, 0.15, 'sine', 0.18); // (ding-dong!)
+  updateOverlays();
+});
+net.on('guard_request_gone', ({ id }) => guardAsk.close(id));
 
 // The pet does the trick (or has a go at it, while it's still learning).
 net.on('trick', ({ trick, n, learned, fresh }) => {
@@ -5508,7 +5556,7 @@ let menuSpin = 0, lastFrame = 0, frameCount = 0, crouchK = 0;
 // menu (nothing much is moving then).
 function frameRateNow() {
   if (!inGame) return 30;
-  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel || petMenu?.open || cards?.open || gameUI?.pickerOpen || weatherPicker?.open) return 12;
+  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel || petMenu?.open || cards?.open || gameUI?.pickerOpen || weatherPicker?.open || guardAsk?.open) return 12;
   return settings.fps || 1000;
 }
 
@@ -5597,7 +5645,7 @@ function frame(timestamp) {
       player.sledding = sledding;
       player.winter = !!seasonLook?.winter;
       player.sneakers = hud.wearing(SNEAKERS);
-      player.update(dt, active ? held : noKeys);
+      player.update(dt, active && !guardCatch?.frozen ? held : noKeys); // (not while the bodyguards have hold of you)
       if (sledding && player.onGround && !player.surface()) sled(false); // (off the snow: off the sled)
       // (Never inside the ground, even if a hole grew back over us a moment ago.)
       if (player.pos.y < 0 && world.isSolid(Math.floor(player.pos.x), Math.floor(player.pos.y + 0.05), Math.floor(player.pos.z))) {
@@ -5626,6 +5674,7 @@ function frame(timestamp) {
     }
     crouchK += ((player.crouching && !riding() ? 1 : 0) - crouchK) * Math.min(1, dt * 12);
     agency.frame(dt, time, player, !!riding() || elevators.riding || rv.inside);
+    guardCatch?.frame(dt, { driving: myCar && !rv.inside ? myCar : null, busy: !!riding() || elevators.riding || rv.inside || !!sleeping || !!seated });
     agency.nightVision(hud.wearing(GOGGLES));
     sky.nightVision += ((hud.wearing(GOGGLES) ? 1 : 0) - (sky.nightVision || 0)) * Math.min(1, dt * 3); // (the goggles light up the dark)
     updateCamera(dt);
@@ -6088,6 +6137,8 @@ window.buildzone = {
   get contraptions() { return contraptions; },
   get showers() { return showers; },
   get weatherPicker() { return weatherPicker; },
+  get guardCatch() { return guardCatch; },
+  get guardAsk() { return guardAsk; },
   get seasonLook() { return seasonLook; },
   get petMenu() { return petMenu; },
   openPetMenu: () => myBody.pet && openPetMenu({ avatar: myBody, pet: myBody.pet, point: myBody.pet.pos.clone() }),

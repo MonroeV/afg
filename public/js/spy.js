@@ -81,26 +81,7 @@ export class SecretAgency {
     return null;
   }
 
-  // On someone's guarded land without being invited: their bodyguards walk you off it, to just
-  // past the nearest edge.
-  escortOff(player) {
-    const p = player.pos, land = this.keptOut(p.x, p.z);
-    if (!land || p.y > 40) return false;
-    const [x0, z0, x1, z1] = land.rect;
-    const ways = [[x0 - 1.5, p.z, p.x - x0], [x1 + 2.5, p.z, x1 + 1 - p.x], [p.x, z0 - 1.5, p.z - z0], [p.x, z1 + 2.5, z1 + 1 - p.z]].sort((a, b) => a[2] - b[2]);
-    for (const [x, z] of ways) {
-      p.set(x, Math.max(0, p.y), z);
-      if (!player.overlapsSomething()) break;
-    }
-    player.vel.set(0, 0, 0);
-    player.flying = false;
-    if (this.escortT <= 0) {
-      this.hud.toast(`🛡️ ${land.owner}'s bodyguards walk you back off their land. Guests only! (Ask ${land.owner} to put you on the list.)`);
-      this.sounds.tone(660, 330, 0.3, 0.15, 'square');
-      this.escortT = 3;
-    }
-    return true;
-  }
+  // (Someone's bodyguards keeping you off their land: see guardcatch.js.)
 
   // Is this door one of the base's (locked to anyone without clearance)?
   lockedDoor(x, y, z) {
@@ -129,8 +110,6 @@ export class SecretAgency {
         this.escortT = 3;
       }
     }
-    // Someone's bodyguards don't let you onto their land unless you're on their guest list.
-    if (!busy) this.escortOff(player);
     // The security scan, just inside the door.
     if (near && this.clear) {
       const inHall = this.inside(p) && p.z < this.base.scan + 2;

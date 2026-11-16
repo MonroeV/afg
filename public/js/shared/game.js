@@ -1,11 +1,11 @@
 // The game "room": the world, players, vehicles, land claims, growing trees and the clock.
 // The Node server runs one of these for everybody. When there is no server,
 // the browser runs its own copy so single player works exactly the same way.
-import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, isExclusive, DOOR_OPEN, DOOR_TOP, DAY_LENGTH, WORLD, isNightTime, SHOP_ITEMS, BLOCKS, SHOP_TOOLS, FOUND_GEAR, HOLE_HEAL, SIGN, cleanSignText, cleanWords, isCrop, cropStage, cropWet, CROP_RIPE, CROP_WET, makeBlock, blockMeta } from './blocks.js';
+import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, isExclusive, DOOR_OPEN, DOOR_TOP, DAY_LENGTH, WORLD, isNightTime, SHOP_ITEMS, BLOCKS, SHOP_TOOLS, FOUND_GEAR, HOLE_HEAL, SIGN, cleanSignText, cleanWords, isCrop, cropStage, cropWet, CROP_RIPE, CROP_WET, makeBlock, blockMeta, toggleDoorValue } from './blocks.js';
 import { sanitizeLook, cleanName, randomLook } from './avatar.js';
 import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines, buildStore, furnishHouses, furnishTowers, elevatorTowers } from './worldgen.js';
 import { buildSecretBase, hideSecretFiles, AGENCY, AGENT_SPOT, FILES_NEEDED, FILE_HINTS, inZone } from './secretbase.js';
-import { NpcCrew } from './npcs.js';
+import { NpcCrew, NPC_ACT } from './npcs.js';
 import { buildFrontier, buildPizzeria, buildSignposts, refurnish, addFishingSpots } from './frontier.js';
 import { buildFarCountry, moreVehicles } from './farcountry.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot, seatCount } from './vehicles.js';
@@ -20,6 +20,7 @@ import { Quests, cleanQuest } from './quests.js';
 import { TRICKS, TRICK_TRIES, TREATS, trickIndex, hatItem } from './tricks.js';
 import { CHALLENGES, partCount } from './challenges.js';
 import { Playground } from './playground.js';
+import { doorAt } from './homenav.js';
 import { Structures } from '../structures.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
@@ -58,6 +59,10 @@ const CROP_SPEED = [0.7, 1, 1.7, 0];
 const MAX_CROPS = 400, MAX_CROPS_EACH = 48;
 const GARDEN_REACH = 7;
 const WATERING_CAN = 'wateringcan';
+// Asking a bodyguard to let you in: how long the owner has to answer, how long before you can ask
+// them again (longer after a "no"), and how long a "just this visit" pass lasts.
+const ASK_ANSWER = 45 * 1000, ASK_AGAIN = 2 * 60 * 1000, ASK_AFTER_NO = 10 * 60 * 1000, VISIT_PASS = 15 * 60 * 1000;
+const INTRUDE_WAYS = ['foot', 'air', 'car', 'tunnel'];
 export const MAX_OWNED_VEHICLES = 3; // vehicles one person can have of their own
 export const MAX_MANY = 4096; // the most blocks one Fill or Paste can change
 
@@ -79,6 +84,7 @@ const FISH_BITE = 1800; // ms you have to reel it in once it bites
 
 const num = v => (Number.isFinite(v) ? v : 0);
 const clampWorld = v => Math.max(WORLD.min, Math.min(WORLD.max + 1, num(v)));
+const pickOne = list => list[Math.floor(Math.random() * list.length)];
 const numbers = (a, n) => (Array.isArray(a) ? a.slice(0, n).map(num) : 0);
 
 export class GameRoom {
@@ -109,13 +115,22 @@ export class GameRoom {
     this.nextCoin = 1;
     this.npcs = new NpcCrew(this);
     this.playground = new Playground(this); // games of Tag and Hide-and-seek on the town square
+    // Bodyguards: requests to come in (id -> request), when you can ask again ("you|owner" ->
+    // time), visit passes (owner -> Map(guest -> until)), who was welcome a moment ago, and doors
+    // to slam shut.
+    this.guardAsks = new Map();
+    this.askSeq = 0;
+    this.askWait = new Map();
+    this.passes = new Map();
+    this.unwelcomed = new Map();
+    this.slams = [];
     this.quests = new Quests(this);
     this.nextId = 1;
     this.nextVehicleId = 1;
     this.nextHomeId = 1;
     this.time = DAY_LENGTH * 0.08; // start in the morning
     this.day = 0; // how many days have gone by (for the seasons: see seasons.js)
-    this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0, holes: 5, crops: 2 };
+    this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0, holes: 5, crops: 2, guardThings: 1 };
     this.isSolid = (x, y, z) =>
       y < 0 || x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max ||
       blocksVehicles(this.world.get(blockKey(x, y, z)) || 0);
@@ -294,6 +309,7 @@ export class GameRoom {
         guests: Array.isArray(w.guests) ? w.guests.filter(k => typeof k === 'string').map(nameKey).slice(0, 40) : [], // who their bodyguards let in
         can: w.can ? 1 : 0, // carrying a gas can
         harvest: Number.isInteger(w.harvest) && w.harvest > 0 ? w.harvest : 0, // crops picked, ever
+        noAsk: Array.isArray(w.noAsk) ? w.noAsk.filter(k => typeof k === 'string').slice(0, 50) : [], // (people who can't ask your bodyguards to let them in)
         challenges: Array.isArray(w.challenges) ? w.challenges.filter(id => CHALLENGES.some(c => c.id === id)) : [], // Builder Bea's cards done
         // Pet tricks: how many tries at each (learned at TRICK_TRIES).
         tricks: Object.fromEntries(TRICKS.map(t => [t.id, Math.min(TRICK_TRIES, Math.max(0, Math.floor(Number(w.tricks?.[t.id]) || 0)))]).filter(([, n]) => n > 0)),
@@ -447,7 +463,10 @@ export class GameRoom {
     for (const [key, w] of Object.entries(this.wallets)) {
       if (!w.owned?.includes('bodyguards')) continue;
       const land = this.claims.find(c => c.key === key && !c.vacation && !c.permanent);
-      if (land) out.push({ owner: land.owner, key, rect: [land.x0, land.z0, land.x1, land.z1], guests: w.guests || [] });
+      if (!land) continue;
+      // (Guests on the list, and anyone with a pass for this visit.)
+      const visitors = [...(this.passes?.get(key) || [])].filter(([, until]) => until > Date.now()).map(([k]) => k);
+      out.push({ owner: land.owner, key, rect: [land.x0, land.z0, land.x1, land.z1], guests: [...new Set([...(w.guests || []), ...visitors])] });
     }
     return out;
   }
@@ -467,6 +486,75 @@ export class GameRoom {
   welcomeOn(land, client) {
     const k = nameKey(client.name);
     return k === land.key || land.guests.includes(k);
+  }
+
+  guardedLandAt(x, z) {
+    return this.guardedLands().find(l => x >= l.rect[0] && x < l.rect[2] + 1 && z >= l.rect[1] && z < l.rect[3] + 1) || null;
+  }
+
+  // Every second: visit passes running out, owners who didn't answer, and doors to slam shut.
+  updateGuardThings() {
+    const now = Date.now();
+    let changed = false;
+    for (const [owner, pass] of this.passes) {
+      for (const [k, until] of pass) if (until <= now) {
+        pass.delete(k);
+        this.unwelcomed.set(`${k}|${owner}`, now);
+        changed = true;
+      }
+      if (!pass.size) this.passes.delete(owner);
+    }
+    if (changed) this.updateGuards();
+    for (const req of [...this.guardAsks.values()]) {
+      if (req.until > now) continue;
+      this.guardAsks.delete(req.id);
+      this.askWait.set(`${req.fromKey}|${req.owner}`, now + ASK_AGAIN);
+      this.guardTell(req, `🤷 No answer, ${req.fromName}. Try again later!`, 'none');
+      this.clientNamed(req.owner)?.send({ t: 'guard_request_gone', id: req.id });
+    }
+    for (const sl of this.slams.filter(sl => sl.at <= now)) {
+      this.slams.splice(this.slams.indexOf(sl), 1);
+      this.slamDoor(sl);
+    }
+  }
+
+  clientNamed(key) {
+    return [...this.clients.values()].find(c => c.joined && nameKey(c.name) === key) || null;
+  }
+
+  // A bodyguard (of this land) tells whoever asked to come in how it went.
+  guardTell(req, text, answer) {
+    const guard = this.npcs.list.find(n => n.id === req.guard) || this.npcs.list.find(n => n.def.land === req.owner);
+    if (guard) {
+      this.npcs.act(guard, NPC_ACT.wave, 1.5);
+      this.npcs.say(guard, text, true);
+    }
+    this.clients.get(req.from)?.send({ t: 'guard_reply', answer, owner: req.ownerName });
+  }
+
+  // Someone who isn't welcome opened a door on guarded land: a bodyguard shuts it again.
+  slamDoor({ x, y, z, key }) {
+    const get = (a, b, c) => this.get(a, b, c);
+    const d = doorAt(get, x, y, z);
+    if (!d || !(blockMeta(itemOf(this.get(x, d.lo, z))) & DOOR_OPEN)) return;
+    const guard = this.npcs.list.filter(n => n.def.land === key).sort((a, b) => Math.hypot(a.pos[0] - x, a.pos[2] - z) - Math.hypot(b.pos[0] - x, b.pos[2] - z))[0];
+    if (d.garage) {
+      if (guard) this.npcs.say(guard, '🚧 Hey! That\'s the boss\'s garage!', true);
+      return;
+    }
+    const cells = [];
+    for (let yy = d.lo; yy <= d.hi; yy++) {
+      const v = toggleDoorValue(this.get(x, yy, z));
+      this.world.set(blockKey(x, yy, z), v);
+      cells.push(x, yy, z, v);
+    }
+    this.broadcast({ t: 'many', cells });
+    this.broadcast({ t: 'fx', kind: 'slam', x: x + 0.5, y: d.lo + 1, z: z + 0.5 });
+    this.onDirty();
+    if (guard) {
+      this.npcs.face(guard, x + 0.5, z + 0.5);
+      this.npcs.say(guard, pickOne(['🚪 *SLAM!* Guests only!', '🚪 *SLAM!* Nope! 🕶️', '🚪 *SLAM!* Ask first! 🔔']), true);
+    }
   }
 
   // ---------- The weather ----------
@@ -1273,6 +1361,11 @@ export class GameRoom {
       this.touched(x, y, z);
       if (y < -1) this.tellDiggers({ t: 'set', x, y, z, b }, client); // (secret!)
       else this.broadcast({ t: 'set', x, y, z, b }, client);
+      if (isDoorToggle(old, b) && itemOf(b) & (DOOR_OPEN << 8)) {
+        // A door on someone's guarded land, opened by someone who isn't welcome: a bodyguard shuts it.
+        const land = this.guardedLandAt(x, z);
+        if (land && !this.welcomeOn(land, client) && !this.slams.some(sl => sl.x === x && sl.z === z)) this.slams.push({ x, y, z, key: land.key, at: Date.now() + 1200 });
+      }
       if (y === -1 && b && !old) this.progress(client, 'tunnel', 'fill'); // something put in a hole
       if (blockId(b) === LOG && blockId(old) !== LOG && this.maybePlant(x, y, z)) this.progress(client, 'nature', 'trees');
       this.onDirty();
@@ -1850,11 +1943,74 @@ export class GameRoom {
       if (!Array.isArray(names) || !this.allow(client, 'guests', 1, 3)) return;
       const w = this.wallet(client);
       if (!w.owned.includes('bodyguards')) return;
-      const me = nameKey(client.name);
+      const me = nameKey(client.name), before = w.guests || [];
       w.guests = [...new Set(names.filter(n => typeof n === 'string').map(n => nameKey(cleanName(n))).filter(k => k && k !== me))].slice(0, 40);
       client.send({ t: 'chat', system: true, text: w.guests.length ? `🛡️ Your bodyguards will let in: ${names.filter(n => typeof n === 'string').map(cleanName).filter(n => nameKey(n) !== me).slice(0, 40).join(', ')}.` : '🛡️ Your bodyguards won\'t let anybody in but you.' });
+      for (const k of before) if (!w.guests.includes(k)) this.unwelcomed.set(`${k}|${me}`, Date.now()); // (gently walked out, if they're there)
       this.onDirty();
       this.updateGuards();
+    },
+
+    // Asking a bodyguard to let you in: they ask the owner (if they're here). One question at a
+    // time, and not again for a while (longer after a "no"); the owner can say "stop asking".
+    guard_ask(client, { key }) {
+      if (typeof key !== 'string' || !this.allow(client, 'guardAsk', 0.2, 1)) return;
+      const land = this.guardedLands().find(l => l.key === key);
+      if (!land || this.welcomeOn(land, client) || !client.pos) return;
+      const guard = this.npcs.list.filter(n => n.def.land === key && Math.hypot(n.pos[0] - client.pos[0], n.pos[2] - client.pos[2]) < 10)[0];
+      if (!guard) return;
+      const say = text => {
+        this.npcs.face(guard, client.pos[0], client.pos[2]);
+        this.npcs.say(guard, text, true);
+      };
+      const owner = this.clientNamed(key), me = nameKey(client.name), now = Date.now();
+      if (!owner) return say('📵 The boss isn\'t home. Try again later!');
+      if ((this.wallets[key]?.noAsk || []).includes(me)) return say(`🙅 Sorry ${client.name}, the boss said no more asking.`);
+      if ((this.askWait.get(`${me}|${key}`) || 0) > now) return say(`⏳ I asked already, ${client.name}! Try again later.`);
+      const pending = [...this.guardAsks.values()];
+      if (pending.some(r => r.fromKey === me)) return say('⏳ One question at a time!');
+      if (pending.some(r => r.owner === key)) return say('⏳ The boss is busy. Try again in a bit!');
+      const id = ++this.askSeq;
+      this.guardAsks.set(id, { id, from: client.id, fromKey: me, fromName: client.name, owner: key, ownerName: land.owner, guard: guard.id, until: now + ASK_ANSWER });
+      owner.send({ t: 'guard_request', id, from: client.name, seconds: ASK_ANSWER / 1000 });
+      this.npcs.act(guard, NPC_ACT.wave, 2);
+      say(`🔔 Hang on, ${client.name}! I'll ask ${land.owner}. 📞`);
+    },
+
+    // The owner's answer: ✅ on the guest list, 🚪 just this visit, ❌ no, 🔕 stop asking.
+    guard_answer(client, { id, answer }) {
+      const req = this.guardAsks.get(num(id));
+      if (!req || req.owner !== nameKey(client.name) || !['list', 'visit', 'no', 'block'].includes(answer)) return;
+      this.guardAsks.delete(req.id);
+      const w = this.wallet(client), now = Date.now();
+      this.askWait.set(`${req.fromKey}|${req.owner}`, now + (answer === 'no' ? ASK_AFTER_NO : ASK_AGAIN));
+      if (answer === 'list') {
+        w.guests = [...new Set([...(w.guests || []), req.fromKey])].slice(0, 40);
+        this.guardTell(req, `✅ Come on in, ${req.fromName}! You're on the list now.`, answer);
+      } else if (answer === 'visit') {
+        if (!this.passes.has(req.owner)) this.passes.set(req.owner, new Map());
+        this.passes.get(req.owner).set(req.fromKey, now + VISIT_PASS);
+        this.guardTell(req, `🚪 Come on in, ${req.fromName}! Just for this visit. 😊`, answer);
+      } else if (answer === 'no') {
+        this.guardTell(req, `❌ Sorry, ${req.fromName}. The boss said no.`, answer);
+      } else {
+        w.noAsk = [...new Set([...(w.noAsk || []), req.fromKey])].slice(-50);
+        this.guardTell(req, `🙅 Sorry, ${req.fromName}. The boss said no more asking.`, answer);
+      }
+      this.onDirty();
+      this.updateGuards();
+    },
+
+    // Someone stepped (or flew, drove or dug) onto guarded land they aren't welcome on: the
+    // bodyguards deal with it (see catchIntruder in npcs.js, and guardcatch.js).
+    intrude(client, { key, how }) {
+      if (!INTRUDE_WAYS.includes(how) || !this.allow(client, 'intrude', 0.5, 2) || !client.pos) return;
+      const land = this.guardedLands().find(l => l.key === key);
+      if (!land || this.welcomeOn(land, client)) return;
+      const [x0, z0, x1, z1] = land.rect, p = client.pos, m = 4;
+      if (p[0] < x0 - m || p[0] > x1 + 1 + m || p[2] < z0 - m || p[2] > z1 + 1 + m) return;
+      const gentle = Date.now() - (this.unwelcomed.get(`${nameKey(client.name)}|${key}`) || 0) < 3 * 60 * 1000;
+      this.npcs.catchIntruder(client, land, how, gentle);
     },
 
     // Night-vision goggles from the gadget vault (agents only: you'd have to be inside!).
@@ -2389,6 +2545,10 @@ export class GameRoom {
     if (t.crops <= 0) {
       t.crops = 2;
       this.updateCrops();
+    }
+    if (t.guardThings <= 0) {
+      t.guardThings = 1;
+      this.updateGuardThings();
     }
     for (const s of this.saplings.filter(s => s.at <= now)) {
       if (this.growSapling(s)) this.saplings.splice(this.saplings.indexOf(s), 1);

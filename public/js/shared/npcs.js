@@ -324,6 +324,10 @@ export class NpcCrew {
       n.actionT -= dt;
       if (n.actionT <= 0 && n.action !== NPC_ACT.walk) n.action = NPC_ACT.idle;
       if (n.game) continue; // (a kid in a game of tag or hide-and-seek: playground.js moves them)
+      if (n.catch || n.escort) {
+        this.guardChase(n, dt); // (a bodyguard running after an intruder, or walking them off the land)
+        continue;
+      }
       if (n.def.reporter) this.report(n, dt, players);
       this.notice(n, players, now);
       if (n.nav) this.homeMove(n, dt, players);
@@ -753,9 +757,9 @@ export class NpcCrew {
     const tx = step.x + 0.5, tz = step.z + 0.5, ty = step.y;
     const dx = tx - n.pos[0], dz = tz - n.pos[2], d = Math.hypot(dx, dz), dy = ty - n.pos[1];
     if (step.how === CLIMB) {
-      n.pos[1] += Math.sign(dy) * Math.min(Math.abs(dy), 1.8 * dt);
+      n.pos[1] += Math.sign(dy) * Math.min(Math.abs(dy), (n.catch ? 4 : 1.8) * dt);
     } else {
-      const s = Math.min(d, (n.def.land ? 1.7 : 1.4) * dt);
+      const s = Math.min(d, (n.catch ? 6.5 : n.def.land ? 1.7 : 1.4) * dt); // (bodyguards run after intruders)
       if (d > 1e-6) {
         n.pos[0] += (dx / d) * s;
         n.pos[2] += (dz / d) * s;
@@ -1016,7 +1020,11 @@ export class NpcCrew {
         this.say(n, pickOne(['Yes, boss! Who gets in? 📋', 'Your guest list, boss! 🕶️']), true);
         c.send({ t: 'guests_open', guests: land.guests });
       } else if (land && this.room.welcomeOn(land, c)) this.say(n, pickOne([`${c.name}! You're on the list. Come on in! ✅`, `Welcome, ${c.name}! ${land.owner} said you're a guest. 🫡`]), true);
-      else this.say(n, pickOne([`🛑 Sorry ${c.name}, this is ${n.def.owner}'s house. Guests only!`, `🛑 You're not on the list, ${c.name}. Ask ${n.def.owner}!`]), true);
+      else if (land && this.room.clientNamed(land.key)) {
+        // Not on the list: shall they ask the boss? (See guard_ask in game.js.)
+        this.say(n, pickOne([`🛑 Guests only, ${c.name}! Want me to ask ${n.def.owner}? 🔔`, `${n.def.owner}'s house! Shall I ask the boss? 🔔`]), true);
+        c.send({ t: 'guard_offer', key: land.key, owner: land.owner });
+      } else this.say(n, pickOne([`🛑 Sorry ${c.name}, guests only. 📵 ${n.def.owner} isn't home, so I can't ask.`, `📵 The boss isn't home, ${c.name}. Try again later!`]), true);
     } else if (n.def.agent) {
       this.say(n, this.mission(c), true);
       c.send({ t: 'club_open', club: 'agency' });
@@ -1180,9 +1188,10 @@ export class NpcCrew {
   bodyguardWatch(n, players, now) {
     const land = this.lands.find(l => l.key === n.def.land);
     if (!land) return;
+    const handled = new Set(this.list.filter(g => g.def.land === land.key).map(g => (g.catch || g.escort)?.client).filter(Boolean)); // (a partner's already on it)
     for (const c of players) {
       const [x, y, z] = c.pos;
-      if (!this.near(n, x, y, z, 5)) continue;
+      if (!this.near(n, x, y, z, 5) || handled.has(c.id)) continue;
       const boss = nameKey(c.name) === land.key, ok = this.room.welcomeOn(land, c);
       const key = `${c.id}:${ok}`;
       if (now - (n.seen.get(key) || 0) < (ok ? 120 : 25) * SECOND) continue;
@@ -1193,6 +1202,134 @@ export class NpcCrew {
         : pickOne([`🛑 Halt, ${c.name}! This is ${land.owner}'s house. Guests only!`, `🛑 Sorry ${c.name}, you're not on ${land.owner}'s guest list.`]), true);
       return;
     }
+  }
+
+  // Someone's on guarded land who shouldn't be (see intrude in game.js). On foot: the nearest
+  // bodyguard runs over, catches them and walks them off (guardChase). From the air, they huff
+  // and puff and blow them away; in a vehicle, a stop sign; tunnelling underneath, a bucket of
+  // water. (Their own screens do the rest: see guardcatch.js.) gentle: they were welcome a
+  // moment ago (taken off the list, or their visit's over).
+  catchIntruder(c, land, how, gentle = false) {
+    const guards = this.list.filter(n => n.def.land === land.key);
+    if (!guards.length) return;
+    const [x, y, z] = c.pos;
+    const far = n => Math.hypot(n.pos[0] - x, n.pos[2] - z) + Math.abs(n.pos[1] - y) * 8;
+    if (how === 'foot') {
+      if (guards.some(n => n.catch?.client === c.id || n.escort?.client === c.id)) return;
+      const n = guards.filter(g => !g.catch && !g.escort && !g.ride).sort((a, b) => far(a) - far(b))[0];
+      if (!n) return c.send({ t: 'guard_shoo', id: guards[0].id });
+      if (n.doing) this.stopDoing(n);
+      n.actionT = 0;
+      n.catch = { client: c.id, until: Date.now() + 6 * SECOND, gentle };
+      n.catchAt = null;
+      [n.path, n.chase, n.plan] = [null, null, null];
+      this.say(n, gentle ? 'Time\'s up, friend! 🕶️' : pickOne(['🛑 HALT!', '🛑 HEY! Stop right there!', '🛑 Not so fast!']), true);
+      return;
+    }
+    const n = guards.sort((a, b) => far(a) - far(b))[0];
+    if (how === 'air') {
+      for (const g of guards) {
+        this.face(g, x, z);
+        this.act(g, NPC_ACT.cheer, 2);
+      }
+      this.say(n, 'HUFF... PUFF... 💨💨💨', true);
+    } else if (how === 'car') {
+      this.face(n, x, z);
+      this.act(n, NPC_ACT.wave, 2);
+      this.say(n, `🚧 STOP! No vehicles on ${land.owner}'s land!`, true);
+    } else {
+      this.say(n, pickOne(['👂 I hear digging! 🪣💦', '🪣 Somebody\'s tunnelling! FLUSH! 💦']), true);
+    }
+  }
+
+  guardChase(n, dt) {
+    const now = Date.now();
+    if (n.escort) {
+      // Walking them off: side by side, to just outside the land.
+      const e = n.escort, dx = e.to[0] - n.pos[0], dz = e.to[2] - n.pos[2], d = Math.hypot(dx, dz);
+      if (d < 0.1 || now > e.until) {
+        n.escort = null;
+        [n.path, n.chase, n.plan] = [null, null, null];
+        n.wait = 2;
+        const c = this.room.clients.get(e.client);
+        if (c?.pos) this.face(n, c.pos[0], c.pos[2]);
+        // (No "halt!" from either of us straight after: we've just said our piece.)
+        for (const g of this.list) if (g.def.land === n.def.land) g.seen.set(`${e.client}:false`, now);
+        this.act(n, NPC_ACT.wave, 1.5);
+        this.say(n, e.gentle ? pickOne(['Come back soon! 👋', 'Bye now! 🕶️']) : pickOne(['And stay out! 🕶️', 'Guests only! Ask first next time. 🔔', 'Have a nice day! 🕶️']), true);
+        return;
+      }
+      const step = Math.min(d, 3 * dt);
+      n.pos[0] += (dx / d) * step;
+      n.pos[2] += (dz / d) * step;
+      n.pos[1] = e.to[1];
+      n.yaw = turn(n.yaw, Math.atan2(-dx, -dz), dt * 8);
+      n.action = NPC_ACT.walk;
+      return;
+    }
+    const k = n.catch, c = this.room.clients.get(k.client);
+    if (!c?.joined || !c.pos || now > k.until) {
+      // Couldn't get to them in time: shoo!
+      n.catch = null;
+      [n.path, n.chase] = [null, null];
+      n.wait = 1;
+      if (c?.joined) {
+        c.send({ t: 'guard_shoo', id: n.id });
+        this.act(n, NPC_ACT.wave, 1.5);
+        this.say(n, k.gentle ? 'Time\'s up! Off you go! 👋' : pickOne(['SHOO! 👋', 'Off you go! SHOO! 👋']), true);
+      }
+      return;
+    }
+    const [x, y, z] = c.pos, d = Math.hypot(x - n.pos[0], z - n.pos[2]);
+    if (d < 1.4 && Math.abs(y - n.pos[1]) < 1.6) {
+      // Caught! This way out, please.
+      const land = this.lands.find(l => l.key === n.def.land);
+      const to = land ? this.exitSpot(land.rect, c.pos) : [x, y, z];
+      c.send({ t: 'guard_caught', id: n.id, to, gentle: k.gentle });
+      const wx = to[0] - x, wz = to[2] - z, wl = Math.hypot(wx, wz) || 1;
+      n.escort = { to: [to[0] - (wz / wl) * 0.8, to[1], to[2] + (wx / wl) * 0.8], client: c.id, gentle: k.gentle, until: now + (wl / 3 + 2.5) * SECOND };
+      n.catch = null;
+      [n.path, n.chase] = [null, null];
+      this.face(n, x, z);
+      this.say(n, k.gentle ? 'This way, friend. 🕶️' : pickOne(['Gotcha! This way, please. 🕶️', 'Caught you! Out you go! 🕶️', 'Nice try! Off we go. 🕶️']), true);
+      return;
+    }
+    // Run there: through the house and yard (doors, stairs) if there's a way, or straight at them.
+    // (A new way only when they've moved off from where we were heading.)
+    const moved = !n.catchAt || Math.hypot(n.catchAt[0] - x, n.catchAt[2] - z) > 1.5 || Math.abs(n.catchAt[1] - y) > 0.5;
+    if ((!n.path && now - (n.chaseAt || 0) > 300) || (moved && now - (n.chaseAt || 0) > 400)) {
+      n.chaseAt = now;
+      n.catchAt = [x, y, z];
+      const map = this.homeMap(n);
+      const goal = map && nearestNode(map, x, y, z, 3);
+      const path = goal && route(map, cellKey(...this.cellOf(n)), goal);
+      if (path?.length) this.setPath(n, path, goal);
+      else n.path = null;
+    }
+    if (n.path) return this.followPath(n, dt);
+    const step = Math.min(d, 6.5 * dt), nx = n.pos[0] + ((x - n.pos[0]) / d) * step, nz = n.pos[2] + ((z - n.pos[2]) / d) * step;
+    if (this.standable(Math.floor(nx), Math.round(n.pos[1]), Math.floor(nz), n.def)) {
+      n.pos[0] = nx;
+      n.pos[2] = nz;
+      n.yaw = turn(n.yaw, Math.atan2(-(x - n.pos[0]), -(z - n.pos[2])), dt * 10);
+      n.action = NPC_ACT.walk;
+    } else n.action = NPC_ACT.idle;
+  }
+
+  // Just outside the land, nearest to (where they are): somewhere to stand, a step or two out.
+  exitSpot([x0, z0, x1, z1], p) {
+    const y = Math.max(0, Math.round(p[1])), fx = Math.floor(p[0]), fz = Math.floor(p[2]);
+    // [x, z, along-x, along-z]: the cells just past each edge, and which way that edge runs.
+    const ways = [[x0 - 2, fz, 0, 1], [x1 + 2, fz, 0, 1], [fx, z0 - 2, 1, 0], [fx, z1 + 2, 1, 0]]
+      .sort((a, b) => Math.hypot(a[0] + 0.5 - p[0], a[1] + 0.5 - p[2]) - Math.hypot(b[0] + 0.5 - p[0], b[1] + 0.5 - p[2]));
+    for (const [cx, cz, ax, az] of ways) {
+      for (const back of [0, 1]) for (const o of [0, 1, -1, 2, -2, 3, -3]) {
+        const x = cx + ax * o + (cx < x0 ? back : cx > x1 ? -back : 0), z = cz + az * o + (cz < z0 ? back : cz > z1 ? -back : 0);
+        if (this.standable(x, y, z)) return [x + 0.5, y, z + 0.5];
+      }
+    }
+    const [cx, cz] = ways[0];
+    return [cx + 0.5, y, cz + 0.5];
   }
 
   // Someone without clearance tried the base's door: the nearest guard tells them.

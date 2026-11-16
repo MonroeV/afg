@@ -369,11 +369,27 @@ customize your character, drive cars, build anything and play with friends.
   **Bodyguards** (300, and only for Secret Agency agents with Top Secret clearance): two guards in
   black suits and sunglasses who patrol your land (your home land): round the house, every floor,
   the yard and the windows, and they take turns standing guard at the front door. They walk right up to anyone who shouldn't be there, and don't let
-  anybody else on it, just like the guards at the secret base. Players who
-  aren't on your guest list get walked straight back off it, the town's people (and other
+  anybody else on it, just like the guards at the secret base. The town's people (and other
   people's pets) can't step onto it, and the guards say so ("🛑 Sorry Bo, you're not on Mia's
   guest list"). Right-click one of your bodyguards for your **guest list**: tick the names saved
-  in the Character Gallery (or type in anyone's) and they're let in. **A Family** (160): a family
+  in the Character Gallery (or type in anyone's) and they're let in.
+  - **Asking to come in** 🔔: right-click someone's bodyguard and they offer to ask the owner (if
+    they're playing). The owner gets a little picture box: ✅📋 on the guest list, 🚪⏰ just this
+    visit (15 minutes), ❌ no, or 🔕 stop asking me (remembered). The bodyguard tells you the
+    answer. No spamming: one question at a time (for the asker and for the owner), not again for
+    2 minutes (10 after a no), and the owner has 45 seconds to answer before it goes away
+  - **Anyone who comes in anyway** isn't teleported: what happens depends on how they got in.
+    - **On foot**: a whistle and "🛑 HALT!" (you're frozen to the spot), a bodyguard comes
+      running (through the house and up the stairs if need be), catches you ("Gotcha! This way,
+      please. 🕶️") and walks you off the land beside you ("And stay out!"). If they can't get
+      to you, they shoo you off
+    - **From above** (flying, a jetpack, a balloon, up on a roof): the bodyguards huff and puff
+      and BLOW you off the land in a big gust 💨
+    - **Driving**: 🚧 STOP! Your vehicle's pushed back out
+    - **Tunnelling underneath**: they hear the digging and FLUSH you out with a bucket of water 🪣💦
+    - **Opening a door** on their land: a moment later a bodyguard slams it shut 🚪
+    - Taken off the guest list (or your visit's over) while you're there: walked out gently
+      ("This way, friend") **A Family** (160): a family
   moves into your house (your home land) and lives there, coming to say hello when you come home.
   They each go off and do their own thing, spread out round the house: lying on the bed (for a
   long while at night), sitting on a chair or the couch (sometimes reading a book), reading at a
@@ -822,6 +838,8 @@ public/
     gameui.js          Coach Kai's games on your screen: picking one, the banner, counting
     tacos.js           Raining tacos, ice cream, pizza, donuts and cats & dogs; the station's spinning mast
     weatherui.js       Stormy's menu: what shall it rain?
+    guardcatch.js      Bodyguards keeping you off their land: caught and walked off, blown away, flushed out
+    guardui.js         Someone asking your bodyguards to let them in: your answer
     lighting.js        Live reflections and the glow effect
     lightpools.js      Soft pools of light on the ground under every lamp
     models.js          3D models for the lamps and furniture
