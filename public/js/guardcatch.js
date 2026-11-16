@@ -1,14 +1,15 @@
 // Someone's bodyguards keeping you off their land (when you're not on their guest list). No
 // teleporting: what happens depends on how you got in.
-//  - On foot: a whistle, "HALT!", and you freeze. A bodyguard comes running (the server runs
-//    them: see catchIntruder in npcs.js), catches you, and walks you off the land, side by side.
-//    (If they can't get to you, they shoo you off.)
+//  - On foot: a whistle and "HALT!", and a bodyguard comes running (the server runs them: see
+//    catchIntruder in npcs.js). Run if you like: they're always a good bit faster than you, and
+//    when they catch you they walk you off the land (out through the doors and down the stairs).
+//    Get back off the land first and that's that, no fuss. (Can't get to you? They shoo you off.)
 //  - From above (flying, a jetpack, a balloon, up on a roof): they huff and puff and BLOW you away.
 //  - Driving: a stop sign, and your vehicle's pushed back out.
 //  - Tunnelling underneath: they hear the digging and flush you out with a bucket of water.
 // Whoever's watching sees it too: you're moved for real, and the guards are where they are.
 const ESCORT_SPEED = 3; // (the same as the guard walking beside you: see guardChase)
-const FAILSAFE = 8; // seconds frozen with no word from the server: shoo
+const FAILSAFE = 15; // seconds of being chased with no word from the server: shoo
 const COOLDOWN = 2;
 
 export class GuardCatch {
@@ -19,9 +20,9 @@ export class GuardCatch {
     this.cooldown = 0;
   }
 
-  // Can't walk about just now (frozen, or being walked off, or blown away).
+  // Can't walk about just now (being walked off, or blown away). (Being chased, you can run!)
   get frozen() {
-    return !!this.state && this.state.kind !== 'car';
+    return !!this.state && this.state.kind !== 'car' && this.state.kind !== 'chase';
   }
 
   // Where you go to be off the land: just past the nearest edge (and `extra` further on).
@@ -58,7 +59,7 @@ export class GuardCatch {
     const how = driving ? 'car' : p.y < -0.5 ? 'tunnel' : !this.player.onGround || this.player.flying || p.y > 1.3 ? 'air' : 'foot';
     this.net.send({ t: 'intrude', key: land.key, how });
     if (how === 'foot') {
-      this.state = { kind: 'halt', land, t: 0, at: p.clone(), resend: 2.5 };
+      this.state = { kind: 'chase', land, t: 0, resend: 2.5 };
       this.sounds.tone(2600, 2400, 0.25, 0.2, 'square');
       this.sounds.tone(2600, 2400, 0.35, 0.2, 'square', 0.32); // (the whistle: tweet-tweeeet!)
       this.shout('🛑 HALT!');
@@ -79,17 +80,26 @@ export class GuardCatch {
     }
   }
 
-  // A bodyguard caught you: they walk you off, to `to`.
-  caught({ to, gentle }) {
-    if (this.state?.kind !== 'halt') return;
-    this.state = { kind: 'escort', land: this.state.land, to: { x: to[0], y: to[1], z: to[2] }, gentle, t: 0 };
+  // A bodyguard caught you: they walk you off, along `path` (the way out: [x, y, z] each).
+  caught({ path, gentle }) {
+    if (this.state?.kind !== 'chase' || !Array.isArray(path) || !path.length) return;
+    this.state = { kind: 'escort', land: this.state.land, path: path.map(([x, y, z]) => ({ x, y, z })), i: 0, gentle, t: 0 };
+    this.player.vel.set(0, 0, 0);
     this.shout(gentle ? '🕶️👋' : '🛡️ GOTCHA!');
   }
 
   // They couldn't get to you: off you go anyway (quick, with a puff of dust).
   shoo() {
-    if (this.state?.kind !== 'halt') return;
+    if (this.state?.kind !== 'chase') return;
     this.startSlide(this.state.land);
+  }
+
+  // The bodyguard's happy we're off the land again (we got off before they caught us).
+  release() {
+    if (this.state?.kind !== 'chase') return;
+    this.state = null;
+    this.cooldown = COOLDOWN;
+    this.shout('👍');
   }
 
   startSlide(land) {
@@ -110,11 +120,12 @@ export class GuardCatch {
   play(s, dt) {
     const pl = this.player, p = pl.pos;
     s.t += dt;
-    if (s.kind === 'halt') {
-      // Frozen to the spot while a bodyguard comes running.
-      p.x = s.at.x;
-      p.z = s.at.z;
-      pl.vel.x = pl.vel.z = 0;
+    if (s.kind === 'chase') {
+      // Run! (A bodyguard's coming, much faster than you.) Off the land again: no fuss.
+      if (!this.agency.keptOut(p.x, p.z) || p.y < -0.5) {
+        this.net.send({ t: 'intrude_off', key: s.land.key });
+        return this.release();
+      }
       if (s.t > s.resend) {
         // (No word yet: the server might not have known where we were. Tell it again.)
         s.resend += 2.5;
@@ -122,17 +133,29 @@ export class GuardCatch {
       }
       if (s.t > FAILSAFE) this.startSlide(s.land);
     } else if (s.kind === 'escort') {
-      const dx = s.to.x - p.x, dz = s.to.z - p.z, d = Math.hypot(dx, dz);
+      // Walked along the way out, a spot at a time (through doors, down stairs).
       pl.vel.set(0, 0, 0);
-      if (d < 0.05 || s.t > 10) {
-        p.x = s.to.x;
-        p.z = s.to.z;
-        p.y = Math.max(p.y, s.to.y);
-        return this.done(s.gentle ? `🛡️ Time's up on ${s.land.owner}'s land. Bye for now! 👋` : `🛡️ The bodyguards walked you off ${s.land.owner}'s land. Guests only! (🔔 Ask a bodyguard to let you in.)`);
+      let left = ESCORT_SPEED * dt;
+      while (left > 0 && s.i < s.path.length) {
+        const to = s.path[s.i], dx = to.x - p.x, dz = to.z - p.z, d = Math.hypot(dx, dz);
+        if (d <= left) {
+          p.x = to.x;
+          p.z = to.z;
+          p.y = to.y;
+          left -= d;
+          s.i++;
+          continue;
+        }
+        p.x += (dx / d) * left;
+        p.z += (dz / d) * left;
+        p.y += (to.y - p.y) * Math.min(1, left / Math.max(d, 0.01));
+        left = 0;
       }
-      const step = Math.min(d, ESCORT_SPEED * dt);
-      p.x += (dx / d) * step;
-      p.z += (dz / d) * step;
+      if (s.i >= s.path.length || s.t > 25) {
+        const end = s.path.at(-1);
+        p.set(end.x, Math.max(p.y, end.y), end.z);
+        return this.done(s.gentle ? `🛡️ Time's up on ${s.land.owner}'s land. Bye for now! 👋` : `🛡️ The bodyguards walked you off ${s.land.owner}'s land. Guests only! (🔔 Right-click a bodyguard to ask to come in.)`);
+      }
     } else if (s.kind === 'slide') {
       const k = Math.min(1, s.t / 0.5);
       p.x = s.from.x + (s.to.x - s.from.x) * k;

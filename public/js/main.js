@@ -2236,6 +2236,7 @@ const makeGuardCatch = () => new GuardCatch({
 });
 net.on('guard_caught', msg => guardCatch?.caught(msg));
 net.on('guard_shoo', () => guardCatch?.shoo());
+net.on('guard_release', () => guardCatch?.release());
 // Not on the list: shall the bodyguard ask the owner?
 net.on('guard_offer', ({ key, owner }) => ask('🛡️🔔', `${owner} 🚪❓`, '🔔 Ask!', 'No thanks', () => net.send({ t: 'guard_ask', key })));
 net.on('guard_reply', ({ answer, owner }) => {

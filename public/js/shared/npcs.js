@@ -658,7 +658,16 @@ export class NpcCrew {
     for (const c of players) {
       if (!c.pos || c.sleeping) continue;
       const boss = nameKey(c.name) === n.nav.key, seenKey = n.def.land ? `${c.id}:true` : c.id;
-      if (land && !this.room.welcomeOn(land, c) && onLand(c.pos, 2)) return { id: c.id, x: c.pos[0], y: c.pos[1], z: c.pos[2], near: 2 };
+      if (land && !this.room.welcomeOn(land, c) && onLand(c.pos, 2)) {
+        if (onLand(c.pos, 0)) return { id: c.id, x: c.pos[0], y: c.pos[1], z: c.pos[2], near: 2 };
+        // Just outside: shadow them along the edge (like a puppy), staying between them and the
+        // land. Just one of us: whoever's nearest and free.
+        const nearest = this.list.filter(g => g.def.land === land.key && !g.catch && !g.escort && !g.ride)
+          .sort((a, b) => Math.hypot(a.pos[0] - c.pos[0], a.pos[2] - c.pos[2]) - Math.hypot(b.pos[0] - c.pos[0], b.pos[2] - c.pos[2]))[0];
+        if (nearest !== n) continue;
+        const sx = Math.min(x1 + 0.5, Math.max(x0 + 0.5, c.pos[0])), sz = Math.min(z1 + 0.5, Math.max(z0 + 0.5, c.pos[2]));
+        return { id: c.id, x: sx, y: n.pos[1], z: sz, near: 0.6, shadow: true, lx: c.pos[0], lz: c.pos[2] };
+      }
       if (!boss || !onLand(c.pos, 4)) continue;
       bossHome = true;
       // (Just come home: go and say hi. Not every time they walk past, though.)
@@ -670,6 +679,16 @@ export class NpcCrew {
 
   homeMove(n, dt, players) {
     if (n.ride) return this.rideLift(n, dt);
+    if (n.stay) {
+      // Staying put by someone we've just seen off (so they can ask to come in).
+      const c = this.room.clients.get(n.stay.client);
+      if (!c?.joined || !c.pos || Date.now() > n.stay.until || Math.hypot(c.pos[0] - n.pos[0], c.pos[2] - n.pos[2]) > 12) n.stay = null;
+      else {
+        n.yaw = turn(n.yaw, Math.atan2(-(c.pos[0] - n.pos[0]), -(c.pos[2] - n.pos[2])), dt * 4);
+        if (n.actionT <= 0) n.action = NPC_ACT.idle;
+        return;
+      }
+    }
     if (n.doing) return this.homeDoing(n, dt, players, Date.now());
     const step = n.path?.[n.pathI];
     const between = step && (step.how === CLIMB || Math.abs(n.pos[1] - Math.round(n.pos[1])) > 0.01);
@@ -680,14 +699,18 @@ export class NpcCrew {
       // (Finish the step, or the climb, first.)
     } else if (chase) {
       const d = Math.hypot(chase.x - n.pos[0], chase.z - n.pos[2]);
+      n.shadow = !!chase.shadow;
       if (d < chase.near && Math.abs(chase.y - n.pos[1]) < 1.5) {
         if (chase.pet) return this.patPet(n, chase.c, chase.pet);
         if (n.chase) [n.path, n.chase] = [null, null];
-        this.face(n, chase.x, chase.z);
+        this.face(n, chase.lx ?? chase.x, chase.lz ?? chase.z);
         n.action = NPC_ACT.idle;
         return;
       }
-      if (n.chase?.id !== chase.id || now - n.chaseAt > 1500) {
+      n.shadowT = (n.shadowT ?? 0) - dt;
+      const moved = chase.shadow && n.chase && Math.hypot(n.chase.x - chase.x, n.chase.z - chase.z) > 1 && n.shadowT <= 0;
+      if (moved) n.shadowT = 0.3;
+      if (n.chase?.id !== chase.id || now - n.chaseAt > 1500 || moved) {
         n.chase = chase;
         n.chaseAt = now;
         const map = this.homeMap(n);
@@ -698,7 +721,7 @@ export class NpcCrew {
           n.plan = null;
         } else if (chase.pet) n.task = null; // (can't get there from here)
       }
-    } else if (n.chase) [n.path, n.chase] = [null, null];
+    } else if (n.chase) [n.path, n.chase, n.shadow] = [null, null, false];
     if (!n.path) {
       n.action = NPC_ACT.idle;
       n.wait -= dt;
@@ -757,9 +780,9 @@ export class NpcCrew {
     const tx = step.x + 0.5, tz = step.z + 0.5, ty = step.y;
     const dx = tx - n.pos[0], dz = tz - n.pos[2], d = Math.hypot(dx, dz), dy = ty - n.pos[1];
     if (step.how === CLIMB) {
-      n.pos[1] += Math.sign(dy) * Math.min(Math.abs(dy), (n.catch ? 4 : 1.8) * dt);
+      n.pos[1] += Math.sign(dy) * Math.min(Math.abs(dy), (n.catch ? n.catch.speed / 2 : 1.8) * dt);
     } else {
-      const s = Math.min(d, (n.catch ? 6.5 : n.def.land ? 1.7 : 1.4) * dt); // (bodyguards run after intruders)
+      const s = Math.min(d, (n.catch ? n.catch.speed : n.escort ? 3 : n.shadow ? 5 : n.def.land ? 1.7 : 1.4) * dt); // (bodyguards run after intruders)
       if (d > 1e-6) {
         n.pos[0] += (dx / d) * s;
         n.pos[2] += (dz / d) * s;
@@ -1220,7 +1243,9 @@ export class NpcCrew {
       if (!n) return c.send({ t: 'guard_shoo', id: guards[0].id });
       if (n.doing) this.stopDoing(n);
       n.actionT = 0;
-      n.catch = { client: c.id, until: Date.now() + 6 * SECOND, gentle };
+      n.stay = null;
+      // left: seconds to catch them in; speed: always a good bit faster than them (see guardChase).
+      n.catch = { client: c.id, left: 12, gentle, speed: 11, v: 0, acc: 0, prev: c.pos.slice() };
       n.catchAt = null;
       [n.path, n.chase, n.plan] = [null, null, null];
       this.say(n, gentle ? 'Time\'s up, friend! 🕶️' : pickOne(['🛑 HALT!', '🛑 HEY! Stop right there!', '🛑 Not so fast!']), true);
@@ -1244,31 +1269,11 @@ export class NpcCrew {
 
   guardChase(n, dt) {
     const now = Date.now();
-    if (n.escort) {
-      // Walking them off: side by side, to just outside the land.
-      const e = n.escort, dx = e.to[0] - n.pos[0], dz = e.to[2] - n.pos[2], d = Math.hypot(dx, dz);
-      if (d < 0.1 || now > e.until) {
-        n.escort = null;
-        [n.path, n.chase, n.plan] = [null, null, null];
-        n.wait = 2;
-        const c = this.room.clients.get(e.client);
-        if (c?.pos) this.face(n, c.pos[0], c.pos[2]);
-        // (No "halt!" from either of us straight after: we've just said our piece.)
-        for (const g of this.list) if (g.def.land === n.def.land) g.seen.set(`${e.client}:false`, now);
-        this.act(n, NPC_ACT.wave, 1.5);
-        this.say(n, e.gentle ? pickOne(['Come back soon! 👋', 'Bye now! 🕶️']) : pickOne(['And stay out! 🕶️', 'Guests only! Ask first next time. 🔔', 'Have a nice day! 🕶️']), true);
-        return;
-      }
-      const step = Math.min(d, 3 * dt);
-      n.pos[0] += (dx / d) * step;
-      n.pos[2] += (dz / d) * step;
-      n.pos[1] = e.to[1];
-      n.yaw = turn(n.yaw, Math.atan2(-dx, -dz), dt * 8);
-      n.action = NPC_ACT.walk;
-      return;
-    }
+    if (n.escort) return this.guardEscort(n, dt, now);
     const k = n.catch, c = this.room.clients.get(k.client);
-    if (!c?.joined || !c.pos || now > k.until) {
+    const land = this.lands.find(l => l.key === n.def.land);
+    k.left -= dt;
+    if (!c?.joined || !c.pos || k.left <= 0 || !land) {
       // Couldn't get to them in time: shoo!
       n.catch = null;
       [n.path, n.chase] = [null, null];
@@ -1277,28 +1282,50 @@ export class NpcCrew {
         c.send({ t: 'guard_shoo', id: n.id });
         this.act(n, NPC_ACT.wave, 1.5);
         this.say(n, k.gentle ? 'Time\'s up! Off you go! 👋' : pickOne(['SHOO! 👋', 'Off you go! SHOO! 👋']), true);
+        this.stayBy(n, c.id, now);
       }
       return;
     }
     const [x, y, z] = c.pos, d = Math.hypot(x - n.pos[0], z - n.pos[2]);
-    if (d < 1.4 && Math.abs(y - n.pos[1]) < 1.6) {
-      // Caught! This way out, please.
-      const land = this.lands.find(l => l.key === n.def.land);
-      const to = land ? this.exitSpot(land.rect, c.pos) : [x, y, z];
-      c.send({ t: 'guard_caught', id: n.id, to, gentle: k.gentle });
-      const wx = to[0] - x, wz = to[2] - z, wl = Math.hypot(wx, wz) || 1;
-      n.escort = { to: [to[0] - (wz / wl) * 0.8, to[1], to[2] + (wx / wl) * 0.8], client: c.id, gentle: k.gentle, until: now + (wl / 3 + 2.5) * SECOND };
-      n.catch = null;
-      [n.path, n.chase] = [null, null];
-      this.face(n, x, z);
-      this.say(n, k.gentle ? 'This way, friend. 🕶️' : pickOne(['Gotcha! This way, please. 🕶️', 'Caught you! Out you go! 🕶️', 'Nice try! Off we go. 🕶️']), true);
-      return;
+    // Off the land again before we got to them? That'll do: no fuss.
+    const [x0, z0, x1, z1] = land.rect, m = 0.5;
+    if (x < x0 - m || x > x1 + 1 + m || z < z0 - m || z > z1 + 1 + m) return this.releaseIntruder(c, land.key);
+    // How fast are they going? (We're always a good bit faster.)
+    k.acc += dt;
+    if (k.acc >= 0.1) {
+      const v = Math.hypot(x - k.prev[0], z - k.prev[2]) / k.acc;
+      k.v = k.v * 0.5 + Math.min(30, v) * 0.5;
+      k.prev = [x, y, z];
+      k.acc = 0;
+      k.speed = Math.min(25, Math.max(11, k.v * 1.35));
+    }
+    if (d < 1.4 && Math.abs(y - n.pos[1]) < 1.6) return this.caughtIntruder(n, c, land, now);
+    // Still running after a few seconds? The other bodyguard joins in, from wherever they are.
+    k.t = (k.t || 0) + dt;
+    if (k.t > 4 && !k.called) {
+      k.called = true;
+      const other = this.list.find(g => g !== n && g.def.land === n.def.land && !g.catch && !g.escort && !g.ride);
+      if (other) {
+        if (other.doing) this.stopDoing(other);
+        other.stay = null;
+        other.catch = { ...k, prev: k.prev.slice(), called: true, replan: 0 };
+        other.catchAt = null;
+        [other.path, other.chase, other.plan] = [null, null, null];
+        this.say(other, pickOne(['I\'ll head them off! 🕶️', 'Coming round the other side! 🏃']), true);
+      }
+    }
+    // In plain sight on the same level: straight at them. (Otherwise the way round: below.)
+    if (Math.abs(y - n.pos[1]) < 0.5 && d < 14 && this.clearLine(n.pos, [x, n.pos[1], z], n.def)) {
+      n.path = null;
+      n.catchAt = null;
+      return this.runAt(n, x, z, d, k.speed, dt);
     }
     // Run there: through the house and yard (doors, stairs) if there's a way, or straight at them.
     // (A new way only when they've moved off from where we were heading.)
     const moved = !n.catchAt || Math.hypot(n.catchAt[0] - x, n.catchAt[2] - z) > 1.5 || Math.abs(n.catchAt[1] - y) > 0.5;
-    if ((!n.path && now - (n.chaseAt || 0) > 300) || (moved && now - (n.chaseAt || 0) > 400)) {
-      n.chaseAt = now;
+    k.replan = (k.replan ?? 0) - dt;
+    if ((!n.path || moved) && k.replan <= 0) {
+      k.replan = 0.3;
       n.catchAt = [x, y, z];
       const map = this.homeMap(n);
       const goal = map && nearestNode(map, x, y, z, 3);
@@ -1307,7 +1334,11 @@ export class NpcCrew {
       else n.path = null;
     }
     if (n.path) return this.followPath(n, dt);
-    const step = Math.min(d, 6.5 * dt), nx = n.pos[0] + ((x - n.pos[0]) / d) * step, nz = n.pos[2] + ((z - n.pos[2]) / d) * step;
+    this.runAt(n, x, z, d, k.speed, dt);
+  }
+
+  runAt(n, x, z, d, speed, dt) {
+    const step = Math.min(d, speed * dt), nx = n.pos[0] + ((x - n.pos[0]) / d) * step, nz = n.pos[2] + ((z - n.pos[2]) / d) * step;
     if (this.standable(Math.floor(nx), Math.round(n.pos[1]), Math.floor(nz), n.def)) {
       n.pos[0] = nx;
       n.pos[2] = nz;
@@ -1316,12 +1347,97 @@ export class NpcCrew {
     } else n.action = NPC_ACT.idle;
   }
 
+  // Caught! The way out (through the doors and down the stairs, on our map of the place), for
+  // them to be walked along, and us a step behind.
+  caughtIntruder(n, c, land, now) {
+    const k = n.catch, [x, y, z] = c.pos;
+    for (const g of this.list) if (g !== n && g.catch?.client === c.id) [g.catch, g.path, g.chase] = [null, null, null]; // (we've got them)
+    // The shortest way off the land: out of whichever side's quickest to get to (through the doors).
+    const map = this.homeMap(n), from = map && nearestNode(map, x, y, z, 2);
+    let to = this.exitSpot(land.rect, c.pos), steps = null;
+    if (from) {
+      for (const side of [0, 1, 2, 3]) {
+        const spot = this.exitSpot(land.rect, c.pos, side), goal = nearestNode(map, spot[0], spot[1], spot[2], 2);
+        const r = goal && route(map, from, goal);
+        if (r && (!steps || r.length < steps.length)) [steps, to] = [r, spot];
+      }
+    }
+    const path = steps?.length ? steps.map(st => [st.x + 0.5, st.y, st.z + 0.5]) : [to];
+    if (steps?.length && Math.hypot(path.at(-1)[0] - to[0], path.at(-1)[2] - to[2]) > 0.3) path.push(to);
+    c.send({ t: 'guard_caught', id: n.id, path, gentle: k.gentle });
+    n.catch = null;
+    [n.chase, n.plan] = [null, null];
+    if (steps?.length > 1) {
+      this.setPath(n, steps.slice(0, -1), null); // (a step behind them, all the way out)
+      n.escort = { client: c.id, gentle: k.gentle, left: path.length / 3 + 4, along: true };
+    } else {
+      n.path = null;
+      const wx = to[0] - x, wz = to[2] - z, wl = Math.hypot(wx, wz) || 1;
+      n.escort = { to: [to[0] - (wz / wl) * 0.8, to[1], to[2] + (wx / wl) * 0.8], client: c.id, gentle: k.gentle, left: wl / 3 + 2.5 };
+    }
+    this.face(n, x, z);
+    this.say(n, k.gentle ? 'This way, friend. 🕶️' : pickOne(['Gotcha! This way, please. 🕶️', 'Caught you! Out you go! 🕶️', 'Nice try! Off we go. 🕶️']), true);
+  }
+
+  // Walking them off (along the way out, or straight there), then a word, and we stay put a
+  // while so they can ask to come in.
+  guardEscort(n, dt, now) {
+    const e = n.escort;
+    e.left -= dt;
+    let there = e.left <= 0;
+    if (!there && e.along) {
+      if (n.path) this.followPath(n, dt);
+      there = !n.path;
+    } else if (!there) {
+      const dx = e.to[0] - n.pos[0], dz = e.to[2] - n.pos[2], d = Math.hypot(dx, dz);
+      if (d < 0.1) there = true;
+      else {
+        const step = Math.min(d, 3 * dt);
+        n.pos[0] += (dx / d) * step;
+        n.pos[2] += (dz / d) * step;
+        n.pos[1] = e.to[1];
+        n.yaw = turn(n.yaw, Math.atan2(-dx, -dz), dt * 8);
+        n.action = NPC_ACT.walk;
+      }
+    }
+    if (!there) return;
+    n.escort = null;
+    [n.path, n.chase, n.plan] = [null, null, null];
+    const c = this.room.clients.get(e.client);
+    if (c?.pos) this.face(n, c.pos[0], c.pos[2]);
+    this.act(n, NPC_ACT.wave, 1.5);
+    this.say(n, e.gentle ? pickOne(['Come back soon! 👋', 'Bye now! 🕶️']) : pickOne(['And stay out! 🕶️', 'Guests only! Want me to ask the boss? 🔔', 'Have a nice day! Ask first next time. 🔔']), true);
+    this.stayBy(n, e.client, now);
+  }
+
+  // Stay right here a while, facing them (so they can ask to come in), and no more "halt!"
+  // from either of us straight away.
+  stayBy(n, client, now) {
+    n.stay = { client, until: now + 60 * SECOND };
+    n.wait = 2;
+    for (const g of this.list) if (g.def.land === n.def.land) g.seen.set(`${client}:false`, now);
+  }
+
+  // They got back off the land before we caught them: fine by us. (Or their game says so.)
+  releaseIntruder(c, key) {
+    const n = this.list.find(g => g.def.land === key && g.catch?.client === c.id);
+    if (!n) return;
+    n.catch = null;
+    [n.path, n.chase, n.plan] = [null, null, null];
+    if (c.pos) this.face(n, c.pos[0], c.pos[2]);
+    this.act(n, NPC_ACT.wave, 1.5);
+    this.say(n, pickOne(['Thanks! Guests only. 🔔', 'Ask the boss first! 🔔', 'Thank you! 🕶️']), true);
+    c.send({ t: 'guard_release', id: n.id });
+    this.stayBy(n, c.id, Date.now());
+  }
+
   // Just outside the land, nearest to (where they are): somewhere to stand, a step or two out.
-  exitSpot([x0, z0, x1, z1], p) {
+  // side: just that side (0 west, 1 east, 2 north, 3 south); otherwise the nearest.
+  exitSpot([x0, z0, x1, z1], p, side = null) {
     const y = Math.max(0, Math.round(p[1])), fx = Math.floor(p[0]), fz = Math.floor(p[2]);
     // [x, z, along-x, along-z]: the cells just past each edge, and which way that edge runs.
-    const ways = [[x0 - 2, fz, 0, 1], [x1 + 2, fz, 0, 1], [fx, z0 - 2, 1, 0], [fx, z1 + 2, 1, 0]]
-      .sort((a, b) => Math.hypot(a[0] + 0.5 - p[0], a[1] + 0.5 - p[2]) - Math.hypot(b[0] + 0.5 - p[0], b[1] + 0.5 - p[2]));
+    const all = [[x0 - 2, fz, 0, 1], [x1 + 2, fz, 0, 1], [fx, z0 - 2, 1, 0], [fx, z1 + 2, 1, 0]];
+    const ways = side !== null ? [all[side]] : all.sort((a, b) => Math.hypot(a[0] + 0.5 - p[0], a[1] + 0.5 - p[2]) - Math.hypot(b[0] + 0.5 - p[0], b[1] + 0.5 - p[2]));
     for (const [cx, cz, ax, az] of ways) {
       for (const back of [0, 1]) for (const o of [0, 1, -1, 2, -2, 3, -3]) {
         const x = cx + ax * o + (cx < x0 ? back : cx > x1 ? -back : 0), z = cz + az * o + (cz < z0 ? back : cz > z1 ? -back : 0);

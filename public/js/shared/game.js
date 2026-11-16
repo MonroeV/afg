@@ -2013,6 +2013,11 @@ export class GameRoom {
       this.npcs.catchIntruder(client, land, how, gentle);
     },
 
+    // Back off guarded land before a bodyguard caught them (their game says so): no fuss.
+    intrude_off(client, { key }) {
+      if (typeof key === 'string' && this.allow(client, 'intrude', 0.5, 2)) this.npcs.releaseIntruder(client, key);
+    },
+
     // Night-vision goggles from the gadget vault (agents only: you'd have to be inside!).
     take_goggles(client, { x, y, z }) {
       if (!this.allow(client, 'skis', 1, 3) || !inBounds(x, y, z) || BLOCKS[blockId(itemOf(this.get(x, y, z)))]?.spy !== 'goggles') return;

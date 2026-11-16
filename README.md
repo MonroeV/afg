@@ -379,10 +379,15 @@ customize your character, drive cars, build anything and play with friends.
     answer. No spamming: one question at a time (for the asker and for the owner), not again for
     2 minutes (10 after a no), and the owner has 45 seconds to answer before it goes away
   - **Anyone who comes in anyway** isn't teleported: what happens depends on how they got in.
-    - **On foot**: a whistle and "🛑 HALT!" (you're frozen to the spot), a bodyguard comes
-      running (through the house and up the stairs if need be), catches you ("Gotcha! This way,
-      please. 🕶️") and walks you off the land beside you ("And stay out!"). If they can't get
-      to you, they shoo you off
+    - **Walking up to the land**: a bodyguard shadows you along the edge (like a puppy), staying
+      between you and the land, and goes back to patrolling once you wander off
+    - **On foot**: a whistle and "🛑 HALT!", and a bodyguard comes running. Run if you like: you
+      can get a good way in, but they're always much faster than you (even in Super Sneakers),
+      and after a few seconds the other bodyguard joins in to head you off. They catch you
+      ("Gotcha! This way, please. 🕶️") and walk you off the land the quickest way, out through
+      the doors and down the stairs ("And stay out!"). Then they stay right there with you a
+      while, so you can ask to come in. Step back off the land before they catch you and that's
+      that: "Thanks! Guests only. 🔔". (If they can't get to you at all, they shoo you off.)
     - **From above** (flying, a jetpack, a balloon, up on a roof): the bodyguards huff and puff
       and BLOW you off the land in a big gust 💨
     - **Driving**: 🚧 STOP! Your vehicle's pushed back out
