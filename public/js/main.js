@@ -1250,7 +1250,7 @@ net.on('car_driver', msg => {
 });
 net.on('horn', ({ id }) => {
   const car = cars.list.get(id);
-  if (car) sounds.horn(loudness(car.pos.x, car.pos.y, car.pos.z, 60), hornPitch(car));
+  if (car) sounds.horn(loudness(car.pos.x, car.pos.y, car.pos.z, 60), hornPitch(car), hornStyle(car));
 });
 net.on('time', ({ time, day }) => {
   if (Number.isInteger(day)) worldDay = day;
@@ -1931,7 +1931,12 @@ function emote(kind) {
 
 // Every vehicle's horn has its own note.
 function hornPitch(car) {
-  return { police: 1.06, monster: 0.82, dump: 0.7, pickup: 0.86, camper: 1.0, boat: 0.68 }[car.kind] ?? 0.92 + ((car.id * 0.618) % 1) * 0.14;
+  return { police: 1.06, monster: 0.95, dump: 0.88, rv: 1.05, pickup: 0.88, camper: 0.94, boat: 1 }[car.kind] ?? 0.92 + ((car.id * 0.618) % 1) * 0.16;
+}
+
+// Big trucks have air horns, boats a foghorn; everything else a two-tone car horn.
+function hornStyle(car) {
+  return car.kind === 'boat' ? 'boat' : car.kind === 'dump' || car.kind === 'monster' || car.kind === 'rv' ? 'air' : 'car';
 }
 
 // G while driving: the police car's siren, the camper van's pop-up roof, the dump truck's bed.
@@ -2040,7 +2045,7 @@ net.on('car_gone', ({ id }) => {
 });
 
 function honk() {
-  sounds.horn(1, hornPitch(myCar));
+  sounds.horn(1, hornPitch(myCar), hornStyle(myCar));
   net.send({ t: 'horn' });
 }
 

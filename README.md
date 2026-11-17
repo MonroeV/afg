@@ -515,7 +515,10 @@ customize your character, drive cars, build anything and play with friends.
   pine needles, snowmen, ski lifts, pizza ovens…
 - **Sounds that don't get old**: every sound is a little different each time, every vehicle has its
   own engine and horn note, and a steady engine or helicopter hum slowly settles into the
-  background (it comes right back when you speed up, slow down or climb)
+  background (it comes right back when you speed up, slow down or climb). Horns sound like the
+  real thing: cars have a two-tone horn (two notes a third apart, with the buzz and brassy ring of
+  a real one), the dump truck, monster truck and RV a big air horn (a deep chord, with a puff of
+  air), and boats a foghorn
 - **Real-time multiplayer**: see each other, drive together, chat. Other players, their pets, their
   cars and the town's people move smoothly: their moves are replayed a split second behind, at the
   even pace they really moved, so a bumpy connection doesn't make them jitter or bounce

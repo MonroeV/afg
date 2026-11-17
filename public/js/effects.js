@@ -670,6 +670,78 @@ class EngineSampler {
   }
 }
 
+// ---------- Horns ----------
+// A real horn: a metal diaphragm buzzing (rich, slightly overdriven harmonics) through a
+// trumpet-shaped bell (a brassy resonance in the middle), loud and steady while it sounds: in
+// quickly, held, out quickly. Cars have two of them a third apart (a little out of tune with each
+// other); big trucks have air horns (a deep chord, with a puff of air); boats a foghorn.
+const HORNS = {
+  car: { notes: [400, 500], length: 0.42, attack: 0.012, release: 0.07, ring: 2200, top: 5000, level: 0.16 },
+  air: { notes: [185, 233, 277], length: 0.75, attack: 0.06, release: 0.15, ring: 900, top: 4000, level: 0.17 },
+  boat: { notes: [98, 100.5], length: 1.5, attack: 0.15, release: 0.3, ring: 500, top: 1200, level: 0.16 },
+};
+let hornCurve = null;
+
+// One honk, played into `out` at time t (on any audio context, an offline one too).
+export function hornVoice(ctx, out, t, volume = 1, pitch = 1, style = 'car') {
+  const h = HORNS[style] || HORNS.car;
+  const k = pitch * jitter(0.02), length = h.length * jitter(0.06);
+  if (!hornCurve) {
+    hornCurve = new Float32Array(1024);
+    for (let i = 0; i < 1024; i++) hornCurve[i] = Math.tanh(((i / 1023) * 2 - 1) * 2.2) / Math.tanh(2.2);
+  }
+  const mix = ctx.createGain();
+  mix.gain.value = 0.55 / h.notes.length;
+  const end = t + h.attack + length + h.release;
+  for (const f of h.notes) {
+    for (const cents of [0, 6]) {
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.detune.value = cents + (Math.random() * 2 - 1) * 4; // (two horns are never quite in tune)
+      // The diaphragm starts a touch flat, then settles.
+      osc.frequency.setValueAtTime(f * k * 0.97, t);
+      osc.frequency.exponentialRampToValueAtTime(f * k, t + 0.03);
+      osc.connect(mix);
+      osc.start(t);
+      osc.stop(end + 0.02);
+    }
+  }
+  const buzz = ctx.createWaveShaper();
+  buzz.curve = hornCurve;
+  const low = ctx.createBiquadFilter();
+  low.type = 'highpass';
+  low.frequency.value = style === 'boat' ? 60 : 180;
+  const bell = ctx.createBiquadFilter();
+  bell.type = 'peaking';
+  bell.frequency.value = h.ring;
+  bell.Q.value = 1.4;
+  bell.gain.value = 9;
+  const top = ctx.createBiquadFilter();
+  top.type = 'lowpass';
+  top.frequency.value = h.top;
+  const g = ctx.createGain();
+  const level = h.level * volume;
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(level, t + h.attack);
+  g.gain.setValueAtTime(level, t + h.attack + length);
+  g.gain.linearRampToValueAtTime(0, end);
+  mix.connect(buzz).connect(low).connect(bell).connect(top).connect(g).connect(out);
+  if (style === 'air') {
+    // The puff of air as the valve opens.
+    const src = ctx.createBufferSource(), n = Math.floor(ctx.sampleRate * 0.25);
+    src.buffer = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = src.buffer.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 1400;
+    const pg = ctx.createGain();
+    pg.gain.value = 0.25 * volume;
+    src.connect(f).connect(pg).connect(out);
+    src.start(t);
+  }
+}
+
 export class Sounds {
   constructor() {
     this.ctx = null;
@@ -826,11 +898,11 @@ export class Sounds {
     this.noiseHit(400, 0.08, 0.6, 'bandpass', 0.22);
   }
   bump() { this.noiseHit(160, 0.25, 1.4, 'lowpass'); }
-  horn(volume = 1, pitch = 1) {
-    this.together(() => {
-      this.tone(330 * pitch, 325 * pitch, 0.38, 0.25 * volume, 'square');
-      this.tone(415 * pitch, 410 * pitch, 0.38, 0.22 * volume, 'square');
-    });
+  // style: 'car' (two-tone), 'air' (a big truck's air horn) or 'boat' (a foghorn).
+  horn(volume = 1, pitch = 1, style = 'car') {
+    const ctx = this.ensure();
+    if (!ctx || volume <= 0.001) return;
+    hornVoice(ctx, this.master, ctx.currentTime, volume, pitch, style);
   }
   launch(volume = 1) { this.tone(500, 1800, 0.8, 0.12 * volume, 'sine'); this.noiseHit(3000, 0.6, 0.15 * volume, 'highpass'); }
   boom(volume = 1) {
