@@ -26,6 +26,12 @@ export const FOODS = {
   guac: { icon: '🥑', name: 'Chips & Guacamole', fill: 20, price: 2, store: 'fiesta' },
   elote: { icon: '🌽', name: 'Elote (Street Corn)', fill: 18, price: 2, store: 'fiesta' },
   agua: { icon: '🥤', name: 'Agua Fresca', fill: 10, price: 1, store: 'fiesta' },
+  // At Pete's snack stand in Fun Land.
+  popcorn: { icon: '🍿', name: 'Popcorn', fill: 10, price: 1, store: 'funland' },
+  cottoncandy: { icon: '🍭', name: 'Cotton Candy', fill: 8, price: 1, store: 'funland' },
+  icecream: { icon: '🍦', name: 'Ice Cream Cone', fill: 15, price: 2, store: 'funland' },
+  corndog: { icon: '🌭', name: 'Corn Dog', fill: 25, price: 3, store: 'funland' },
+  lemonade: { icon: '🍋', name: 'Lemonade', fill: 10, price: 1, store: 'funland' },
   // From the garden (picked crops go in your lunchbox too).
   carrot: { icon: '🥕', name: 'Carrot', fill: 12 },
   strawberry: { icon: '🍓', name: 'Strawberries', fill: 12 },

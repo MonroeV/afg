@@ -645,6 +645,16 @@ MODELS.salonChair = {
   colors: { body: 0xf06292, trim: 0xcfd8dc, accent: 0xb0bec5, metal: 0.6 },
 };
 
+// ---------- Fun Land ----------
+// A ride's gate: a little turnstile with a striped post and a flag on top.
+MODELS.rideGate = {
+  body: [box(0.12, 1.0, 0.12, 0.15, 0.5, 0.5), box(0.12, 1.0, 0.12, 0.85, 0.5, 0.5)],
+  accent: [box(0.7, 0.08, 0.06, 0.5, 0.75, 0.5), box(0.7, 0.08, 0.06, 0.5, 0.45, 0.5)],
+  trim: [cyl(0.015, 0.015, 0.5, 0.15, 1.25, 0.5, 5)],
+  glow: [box(0.25, 0.16, 0.01, 0.28, 1.4, 0.5)],
+  colors: { body: 0xe53935, accent: 0xfdd835, trim: 0x9e9e9e, glow: 0xffeb3b, metal: 0.3 },
+};
+
 // ---------- The Loop Express ----------
 // A ticket machine: a blue post with a big glowing screen and a red button (catch the train!).
 MODELS.trainStop = {

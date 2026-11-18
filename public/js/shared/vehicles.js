@@ -38,6 +38,12 @@ export const VEHICLES = {
     seats: [[-0.6, 1.08, -3.15], [0.6, 1.08, -3.15], [-0.78, 1.15, -2.15, Math.PI], [-0.78, 1.15, -0.95, 0], [0.92, 1.15, -1.9, Math.PI / 2], [0.92, 1.15, -1.05, Math.PI / 2]],
     beds: [[-0.45, 1.22, 3.9], [0.45, 1.22, 3.9], [0.92, 1.18, -0.6]], special: 'awning', lightY: 0.55, engine: 'diesel', pitch: 1.1,
   },
+  // A bumper car (at Fun Land): small, slow and round, with a rubber bumper all the way round.
+  // Bump into each other as much as you like: they bounce, and never get hurt.
+  bumper: {
+    name: 'Bumper Car', mass: 260, length: 2.1, width: 1.5, ride: 0.1, bodyH: 0.42, cabinH: 0.2, wheelR: 0.12, maxSpeed: 6.5, accel: 7, gears: 3, respawn: 20,
+    seats: [[0, 0.32, 0.15]], bouncy: true, noDamage: true, engine: 'normal', pitch: 1.7,
+  },
   // A sports car: low, light and quick, with a spoiler on the back. Two seats.
   sports: {
     name: 'Sports Car', mass: 1100, length: 3.9, width: 1.86, ride: 0.2, bodyH: 0.42, cabinH: 0.5, wheelR: 0.33, maxSpeed: 24, accel: 13, gears: 3, respawn: 30,

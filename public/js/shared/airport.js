@@ -25,27 +25,28 @@ const PLANE_COLORS = ['#e53935', '#fdd835', '#1e88e5', '#f5f5f5'];
 
 // Finds a spot and builds it (or null if there's nowhere big enough). near: where we'd like it.
 export function buildAirport({ get, set, canUse, near = [RING + 30, 330] }) {
+  const site = findBigSite({ L, D, tall: TALL, near, get, canUse });
+  return site ? airportAt(site, set) : null;
+}
+
+// The free spot beside the Outer Loop (L along it, D away from it, empty up to `tall`) nearest
+// `near`, or null. Quick even for big ones: a map of which columns are free, beside each side.
+export function findBigSite({ L, D, tall, near, get, canUse }) {
   const roads = ringRoads();
   let best = null, bestD = Infinity;
   for (const name of ['loopE', 'loopS', 'loopW', 'loopN']) {
     const road = roads[name];
     for (const side of [1, -1]) {
-      // A map of the strip beside this side of the road: 1 where a column isn't free.
       const first = road.from + 20, last = road.to - 20; // (u = 0 at a = first)
       const n = last - first + 1, edge = makeSite(road, side, first);
-      const busy = new Uint8Array(n * (D + 1));
-      for (let i = 0; i < n; i++)
-        for (let v = 0; v <= D; v++) {
-          const [x, z] = edge.at(i, v);
-          let b = x < WORLD.min + 2 || x > WORLD.max - 2 || z < WORLD.min + 2 || z > WORLD.max - 2 || !canUse(x, z);
-          for (let y = 0; y < TALL && !b; y++) if (get(x, y, z)) b = true;
-          busy[i * (D + 1) + v] = b ? 1 : 0;
-        }
-      // Running count of busy columns (so any stretch can be checked at once).
       const busyCols = new Int32Array(n + 1);
       for (let i = 0; i < n; i++) {
         let any = 0;
-        for (let v = 0; v <= D; v++) any |= busy[i * (D + 1) + v];
+        for (let v = 0; v <= D && !any; v++) {
+          const [x, z] = edge.at(i, v);
+          if (x < WORLD.min + 2 || x > WORLD.max - 2 || z < WORLD.min + 2 || z > WORLD.max - 2 || !canUse(x, z)) any = 1;
+          for (let y = 0; y < Math.min(tall, 6) && !any; y++) if (get(x, y, z)) any = 1; // (anything built reaches down near the ground)
+        }
         busyCols[i + 1] = busyCols[i] + any;
       }
       for (let a = first + 1; a + L < last; a += 2) {
@@ -57,7 +58,7 @@ export function buildAirport({ get, set, canUse, near = [RING + 30, 330] }) {
       }
     }
   }
-  return best ? airportAt(best, set) : null;
+  return best;
 }
 
 function airportAt(site, set) {

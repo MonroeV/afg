@@ -137,6 +137,7 @@ function ownerTag(text) {
 export function buildCarModel(kind, color) {
   if (kind === 'heli') return buildHeliModel(color);
   if (kind === 'plane') return buildPlaneModel(color);
+  if (kind === 'bumper') return buildBumperModel(color);
   if (kind === 'boat') return buildBoatModel(color);
   const s = CAR_SPECS[kind];
   const g = new THREE.Group();
@@ -542,6 +543,39 @@ function buildHeliModel(color) {
   return {
     group: g, wheels: [], steerers: [], rotor, tailRotor, blur, paint: mats.paint, paintMesh: meshes.paint,
     baseColor: new THREE.Color(color), headMat: mats.tail, tailMat: mats.tail, siren: null,
+  };
+}
+
+// A bumper car: a round shiny tub with a fat black rubber bumper all round, a seat and a steering
+// wheel, and a pole up the back with a spark on top (it touches the ceiling at real fairs!).
+function buildBumperModel(color) {
+  const s = VEHICLES.bumper, g = new THREE.Group();
+  const mats = {
+    paint: new THREE.MeshPhysicalMaterial({ color, metalness: 0.3, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.08 }),
+    dark: new THREE.MeshStandardMaterial({ color: 0x1d1f24, roughness: 0.8 }),
+    chrome: new THREE.MeshStandardMaterial({ color: 0xd0d4d8, metalness: 0.9, roughness: 0.2 }),
+    seat: new THREE.MeshStandardMaterial({ color: 0x263238, roughness: 0.7 }),
+    head: new THREE.MeshStandardMaterial({ color: 0xfff6d8, emissive: 0xfff2c0, emissiveIntensity: 0.3 }),
+    tail: new THREE.MeshStandardMaterial({ color: 0x8a0a0a, emissive: 0xff0000, emissiveIntensity: 0.3 }),
+    spark: new THREE.MeshStandardMaterial({ color: 0x80d8ff, emissive: 0x80d8ff, emissiveIntensity: 1.5 }),
+  };
+  const parts = {};
+  const add = (geo, mat, x, y, z) => (parts[mat] ??= []).push(geo.translate(x, y, z));
+  const hw = s.width / 2, hl = s.length / 2;
+  add(new THREE.CylinderGeometry(1, 1, s.bodyH, 20).scale(hw - 0.08, 1, hl - 0.08), 'paint', 0, s.ride + s.bodyH / 2 + 0.05, 0);
+  add(new THREE.TorusGeometry(1, 0.16, 8, 24).rotateX(Math.PI / 2).scale(hw - 0.1, 1, hl - 0.1), 'dark', 0, s.ride + 0.12, 0);
+  add(new THREE.BoxGeometry(0.8, 0.12, 0.6), 'seat', 0, s.ride + s.bodyH + 0.06, 0.25);
+  add(new THREE.BoxGeometry(0.8, 0.5, 0.12), 'seat', 0, s.ride + s.bodyH + 0.3, 0.58);
+  add(new THREE.CylinderGeometry(0.03, 0.03, 0.35, 6).rotateX(-0.6), 'dark', 0, s.ride + s.bodyH + 0.18, -0.35);
+  add(new THREE.TorusGeometry(0.16, 0.025, 6, 14).rotateX(-0.9), 'dark', 0, s.ride + s.bodyH + 0.35, -0.45);
+  add(new THREE.CylinderGeometry(0.025, 0.025, 1.6, 6), 'chrome', 0, s.ride + s.bodyH + 0.8, 0.75);
+  add(new THREE.SphereGeometry(0.07, 8, 6), 'spark', 0, s.ride + s.bodyH + 1.62, 0.75);
+  add(new THREE.BoxGeometry(0.3, 0.08, 0.04), 'head', 0, s.ride + s.bodyH * 0.6, -hl + 0.06);
+  add(new THREE.BoxGeometry(0.3, 0.08, 0.04), 'tail', 0, s.ride + s.bodyH * 0.6, hl - 0.06);
+  const meshes = mergeParts(g, parts, mats);
+  return {
+    group: g, wheels: [], steerers: [], paint: mats.paint, paintMesh: meshes.paint, baseColor: new THREE.Color(color),
+    headMat: mats.head, tailMat: mats.tail, brakeMat: mats.tail, reverseMat: mats.head, siren: null,
   };
 }
 
@@ -1080,7 +1114,7 @@ export class Cars {
 
     const closing = va.clone().sub(vb).dot(n);
     if (closing <= 0.05) return events;
-    const ma = a.spec.mass, mb = b.spec.mass, bounce = 0.25;
+    const ma = a.spec.mass, mb = b.spec.mass, bounce = a.spec.bouncy || b.spec.bouncy ? 0.9 : 0.25; // (bumper cars: BOING)
     const J = ((1 + bounce) * closing) / (1 / ma + 1 / mb);
     const dva = n.clone().multiplyScalar(-J / ma), dvb = n.clone().multiplyScalar(J / mb);
     this.setVelocity(a, va.add(dva));

@@ -15,6 +15,8 @@ import { ChurchMeeting } from './churchui.js';
 import { HopperWindow } from './tvgame.js';
 import { PalAsk } from './palui.js';
 import { LoopExpress } from './trainui.js';
+import { FunRides } from './funrides.js';
+import { GATE_BLOCK } from './shared/funland.js';
 import { gameTime, STOP_BLOCK } from './shared/train.js';
 import { meetingAt, isSunday, MEETING_COINS } from './shared/church.js';
 import { generateTextures } from './textures.js';
@@ -246,6 +248,7 @@ let inGame = false;
 let showers = null, weatherMast = null; // it's raining tacos (or ice cream, or cats and dogs…)! (and the weather station's mast)
 let weatherPicker = null; // Stormy's menu: what shall it rain?
 let lunchbox = null; // your lunchbox 🍱 (L): food to eat
+let funRides = null; // Fun Land's roller coaster and Ferris wheel
 let loopExpress = null; // the Loop Express (the train round the Outer Loop)
 let palAsk = null; // a kid at Friendship Park asking to be your best friend
 let flightLog = { air: 0, was: true }; // (for the Sky Pilots: how long we've been up, and were we on the ground)
@@ -721,6 +724,7 @@ function startGame(welcome, resume = false) {
   worldDay = welcome.day || 0;
   churchPlace = welcome.church || null;
   loopExpress.setStops(welcome.train);
+  funRides.setPlace(welcome.funland);
   weather.set(welcome.rain || 0, welcome.snow);
   agency.setGuards(welcome.guards);
   if (guardCatch) guardCatch.cooldown = 1.5; // (not until the server knows where we are)
@@ -992,6 +996,7 @@ loopExpress = new LoopExpress({
     updateOverlays();
   },
 });
+funRides = new FunRides({ scene, sounds, hud: { toast: text => hud.toast(text) } });
 function openTrainPicker([x, , z]) {
   const st = loopExpress.stopAt(x + 0.5, z + 0.5);
   if (!st) return;
@@ -2730,7 +2735,7 @@ function kickBall() {
 }
 
 function reportDamage(car, amount, impact) {
-  if (amount < 1) return;
+  if (amount < 1 || car.spec.noDamage) return; // (bumper cars never get hurt)
   net.send({ t: 'car_damage', id: car.id, amount: Math.round(amount), impact });
 }
 
@@ -3394,7 +3399,7 @@ function sendState() {
   const rot = myCar ? [r(myCar.h), 0] : inBed() ? [r(sleeping.yaw), 0] : [r(player.yaw), r(player.pitch)];
   const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
   const balloon = hud.item === BALLOON && !riding() && !sleeping;
-  const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || sliding || loopExpress?.riding || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
+  const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || sliding || loopExpress?.riding || funRides?.riding || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
     (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) | (sledding && !balloon ? FLAG.sled : 0) | (player.parachute && !balloon ? FLAG.parachute : 0) |
     (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
   net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item, drone: agency.droneState(player.yaw) });
@@ -4442,6 +4447,7 @@ function interact() {
     }
     if (BLOCKS[blockId(hit.value)]?.slide) return startSlide(...hit.block);
     if (blockId(hit.value) === STOP_BLOCK) return openTrainPicker(hit.block);
+    if (blockId(hit.value) === GATE_BLOCK) return funRides.board(hit.block[0] + 0.5, hit.block[2] + 0.5, player, gameTime(worldDay, sky.time));
     const s = structures.at(...hit.block);
     if (s?.type === 'bed') return goToBed(s);
     if (s?.type === 'cannon') return fireCannon(s);
@@ -6021,6 +6027,7 @@ function frame(timestamp) {
       player.explorerBoots = perks.has('explorer'); // (the Explorer Club's boots: a bit faster)
       if (sliding) updateSlide(dt); // (whee: down a slide)
       else if (loopExpress.updateRide(dt, gameTime(worldDay, sky.time), player)) player.flying = false; // (on the train)
+      else if (funRides.updateRide(dt, gameTime(worldDay, sky.time), player)) player.flying = false; // (on a ride at Fun Land)
       else player.update(dt, active && !guardCatch?.frozen ? held : noKeys); // (not while the bodyguards have hold of you)
       if (sledding && player.onGround && !player.surface()) sled(false); // (off the snow: off the sled)
       // (Never inside the ground, even if a hole grew back over us a moment ago.)
@@ -6182,6 +6189,7 @@ function frame(timestamp) {
       else if (s?.type === 'balloon') hint = '🎈 Right-click to fly the balloon!';
       else if (s?.type === 'hoop') hint = '🏀 Throw the Pet Ball through the hoop!';
       else if (hit && blockId(hit.value) === STOP_BLOCK && !tool) hint = '🚉 Right-click to catch the train!';
+      else if (hit && blockId(hit.value) === GATE_BLOCK && !tool) hint = '🎟️ Right-click to ride!';
       else if (s?.type === 'tv') hint = tvs.onGame(s) ? '🎮 Right-click to play Block Hopper!' : '📺 Right-click to change the channel';
       else if (item === CLAIM) hint = `🚩 Click a corner to start claiming land (max ${CLAIM_MAX}×${CLAIM_MAX}), or a vehicle to make it yours` + (myVehicles().length ? ` · 🔑 ${whereMyVehicles()}` : '');
       else if (item === VACATION) hint = myLand(true) ? '🏖️ You have vacation land already' : `🏖️ Click a corner to claim your vacation land (max ${CLAIM_MAX}×${CLAIM_MAX}). It stays put for good!`;
@@ -6283,7 +6291,7 @@ function frame(timestamp) {
     myBody.targetPitch = inBed() ? 0 : player.pitch;
     myBody.flying = player.flying;
     myBody.swing = view.swingT;
-    myBody.sitting = !!seated || !!sliding || loopExpress.riding || !!liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel';
+    myBody.sitting = !!seated || !!sliding || loopExpress.riding || funRides.riding || !!liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel';
     myBody.hotair = contraptions.riding === 'balloon';
     myBody.sledding = sledding;
     myBody.parachute = !!player.parachute && !riding();
@@ -6420,6 +6428,7 @@ function frame(timestamp) {
     updateSparkly(dt, time);
     updateFiesta(dt);
     loopExpress.update(dt, gameTime(worldDay, sky.time), camera.position);
+    funRides.update(dt, gameTime(worldDay, sky.time), camera.position);
     updateChurch(dt, time);
   }
   cars.setView(camera.position, scene.fog.far);
@@ -6486,6 +6495,8 @@ load();
 window.buildzone = {
   tvs, news, newsCam, keys, getOut, playHopper, startSlide, slideChain, openTrainPicker,
   get loopExpress() { return loopExpress; },
+  get funRides() { return funRides; },
+  gameNow: () => gameTime(worldDay, sky.time),
   scene, camera, sky, net, avatars, renderer, fireworks, effects, glow, reflections, view, sounds,
   get world() { return world; },
   get player() { return player; },

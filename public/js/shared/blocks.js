@@ -225,6 +225,8 @@ export const BLOCKS = {
   // (with a Ladder up to the top). Right-click it to slide! (Low, so you can walk over it.)
   // A Loop Express ticket machine (see train.js): right-click it to catch the train.
   147: { name: 'Train Stop', shape: 'model', model: 'trainStop', hidden: true, worldOnly: true, box: [0.25, 0, 0.25, 0.75, 1.6, 0.75], light: { color: 0x9ad6ff, power: 0.4, range: 8, always: true, y: 1.4 } },
+  // A ride's gate at Fun Land (see funland.js): right-click it to ride.
+  148: { name: 'Ride Gate', shape: 'model', model: 'rideGate', facing: true, hidden: true, worldOnly: true, box: [0.1, 0, 0.35, 0.9, 1.3, 0.65] },
   146: { name: 'Slide', shape: 'model', model: 'slide', facing: true, slide: true, box: [0, 0, 0, 1, 0.12, 1] },
 };
 // Crops: how grown (0 seeds .. 3 ripe) and whether they've just been watered.
@@ -315,6 +317,7 @@ export const STORES = {
   pets: { name: 'Happy Paws Pet Shop', icon: '🐾', color: '#a1887f', keeper: 'Pip' },
   grocery: { name: 'FreshMart Grocery', icon: '🛒', color: '#43a047', keeper: 'Gus' },
   fiesta: { name: 'Casa Fiesta', icon: '🌮', color: '#ff7043', keeper: 'Luis' },
+  funland: { name: "Pete's Snacks", icon: '🍿', color: '#e53935', keeper: 'Pete' },
   salon: { name: 'Snip & Style', icon: '💇', color: '#ec407a', keeper: 'Stella' },
 };
 export const storeOf = item => (typeof item === 'number' ? BLOCKS[item]?.store : SHOP_TOOLS[item]?.store) || 'luxe';

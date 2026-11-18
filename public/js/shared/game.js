@@ -16,6 +16,7 @@ import { buildChurch, meetingOn, MEETING_COINS, MEETING_STAY } from './church.js
 import { buildAirport } from './airport.js';
 import { buildPark } from './park.js';
 import { buildTrainLine } from './train.js';
+import { buildFunLand } from './funland.js';
 import { findHomes } from './residents.js';
 import { buildWeatherStation, SHOWERS } from './weather.js';
 import { buildBuildPark } from './buildpark.js';
@@ -31,7 +32,7 @@ import { Structures } from '../structures.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
-export const SAVE_VERSION = 24;
+export const SAVE_VERSION = 25;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -287,6 +288,7 @@ export class GameRoom {
       this.upgradeTo22();
       this.upgradeTo23();
       this.upgradeTo24();
+      this.upgradeTo25();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -384,6 +386,7 @@ export class GameRoom {
     if (data.version < 22) this.upgradeTo22();
     if (data.version < 23) this.upgradeTo23();
     if (data.version < 24) this.upgradeTo24();
+    if (data.version < 25) this.upgradeTo25();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -838,6 +841,24 @@ export class GameRoom {
   upgradeTo24() {
     this.addTrainStops();
     this.log(`Added the Loop Express (${this.places?.train?.stops?.length || 0} stops)`);
+    this.onDirty();
+  }
+
+  // Worlds saved before version 25: Fun Land (and a train stop by it).
+  upgradeTo25() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const fun = buildFunLand({ get, set, canUse: this.freeLand() });
+    if (fun) {
+      this.claims.push(fun.claim);
+      for (const [x, y, z, text] of fun.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+      this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...fun.places };
+      for (const c of fun.cars) this.spawn(this.addHome(c));
+      this.addTrainStops();
+    }
+    this.log(`Added Fun Land (${fun ? 'yes' : 'no room'})`);
     this.onDirty();
   }
 
@@ -1427,6 +1448,7 @@ export class GameRoom {
       mast: this.places?.weather?.mast || null, // the weather station's mast (its cups spin)
       church: this.places?.church || null, // (where everyone sits for Sunday's meeting: see churchui.js)
       train: this.places?.train?.stops || [], // the Loop Express's stops (see train.js)
+      funland: this.places?.funland || null, // where Fun Land's rides are (see funrides.js)
       landmarks: Object.entries(this.places || {}).filter(([, p]) => p && Number.isFinite(p.x) && Number.isFinite(p.z)).map(([k, p]) => [k, p.x, p.z]),
     });
     // Coins: your wallet, and a little present the first time you play each day.
@@ -1587,6 +1609,7 @@ export class GameRoom {
   }
 
   damageVehicle(v, amount, impact) {
+    if (VEHICLES[v.kind].noDamage) return; // (bumper cars: bump all you like)
     v.hp = Math.max(0, v.hp - amount);
     this.broadcast({ t: 'car_hp', id: v.id, hp: Math.round(v.hp), impact });
     if (v.hp <= 0) this.destroyVehicle(v);

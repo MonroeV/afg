@@ -129,6 +129,13 @@ const NPCS = [
     hello: (n, room) => (isSunday(room?.day) ? [`Welcome, ${n}! We're so glad you came! 😊`, `Hi ${n}! The meeting is in the chapel. Come on in! ⛪`] : [`Hello ${n}! Welcome! 😊`, `Hi ${n}! Come visit us on Sunday morning! ⛪`]),
     tips: ['⛪ Sunday ☀️ 9:00', 'Everyone is welcome here! 🤝', 'Jesus Christ loves everyone! ❤️'],
   },
+  {
+    // Fun Land: Pete at his snack stand (popcorn, cotton candy, ice cream, corn dogs, lemonade).
+    id: -68, place: 'funland_snacks', name: 'Pete', title: 'Pete 🍿', roam: 1.5, store: 'funland',
+    look: { face: 'grin', hair: 'short', hat: 'party', shirt: 'striped', pants: 'jeans', extra: 'none', skin: '#f5c9a0', hairColor: '#c23b22', hatColor: '#fdd835', shirtColor: '#e53935', shirtColor2: '#ffffff', pantsColor: '#37474f', shoesColor: '#111111' },
+    hello: n => [`Step right up, ${n}! Popcorn! Cotton candy! 🍿🍭`, `Hi ${n}! Ridden the roller coaster yet? 🎢`],
+    tips: ['🍿🍭🍦🌭🍋', 'The Ferris wheel goes REALLY high! 🎡', 'Bumper cars: bump into everybody! 🚗💥'],
+  },
   // ---------- Friendship Park ----------
   // Kids who'd love a best friend (talk to one!), and the leaders of two clubs.
   ...[

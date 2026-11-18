@@ -44,6 +44,15 @@ customize your character, drive cars, build anything and play with friends.
     - **Sky Tower and Cloud Tower** 🏙️ (since v0.49, on the east side of the Outer Loop): the two
       tallest buildings in the world, 100 and 80 blocks high, with an elevator up every floor,
       offices on every floor, and a helipad on top of Sky Tower
+    - **Fun Land** 🎢🎡 (since v0.52, on the west side of the Outer Loop): an amusement park.
+      Right-click a ride's gate 🎟️ to ride:
+      - the **roller coaster**: the chain clanks you up the lift hill, then it's all gravity,
+        down the big drop (about 65 km/h!), over the hills and round the curves, and back
+      - the **Ferris wheel**: it turns slowly all the time (everyone sees the same turn); step
+        into a gondola at the bottom and ride it all the way round, 21 blocks up
+      - **bumper cars** in a fenced arena: they bounce off each other (BOING) and never get hurt
+      - a merry-go-round (the Build Book's), and Pete's snack stand (🍿 🍭 🍦 🌭 🍋)
+      The Loop Express stops right by it
     - **The Loop Express** 🚆 (since v0.51): a train all the way round the Outer Loop, on a track
       high over the outside of the road, held up by concrete pillars. Three trains go round and
       round. At each stop (by the new places, and where the roads from town come out) there's a
@@ -946,6 +955,7 @@ public/
     tvgame.js          Block Hopper, the video game on the TV's Game channel
     palui.js           A kid at Friendship Park asking to be your best friend
     trainui.js         The Loop Express: the track and trains you see, picking a stop, riding
+    funrides.js        Fun Land's roller coaster and Ferris wheel: drawing and riding them
     guardcatch.js      Bodyguards keeping you off their land: caught and walked off, blown away, flushed out
     guardui.js         Someone asking your bodyguards to let them in: your answer
     lighting.js        Live reflections and the glow effect
@@ -995,6 +1005,7 @@ public/
       airport.js       The airport: finding room for it, the runway, terminal, tower and hangars
       park.js          Friendship Park: the paths, flowers, trees, swings and slides
       train.js         The Loop Express: its track, where the trains are, the stops, pillars and ticket machines
+      funland.js       Fun Land: its layout, the bumper car arena, and the coaster's and wheel's shapes
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/
   make-engine-sounds.py  Makes the engine recordings (needs numpy and ffmpeg; run it after changing a voice)

@@ -127,12 +127,12 @@ export function buildTrainLine({ get, set, canUse, places }) {
     const p = trackPoint(st.s), ox = Math.abs(p.x) > Math.abs(p.z) ? Math.sign(p.x) : 0, oz = ox ? 0 : Math.sign(p.z);
     let spot = null;
     // (Already one here? Then that's it.)
-    for (let d = -10; d <= 10 && !spot; d++)
+    for (let d = -45; d <= 45 && !spot; d++)
       for (let out = 0; out <= 3 && !spot; out++) {
         const x = Math.floor(p.x + ox * out + (ox ? 0 : d)), z = Math.floor(p.z + oz * out + (oz ? 0 : d));
         if (get(x, 0, z) === STOP_BLOCK) spot = [x, z];
       }
-    for (let d = 0; d <= 12 && !spot; d++)
+    for (let d = 0; d <= 45 && !spot; d++)
       for (const sgn of d ? [1, -1] : [1]) {
         const along = d * sgn, x = Math.floor(p.x + ox * 2 + (ox ? 0 : along)), z = Math.floor(p.z + oz * 2 + (oz ? 0 : along));
         if (empty(x, z, 3)) {
