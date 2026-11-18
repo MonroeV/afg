@@ -2,7 +2,7 @@
 
 export const LOOK_OPTIONS = {
   face: ['smile', 'grin', 'cool', 'wink', 'surprised', 'silly', 'sleepy', 'cat', 'robot', 'starry'],
-  hair: ['none', 'short', 'spiky', 'long', 'ponytail', 'mohawk', 'afro', 'buns'],
+  hair: ['none', 'short', 'spiky', 'long', 'ponytail', 'mohawk', 'afro', 'buns', 'curly', 'pigtails', 'braids', 'topbun', 'flattop', 'fauxhawk', 'princess', 'rainbow', 'galaxy'],
   hat: ['none', 'cap', 'beanie', 'tophat', 'crown', 'cowboy', 'party', 'wizard', 'viking'],
   shirt: ['tshirt', 'striped', 'hoodie', 'jacket', 'tank', 'jersey', 'dress'],
   pants: ['jeans', 'shorts', 'skirt', 'sweatpants'],
@@ -18,6 +18,8 @@ export const OPTION_LABELS = {
   silly: 'Silly', sleepy: 'Sleepy', cat: 'Kitty', robot: 'Robot', starry: 'Star Eyes',
   none: 'None', short: 'Short', spiky: 'Spiky', long: 'Long', ponytail: 'Ponytail',
   mohawk: 'Mohawk', afro: 'Afro', buns: 'Space Buns',
+  curly: 'Curly', pigtails: 'Pigtails', braids: 'Braids', topbun: 'Top Bun', flattop: 'Flat Top', fauxhawk: 'Faux-hawk',
+  princess: 'Princess Waves', rainbow: 'Rainbow Spikes', galaxy: 'Galaxy Hair',
   cap: 'Cap', beanie: 'Beanie', tophat: 'Top Hat', crown: 'Crown', cowboy: 'Cowboy',
   party: 'Party Hat', wizard: 'Wizard', viking: 'Viking',
   tshirt: 'T-Shirt', striped: 'Stripes', hoodie: 'Hoodie', jacket: 'Jacket', tank: 'Tank Top',
@@ -26,6 +28,12 @@ export const OPTION_LABELS = {
   backpack: 'Backpack', cape: 'Super Cape', wings: 'Wings',
   dog: 'Puppy', bunny: 'Bunny', pig: 'Piglet', dragon: 'Baby Dragon', // (the cat pet shares the 'Kitty' label)
 };
+
+// Premium hairdos: from Stella at Snip & Style (the hair salon), and only for those who've bought
+// them (the server checks: see ownLook in game.js). style: price.
+export const PREMIUM_HAIR = { curly: 8, pigtails: 8, braids: 10, topbun: 10, flattop: 12, fauxhawk: 12, princess: 15, rainbow: 25, galaxy: 30 };
+export const hairItem = style => `hair_${style}`;
+export const HAIR_ICONS = { curly: '🌀', pigtails: '🎈', braids: '🥨', topbun: '🧅', flattop: '🟫', fauxhawk: '🔥', princess: '👸', rainbow: '🌈', galaxy: '🌌' };
 
 export const SKIN_TONES = ['#ffe0c4', '#f5c9a0', '#e8b088', '#d39a6a', '#b07548', '#8d5a34', '#6b4226', '#4a2c18', '#7fd17a', '#8fb8ff'];
 
@@ -68,7 +76,7 @@ export function randomLook(rand = Math.random) {
   const pick = list => list[Math.floor(rand() * list.length)];
   return {
     face: pick(LOOK_OPTIONS.face),
-    hair: pick(LOOK_OPTIONS.hair),
+    hair: pick(LOOK_OPTIONS.hair.filter(h => !PREMIUM_HAIR[h])),
     hat: rand() < 0.4 ? 'none' : pick(LOOK_OPTIONS.hat),
     shirt: pick(LOOK_OPTIONS.shirt),
     pants: pick(LOOK_OPTIONS.pants),

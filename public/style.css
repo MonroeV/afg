@@ -403,6 +403,11 @@ button.secondary {
 .option .emoji { font-size: 26px; line-height: 1; }
 .option.selected { border-color: var(--accent); background: rgba(255, 179, 33, 0.15); }
 .option:active { transform: scale(0.96); box-shadow: none; }
+.option.locked { opacity: 0.6; font-size: 11px; }
+.option.locked .emoji { filter: grayscale(0.7); }
+.option.premium { border-color: #ec407a; }
+.option.nope { animation: nope 0.35s; }
+@keyframes nope { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
 .color-row { margin-top: 16px; }
 .color-title { margin-bottom: 6px; font-weight: 700; color: var(--muted); }
 .swatches { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -574,6 +579,7 @@ body.touch #coins, body.touch #badge-chip { font-size: 14px; }
 .shop-about { color: var(--muted); min-height: 30px; }
 .shop-card button { margin-top: 6px; padding: 8px; font-size: 15px; letter-spacing: 1px; }
 .shop-card.owned { border-color: #7dff8a; }
+.shop-card.free { border-color: #ff7043; box-shadow: 0 0 14px #ffb74d; }
 #shop-done { max-width: 260px; }
 
 /* The race clock. */

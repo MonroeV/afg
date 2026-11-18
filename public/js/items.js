@@ -5,6 +5,7 @@ import { blockMaterial, railGeometry } from './world.js';
 import { modelGeometry, modelMaterials } from './models.js';
 import { pictureCanvas } from './pictures.js';
 import { FOODS, itemFood } from './shared/food.js';
+import { HAIR_ICONS } from './shared/avatar.js';
 
 export const HAMMER = 'hammer';
 export const FIREWORKS = 'fireworks';
@@ -43,7 +44,7 @@ export const ALL_ITEMS = [...TOOLS, ...BLOCK_IDS];
 // Gear isn't held: you wear it (put it on and take it off in the item menu's 🎒 Gear).
 export const GEAR = [SNEAKERS, JETPACK, TRAIL, SKIS, GOGGLES];
 // Everything that needs a little picture: the hotbar things, gear, and Gold Car Paint (for the store).
-const FOOD_ITEMS = Object.keys(SHOP_TOOLS).filter(i => SHOP_TOOLS[i].food); // (grocery store food)
+const FOOD_ITEMS = Object.keys(SHOP_TOOLS).filter(i => SHOP_TOOLS[i].food || SHOP_TOOLS[i].hair); // (food, and hairdos from the salon)
 export const ICON_ITEMS = [...ALL_ITEMS, ...GEAR, GOLDPAINT, BODYGUARDS, 'family', 'mysterybox', ...PET_HAT_ITEMS, ...FOOD_ITEMS];
 
 // ---------- Styles ----------
@@ -174,12 +175,17 @@ export function makeIcon(item, textures, paint = 1) {
     return canvas;
   }
 
-  if (itemFood(item)) {
-    // Something to eat (it goes in your lunchbox).
+  if (itemFood(item) || SHOP_TOOLS[item]?.hair) {
+    // Something to eat (it goes in your lunchbox), or a hairdo (with scissors).
+    const hair = SHOP_TOOLS[item]?.hair;
     ctx.font = '46px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(FOODS[itemFood(item)].icon, 32, 34);
+    ctx.fillText(hair ? HAIR_ICONS[hair] : FOODS[itemFood(item)].icon, 32, 34);
+    if (hair) {
+      ctx.font = '22px sans-serif';
+      ctx.fillText('✂️', 50, 52);
+    }
     return canvas;
   }
   if (item === TREATS || PET_HAT_ITEMS.includes(item)) {

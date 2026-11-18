@@ -4,6 +4,7 @@
 // come near, pet your pet, love your cool stuff, and react to fireworks, explosions,
 // dancing and water balloons.
 import { sanitizeLook } from './avatar.js';
+import { isTacoTuesday } from './seasons.js';
 import { BLOCKS, isSolidBlock, blockId, itemOf, shapeOf, blockMeta, blockKey, toggleDoorValue, isNightTime, DOOR_OPEN, DOOR_TOP, SHOP_TOOLS } from './blocks.js';
 import { claimAt } from './claims.js';
 import { liftColumn, liftStops } from './elevator.js';
@@ -104,6 +105,27 @@ const NPCS = [
     id: -24, place: 'shop_grocery', name: 'Gus', title: 'Gus 🛒', roam: 2, store: 'grocery',
     look: { face: 'grin', hair: 'short', hat: 'cap', shirt: 'tshirt', pants: 'jeans', skin: '#d39a6a', hairColor: '#3b2314', hatColor: '#43a047', shirtColor: '#43a047', shirtColor2: '#ffffff', pantsColor: '#37474f', shoesColor: '#111111' },
     hello: n => [`Hi ${n}! Hungry? 🍎🍌🥪`, `Welcome to FreshMart, ${n}! Everything's fresh! 🛒`, `${n}! Fill up your lunchbox! 🍱`], tips: ['🍎🍌🥪🍉', 'Hungry? You slow down! Eat something! 🍽️'],
+  },
+  {
+    // Casa Fiesta, the Mexican restaurant (Taco Tuesday: free tacos!).
+    id: -25, place: 'shop_fiesta', name: 'Luis', title: 'Luis 🌮', roam: 2, store: 'fiesta',
+    look: { face: 'grin', hair: 'short', hat: 'none', shirt: 'tshirt', pants: 'jeans', extra: 'none', skin: '#b07548', hairColor: '#1b1209', shirtColor: '#ffffff', shirtColor2: '#e53935', pantsColor: '#37474f', shoesColor: '#3b2314' },
+    hello: (n, room) => (isTacoTuesday(room?.day) ? [`¡Hola ${n}! It's TACO TUESDAY! 🌮🎉 Free tacos!`, `${n}! ¡Fiesta! Free tacos today! 🌮🌮🌮`] : [`¡Hola ${n}! Welcome to Casa Fiesta! 🌮`, `${n}! Hungry? Try a burrito! 🌯`]),
+    tips: ['🌮🌯🥑🌽🥤', 'Taco Tuesday: free tacos! 🌮🎉', '¡Buen provecho! 😋'],
+  },
+  {
+    // Mateo plays his guitar at Casa Fiesta (on Taco Tuesday, the whole band plays: 🎺🎸🎶).
+    id: -27, place: 'shop_fiesta', name: 'Mateo', title: 'Mateo 🎸', roam: 2,
+    look: { face: 'cool', hair: 'short', hat: 'cowboy', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#d39a6a', hairColor: '#1b1209', hatColor: '#111111', shirtColor: '#111111', shirtColor2: '#ffd54f', pantsColor: '#111111', shoesColor: '#3b2314' },
+    hello: (n, room) => (isTacoTuesday(room?.day) ? [`🎺🎸🎶 ¡Fiesta, ${n}!`, `🎶 Dance with us, ${n}! 💃`] : [`🎸 Hola ${n}!`, `🎶 Come back on Taco Tuesday, ${n}! 🌮`]),
+    tips: ['🎸🎶', '🎺🎸🎻🎶', '💃🕺🎶'],
+  },
+  {
+    // Snip & Style, the hair salon (premium hairdos).
+    id: -26, place: 'shop_salon', name: 'Stella', title: 'Stella 💇', roam: 2, store: 'salon',
+    look: { face: 'wink', hair: 'princess', hat: 'none', shirt: 'dress', pants: 'skirt', extra: 'none', skin: '#f5c9a0', hairColor: '#ff5fa2', shirtColor: '#ec407a', shirtColor2: '#ffffff', pantsColor: '#ec407a', shoesColor: '#ffffff' },
+    hello: n => [`Hi ${n}! Ready for a new look? 💇✨`, `${n}, darling! Let's make you fabulous! ✂️`],
+    tips: ['✂️💇✨', '🌈 Rainbow Spikes! 🌌 Galaxy Hair!', 'Change your hair any time: 🎨'],
   },
   {
     id: -15, place: 'shop_garden', name: 'Fern', title: 'Fern 🌻', roam: 2, store: 'garden',
@@ -355,7 +377,7 @@ export class NpcCrew {
         n.seen.set(c.id, now);
         this.face(n, x, z);
         this.act(n, NPC_ACT.wave, 2);
-        this.say(n, pickOne(n.def.hello(c.name)), true);
+        this.say(n, pickOne(n.def.hello(c.name, this.room)), true);
         return;
       }
       const hold = c.hold;

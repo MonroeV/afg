@@ -8,7 +8,9 @@ import {
   GOLD_PAINT, GOLD_HEX, ELEVATOR, isCrop, cropStage, cropWet, CROP_RIPE,
 } from './shared/blocks.js';
 import { generateWorld } from './shared/worldgen.js';
-import { randomLook, sanitizeLook, cleanName } from './shared/avatar.js';
+import { randomLook, sanitizeLook, cleanName, PREMIUM_HAIR, hairItem } from './shared/avatar.js';
+import { WEEKDAYS, weekday, isTacoTuesday } from './shared/seasons.js';
+import { FiestaBand } from './fiesta.js';
 import { generateTextures } from './textures.js';
 import { World, createBlockMaterials, blockMaterial, RAILING, WIND, rayBox } from './world.js';
 import { Player, EYE_HEIGHT, CROUCH_DROP } from './player.js';
@@ -64,7 +66,7 @@ import { TURBO, MAGNET } from './shared/clubs.js';
 import { isTunnelY } from './shared/underground.js';
 import { BadgeBook } from './badges.js';
 import { Lunchbox } from './lunchbox.js';
-import { FOODS, HUNGER_FULL, hungerSpeed } from './shared/food.js';
+import { FOODS, HUNGER_FULL, FREE_TACOS, hungerSpeed } from './shared/food.js';
 
 const $ = id => document.getElementById(id);
 const REACH = 7;
@@ -239,6 +241,8 @@ let showers = null, weatherMast = null; // it's raining tacos (or ice cream, or 
 let weatherPicker = null; // Stormy's menu: what shall it rain?
 let lunchbox = null; // your lunchbox 🍱 (L): food to eat
 let hunger = HUNGER_FULL; // how full you are (out of 100: the server counts it down as you play)
+let tacoTuesday = { day: -1, n: 0 }; // free tacos had (on which Tuesday)
+let fiestaBand = null, tacoToldDay = -1; // Mateo's band at Casa Fiesta; the last Taco Tuesday we said so
 let seasonLook = null, worldDay = 0; // the seasons (the server counts the days)
 let autoJoin = false; // joining by itself (back after a lost connection, or an update)
 let myCar = null; // the vehicle we're driving
@@ -861,9 +865,22 @@ net.on('secret_file', ({ again, found, need, clear, left = [] }) => {
   }
 });
 net.on('shop_open', ({ store }) => openShop(store));
-net.on('wallet', ({ coins, owned, vacation, found = [], agent, can, clubs, badges, tricks, hunger: h, pantry }) => {
+net.on('wallet', ({ coins, owned, vacation, found = [], agent, can, clubs, badges, tricks, hunger: h, pantry, tacoDay, tacos }) => {
   setHunger(h);
   lunchbox.set({ pantry });
+  if (Number.isInteger(tacoDay)) tacoTuesday = { day: tacoDay, n: tacos || 0 };
+  shop.freeTacos = freeTacos();
+  editor.owned = new Set(owned); // (premium hairdos you've bought: unlocked in the editor)
+  // Just bought a new hairdo at the salon? On it goes!
+  const newHair = wallet.loaded && Object.keys(PREMIUM_HAIR).find(st => owned.includes(hairItem(st)) && !wallet.owned.includes(hairItem(st)));
+  if (newHair) {
+    settings.look = { ...settings.look, hair: newHair };
+    saveSettings();
+    myBody.setLook(settings.look);
+    net.send({ t: 'look', look: settings.look });
+    sounds.magic();
+    effects.sparkle(player.pos.x, player.pos.y + 2, player.pos.z, 30);
+  }
   if (tricks) myTricks = { ...tricks };
   // Just bought a hat for your pet? It puts it straight on.
   const newHat = wallet.loaded && PET_HATS.find(h => owned.includes(hatItem(h)) && !wallet.owned.includes(hatItem(h)));
@@ -5474,9 +5491,32 @@ function npcRaycast(origin, dir, max) {
   return best;
 }
 
+// Taco Tuesday: how many free tacos you've still got today (0 on other days).
+function freeTacos() {
+  if (!isTacoTuesday(worldDay)) return 0;
+  return tacoTuesday.day === worldDay ? Math.max(0, FREE_TACOS - tacoTuesday.n) : FREE_TACOS;
+}
+
+// Mateo's band at Casa Fiesta: you hear it near him (the whole band on Taco Tuesday), with music
+// notes floating up, and everybody there dancing.
+function updateFiesta(dt) {
+  fiestaBand ??= new FiestaBand(sounds);
+  const tuesday = isTacoTuesday(worldDay), mateo = npcs.get(-27);
+  const d = mateo ? mateo.pos.distanceTo(camera.position) : 999;
+  fiestaBand.update(sounds.ctx && !document.hidden ? Math.max(0, 1 - d / 36) * (tuesday ? 1 : 0.6) : 0, tuesday);
+  if (mateo && d < 60 && Math.random() < dt * (tuesday ? 3 : 1)) effects.note(mateo.pos.x, mateo.pos.y + 2.2, mateo.pos.z);
+  if (tuesday && d < 40) for (const id of [-25, -27]) if (Math.random() < dt * 0.25) npcs.get(id)?.emote('dance');
+  // It's Taco Tuesday! (Said once, when it starts or when you join.)
+  if (tuesday && tacoToldDay !== worldDay) {
+    tacoToldDay = worldDay;
+    hud.toast('🌮🎉 TACO TUESDAY! 🆓🌮 ➡ Casa Fiesta 🎸');
+  }
+}
+
 function openShop(store = 'luxe') {
   if (shopOpen || !inGame) return;
   shopOpen = true;
+  shop.freeTacos = freeTacos();
   unlock();
   shop.open(store);
   updateOverlays();
@@ -6045,7 +6085,7 @@ function frame(timestamp) {
       hudTimer = 0.5;
       fps = Math.round(fpsFrames / Math.max(fpsTime, 1e-3));
       fpsFrames = fpsTime = 0;
-      hud.updateInfo({ online: online || (reconnecting ? 'reconnecting' : false), fps, pos: player.pos, flying: player.flying, clock: `${seasonLook.season.icon} ${sky.clockText()}` });
+      hud.updateInfo({ online: online || (reconnecting ? 'reconnecting' : false), fps, pos: player.pos, flying: player.flying, clock: `${seasonLook.season.icon} ${WEEKDAYS[weekday(worldDay)]}${isTacoTuesday(worldDay) ? ' 🌮' : ''} ${sky.clockText()}` });
       hud.updatePlayers([{ name: settings.name + ' (you)', color: settings.look.shirtColor }, ...[...avatars.list.values()].map(a => ({ name: a.name, color: a.color }))]);
     }
     hud.update(dt);
@@ -6123,6 +6163,7 @@ function frame(timestamp) {
   if (inGame) {
     updateCoins(dt, time);
     updateSparkly(dt, time);
+    updateFiesta(dt);
   }
   cars.setView(camera.position, scene.fog.far);
   if (inGame) questHud.update(time, player, camera, npcs);

@@ -1,11 +1,12 @@
 // The "Customize your character" screen with a spinning 3D preview.
 import * as THREE from 'three';
-import { LOOK_OPTIONS, OPTION_LABELS, SKIN_TONES, PALETTE, HAIR_COLORS, PET_COLORS, sanitizeLook, randomLook } from './shared/avatar.js';
+import { LOOK_OPTIONS, OPTION_LABELS, SKIN_TONES, PALETTE, HAIR_COLORS, PET_COLORS, PREMIUM_HAIR, HAIR_ICONS, hairItem, sanitizeLook, randomLook } from './shared/avatar.js';
 import { buildCharacter, animateCharacter, buildPet, animatePet } from './character.js';
 
 const EMOJI = {
   smile: '😊', grin: '😁', cool: '😎', wink: '😉', surprised: '😮', silly: '😜', sleepy: '😴', cat: '🐱', robot: '🤖', starry: '🤩',
   none: '❌', short: '✂️', spiky: '⚡', long: '💇', ponytail: '🎀', mohawk: '🦔', afro: '☁️', buns: '🍡',
+  ...HAIR_ICONS,
   cap: '🧢', beanie: '🧶', tophat: '🎩', crown: '👑', cowboy: '🤠', party: '🥳', wizard: '🧙', viking: '⚔️',
   tshirt: '👕', striped: '🦓', hoodie: '🧥', jacket: '🥼', tank: '🎽', jersey: '🏀', dress: '👗',
   jeans: '👖', shorts: '🩳', skirt: '💃', sweatpants: '🏃',
@@ -28,6 +29,7 @@ export class Editor {
     this.el = document.getElementById('editor');
     this.canvas = document.getElementById('preview');
     this.tab = 0;
+    this.owned = new Set(); // what you've bought (premium hairdos from Snip & Style)
     this.look = null;
     this.open = false;
     this.spin = 0.4;
@@ -161,12 +163,20 @@ export class Editor {
     grid.className = 'option-grid';
     for (const opt of LOOK_OPTIONS[tab.option]) {
       const b = document.createElement('button');
-      b.className = 'option' + (this.look[tab.option] === opt ? ' selected' : '');
+      // A premium hairdo you haven't bought yet: locked (get it at Snip & Style, the hair salon).
+      const locked = tab.option === 'hair' && PREMIUM_HAIR[opt] && !this.owned.has(hairItem(opt));
+      b.className = 'option' + (this.look[tab.option] === opt ? ' selected' : '') + (locked ? ' locked' : PREMIUM_HAIR[opt] ? ' premium' : '');
       const icon = document.createElement('span');
       icon.className = 'emoji';
       icon.textContent = EMOJI[opt] || '•';
-      b.append(icon, document.createTextNode(OPTION_LABELS[opt] || opt));
-      b.addEventListener('click', () => this.setLook({ ...this.look, [tab.option]: opt }));
+      b.append(icon, document.createTextNode(locked ? `🔒 💇🪙${PREMIUM_HAIR[opt]}` : OPTION_LABELS[opt] || opt));
+      if (locked) b.title = `${OPTION_LABELS[opt]}: at Snip & Style, the hair salon (🪙 ${PREMIUM_HAIR[opt]})`;
+      b.addEventListener('click', () => {
+        if (!locked) return this.setLook({ ...this.look, [tab.option]: opt });
+        b.classList.remove('nope');
+        void b.offsetWidth; // (so the wiggle plays again)
+        b.classList.add('nope');
+      });
       grid.append(b);
     }
     body.append(grid);

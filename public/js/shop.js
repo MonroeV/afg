@@ -15,6 +15,7 @@ export class Shop {
     this.coins = 0;
     this.owned = new Set();
     this.isOpen = false;
+    this.freeTacos = 0; // (Taco Tuesday at Casa Fiesta: how many free tacos you've still got)
     $('shop-done').addEventListener('click', () => this.close());
   }
 
@@ -22,7 +23,7 @@ export class Shop {
   open(store = 'luxe') {
     this.store = STORES[store] ? store : 'luxe';
     const s = STORES[this.store];
-    $('shop-title').textContent = `${s.icon} ${s.name} ${s.icon}`;
+    $('shop-title').textContent = `${s.icon} ${s.name} ${s.icon}${this.store === 'fiesta' && this.freeTacos > 0 ? ' 🎉 TACO TUESDAY! 🎉' : ''}`;
     $('shop').style.setProperty('--store', s.color);
     this.isOpen = true;
     $('shop').classList.remove('hidden');
@@ -75,6 +76,14 @@ export class Shop {
         button.textContent = '🕶️ Agents only';
         button.disabled = true;
         button.title = 'You need Top Secret clearance (Agent Shadow on the town square knows how)';
+      } else if (item === 'food_taco' && this.freeTacos > 0) {
+        // Taco Tuesday!
+        button.textContent = `🆓 🌮 × ${this.freeTacos}`;
+        card.classList.add('free');
+        button.addEventListener('click', () => {
+          this.sounds.click();
+          this.onBuy(item);
+        });
       } else if (this.coins < price) {
         button.textContent = `🪙 ${price}`;
         button.disabled = true;

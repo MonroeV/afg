@@ -10,8 +10,19 @@ customize your character, drive cars, build anything and play with friends.
     ring road all the way round, with roads out to it (east past the quarry, west past the farm,
     north through the snowy woods), trees and wildflower meadows, and the bay at Sunny Shores
     carrying on south to a far beach. New places go along the Outer Loop:
-    - **FreshMart Grocery** 🛒 (since v0.45, on the Outer Loop): fruit stands and shelves of food.
-      Talk to Gus to buy something to eat (it goes in your lunchbox 🍱)
+    - **FreshMart Grocery** 🛒 (since v0.45, on the Outer Loop, by the road out east): fruit
+      stands and shelves of food. Talk to Gus to buy something to eat (it goes in your lunchbox 🍱)
+    - **Casa Fiesta** 🌮 (since v0.46, on the Outer Loop, by the road out west): a Mexican
+      restaurant with tables and chairs, cacti, a piñata and papel picado. Luis sells tacos 🌮,
+      burritos 🌯, chips & guacamole 🥑, elote 🌽 and agua fresca 🥤, and Mateo plays his guitar
+      🎸 (you hear it as you get close). **Taco Tuesday** 🎉: every Tuesday (the game has its own
+      week: see the day by the clock), your first 3 tacos are FREE, the whole band plays (🎺 a
+      trumpet joins in), and everybody dances
+    - **Snip & Style** 💇 (since v0.46, on the Outer Loop, by the road out north): a hair salon
+      with salon chairs and mirrors. Stella sells **premium hairdos**: Curly 🌀, Pigtails 🎈,
+      Braids 🥨, Top Bun 🧅, Flat Top, Faux-hawk 🔥, Princess Waves 👸 (with a tiara), Rainbow
+      Spikes 🌈 and Galaxy Hair 🌌 (it glows, with twinkling stars). A new hairdo goes straight
+      on; change it any time in 🎨 Customize (hairdos you haven't bought show a 🔒 and a price)
   - **Up north, the snowy country** (the ground turns to snow and snowflakes start to fall): a
     **ski resort** with a big snowy mountain and a long ski run, a **ski lift** with chairs going
     up and down its cable (right-click the chair at the bottom to ride to the top, Space to hop
@@ -218,6 +229,8 @@ customize your character, drive cars, build anything and play with friends.
 - **Seasons** 🌸☀️🍂❄️: spring, summer, fall and winter, two game days each (a whole year in 80
   minutes), shown by the little picture next to the clock. Each season comes in slowly over its
   first half day. Skye announces each new one on BZ Live.
+  The game has its own **week** too (Sun, Mon, Tue… one game day each), shown by the clock:
+  Tuesday is Taco Tuesday at Casa Fiesta 🌮
   - **Spring**: the trees are covered in buds and pink blossom, the grass turns fresh green, and
     wildflowers pop up all over the grass around you
   - **Summer**: green trees, green grass
@@ -864,6 +877,7 @@ public/
     tacos.js           Raining tacos, ice cream, pizza, donuts and cats & dogs; the station's spinning mast
     weatherui.js       Stormy's menu: what shall it rain?
     lunchbox.js        Your lunchbox: how full you are, and food to eat
+    fiesta.js          Mateo's band at Casa Fiesta (the whole band on Taco Tuesday)
     guardcatch.js      Bodyguards keeping you off their land: caught and walked off, blown away, flushed out
     guardui.js         Someone asking your bodyguards to let them in: your answer
     lighting.js        Live reflections and the glow effect
@@ -898,7 +912,7 @@ public/
       fuel.js          Gas, mud, the gas stations and their car washes
       clubs.js         The clubs: their leaders, tasks and prizes
       underground.js   Under the ground: holes, and the Tunnel Diggers' secret tunnels
-      shops.js         The Garden Center, the Toy Box, the Pet Shop and FreshMart Grocery (what they sell is in blocks.js)
+      shops.js         The Garden Center, the Toy Box, the Pet Shop, and out on the Outer Loop FreshMart Grocery, Casa Fiesta and Snip & Style (what they sell is in blocks.js)
       residents.js     The residents and the houses they live in
       quests.js        The residents' quests
       weather.js       The weather station, and its showers (prices, how long, songs)

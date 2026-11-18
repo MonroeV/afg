@@ -20,6 +20,12 @@ export const FOODS = {
   cheese: { icon: '🧀', name: 'Cheese', fill: 20, price: 2, store: 'grocery' },
   sandwich: { icon: '🥪', name: 'Sandwich', fill: 40, price: 3, store: 'grocery' },
   watermelon: { icon: '🍉', name: 'Watermelon', fill: 45, price: 4, store: 'grocery' },
+  // At Casa Fiesta (on Taco Tuesday the first few tacos are free!).
+  taco: { icon: '🌮', name: 'Taco', fill: 25, price: 2, store: 'fiesta' },
+  burrito: { icon: '🌯', name: 'Burrito', fill: 45, price: 4, store: 'fiesta' },
+  guac: { icon: '🥑', name: 'Chips & Guacamole', fill: 20, price: 2, store: 'fiesta' },
+  elote: { icon: '🌽', name: 'Elote (Street Corn)', fill: 18, price: 2, store: 'fiesta' },
+  agua: { icon: '🥤', name: 'Agua Fresca', fill: 10, price: 1, store: 'fiesta' },
   // From the garden (picked crops go in your lunchbox too).
   carrot: { icon: '🥕', name: 'Carrot', fill: 12 },
   strawberry: { icon: '🍓', name: 'Strawberries', fill: 12 },
@@ -30,5 +36,7 @@ export const FOOD_KINDS = Object.keys(FOODS);
 export const foodItem = f => `food_${f}`;
 export const itemFood = item => (typeof item === 'string' && item.startsWith('food_') && FOODS[item.slice(5)] ? item.slice(5) : null);
 export const MAX_PANTRY = 30; // of each kind in your lunchbox
+// Taco Tuesday: this many free tacos each, every Tuesday (then they're the usual price).
+export const FREE_TACOS = 3;
 // What a crop gives you when you pick it (see the garden in game.js).
 export const CROP_FOOD = { 131: 'carrot', 132: 'strawberry', 133: 'sunseeds', 134: 'pumpkin' };

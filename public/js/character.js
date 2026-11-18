@@ -40,6 +40,11 @@ const material = (texOrColor, extra = {}) =>
     ...extra,
   });
 
+// Hair's color (Galaxy Hair is always the deep purple-blue of the night sky, whatever color's picked).
+const GALAXY = '#2a1b5e';
+const hairTint = look => (look.hair === 'galaxy' ? GALAXY : look.hairColor);
+const LONG_HAIR = ['long', 'ponytail', 'buns', 'afro', 'braids', 'pigtails', 'princess', 'galaxy'];
+
 // ---------- Faces (drawn on a 16x16 pixel grid) ----------
 
 function drawFace(ctx, look) {
@@ -133,12 +138,14 @@ function drawFace(ctx, look) {
   }
 
   // Hair fringe along the top of the face.
-  const hair = look.hair;
+  const hair = look.hair, hc = hairTint(look);
   if (hair !== 'none' && hair !== 'mohawk') {
-    px(0, 0, look.hairColor, 16, 2);
-    if (hair === 'spiky' || hair === 'short') { px(0, 2, look.hairColor, 3, 1); px(10, 2, look.hairColor, 6, 1); }
-    if (hair === 'long' || hair === 'ponytail' || hair === 'buns') { px(0, 2, look.hairColor, 2, 6); px(14, 2, look.hairColor, 2, 6); px(2, 2, look.hairColor, 4, 1); }
-    if (hair === 'afro') px(0, 2, look.hairColor, 16, 1);
+    px(0, 0, hc, 16, 2);
+    if (['spiky', 'short', 'fauxhawk', 'flattop', 'rainbow', 'topbun'].includes(hair)) { px(0, 2, hc, 3, 1); px(10, 2, hc, 6, 1); }
+    if (['long', 'ponytail', 'buns', 'braids', 'pigtails', 'princess', 'galaxy'].includes(hair)) { px(0, 2, hc, 2, 6); px(14, 2, hc, 2, 6); px(2, 2, hc, 4, 1); }
+    if (hair === 'afro' || hair === 'curly') px(0, 2, hc, 16, 1);
+    if (hair === 'curly') for (let i = 0; i < 16; i += 3) px(i, 3, hc, 2, 1); // (curls)
+    if (hair === 'galaxy') { px(3, 0, '#ffffff', 1, 1); px(9, 1, '#fff59d', 1, 1); px(13, 0, '#ffffff', 1, 1); } // (stars!)
   }
 }
 
@@ -148,16 +155,16 @@ function headMaterials(look) {
     ctx.fillStyle = look.skin;
     ctx.fillRect(0, 0, 16, 16);
     if (hasHair) {
-      ctx.fillStyle = look.hairColor;
-      const long = ['long', 'ponytail', 'buns', 'afro'].includes(look.hair);
+      ctx.fillStyle = hairTint(look);
+      const long = LONG_HAIR.includes(look.hair);
       ctx.fillRect(0, 0, 16, 4);
       ctx.fillRect(10, 0, 6, long ? 14 : 8); // back of the side
     }
     ctx.fillStyle = shadeHex(look.skin, 0.85);
     ctx.fillRect(6, 7, 2, 3); // ear
   });
-  const back = hasHair ? material(look.hairColor) : material(look.skin);
-  const top = hasHair ? material(look.hairColor) : material(look.skin);
+  const back = hasHair ? material(hairTint(look)) : material(look.skin);
+  const top = hasHair ? material(hairTint(look)) : material(look.skin);
   const face = canvas(64, 64, ctx => drawFace(ctx, look));
   const sideMat = material(side);
   const bottom = material(look.skin);
@@ -282,6 +289,14 @@ function box(w, h, d, mat, x = 0, y = 0, z = 0) {
   return m;
 }
 
+// A ball of hair (curls, buns).
+function ball(head, geometry, m, x, y, z) {
+  const b = new THREE.Mesh(geometry, m);
+  b.position.set(x, y, z);
+  b.castShadow = true;
+  head.add(b);
+}
+
 function addHair(head, look) {
   const m = material(look.hairColor);
   const top = HEAD / 2;
@@ -331,6 +346,104 @@ function addHair(head, look) {
         head.add(bun);
       }
       break;
+    // ---------- Premium hairdos (from Snip & Style) ----------
+    case 'curly': {
+      // Lots of bouncy curls all over the top and round the back.
+      head.add(box(0.53, 0.08, 0.53, m, 0, top + 0.03, 0.01));
+      const g = new THREE.SphereGeometry(0.09, 8, 6);
+      for (let i = 0; i < 9; i++) ball(head, g, m, -0.2 + (i % 3) * 0.2, top + 0.08 + (i % 2) * 0.03, -0.18 + Math.floor(i / 3) * 0.19);
+      for (const x of [-0.27, 0.27]) for (const y of [0.12, -0.02]) for (const z of [0.05, 0.2]) ball(head, g, m, x, y, z);
+      for (const x of [-0.16, 0, 0.16]) ball(head, g, m, x, 0.06, 0.28);
+      break;
+    }
+    case 'pigtails':
+      // Two bunches sticking out at the sides, with bobbles.
+      head.add(box(0.53, 0.08, 0.53, m, 0, top + 0.03, 0.01));
+      head.add(box(0.53, 0.3, 0.08, m, 0, 0.1, 0.27));
+      for (const sx of [-1, 1]) {
+        const tail = box(0.13, 0.32, 0.13, m, sx * 0.36, 0.0, 0.12);
+        tail.rotation.z = sx * 0.6;
+        head.add(tail);
+        head.add(box(0.1, 0.1, 0.1, material('#ffd54f'), sx * 0.29, 0.13, 0.12));
+      }
+      break;
+    case 'braids':
+      // Two long braids down the back (a row of plaits each), with bows on the ends.
+      head.add(box(0.53, 0.08, 0.53, m, 0, top + 0.03, 0.01));
+      head.add(box(0.53, 0.36, 0.08, m, 0, 0.06, 0.27));
+      for (const x of [-0.17, 0.17]) {
+        for (let i = 0; i < 6; i++) {
+          const plait = box(0.12, 0.11, 0.1, m, x, -0.14 - i * 0.1, 0.3 + i * 0.012);
+          plait.rotation.z = i % 2 ? 0.25 : -0.25;
+          head.add(plait);
+        }
+        head.add(box(0.16, 0.07, 0.08, material('#ec407a'), x, -0.76, 0.37));
+      }
+      break;
+    case 'topbun': {
+      // One big bun right on top, with a hair band.
+      head.add(box(0.53, 0.08, 0.53, m, 0, top + 0.03, 0.01));
+      ball(head, new THREE.SphereGeometry(0.16, 12, 10), m, 0, top + 0.17, 0.04);
+      const band = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.025, 6, 14), material('#ec407a'));
+      band.rotation.x = Math.PI / 2;
+      band.position.set(0, top + 0.08, 0.04);
+      head.add(band);
+      break;
+    }
+    case 'flattop':
+      // Tall and flat as a table on top.
+      head.add(box(0.54, 0.24, 0.54, m, 0, top + 0.1, 0.01));
+      break;
+    case 'fauxhawk':
+      // Short at the sides, swept up into a row of spikes down the middle.
+      head.add(box(0.53, 0.05, 0.53, m, 0, top + 0.02, 0.01));
+      for (let i = 0; i < 4; i++) {
+        const spike = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.24 - i * 0.03, 4), m);
+        spike.position.set(0, top + 0.13 - i * 0.015, -0.17 + i * 0.13);
+        spike.rotation.x = -0.35;
+        spike.castShadow = true;
+        head.add(spike);
+      }
+      break;
+    case 'princess': {
+      // Long flowing waves right down the back, curls at the sides, and a sparkly tiara.
+      head.add(box(0.53, 0.08, 0.53, m, 0, top + 0.03, 0.01));
+      head.add(box(0.55, 0.95, 0.1, m, 0, -0.22, 0.27));
+      const g = new THREE.SphereGeometry(0.07, 8, 6);
+      for (const x of [-0.29, 0.29]) for (let i = 0; i < 5; i++) ball(head, g, m, x, 0.1 - i * 0.13, 0.12 + (i % 2) * 0.04);
+      for (let i = 0; i < 4; i++) ball(head, g, m, -0.2 + i * 0.13, -0.68, 0.29);
+      const gold = material('#ffd54f', { metalness: 0.8, roughness: 0.25 });
+      head.add(box(0.36, 0.04, 0.04, gold, 0, top + 0.07, -0.18));
+      for (const [x, h] of [[-0.12, 0.06], [0, 0.1], [0.12, 0.06]]) head.add(box(0.04, h, 0.03, gold, x, top + 0.09 + h / 2, -0.18));
+      head.add(box(0.05, 0.05, 0.03, material('#ff4081', { emissive: '#ff4081', emissiveIntensity: 0.5 }), 0, top + 0.15, -0.2));
+      break;
+    }
+    case 'rainbow': {
+      // A fan of spikes in every color of the rainbow.
+      head.add(box(0.53, 0.07, 0.53, m, 0, top + 0.03, 0.01));
+      const colors = ['#e53935', '#ff9800', '#fdd835', '#43a047', '#1e88e5', '#3949ab', '#8e24aa'];
+      colors.forEach((c, i) => {
+        const a = -0.9 + i * 0.3;
+        const spike = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.3, 4), material(c, { emissive: c, emissiveIntensity: 0.25 }));
+        spike.position.set(Math.sin(a) * 0.2, top + 0.12 + Math.cos(a) * 0.06, 0.04);
+        spike.rotation.z = -a * 0.9;
+        spike.castShadow = true;
+        head.add(spike);
+      });
+      break;
+    }
+    case 'galaxy': {
+      // The night sky: deep purple-blue with a soft glow, twinkling stars all through it.
+      const sky = material(GALAXY, { emissive: '#3a1f8a', emissiveIntensity: 0.55, roughness: 0.3 });
+      head.add(box(0.54, 0.09, 0.54, sky, 0, top + 0.035, 0.01));
+      head.add(box(0.55, 0.7, 0.1, sky, 0, -0.1, 0.27));
+      for (const x of [-0.27, 0.27]) head.add(box(0.07, 0.42, 0.42, sky, x, 0.02, 0.05));
+      const star = material('#ffffff', { emissive: '#ffffff', emissiveIntensity: 1 }), gold = material('#fff59d', { emissive: '#fff59d', emissiveIntensity: 1 });
+      for (const [x, y, z, gld] of [[-0.15, top + 0.085, -0.1], [0.12, top + 0.085, 0.12, 1], [0.2, top + 0.085, -0.15], [-0.1, -0.05, 0.325, 1], [0.15, -0.3, 0.325], [-0.18, -0.36, 0.325], [0.05, 0.15, 0.325, 1], [0.31, 0.1, 0.1], [-0.31, -0.08, -0.02, 1], [0.31, -0.1, 0.2]]) {
+        head.add(box(0.035, 0.035, 0.035, gld ? gold : star, x, y, z));
+      }
+      break;
+    }
   }
 }
 
@@ -338,7 +451,7 @@ function addHat(head, look) {
   const color = look.hatColor;
   const m = material(color);
   // Hats sit on top of big hairdos.
-  const top = HEAD / 2 + (look.hair === 'afro' ? 0.2 : look.hair === 'buns' || look.hair === 'spiky' ? 0.06 : look.hair === 'mohawk' ? 0.1 : 0);
+  const top = HEAD / 2 + ({ afro: 0.2, buns: 0.06, spiky: 0.06, mohawk: 0.1, curly: 0.1, topbun: 0.2, flattop: 0.2, fauxhawk: 0.12, rainbow: 0.16 }[look.hair] || 0);
   const add = mesh => {
     mesh.castShadow = true;
     head.add(mesh);
@@ -410,7 +523,7 @@ function addHat(head, look) {
 }
 
 function addCatEars(head, look) {
-  const m = material(look.hair === 'none' ? look.skin : look.hairColor);
+  const m = material(look.hair === 'none' ? look.skin : hairTint(look));
   for (const s of [-1, 1]) {
     const ear = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.16, 4), m);
     ear.position.set(s * 0.17, HEAD / 2 + 0.1, 0);

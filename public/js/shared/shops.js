@@ -5,9 +5,10 @@
 // nobody can knock them down. What each one sells is in blocks.js (STORES, and `store` on things).
 import { DOOR_TOP, makeBlock, stack, BLOCKS } from './blocks.js';
 import { exitRoads, makeSite, siteFree } from './worldgen.js';
-import { ringRoads } from './outerlands.js';
+import { ringRoads, RING } from './outerlands.js';
+import { FAR_ROADS } from './frontier.js';
 
-const B = { floor: 25, glass: 9, door: 21, sidewalk: 24, flowerPot: 67, ceilingLight: 41, register: 86, desk: 73, sign: 94, lantern: 45, white: 12 };
+const B = { floor: 25, glass: 9, door: 21, sidewalk: 24, flowerPot: 67, ceilingLight: 41, register: 86, desk: 73, sign: 94, lantern: 45, white: 12, table: 62, chair: 60, mirror: 37, papel: 137, pinata: 138, salonChair: 140 };
 const faceDir = (dx, dz) => (dz > 0 ? 0 : dx > 0 ? 1 : dz < 0 ? 2 : 3);
 const onWall = (wx, wz) => faceDir(-wx, -wz);
 
@@ -19,37 +20,61 @@ const SHOPS = [
 ];
 // The stores out along the Outer Loop (in the outer lands): goods: what's on display (blocks).
 const OUTER_SHOPS = [
-  { id: 'grocery', walls: 13, trim: 16, roof: 26, roads: ['loopE', 'loopS', 'loopW', 'loopN'], sign: '🛒 FRESHMART GROCERY', owner: 'FreshMart Grocery', goods: [136, 136, 136, 136, 135, 135, 135, 135] },
+  { id: 'grocery', walls: 13, trim: 16, roof: 26, roads: ['loopE', 'loopS', 'loopW', 'loopN'], sign: '🛒 FRESHMART GROCERY', owner: 'FreshMart Grocery', near: [RING, -40], goods: [136, 136, 136, 136, 135, 135, 135, 135] },
+  // Casa Fiesta: orange walls, yellow trim, tables and chairs, cacti, a piñata and papel picado.
+  { id: 'fiesta', walls: 32, trim: 16, roof: 26, roads: ['loopS', 'loopW', 'loopN', 'loopE'], sign: '🌮 CASA FIESTA (🎉 Taco Tuesday!)', owner: 'Casa Fiesta', near: [-RING, FAR_ROADS.west + 20], goods: [0, 0, 0, 0, 139, 139], decor: fiestaDecor },
+  // Snip & Style: pink walls, white trim, salon chairs facing mirrors on the walls.
+  { id: 'salon', walls: 29, trim: 12, roof: 15, roads: ['loopW', 'loopN', 'loopE', 'loopS'], sign: '💇 SNIP & STYLE', owner: 'Snip & Style', near: [-80, -RING], goods: [0, 0, 0, 0, 67, 67], decor: salonDecor },
 ];
+// (u along the road, v in from it: the room inside is u 1-8, v 2-7, the counter at v 6.)
+function fiestaDecor({ put, inward, outward }) {
+  for (const u of [2, 7]) {
+    put(u, 0, 3, stack(B.table, B.floor));
+    put(u, 0, 2, stack(makeBlock(B.chair, inward), B.floor));
+    put(u, 0, 4, stack(makeBlock(B.chair, outward), B.floor));
+  }
+  for (let u = 1; u <= 8; u++) put(u, 3, 5, makeBlock(B.papel, inward));
+  for (let u = 1; u <= 8; u++) if (u !== 3 && u !== 6) put(u, 3, 3, makeBlock(B.papel, inward));
+  put(4, 3, 4, B.pinata);
+}
+function salonDecor({ put, site }) {
+  const [ux, uz] = site.dirU;
+  for (const v of [3, 5]) {
+    put(1, 0, v, stack(makeBlock(B.salonChair, faceDir(-ux, -uz)), B.floor));
+    put(8, 0, v, stack(makeBlock(B.salonChair, faceDir(ux, uz)), B.floor));
+    put(0, 1, v, B.mirror);
+    put(L - 1, 1, v, B.mirror);
+  }
+}
 const L = 10, D = 9;
 
-// The stores along the Outer Loop (only: just these ones, by id).
+// The stores along the Outer Loop (only: just these ones, by id). A store with `near` takes the
+// free spot closest to there (by where a road comes out to the Outer Loop, say); the others go
+// along their roads in order.
 export function buildOuterShops({ get, set, canUse, only = null }) {
   const roads = ringRoads();
   const out = { claims: [], signs: [], places: {}, areas: [], built: [] };
   const used = [];
   for (const shop of OUTER_SHOPS.filter(s => !only || only.includes(s.id))) {
-    let done = false;
+    const sites = [];
     for (const name of shop.roads) {
       const road = roads[name];
-      for (const side of [-1, 1]) {
-        for (let a = road.from + 30; a + L <= road.to - 30 && !done; a += 3) {
-          const site = makeSite(road, side, a);
-          const [cx, cz] = site.at(L / 2, D / 2);
-          if (used.some(([x, z]) => Math.hypot(x - cx, z - cz) < 60)) continue;
-          if (!siteFree(site, L, D, 6, get, canUse)) continue;
-          const s = shopAt(site, shop, shop.goods, set);
-          out.claims.push(s.claim);
-          out.signs.push(...s.signs);
-          out.places[`shop_${shop.id}`] = s.place;
-          out.areas.push(s.area);
-          out.built.push(shop.id);
-          used.push([cx, cz]);
-          done = true;
-        }
-        if (done) break;
-      }
-      if (done) break;
+      for (const side of [-1, 1]) for (let a = road.from + 30; a + L <= road.to - 30; a += 3) sites.push(makeSite(road, side, a));
+    }
+    const centre = site => site.at(L / 2, D / 2);
+    if (shop.near) sites.sort((p, q) => Math.hypot(...centre(p).map((c, i) => c - shop.near[i])) - Math.hypot(...centre(q).map((c, i) => c - shop.near[i])));
+    for (const site of sites) {
+      const [cx, cz] = centre(site);
+      if (used.some(([x, z]) => Math.hypot(x - cx, z - cz) < 60)) continue;
+      if (!siteFree(site, L, D, 6, get, canUse)) continue;
+      const s = shopAt(site, shop, shop.goods, set);
+      out.claims.push(s.claim);
+      out.signs.push(...s.signs);
+      out.places[`shop_${shop.id}`] = s.place;
+      out.areas.push(s.area);
+      out.built.push(shop.id);
+      used.push([cx, cz]);
+      break;
     }
   }
   return out;
@@ -126,10 +151,11 @@ function shopAt(site, shop, goods, set) {
   const spots = [[1, 3], [8, 3], [1, 5], [8, 5], [1, 7], [8, 7], [2, 2], [7, 2]];
   goods.forEach((item, i) => {
     const s = spots[i];
-    if (!s) return;
+    if (!s || !item) return;
     const def = BLOCKS[item];
     put(s[0], 0, s[1], stack(def.facing ? makeBlock(item, outward) : item, B.floor));
   });
+  shop.decor?.({ put, site, inward, outward });
   // A sign with the store's name over the door, outside.
   const [sx, sz] = site.at(Math.floor(L / 2), 0);
   set(sx, 3, sz, makeBlock(B.sign, onWall(fx, fz)));

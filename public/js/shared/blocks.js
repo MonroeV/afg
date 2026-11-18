@@ -24,6 +24,7 @@
 const warm = 0xffc98a;
 
 import { FOODS, foodItem } from './food.js';
+import { PREMIUM_HAIR, OPTION_LABELS, hairItem } from './avatar.js';
 
 export const BLOCKS = {
   1: { name: 'Grass', tex: { top: 'grass_top', side: 'grass_side', bottom: 'dirt' } },
@@ -209,6 +210,11 @@ export const BLOCKS = {
   // ---------- For the stores in the outer lands (only there: `worldOnly`) ----------
   135: { name: 'Fruit Stand', shape: 'model', model: 'fruitStand', hidden: true, worldOnly: true, box: [0.05, 0, 0.05, 0.95, 0.75, 0.95] },
   136: { name: 'Grocery Shelf', shape: 'model', model: 'groceryShelf', facing: true, hidden: true, worldOnly: true, box: [0, 0, 0.2, 1, 1, 0.8] },
+  // Casa Fiesta (the Mexican restaurant) and Snip & Style (the hair salon).
+  137: { name: 'Papel Picado', shape: 'model', model: 'papelPicado', facing: true, hidden: true, worldOnly: true, box: [0, 0.7, 0.4, 1, 1, 0.6] },
+  138: { name: 'Piñata', shape: 'model', model: 'pinata', hidden: true, worldOnly: true, box: [0.2, 0.25, 0.2, 0.8, 1, 0.8] },
+  139: { name: 'Cactus', shape: 'model', model: 'cactusPot', hidden: true, worldOnly: true, box: [0.2, 0, 0.2, 0.8, 0.95, 0.8] },
+  140: { name: 'Salon Chair', shape: 'model', model: 'salonChair', facing: true, seat: 0.5, hidden: true, worldOnly: true, box: [0.12, 0, 0.12, 0.88, 0.55, 0.88] },
 };
 // Crops: how grown (0 seeds .. 3 ripe) and whether they've just been watered.
 export const CROP_RIPE = 3, CROP_WET = 4;
@@ -263,6 +269,7 @@ export const SHOP_TOOLS = {
   pethat_cape: { name: 'Pet Super Cape', price: 12, store: 'pets', petHat: 'cape', about: 'A super cape: your pet is a superhero!', got: 'Your pet is wearing it! (Right-click your pet to change hats.)' },
   pethat_crown: { name: 'Pet Crown', price: 15, store: 'pets', petHat: 'crown', about: 'A golden crown fit for a royal pet!', got: 'Your pet is wearing it! (Right-click your pet to change hats.)' },
   // The grocery store's food: buy as much as you like (it goes in your lunchbox 🍱; see food.js).
+  ...Object.fromEntries(Object.entries(PREMIUM_HAIR).map(([style, price]) => [hairItem(style), { name: OPTION_LABELS[style], price, store: 'salon', hair: style, about: `✂️ A cool new hairdo: ${OPTION_LABELS[style]}!`, got: '💇 Your new hairdo is on! (Change it any time: 🎨 Customize.)' }])),
   ...Object.fromEntries(Object.entries(FOODS).filter(([, f]) => f.store).map(([id, f]) => [foodItem(id), { name: f.name, price: f.price, store: f.store, again: true, food: id, about: `${f.icon} Fills you up (+${f.fill}). It goes in your lunchbox 🍱 till you eat it.`, got: '' }])),
   mysterybox: { name: 'Mystery Box', price: 12, again: true, about: 'A surprise from one of the stores: something you don\'t have yet!', got: '' },
   vacationflag: { name: 'Vacation Flag', price: 150, about: 'Claim a second piece of land for a vacation home! It stays where you plant it.', got: 'Hold your Land Flag and press X to switch it to vacation land.' },
@@ -296,6 +303,8 @@ export const STORES = {
   toys: { name: 'The Toy Box', icon: '🧸', color: '#ff8a65', keeper: 'Mr. Jingles' },
   pets: { name: 'Happy Paws Pet Shop', icon: '🐾', color: '#a1887f', keeper: 'Pip' },
   grocery: { name: 'FreshMart Grocery', icon: '🛒', color: '#43a047', keeper: 'Gus' },
+  fiesta: { name: 'Casa Fiesta', icon: '🌮', color: '#ff7043', keeper: 'Luis' },
+  salon: { name: 'Snip & Style', icon: '💇', color: '#ec407a', keeper: 'Stella' },
 };
 export const storeOf = item => (typeof item === 'number' ? BLOCKS[item]?.store : SHOP_TOOLS[item]?.store) || 'luxe';
 // What's for sale, cheapest first: [item, price].

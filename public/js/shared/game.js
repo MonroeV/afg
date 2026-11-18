@@ -2,7 +2,7 @@
 // The Node server runs one of these for everybody. When there is no server,
 // the browser runs its own copy so single player works exactly the same way.
 import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, isExclusive, DOOR_OPEN, DOOR_TOP, DAY_LENGTH, WORLD, isNightTime, SHOP_ITEMS, BLOCKS, SHOP_TOOLS, FOUND_GEAR, HOLE_HEAL, SIGN, cleanSignText, cleanWords, isCrop, cropStage, cropWet, CROP_RIPE, CROP_WET, makeBlock, blockMeta, toggleDoorValue } from './blocks.js';
-import { sanitizeLook, cleanName, randomLook } from './avatar.js';
+import { sanitizeLook, cleanName, randomLook, PREMIUM_HAIR, hairItem } from './avatar.js';
 import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines, buildStore, furnishHouses, furnishTowers, elevatorTowers } from './worldgen.js';
 import { buildSecretBase, hideSecretFiles, AGENCY, AGENT_SPOT, FILES_NEEDED, FILE_HINTS, inZone } from './secretbase.js';
 import { NpcCrew, NPC_ACT } from './npcs.js';
@@ -16,18 +16,18 @@ import { findHomes } from './residents.js';
 import { buildWeatherStation, SHOWERS } from './weather.js';
 import { buildBuildPark } from './buildpark.js';
 import { buildOuterLands } from './outerlands.js';
-import { seasonAt, WINTER, SEASON_ICONS } from './seasons.js';
+import { seasonAt, WINTER, SEASON_ICONS, isTacoTuesday } from './seasons.js';
 import { Quests, cleanQuest } from './quests.js';
 import { TRICKS, TRICK_TRIES, TREATS, trickIndex, hatItem } from './tricks.js';
 import { CHALLENGES, partCount } from './challenges.js';
 import { Playground } from './playground.js';
-import { FOODS, FOOD_KINDS, MAX_PANTRY, HUNGER_FULL, HUNGER_MINUTES, CROP_FOOD } from './food.js';
+import { FOODS, FOOD_KINDS, MAX_PANTRY, HUNGER_FULL, HUNGER_MINUTES, CROP_FOOD, FREE_TACOS } from './food.js';
 import { doorAt } from './homenav.js';
 import { Structures } from '../structures.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
 
-export const SAVE_VERSION = 18;
+export const SAVE_VERSION = 19;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -277,6 +277,7 @@ export class GameRoom {
       this.upgradeTo16();
       this.upgradeTo17();
       this.upgradeTo18();
+      this.upgradeTo19();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -316,6 +317,9 @@ export class GameRoom {
         // Hunger (100: full) and the food in your lunchbox ({ apple: 2, … }).
         hunger: Number.isFinite(w.hunger) ? Math.max(0, Math.min(HUNGER_FULL, w.hunger)) : HUNGER_FULL,
         pantry: Object.fromEntries(FOOD_KINDS.map(f => [f, Math.min(MAX_PANTRY, Math.max(0, Math.floor(Number(w.pantry?.[f]) || 0)))]).filter(([, n]) => n > 0)),
+        // Taco Tuesday: which Tuesday (the day count), and how many free tacos they've had.
+        tacoDay: Number.isInteger(w.tacoDay) ? w.tacoDay : -1,
+        tacos: Number.isInteger(w.tacos) && w.tacos > 0 ? w.tacos : 0,
         noAsk: Array.isArray(w.noAsk) ? w.noAsk.filter(k => typeof k === 'string').slice(0, 50) : [], // (people who can't ask your bodyguards to let them in)
         challenges: Array.isArray(w.challenges) ? w.challenges.filter(id => CHALLENGES.some(c => c.id === id)) : [], // Builder Bea's cards done
         // Pet tricks: how many tries at each (learned at TRICK_TRIES).
@@ -362,6 +366,7 @@ export class GameRoom {
     if (data.version < 16) this.upgradeTo16();
     if (data.version < 17) this.upgradeTo17();
     if (data.version < 18) this.upgradeTo18();
+    if (data.version < 19) this.upgradeTo19();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -738,6 +743,21 @@ export class GameRoom {
     this.onDirty();
   }
 
+  // Worlds saved before version 19: Casa Fiesta (the Mexican restaurant) and Snip & Style (the
+  // hair salon), out on the Outer Loop.
+  upgradeTo19() {
+    const built = this.addOuterShops(['fiesta', 'salon']);
+    this.log(`Added Casa Fiesta and Snip & Style (${built.join(', ') || 'no room'})`);
+    this.onDirty();
+  }
+
+  // How many free tacos this player has left today (Taco Tuesday: 0 on other days).
+  freeTacos(client) {
+    if (!isTacoTuesday(this.day)) return 0;
+    const w = this.wallet(client);
+    return w.tacoDay === this.day ? Math.max(0, FREE_TACOS - (w.tacos || 0)) : FREE_TACOS;
+  }
+
   // How many seconds are left of whatever's raining down (0: nothing).
   showerLeft() {
     return Math.max(0, Math.round(((this.shower?.until || 0) - Date.now()) / 100) / 10);
@@ -1009,7 +1029,7 @@ export class GameRoom {
 
   sendWallet(client) {
     const w = this.wallet(client);
-    client.send({ t: 'wallet', coins: w.coins, owned: w.owned, found: w.found, vacation: !!this.vacationOf(client), agent: { files: w.agent.files.length, need: this.filesNeeded(), clear: w.agent.clear }, can: w.can, clubs: w.clubs, badges: w.badges, streak: w.streak, tricks: w.tricks || {}, hunger: Math.round(w.hunger ?? HUNGER_FULL), pantry: w.pantry || {} });
+    client.send({ t: 'wallet', coins: w.coins, owned: w.owned, found: w.found, vacation: !!this.vacationOf(client), agent: { files: w.agent.files.length, need: this.filesNeeded(), clear: w.agent.clear }, can: w.can, clubs: w.clubs, badges: w.badges, streak: w.streak, tricks: w.tricks || {}, hunger: Math.round(w.hunger ?? HUNGER_FULL), pantry: w.pantry || {}, tacoDay: w.tacoDay ?? -1, tacos: w.tacos || 0 });
   }
 
   // ---------- Build challenges (Builder Bea's cards) ----------
@@ -1064,9 +1084,11 @@ export class GameRoom {
     }
   }
 
-  // A pet hat is only for those who bought it.
+  // A pet hat, or a premium hairdo from the salon, is only for those who bought it.
   ownLook(client, look) {
-    if (look.petHat !== 'none' && !this.wallet(client).owned.includes(hatItem(look.petHat))) look.petHat = 'none';
+    const owned = this.wallet(client).owned;
+    if (look.petHat !== 'none' && !owned.includes(hatItem(look.petHat))) look.petHat = 'none';
+    if (PREMIUM_HAIR[look.hair] && !owned.includes(hairItem(look.hair))) look.hair = 'short';
     return look;
   }
 
@@ -1595,8 +1617,15 @@ export class GameRoom {
         // Food: as much as you like (in your lunchbox, till you eat it).
         w.pantry ??= {};
         if ((w.pantry[food] || 0) >= MAX_PANTRY) return reply(`🍱 Your lunchbox is full of ${FOODS[food].icon}!`);
-        if (w.coins < price) return reply(`🪙 ${FOODS[food].icon} ${price}`);
-        w.coins -= price;
+        // Taco Tuesday: the first few tacos are on the house! 🎉
+        const free = food === 'taco' && this.freeTacos(client) > 0;
+        if (!free && w.coins < price) return reply(`🪙 ${FOODS[food].icon} ${price}`);
+        if (free) {
+          if (w.tacoDay !== this.day) w.tacos = 0;
+          w.tacoDay = this.day;
+          w.tacos = (w.tacos || 0) + 1;
+          reply(`🎉🌮 Taco Tuesday! FREE! (${FREE_TACOS - w.tacos} 🌮🆓 left)`);
+        } else w.coins -= price;
         w.pantry[food] = (w.pantry[food] || 0) + 1;
         this.sendWallet(client);
         client.send({ t: 'food_got', food, n: w.pantry[food] });

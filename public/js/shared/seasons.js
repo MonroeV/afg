@@ -18,6 +18,13 @@ export function seasonAt(day, time) {
   return { i, k, mix: t * t * (3 - 2 * t), last: (i + 3) % 4, name: SEASONS[i], icon: SEASON_ICONS[i] };
 }
 
+// The days of the week (the game's own week: 7 game days, counted by the server). Sunday is the
+// day for church (see church.js), and Tuesday is Taco Tuesday at Casa Fiesta.
+export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+export const weekday = day => (((day || 0) % 7) + 7) % 7;
+export const SUNDAY = 0, TUESDAY = 2;
+export const isTacoTuesday = day => weekday(day) === TUESDAY;
+
 // How snowy it is (0..1): snow comes in at the start of winter and melts at the start of spring.
 export function snowAt(s) {
   if (s.i === WINTER) return s.mix;

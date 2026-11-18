@@ -610,6 +610,41 @@ MODELS.groceryShelf = {
   colors: { body: 0xeeeeee, accent: 0xe53935, trim: 0x1e88e5, glow: 0xffd54f, metal: 0.2 },
 };
 
+// ---------- Casa Fiesta and Snip & Style ----------
+// Papel picado: a string of bright paper flags across the ceiling (they flutter: see the glow).
+const flag = (x, i) => box(0.15, 0.17, 0.008, x, 0.83 - (i % 2) * 0.01, 0.5);
+MODELS.papelPicado = {
+  body: [box(1, 0.012, 0.012, 0.5, 0.93, 0.5)],
+  accent: [0.1, 0.5, 0.9].map((x, i) => flag(x, i)),
+  trim: [0.3, 0.7].map((x, i) => flag(x, i + 1)),
+  glow: [box(0.04, 0.04, 0.012, 0.2, 0.92, 0.5), box(0.04, 0.04, 0.012, 0.6, 0.92, 0.5)],
+  colors: { body: 0xffffff, accent: 0xec407a, trim: 0x26c6da, glow: 0xffd54f, metal: 0 },
+};
+// A star piñata hanging from the ceiling: a round middle with five bright points and tassels.
+MODELS.pinata = {
+  body: [ball(0.16, 0.5, 0.55, 0.5)],
+  accent: [0, 1, 2, 3, 4].map(i => new THREE.ConeGeometry(0.07, 0.22, 8).translate(0, 0.2, 0).rotateZ((i / 5) * Math.PI * 2).translate(0.5, 0.55, 0.5)),
+  trim: [0, 1, 2, 3, 4].map(i => box(0.03, 0.12, 0.03, 0.5 + Math.sin((i / 5) * Math.PI * 2) * 0.33, 0.55 - Math.cos((i / 5) * Math.PI * 2) * 0.33 - 0.04, 0.5)),
+  glow: [cyl(0.006, 0.006, 0.3, 0.5, 0.85, 0.5, 4)],
+  colors: { body: 0xff4081, accent: 0xffd54f, trim: 0x26c6da, glow: 0xffffff, metal: 0 },
+};
+// A cactus in a clay pot, with a pink flower on top.
+MODELS.cactusPot = {
+  body: [cyl(0.2, 0.15, 0.28, 0.5, 0.14, 0.5, 12), cyl(0.22, 0.22, 0.05, 0.5, 0.3, 0.5, 12)],
+  accent: [cyl(0.09, 0.09, 0.5, 0.5, 0.55, 0.5, 8), ball(0.09, 0.5, 0.8, 0.5), cyl(0.05, 0.05, 0.16, 0.36, 0.55, 0.5, 8), cyl(0.05, 0.05, 0.14, 0.31, 0.66, 0.5, 8), cyl(0.05, 0.05, 0.14, 0.64, 0.5, 0.5, 8), cyl(0.05, 0.05, 0.12, 0.69, 0.6, 0.5, 8)],
+  trim: [cyl(0.2, 0.2, 0.02, 0.5, 0.32, 0.5, 12)],
+  glow: [ball(0.05, 0.5, 0.9, 0.5)],
+  colors: { body: 0xc1693c, accent: 0x43a047, trim: 0x6d4c33, glow: 0xff80ab, metal: 0 },
+};
+// A salon chair: a shiny pump base, a comfy pink seat, a tall back and armrests (it faces +z,
+// like the chair).
+MODELS.salonChair = {
+  body: [box(0.6, 0.12, 0.6, 0.5, 0.44, 0.5), box(0.6, 0.6, 0.1, 0.5, 0.78, 0.18), box(0.08, 0.1, 0.5, 0.17, 0.62, 0.5), box(0.08, 0.1, 0.5, 0.83, 0.62, 0.5)],
+  trim: [cyl(0.3, 0.3, 0.04, 0.5, 0.02, 0.5, 16), cyl(0.06, 0.06, 0.36, 0.5, 0.2, 0.5, 10), box(0.5, 0.04, 0.12, 0.5, 0.1, 0.8)],
+  accent: [box(0.08, 0.2, 0.08, 0.17, 0.5, 0.7), box(0.08, 0.2, 0.08, 0.83, 0.5, 0.7), box(0.3, 0.12, 0.06, 0.5, 1.14, 0.16)],
+  colors: { body: 0xf06292, trim: 0xcfd8dc, accent: 0xb0bec5, metal: 0.6 },
+};
+
 // ---------- Crops (the garden) ----------
 // Four looks for each: 0 seeds in a little mound of soil, 1 a sprout, 2 growing, 3 ripe.
 // body: the soil, accent: the leaves and stems, trim: the carrots, berries, pumpkin or petals,
