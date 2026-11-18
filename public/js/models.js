@@ -593,6 +593,23 @@ MODELS.bedFoot = bed(true);
 
 const cache = {};
 
+// The grocery store's fruit stand: tilted wooden crates piled with apples, oranges and limes.
+MODELS.fruitStand = {
+  body: [box(0.9, 0.35, 0.9, 0.5, 0.175, 0.5), box(0.9, 0.08, 0.42, 0.5, 0.4, 0.3), box(0.9, 0.08, 0.42, 0.5, 0.52, 0.72)],
+  accent: [...Array(8)].map((_, i) => ball(0.07, 0.15 + (i % 4) * 0.23, 0.5, 0.2 + Math.floor(i / 4) * 0.15)),
+  trim: [...Array(8)].map((_, i) => ball(0.07, 0.15 + (i % 4) * 0.23, 0.62, 0.64 + Math.floor(i / 4) * 0.15)),
+  glow: [ball(0.05, 0.3, 0.6, 0.45), ball(0.05, 0.7, 0.6, 0.45)],
+  colors: { body: 0x9c6b3c, accent: 0xe53935, trim: 0xff9800, glow: 0x9ccc65, metal: 0 },
+};
+// A grocery shelf: three shelves of boxes, cans and jars.
+MODELS.groceryShelf = {
+  body: [box(0.96, 0.04, 0.5, 0.5, 0.02, 0.5), box(0.96, 0.03, 0.5, 0.5, 0.35, 0.5), box(0.96, 0.03, 0.5, 0.5, 0.68, 0.5), box(0.96, 1, 0.04, 0.5, 0.5, 0.27), box(0.04, 1, 0.5, 0.04, 0.5, 0.5), box(0.04, 1, 0.5, 0.96, 0.5, 0.5)],
+  accent: [0.15, 0.4, 0.65].flatMap(x => [box(0.16, 0.24, 0.12, x, 0.16, 0.55), box(0.16, 0.22, 0.12, x + 0.12, 0.8, 0.55)]),
+  trim: [0.2, 0.36, 0.52, 0.68, 0.84].map(x => cyl(0.05, 0.05, 0.13, x, 0.43, 0.6, 10)),
+  glow: [0.25, 0.75].map(x => box(0.3, 0.2, 0.1, x, 0.47, 0.42)),
+  colors: { body: 0xeeeeee, accent: 0xe53935, trim: 0x1e88e5, glow: 0xffd54f, metal: 0.2 },
+};
+
 // ---------- Crops (the garden) ----------
 // Four looks for each: 0 seeds in a little mound of soil, 1 a sprout, 2 growing, 3 ripe.
 // body: the soil, accent: the leaves and stems, trim: the carrots, berries, pumpkin or petals,

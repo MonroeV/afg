@@ -100,6 +100,12 @@ const NPCS = [
   },
   // ---------- The other stores' shopkeepers ----------
   {
+    // Out on the Outer Loop: the grocery store (food for your lunchbox 🍱).
+    id: -24, place: 'shop_grocery', name: 'Gus', title: 'Gus 🛒', roam: 2, store: 'grocery',
+    look: { face: 'grin', hair: 'short', hat: 'cap', shirt: 'tshirt', pants: 'jeans', skin: '#d39a6a', hairColor: '#3b2314', hatColor: '#43a047', shirtColor: '#43a047', shirtColor2: '#ffffff', pantsColor: '#37474f', shoesColor: '#111111' },
+    hello: n => [`Hi ${n}! Hungry? 🍎🍌🥪`, `Welcome to FreshMart, ${n}! Everything's fresh! 🛒`, `${n}! Fill up your lunchbox! 🍱`], tips: ['🍎🍌🥪🍉', 'Hungry? You slow down! Eat something! 🍽️'],
+  },
+  {
     id: -15, place: 'shop_garden', name: 'Fern', title: 'Fern 🌻', roam: 2, store: 'garden',
     look: { face: 'smile', hair: 'long', hat: 'cowboy', shirt: 'tshirt', pants: 'jeans', skin: '#e8b088', hairColor: '#a0632b', hatColor: '#d7a86e', shirtColor: '#66bb6a', shirtColor2: '#ffffff', pantsColor: '#5d4037', shoesColor: '#3b2314' },
     hello: n => [`Hi ${n}! Everything's blooming! 🌻`, `Welcome, ${n}! Fancy a garden gnome? 🧙`], tips: ['🌻🌹🧙⛲'],

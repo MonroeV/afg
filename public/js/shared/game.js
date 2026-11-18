@@ -11,7 +11,7 @@ import { buildFarCountry, moreVehicles } from './farcountry.js';
 import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot, seatCount } from './vehicles.js';
 import { buildGasStations, usesFuel, getsDirty, TANK_RANGE, GAS_PUMP, GAS_CAN, GAS_CAN_PRICE, FULL_TANK_PRICE, PUMP_REACH, DIRT_RANGE, WASH_TIME, fillPrice, paved, isWash } from './fuel.js';
 import { MAX_TUNNELS, isTunnelY, tunnelKey, openBelow } from './underground.js';
-import { buildShops } from './shops.js';
+import { buildShops, buildOuterShops } from './shops.js';
 import { findHomes } from './residents.js';
 import { buildWeatherStation, SHOWERS } from './weather.js';
 import { buildBuildPark } from './buildpark.js';
@@ -21,12 +21,13 @@ import { Quests, cleanQuest } from './quests.js';
 import { TRICKS, TRICK_TRIES, TREATS, trickIndex, hatItem } from './tricks.js';
 import { CHALLENGES, partCount } from './challenges.js';
 import { Playground } from './playground.js';
+import { FOODS, FOOD_KINDS, MAX_PANTRY, HUNGER_FULL, HUNGER_MINUTES, CROP_FOOD } from './food.js';
 import { doorAt } from './homenav.js';
 import { Structures } from '../structures.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
 
-export const SAVE_VERSION = 17;
+export const SAVE_VERSION = 18;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -131,7 +132,7 @@ export class GameRoom {
     this.nextHomeId = 1;
     this.time = DAY_LENGTH * 0.08; // start in the morning
     this.day = 0; // how many days have gone by (for the seasons: see seasons.js)
-    this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0, holes: 5, crops: 2, guardThings: 1 };
+    this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0, holes: 5, crops: 2, guardThings: 1, hunger: 5 };
     this.isSolid = (x, y, z) =>
       y < 0 || x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max ||
       blocksVehicles(this.world.get(blockKey(x, y, z)) || 0);
@@ -275,6 +276,7 @@ export class GameRoom {
       this.upgradeTo15();
       this.upgradeTo16();
       this.upgradeTo17();
+      this.upgradeTo18();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -311,6 +313,9 @@ export class GameRoom {
         guests: Array.isArray(w.guests) ? w.guests.filter(k => typeof k === 'string').map(nameKey).slice(0, 40) : [], // who their bodyguards let in
         can: w.can ? 1 : 0, // carrying a gas can
         harvest: Number.isInteger(w.harvest) && w.harvest > 0 ? w.harvest : 0, // crops picked, ever
+        // Hunger (100: full) and the food in your lunchbox ({ apple: 2, … }).
+        hunger: Number.isFinite(w.hunger) ? Math.max(0, Math.min(HUNGER_FULL, w.hunger)) : HUNGER_FULL,
+        pantry: Object.fromEntries(FOOD_KINDS.map(f => [f, Math.min(MAX_PANTRY, Math.max(0, Math.floor(Number(w.pantry?.[f]) || 0)))]).filter(([, n]) => n > 0)),
         noAsk: Array.isArray(w.noAsk) ? w.noAsk.filter(k => typeof k === 'string').slice(0, 50) : [], // (people who can't ask your bodyguards to let them in)
         challenges: Array.isArray(w.challenges) ? w.challenges.filter(id => CHALLENGES.some(c => c.id === id)) : [], // Builder Bea's cards done
         // Pet tricks: how many tries at each (learned at TRICK_TRIES).
@@ -356,6 +361,7 @@ export class GameRoom {
     if (data.version < 15) this.upgradeTo15();
     if (data.version < 16) this.upgradeTo16();
     if (data.version < 17) this.upgradeTo17();
+    if (data.version < 18) this.upgradeTo18();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -692,6 +698,46 @@ export class GameRoom {
     this.onDirty();
   }
 
+  // ---------- Hunger ----------
+
+  // Fill them up a bit (and tell them how full they are).
+  feed(client, amount) {
+    const w = this.wallet(client);
+    w.hunger = Math.min(HUNGER_FULL, (w.hunger ?? HUNGER_FULL) + amount);
+    client.send({ t: 'hunger', h: Math.round(w.hunger) });
+  }
+
+  // Every few seconds: everyone playing gets a little hungrier (not while asleep).
+  updateHunger(secs) {
+    const per = HUNGER_FULL / (HUNGER_MINUTES * 60) * secs;
+    for (const c of this.clients.values()) {
+      if (!c.joined || c.flags & 1) continue;
+      const w = this.wallet(c), was = Math.round(w.hunger ?? HUNGER_FULL);
+      w.hunger = Math.max(0, (w.hunger ?? HUNGER_FULL) - per);
+      if (Math.round(w.hunger) !== was) c.send({ t: 'hunger', h: Math.round(w.hunger) });
+    }
+  }
+
+  // The stores out on the Outer Loop (only these: by id), for saved worlds.
+  addOuterShops(only) {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const shops = buildOuterShops({ get, set, canUse: this.freeLand(), only });
+    this.claims.push(...shops.claims);
+    for (const [x, y, z, text] of shops.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+    this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...shops.places };
+    return shops.built;
+  }
+
+  // Worlds saved before version 18: FreshMart Grocery, out on the Outer Loop (food!).
+  upgradeTo18() {
+    const built = this.addOuterShops(['grocery']);
+    this.log(`Added FreshMart Grocery (${built.length ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
   // How many seconds are left of whatever's raining down (0: nothing).
   showerLeft() {
     return Math.max(0, Math.round(((this.shower?.until || 0) - Date.now()) / 100) / 10);
@@ -956,12 +1002,14 @@ export class GameRoom {
     w.clubs ??= {};
     w.badges ??= [];
     w.streak ??= 0;
+    w.hunger ??= HUNGER_FULL; // (full up, to start with)
+    w.pantry ??= {}; // your lunchbox
     return w;
   }
 
   sendWallet(client) {
     const w = this.wallet(client);
-    client.send({ t: 'wallet', coins: w.coins, owned: w.owned, found: w.found, vacation: !!this.vacationOf(client), agent: { files: w.agent.files.length, need: this.filesNeeded(), clear: w.agent.clear }, can: w.can, clubs: w.clubs, badges: w.badges, streak: w.streak, tricks: w.tricks || {} });
+    client.send({ t: 'wallet', coins: w.coins, owned: w.owned, found: w.found, vacation: !!this.vacationOf(client), agent: { files: w.agent.files.length, need: this.filesNeeded(), clear: w.agent.clear }, can: w.can, clubs: w.clubs, badges: w.badges, streak: w.streak, tricks: w.tricks || {}, hunger: Math.round(w.hunger ?? HUNGER_FULL), pantry: w.pantry || {} });
   }
 
   // ---------- Build challenges (Builder Bea's cards) ----------
@@ -1128,7 +1176,8 @@ export class GameRoom {
       let open = true;
       for (let y = 1; y < 12 && open; y++) if (this.get(x, y, z)) open = false;
       if (!open || [...this.coins.values()].some(c => Math.hypot(c[0] - x, c[2] - z) < 8)) continue;
-      const r = Math.random(), value = r < 0.08 ? 5 : r < 0.3 ? 2 : 1;
+      // Bronze (1), silver (2), gold (3), and now and then a diamond (5)!
+      const r = Math.random(), value = r < 0.08 ? 5 : r < 0.22 ? 3 : r < 0.48 ? 2 : 1;
       const id = this.nextCoin++;
       this.coins.set(id, [x + 0.5, 0, z + 0.5, value]);
       this.broadcast({ t: 'coin_new', id, x: x + 0.5, y: 0, z: z + 0.5, value });
@@ -1541,6 +1590,19 @@ export class GameRoom {
       const w = this.wallet(client), [, price] = entry;
       const name = typeof item === 'number' ? BLOCKS[item].name : SHOP_TOOLS[item].name;
       const reply = text => client.send({ t: 'chat', system: true, text });
+      const food = SHOP_TOOLS[item]?.food;
+      if (food) {
+        // Food: as much as you like (in your lunchbox, till you eat it).
+        w.pantry ??= {};
+        if ((w.pantry[food] || 0) >= MAX_PANTRY) return reply(`🍱 Your lunchbox is full of ${FOODS[food].icon}!`);
+        if (w.coins < price) return reply(`🪙 ${FOODS[food].icon} ${price}`);
+        w.coins -= price;
+        w.pantry[food] = (w.pantry[food] || 0) + 1;
+        this.sendWallet(client);
+        client.send({ t: 'food_got', food, n: w.pantry[food] });
+        this.onDirty();
+        return;
+      }
       if (w.owned.includes(item)) return reply(`🛍️ You already have the ${name}!`);
       if (item === 'mysterybox') return this.openMysteryBox(client, price);
       if (item === VACATION && this.vacationOf(client)) return reply('🏖️ You already have vacation land! Give it up first if you want to buy a flag for somewhere new.');
@@ -1904,6 +1966,24 @@ export class GameRoom {
       this.startJob(client);
     },
 
+    // Eating something from your lunchbox.
+    eat(client, { food }) {
+      const w = this.wallet(client);
+      if (!FOODS[food] || !(w.pantry?.[food] > 0) || !this.allow(client, 'eat', 2, 3)) return;
+      w.pantry[food]--;
+      if (!w.pantry[food]) delete w.pantry[food];
+      this.feed(client, FOODS[food].fill);
+      this.sendWallet(client);
+      client.send({ t: 'ate', food });
+      this.broadcast({ t: 'fx', kind: 'eat', id: client.id, food }, client);
+      this.onDirty();
+    },
+
+    // Caught something good to eat when it rained food (a little bite each).
+    snack(client) {
+      if (this.allow(client, 'snack', 1, 3) && this.showerLeft() > 0 && this.shower.kind !== 'pets') this.feed(client, 2);
+    },
+
     // Got there with the pizza.
     job_done(client) {
       const job = this.jobs.get(client.id);
@@ -1913,6 +1993,7 @@ export class GameRoom {
       const fast = (Date.now() - job.at) / 1000 <= job.par;
       const coins = job.reward + (fast ? JOB_TIP : 0) + (this.perk(client, 'pizza') ? PIZZA_TIP : 0);
       this.wallet(client).coins += coins;
+      this.feed(client, 10); // (and a slice for you, for the road)
       this.sendWallet(client);
       client.send({ t: 'job_done', coins, fast });
       this.progress(client, 'pizza', 'deliver');
@@ -2111,6 +2192,8 @@ export class GameRoom {
       const w = this.wallet(client);
       w.coins += def.coins;
       w.harvest = (w.harvest || 0) + 1;
+      const food = CROP_FOOD[blockId(v)]; // (and it goes in your lunchbox, to eat)
+      if (food) w.pantry = { ...(w.pantry || {}), [food]: Math.min(MAX_PANTRY, (w.pantry?.[food] || 0) + 1) };
       this.sendWallet(client);
       crop.at = 0;
       this.serverSet(x, y, z, makeBlock(blockId(v), 0)); // (seeds again: water them and it grows back)
@@ -2568,6 +2651,11 @@ export class GameRoom {
     if (t.crops <= 0) {
       t.crops = 2;
       this.updateCrops();
+    }
+    if (t.hunger <= 0) {
+      t.hunger = 5;
+      this.updateHunger(5);
+      this.onDirty();
     }
     if (t.guardThings <= 0) {
       t.guardThings = 1;

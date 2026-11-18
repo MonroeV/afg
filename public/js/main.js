@@ -63,6 +63,8 @@ import { usesFuel, fillPrice, GAS_CAN_PRICE, PUMP_REACH } from './shared/fuel.js
 import { TURBO, MAGNET } from './shared/clubs.js';
 import { isTunnelY } from './shared/underground.js';
 import { BadgeBook } from './badges.js';
+import { Lunchbox } from './lunchbox.js';
+import { FOODS, HUNGER_FULL, hungerSpeed } from './shared/food.js';
 
 const $ = id => document.getElementById(id);
 const REACH = 7;
@@ -235,6 +237,8 @@ let online = false;
 let inGame = false;
 let showers = null, weatherMast = null; // it's raining tacos (or ice cream, or cats and dogs…)! (and the weather station's mast)
 let weatherPicker = null; // Stormy's menu: what shall it rain?
+let lunchbox = null; // your lunchbox 🍱 (L): food to eat
+let hunger = HUNGER_FULL; // how full you are (out of 100: the server counts it down as you play)
 let seasonLook = null, worldDay = 0; // the seasons (the server counts the days)
 let autoJoin = false; // joining by itself (back after a lost connection, or an update)
 let myCar = null; // the vehicle we're driving
@@ -273,6 +277,7 @@ async function load() {
   showers.onCatch = (kind, n, pet) => {
     if (pet) sounds.pet(pet); // (a cat or a dog, safe in your arms)
     hud.toast(pet ? `${pet === 'cat' ? '🐱' : '🐶'} 💕 × ${n}` : `${SHOWERS[kind].icon} × ${n}`);
+    if (!pet) net.send({ t: 'snack' }); // (yum: a little bite)
   };
   signs = new SignTexts(scene, world);
   world.onChange = (x, y, z) => {
@@ -282,6 +287,7 @@ async function load() {
   world.onLoad = () => structures.scan();
   sky.extraLights = structureLights;
   player = new Player(world);
+  player.hungerMul = hungerSpeed(hunger);
   player.bouncePower = trampolineBounce;
   player.onBoost = () => sounds.zoom();
   cars = new Cars(scene, world, effects);
@@ -685,6 +691,7 @@ function startGame(welcome, resume = false) {
   Object.assign(news, { on: !!welcome.news, place: welcome.news?.place || '', guest: welcome.news?.guest || 0, caption: '', cut: true });
   for (const [id, x, y, z, value] of welcome.coins || []) coinMap.set(id, { x, y, z, value });
   $('coins').classList.remove('hidden');
+  $('hunger-chip').classList.remove('hidden');
   cars.clear();
   for (const c of welcome.cars) cars.add(c);
   setClaims(welcome.claims || []);
@@ -854,7 +861,9 @@ net.on('secret_file', ({ again, found, need, clear, left = [] }) => {
   }
 });
 net.on('shop_open', ({ store }) => openShop(store));
-net.on('wallet', ({ coins, owned, vacation, found = [], agent, can, clubs, badges, tricks }) => {
+net.on('wallet', ({ coins, owned, vacation, found = [], agent, can, clubs, badges, tricks, hunger: h, pantry }) => {
+  setHunger(h);
+  lunchbox.set({ pantry });
   if (tricks) myTricks = { ...tricks };
   // Just bought a hat for your pet? It puts it straight on.
   const newHat = wallet.loaded && PET_HATS.find(h => owned.includes(hatItem(h)) && !wallet.owned.includes(hatItem(h)));
@@ -906,14 +915,56 @@ net.on('wallet', ({ coins, owned, vacation, found = [], agent, can, clubs, badge
   }
 });
 net.on('coin_new', ({ id, x, y, z, value }) => coinMap.set(id, { x, y, z, value }));
+// Hunger: the server counts it down as you play, and back up when you eat.
+function setHunger(h) {
+  if (!Number.isFinite(h)) return;
+  const was = hunger;
+  hunger = Math.max(0, Math.min(HUNGER_FULL, h));
+  if (player) player.hungerMul = hungerSpeed(hunger); // (hungry: a bit slower, never less than 3/4 speed)
+  const chip = $('hunger-chip');
+  chip.querySelector('i').style.width = `${(hunger / HUNGER_FULL) * 100}%`;
+  chip.classList.toggle('low', hunger < 35);
+  chip.classList.toggle('hungry', hunger < 20);
+  lunchbox.set({ hunger });
+  // Getting hungry: a hint (once each time), with what to do.
+  for (const at of [35, 15]) if (was >= at && hunger < at) hud.toast(`🍽️ ${at < 20 ? '😩' : '😋'} ➡ 🍱 (L)`);
+}
+net.on('hunger', ({ h }) => setHunger(h));
+net.on('food_got', ({ food, n }) => {
+  sounds.pop();
+  hud.toast(`${FOODS[food]?.icon || '🍽️'} ➡ 🍱 × ${n}`);
+  $('hunger-chip').classList.add('bump');
+  setTimeout(() => $('hunger-chip').classList.remove('bump'), 200);
+});
+net.on('ate', ({ food }) => {
+  sounds.munch();
+  const p = player.pos;
+  effects.heartsAt(p.x, p.y + 1.6, p.z, 3);
+  hud.toast(`${FOODS[food]?.icon || '🍽️'} 😋`);
+});
+lunchbox = new Lunchbox({
+  onEat: food => net.send({ t: 'eat', food }),
+  onClose: () => {
+    lock();
+    updateOverlays();
+  },
+});
+function openLunchbox() {
+  keys.clear();
+  unlock();
+  lunchbox.show();
+  updateOverlays();
+}
+$('hunger-chip').addEventListener('click', () => inGame && openLunchbox());
 net.on('coin_gone', ({ id }) => {
   const c = coinMap.get(id);
   if (c) effects.sparkle(c.x, c.y + 0.4, c.z, 16);
   coinMap.delete(id);
 });
 net.on('coin_got', ({ value }) => {
-  sounds.coin();
-  hud.toast(value > 1 ? `🪙 +${value} coins! A big one!` : '🪙 +1 coin');
+  if (value >= 5) sounds.magic();
+  else sounds.coin();
+  hud.toast(`${COIN_ICON[value] || '🥉'} +${value} 🪙`);
 });
 net.on('join', info => avatars.add(info));
 net.on('leave', ({ id }) => avatars.remove(id));
@@ -924,7 +975,7 @@ net.on('look', ({ id, look, name }) => {
   if (name) a?.setName(name);
 });
 net.on('emote', ({ id, kind }) => avatars.list.get(id)?.emote(kind));
-net.on('fx', ({ kind, x, y, z, color, seed, dir }) => {
+net.on('fx', ({ kind, x, y, z, color, seed, dir, id }) => {
   if (kind === 'hearts') effects.heartsAt(x, y, z);
   else if (kind === 'bubbles') effects.blowBubbles(x, y, z, dir || [0, 0.3, 0], 4);
   else if (kind === 'balloon') letBalloonGo(x, y, z, color);
@@ -932,7 +983,10 @@ net.on('fx', ({ kind, x, y, z, color, seed, dir }) => {
   else if (kind === 'water') effects.splash(x, y, z);
   else if (kind === 'slam') sounds.door(false); // (a bodyguard slamming a door shut)
   else if (kind === 'harvest') effects.sparkle(x + 0.5, y + 0.5, z + 0.5, 14);
-  else if (['volcano', 'feed', 'wish', 'rocket'].includes(kind)) contraptions.remote(kind, x, y, z);
+  else if (kind === 'eat') {
+    const a = avatars.list.get(id); // (somebody having a snack)
+    if (a) effects.heartsAt(a.pos.x, a.pos.y + 1.6, a.pos.z, 3);
+  }  else if (['volcano', 'feed', 'wish', 'rocket'].includes(kind)) contraptions.remote(kind, x, y, z);
   else if (fireworks.launch(x, y, z, color, seed)) {
     sounds.launch(loudness(x, y, z, 80));
   }
@@ -1354,7 +1408,7 @@ function goFullscreen() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!cards?.open || !!gameUI?.pickerOpen || !!weatherPicker?.open || !!guardAsk?.open || !!conn);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!cards?.open || !!gameUI?.pickerOpen || !!weatherPicker?.open || !!lunchbox?.open || !!guardAsk?.open || !!conn);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -1388,7 +1442,7 @@ $('exit-menu').addEventListener('click', () => {
     location.reload();
   }, 150); // a moment for "I got out of the car" to reach the server
 });
-canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !petMenu?.open && !cards?.open && !gameUI?.pickerOpen && !weatherPicker?.open && !guardAsk?.open && !familyEdit && lock());
+canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !petMenu?.open && !cards?.open && !gameUI?.pickerOpen && !weatherPicker?.open && !lunchbox?.open && !guardAsk?.open && !familyEdit && lock());
 $('sensitivity').addEventListener('input', e => {
   settings.sensitivity = Number(e.target.value);
   saveSettings();
@@ -1696,6 +1750,10 @@ window.addEventListener('keydown', e => {
     if (e.code === 'Escape') weatherPicker.close();
     return;
   }
+  if (lunchbox?.open) {
+    if (e.code === 'Escape' || e.code === 'KeyL') lunchbox.close();
+    return;
+  }
   if (guardAsk?.open) return; // (answer it with the buttons)
   if (elevators.panel) {
     elevators.panelKey(e);
@@ -1720,6 +1778,10 @@ window.addEventListener('keydown', e => {
   }
   if (e.code === 'KeyJ' && inGame && !inventoryOpen) {
     book.show();
+    return;
+  }
+  if (e.code === 'KeyL' && inGame && !inventoryOpen) {
+    openLunchbox();
     return;
   }
   if (inventoryOpen) {
@@ -5327,29 +5389,44 @@ function toggleHud() {
 
 // ---------- Coins, the Luxe Store, and the town's people ----------
 
-// Gold coins: they spin and bob, and you pick one up by walking (or driving) into it.
-const COIN_LOOK = { 1: 0xffc83d, 2: 0xffa000, 5: 0x8ff0ff };
+// Coins: they spin and bob, and you pick one up by walking (or driving) into it. What it's worth
+// is what it's made of: bronze 1, silver 2, gold 3, and now and then a sparkly diamond worth 5!
+const COIN_LOOK = { 1: 0xcd7f32, 2: 0xd8dde3, 3: 0xffc83d };
+const COIN_ICON = { 1: '🥉', 2: '🥈', 3: '🥇', 5: '💎' };
 const coinMesh = new THREE.InstancedMesh(
   new THREE.CylinderGeometry(0.3, 0.3, 0.07, 20).rotateX(Math.PI / 2),
-  new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.85, roughness: 0.25, emissive: 0x4a3000 }),
+  new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.85, roughness: 0.25, emissive: 0x2a2418 }),
   64,
 );
-coinMesh.count = 0;
-coinMesh.frustumCulled = false;
-coinMesh.castShadow = true;
-scene.add(coinMesh);
+// Diamonds: a cut gem (two pyramids), icy blue, glinting.
+const gemMesh = new THREE.InstancedMesh(
+  new THREE.OctahedronGeometry(0.3, 0).scale(1, 1.35, 1),
+  new THREE.MeshStandardMaterial({ color: 0xb8f6ff, metalness: 0.3, roughness: 0.05, emissive: 0x2e7a8c, flatShading: true, transparent: true, opacity: 0.88 }),
+  32,
+);
+for (const m of [coinMesh, gemMesh]) {
+  m.count = 0;
+  m.frustumCulled = false;
+  m.castShadow = true;
+  scene.add(m);
+}
 const coinMatrix = new THREE.Matrix4(), coinQuat = new THREE.Quaternion(), coinScale = new THREE.Vector3(), coinPos = new THREE.Vector3();
 
 function updateCoins(dt, time) {
-  let i = 0;
+  let i = 0, g = 0;
   for (const [id, c] of coinMap) {
-    if (i >= 64) break;
-    const s = c.value === 5 ? 1.35 : c.value === 2 ? 1.15 : 1;
-    coinQuat.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, time * 2.2 + id);
+    const gem = c.value >= 5;
+    if (gem ? g >= 32 : i >= 64) continue;
+    coinQuat.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, time * (gem ? 1.4 : 2.2) + id);
     coinPos.set(c.x, c.y + 0.75 + Math.sin(time * 2 + id) * 0.12, c.z);
-    coinMesh.setMatrixAt(i, coinMatrix.compose(coinPos, coinQuat, coinScale.setScalar(s)));
-    coinMesh.setColorAt(i, tmpColor.set(COIN_LOOK[c.value] || COIN_LOOK[1]));
-    i++;
+    if (gem) {
+      gemMesh.setMatrixAt(g++, coinMatrix.compose(coinPos, coinQuat, coinScale.setScalar(1)));
+      if (Math.random() < dt * 1.5) effects.sparkle(c.x, c.y + 0.8, c.z, 3); // (glint!)
+    } else {
+      const s = c.value === 3 ? 1.15 : c.value === 2 ? 1.05 : 1;
+      coinMesh.setMatrixAt(i, coinMatrix.compose(coinPos, coinQuat, coinScale.setScalar(s)));
+      coinMesh.setColorAt(i++, tmpColor.set(COIN_LOOK[c.value] || COIN_LOOK[1]));
+    }
     // Close enough to grab? Ask the server (once every couple of seconds).
     const p = player.pos;
     if (Math.hypot(p.x - c.x, p.z - c.z) < (myCar ? 2 : 1.1) * (perks.has('gold') ? MAGNET : 1) && Math.abs(p.y - c.y) < 2 && time - (c.asked ?? -9) > 2) {
@@ -5358,7 +5435,9 @@ function updateCoins(dt, time) {
     }
   }
   coinMesh.count = i;
+  gemMesh.count = g;
   coinMesh.instanceMatrix.needsUpdate = true;
+  gemMesh.instanceMatrix.needsUpdate = true;
   if (coinMesh.instanceColor) coinMesh.instanceColor.needsUpdate = true;
 }
 
@@ -5562,7 +5641,7 @@ let menuSpin = 0, lastFrame = 0, frameCount = 0, crouchK = 0;
 // menu (nothing much is moving then).
 function frameRateNow() {
   if (!inGame) return 30;
-  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel || petMenu?.open || cards?.open || gameUI?.pickerOpen || weatherPicker?.open || guardAsk?.open) return 12;
+  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel || petMenu?.open || cards?.open || gameUI?.pickerOpen || weatherPicker?.open || lunchbox?.open || guardAsk?.open) return 12;
   return settings.fps || 1000;
 }
 
@@ -6143,6 +6222,8 @@ window.buildzone = {
   get contraptions() { return contraptions; },
   get showers() { return showers; },
   get weatherPicker() { return weatherPicker; },
+  get lunchbox() { return lunchbox; },
+  get hunger() { return hunger; },
   get guardCatch() { return guardCatch; },
   get guardAsk() { return guardAsk; },
   get seasonLook() { return seasonLook; },

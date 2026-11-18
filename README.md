@@ -9,7 +9,9 @@ customize your character, drive cars, build anything and play with friends.
   - **The outer lands** (since v0.44, all round the outside of the old world): the **Outer Loop**, a
     ring road all the way round, with roads out to it (east past the quarry, west past the farm,
     north through the snowy woods), trees and wildflower meadows, and the bay at Sunny Shores
-    carrying on south to a far beach. New places go along the Outer Loop
+    carrying on south to a far beach. New places go along the Outer Loop:
+    - **FreshMart Grocery** 🛒 (since v0.45, on the Outer Loop): fruit stands and shelves of food.
+      Talk to Gus to buy something to eat (it goes in your lunchbox 🍱)
   - **Up north, the snowy country** (the ground turns to snow and snowflakes start to fall): a
     **ski resort** with a big snowy mountain and a long ski run, a **ski lift** with chairs going
     up and down its cable (right-click the chair at the bottom to ride to the top, Space to hop
@@ -359,8 +361,18 @@ customize your character, drive cars, build anything and play with friends.
   from the stores), or go and see somewhere 📍 for them and come back. A card in the corner shows
   what to do, with an arrow pointing the way and how far it is, and a marker floats over where
   you're going. Each one pays a few coins, and they count toward the Good Neighbors club
-- **Gold coins and the Luxe Store**: gold coins lie about all over town (walk, or drive, into
-  them to collect them; the big orange ones are worth 2 and the shiny blue ones 5). You also get
+- **Hunger** 🍎 (since v0.45): everybody gets hungry as they play (full to empty in about 25
+  minutes; not while you're asleep). The bar by your coins shows how full you are. Once it's under
+  half you slow down a little, but never below three-quarters speed, so nobody gets stuck. A 🍽️
+  hint pops up when you're getting hungry, and the bar wiggles when you're really hungry. **Eat**:
+  press **L** (or tap the bar) to open your **lunchbox** 🍱 and tap something to eat it (nom nom).
+  Food comes from **FreshMart Grocery** (🍎 🍌 🍪 1 coin, 🥛 🍞 🧀 2, 🥪 3, 🍉 4; up to 30 of each), and
+  the crops you pick in your garden go in your lunchbox too. Catching food when it rains tacos,
+  ice cream, pizza or donuts gives you a little bite, and delivering a pizza fills you up a bit.
+  Your hunger and lunchbox are saved
+- **Coins and the Luxe Store**: coins lie about all over town (walk, or drive, into them to
+  collect them). What they're made of says what they're worth: **bronze** 🥉 1, **silver** 🥈 2,
+  **gold** 🥇 3, and now and then a sparkly **diamond** 💎 worth 5. You also get
   10 coins the first time you play each day and 3 for finishing a race. Spend them at the **Luxe
   Store**, a fancy shop beside one of the roads out of town: talk to Penny at the counter (or
   right-click the cash register) to see what's for sale. Things you can only get there: the
@@ -578,6 +590,7 @@ customize your character, drive cars, build anything and play with friends.
 | V | Switch camera: first person, behind you, in front of you |
 | G | Dance! (on a dance floor it starts a party). Driving: the police car's siren, the camper van's pop-up roof, the dump truck's bed, the RV's awning |
 | J | The badge book: the clubs, what to do for each badge, and how close you are |
+| L | Your lunchbox 🍱: eat something |
 | B | Wave. In a parked camper van, or inside the RV: sleep (move to get up) |
 | T or Enter | Chat (with quick-chat buttons for common things to say) |
 | R | Go home: your bed, or your land if you have no bed, or else the town square |
@@ -850,6 +863,7 @@ public/
     gameui.js          Coach Kai's games on your screen: picking one, the banner, counting
     tacos.js           Raining tacos, ice cream, pizza, donuts and cats & dogs; the station's spinning mast
     weatherui.js       Stormy's menu: what shall it rain?
+    lunchbox.js        Your lunchbox: how full you are, and food to eat
     guardcatch.js      Bodyguards keeping you off their land: caught and walked off, blown away, flushed out
     guardui.js         Someone asking your bodyguards to let them in: your answer
     lighting.js        Live reflections and the glow effect
@@ -884,7 +898,7 @@ public/
       fuel.js          Gas, mud, the gas stations and their car washes
       clubs.js         The clubs: their leaders, tasks and prizes
       underground.js   Under the ground: holes, and the Tunnel Diggers' secret tunnels
-      shops.js         The Garden Center, the Toy Box and the Pet Shop (what they sell is in blocks.js)
+      shops.js         The Garden Center, the Toy Box, the Pet Shop and FreshMart Grocery (what they sell is in blocks.js)
       residents.js     The residents and the houses they live in
       quests.js        The residents' quests
       weather.js       The weather station, and its showers (prices, how long, songs)
@@ -893,6 +907,8 @@ public/
       challenges.js    Builder Bea's build challenges (what's on each card)
       playground.js    Tag and hide-and-seek: the rounds, tagging, finding, and the kids who play
       buildpark.js     The Build Park: one of each of the newest Build Book things, with signs
+      outerlands.js    The outer lands: the Outer Loop and the roads out to it, the far beach, trees and meadows
+      food.js          Food and hunger: what there is to eat, how much it fills you, how hunger slows you
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/
   make-engine-sounds.py  Makes the engine recordings (needs numpy and ffmpeg; run it after changing a voice)

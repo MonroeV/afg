@@ -948,6 +948,8 @@ export class Sounds {
   }
 
   pop() { this.tone(900, 1600, 0.05, 0.12, 'sine'); }
+  // Nom nom nom (three crunchy bites), then a happy little "mmm!"
+  munch() { this.together(() => { for (let i = 0; i < 3; i++) this.noiseHit(1400 - i * 200, 0.07, 0.5, 'bandpass', i * 0.16); this.tone(520, 700, 0.22, 0.12, 'sine', 0.55); }); }
   coin() { this.together(() => { this.tone(1320, 1320, 0.07, 0.16, 'square'); this.tone(1760, 1760, 0.2, 0.16, 'square', 0.07); }); }
   jet() { this.noiseHit(260, 0.16, 0.55, 'lowpass'); }
   splash(volume = 1) { this.noiseHit(1800, 0.35, 0.9 * volume, 'bandpass'); this.noiseHit(500, 0.25, 0.6 * volume, 'lowpass'); }

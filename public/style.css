@@ -835,6 +835,27 @@ body.spycam #game { filter: saturate(0.35) sepia(0.55) hue-rotate(70deg) contras
   color: #fff; text-shadow: 0 1px 2px #000; pointer-events: auto; cursor: pointer; transition: transform 0.15s;
 }
 #badge-chip.bump { transform: scale(1.3); }
+/* Hunger (tap it for your lunchbox). */
+#hunger-chip {
+  display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 12px; background: rgba(0, 0, 0, 0.55);
+  font-size: 17px; pointer-events: auto; cursor: pointer; transition: transform 0.15s;
+}
+#hunger-chip.bump { transform: scale(1.3); }
+#hunger-chip.hungry { animation: hungry 1.2s ease-in-out infinite; }
+@keyframes hungry { 50% { transform: scale(1.15); box-shadow: 0 0 12px #ff7043; } }
+.hunger-bar { display: inline-block; width: 54px; height: 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.18); overflow: hidden; }
+.hunger-bar i { display: block; height: 100%; width: 100%; border-radius: 6px; background: linear-gradient(90deg, #8bc34a, #43a047); transition: width 0.4s; }
+#hunger-chip.low .hunger-bar i, .hunger-bar.low i { background: linear-gradient(90deg, #ff7043, #ffa726); }
+.hunger-bar.big { width: min(260px, 60vw); height: 18px; border-radius: 10px; }
+body.touch #hunger-chip { font-size: 14px; }
+body.touch .hunger-bar:not(.big) { width: 38px; }
+.lunch-panel { width: min(480px, 100%); }
+.lunch-hunger { display: flex; align-items: center; gap: 10px; font-size: 26px; margin-bottom: 12px; }
+.lunch-foods { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; }
+.lunch-foods button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px; font-size: 15px; font-weight: 800; }
+.lunch-foods button:disabled { opacity: 0.5; }
+.lunch-foods .big, .lunch-empty .big { font-size: 42px; line-height: 1; }
+.lunch-empty { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 24px; padding: 10px; }
 #badge-pops { position: absolute; top: 132px; left: 14px; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
 .badge-pop {
   padding: 4px 12px; border-radius: 14px; background: var(--c); color: #fff; font-size: 20px; font-weight: 900;

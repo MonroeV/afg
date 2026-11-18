@@ -5,6 +5,7 @@
 // nobody can knock them down. What each one sells is in blocks.js (STORES, and `store` on things).
 import { DOOR_TOP, makeBlock, stack, BLOCKS } from './blocks.js';
 import { exitRoads, makeSite, siteFree } from './worldgen.js';
+import { ringRoads } from './outerlands.js';
 
 const B = { floor: 25, glass: 9, door: 21, sidewalk: 24, flowerPot: 67, ceilingLight: 41, register: 86, desk: 73, sign: 94, lantern: 45, white: 12 };
 const faceDir = (dx, dz) => (dz > 0 ? 0 : dx > 0 ? 1 : dz < 0 ? 2 : 3);
@@ -16,7 +17,43 @@ const SHOPS = [
   { id: 'toys', walls: 32, trim: 16, roof: 15, roads: ['north', 'west', 'ringN', 'ringW', 'east', 'south'] },
   { id: 'pets', walls: 6, trim: 29, roof: 26, roads: ['east', 'south', 'ringE', 'ringS', 'north', 'west'] },
 ];
+// The stores out along the Outer Loop (in the outer lands): goods: what's on display (blocks).
+const OUTER_SHOPS = [
+  { id: 'grocery', walls: 13, trim: 16, roof: 26, roads: ['loopE', 'loopS', 'loopW', 'loopN'], sign: '🛒 FRESHMART GROCERY', owner: 'FreshMart Grocery', goods: [136, 136, 136, 136, 135, 135, 135, 135] },
+];
 const L = 10, D = 9;
+
+// The stores along the Outer Loop (only: just these ones, by id).
+export function buildOuterShops({ get, set, canUse, only = null }) {
+  const roads = ringRoads();
+  const out = { claims: [], signs: [], places: {}, areas: [], built: [] };
+  const used = [];
+  for (const shop of OUTER_SHOPS.filter(s => !only || only.includes(s.id))) {
+    let done = false;
+    for (const name of shop.roads) {
+      const road = roads[name];
+      for (const side of [-1, 1]) {
+        for (let a = road.from + 30; a + L <= road.to - 30 && !done; a += 3) {
+          const site = makeSite(road, side, a);
+          const [cx, cz] = site.at(L / 2, D / 2);
+          if (used.some(([x, z]) => Math.hypot(x - cx, z - cz) < 60)) continue;
+          if (!siteFree(site, L, D, 6, get, canUse)) continue;
+          const s = shopAt(site, shop, shop.goods, set);
+          out.claims.push(s.claim);
+          out.signs.push(...s.signs);
+          out.places[`shop_${shop.id}`] = s.place;
+          out.areas.push(s.area);
+          out.built.push(shop.id);
+          used.push([cx, cz]);
+          done = true;
+        }
+        if (done) break;
+      }
+      if (done) break;
+    }
+  }
+  return out;
+}
 
 export function buildShops({ get, set, canUse }) {
   const roads = exitRoads();
@@ -101,9 +138,9 @@ function shopAt(site, shop, goods, set) {
   const rect = [Math.min(cx0, cx1), Math.min(cz0, cz1), Math.max(cx0, cx1), Math.max(cz0, cz1)];
   const [ax, az] = site.at(1, 2), [bx, bz] = site.at(L - 2, D - 2);
   return {
-    signs: [[sx, 3, sz, { garden: '🌻 GREEN THUMB GARDEN CENTER', toys: '🧸 THE TOY BOX', pets: '🐾 HAPPY PAWS PET SHOP' }[shop.id]]],
+    signs: [[sx, 3, sz, shop.sign || { garden: '🌻 GREEN THUMB GARDEN CENTER', toys: '🧸 THE TOY BOX', pets: '🐾 HAPPY PAWS PET SHOP' }[shop.id]]],
     area: [rect[0] - 1, rect[1] - 1, rect[2] + 1, rect[3] + 1],
     place: { x: px, y: 0, z: pz, area: [Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz)], face: Math.atan2(-fx, -fz) },
-    claim: { owner: { garden: 'Green Thumb Garden Center', toys: 'The Toy Box', pets: 'Happy Paws Pet Shop' }[shop.id], key: `store ${shop.id}`, x0: rect[0], z0: rect[1], x1: rect[2], z1: rect[3], createdAt: 0, permanent: true },
+    claim: { owner: shop.owner || { garden: 'Green Thumb Garden Center', toys: 'The Toy Box', pets: 'Happy Paws Pet Shop' }[shop.id], key: `store ${shop.id}`, x0: rect[0], z0: rect[1], x1: rect[2], z1: rect[3], createdAt: 0, permanent: true },
   };
 }
