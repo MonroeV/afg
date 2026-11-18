@@ -18,6 +18,7 @@ import { buildPark } from './park.js';
 import { buildTrainLine } from './train.js';
 import { buildFunLand } from './funland.js';
 import { buildZoo, ANIMALS } from './zoo.js';
+import { buildFireStation, FIRE_EVERY, FIRE_LIFE, DOUSE, FIRE_REWARD, HOSE_RANGE } from './firestation.js';
 import { findHomes } from './residents.js';
 import { buildWeatherStation, SHOWERS } from './weather.js';
 import { buildBuildPark } from './buildpark.js';
@@ -33,7 +34,7 @@ import { Structures } from '../structures.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
-export const SAVE_VERSION = 26;
+export const SAVE_VERSION = 27;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -105,6 +106,8 @@ export class GameRoom {
     this.vehicles = new Map(); // id -> vehicle
     this.homes = new Map(); // id -> where a vehicle lives: { id, kind, color, x, y, z, h }
     this.respawns = []; // { home, at }
+    this.fires = []; // fires burning in town, waiting for a fire truck: { id, x, z, hp, until }
+    this.nextFire = 1;
     this.clients = new Map(); // id -> client
     this.claims = []; // { owner, key, x0, z0, x1, z1, createdAt }
     this.names = {}; // lowercase name -> last time someone played with it
@@ -138,7 +141,7 @@ export class GameRoom {
     this.nextHomeId = 1;
     this.time = DAY_LENGTH * 0.08; // start in the morning
     this.day = 0; // how many days have gone by (for the seasons: see seasons.js)
-    this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0, holes: 5, crops: 2, guardThings: 1, hunger: 5, church: 1 };
+    this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0, holes: 5, crops: 2, guardThings: 1, hunger: 5, church: 1, fire: 90 };
     this.isSolid = (x, y, z) =>
       y < 0 || x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max ||
       blocksVehicles(this.world.get(blockKey(x, y, z)) || 0);
@@ -291,6 +294,7 @@ export class GameRoom {
       this.upgradeTo24();
       this.upgradeTo25();
       this.upgradeTo26();
+      this.upgradeTo27();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -392,6 +396,7 @@ export class GameRoom {
     if (data.version < 24) this.upgradeTo24();
     if (data.version < 25) this.upgradeTo25();
     if (data.version < 26) this.upgradeTo26();
+    if (data.version < 27) this.upgradeTo27();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -882,6 +887,45 @@ export class GameRoom {
     }
     this.log(`Added the zoo (${zoo ? 'yes' : 'no room'})`);
     this.onDirty();
+  }
+
+  // Worlds saved before version 27: the fire station (its fire trucks, and a train stop).
+  upgradeTo27() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const fs = buildFireStation({ get, set, canUse: this.freeLand() });
+    if (fs) {
+      this.claims.push(fs.claim);
+      for (const [x, y, z, text] of fs.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+      this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...fs.places };
+      for (const c of fs.cars) this.spawn(this.addHome(c));
+      this.addTrainStops();
+    }
+    this.log(`Added the fire station (${fs ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
+  // A fire breaks out on a road somewhere in town (not by anyone, and nothing really burns).
+  startFire() {
+    for (let tries = 0; tries < 200; tries++) {
+      const x = Math.floor(Math.random() * 400) - 200, z = Math.floor(Math.random() * 400) - 200;
+      if (blockId(itemOf(this.get(x, 0, z))) !== 22) continue; // (on a road: a fire truck can get there)
+      let open = true;
+      for (let y = 1; y < 10 && open; y++) if (this.get(x, y, z)) open = false;
+      if (!open) continue;
+      const f = { id: this.nextFire++, x: x + 0.5, z: z + 0.5, hp: 100, until: Date.now() + FIRE_LIFE * 1000 };
+      this.fires.push(f);
+      this.broadcast({ t: 'fire_alarm', x: f.x, z: f.z });
+      this.sendFires();
+      return f;
+    }
+    return null;
+  }
+
+  sendFires() {
+    this.broadcast({ t: 'fires', list: this.fires.map(({ id, x, z, hp }) => ({ id, x, z, hp: Math.round(hp) })) });
   }
 
   addTrainStops() {
@@ -1479,6 +1523,7 @@ export class GameRoom {
       train: this.places?.train?.stops || [], // the Loop Express's stops (see train.js)
       funland: this.places?.funland || null, // where Fun Land's rides are (see funrides.js)
       zoo: this.places?.zoo || null, // the zoo's pens (see zooanimals.js)
+      fires: this.fires.map(({ id, x, z, hp }) => ({ id, x, z, hp: Math.round(hp) })), // fires burning in town (see firehose.js)
       landmarks: Object.entries(this.places || {}).filter(([, p]) => p && Number.isFinite(p.x) && Number.isFinite(p.z)).map(([k, p]) => [k, p.x, p.z]),
     });
     // Coins: your wallet, and a little present the first time you play each day.
@@ -2021,7 +2066,8 @@ export class GameRoom {
       v.h = num(msg.h);
       v.speed = num(msg.speed);
       v.steer = num(msg.steer);
-      v.siren = msg.siren ? 1 : 0;
+      v.siren = v.kind === 'firetruck' && msg.siren === 2 ? 2 : msg.siren ? 1 : 0; // (a fire truck: 1 lights, 2 lights and the hose)
+      if (v.kind === 'firetruck' && v.siren) this.progress(client, 'fire', 'siren', 1, true);
       v.pitch = num(msg.p);
       v.roll = num(msg.r);
       v.rotor = num(msg.rs);
@@ -2310,6 +2356,39 @@ export class GameRoom {
     // Done something in an airplane (the Sky Pilots club): took off, landed, parachuted down.
     flight(client, { what }) {
       if (['takeoff', 'land', 'chute'].includes(what) && this.allow(client, 'flight', 0.5, 2)) this.progress(client, 'pilot', what);
+    },
+
+    // A fire truck's hose on something (the driver's game says what it's spraying): a fire in
+    // town, a burning vehicle, or a crashed airplane's wreck.
+    douse(client, { fire, id, x, z }) {
+      const truck = [...this.vehicles.values()].find(v => v.driver === client.id && v.kind === 'firetruck');
+      if (!truck || truck.siren !== 2 || !this.allow(client, 'douse', 8, 10)) return;
+      const reach = HOSE_RANGE * (this.perk(client, 'fire') ? 1.5 : 1) + 6;
+      const close = (px, pz) => Math.hypot(px - truck.x, pz - truck.z) < reach;
+      if (fire) {
+        const f = this.fires.find(o => o.id === num(fire));
+        if (!f || !close(f.x, f.z)) return;
+        f.hp -= DOUSE;
+        if (f.hp > 0) return this.broadcast({ t: 'fire_hp', id: f.id, hp: Math.round(f.hp) });
+        this.fires = this.fires.filter(o => o !== f);
+        this.pay(client, FIRE_REWARD);
+        this.progress(client, 'fire', 'fires');
+        this.broadcast({ t: 'fx', kind: 'doused', x: f.x, y: 0, z: f.z, id: client.id });
+        this.sendFires();
+        return;
+      }
+      if (id !== undefined) {
+        const v = this.vehicles.get(id);
+        if (!v || v === truck || v.hp >= FIRE_HP || !close(v.x, v.z)) return;
+        v.hp = Math.min(MAX_HP, FIRE_HP + 20); // (out! still smoking a bit: a wrench fixes the rest)
+        this.broadcast({ t: 'car_hp', id: v.id, hp: Math.round(v.hp) });
+        this.broadcast({ t: 'fx', kind: 'doused', x: v.x, y: v.y, z: v.z, id: client.id });
+        this.progress(client, 'fire', 'rescue');
+        this.onDirty();
+        return;
+      }
+      // (A crashed airplane's wreck: each game puts its flames out.)
+      if (Number.isFinite(x) && Number.isFinite(z) && close(x, z)) this.broadcast({ t: 'fx', kind: 'wreckout', x: num(x), y: 0, z: num(z) });
     },
 
     // Feeding an animal at the zoo (something from your lunchbox: what it likes best, if you've
@@ -2982,6 +3061,20 @@ export class GameRoom {
       }
     }
 
+    // Now and then a fire in town (while someone's about, and once the last one's out); and
+    // fires nobody came to burn out by themselves.
+    if (t.fire <= 0) {
+      t.fire = 15;
+      const n = this.fires.length;
+      this.fires = this.fires.filter(f => f.until > now);
+      if (this.fires.length < n) this.sendFires();
+      const online = [...this.clients.values()].some(c => c.joined);
+      if (online && !this.fires.length && this.places?.firestation && now - (this.lastFire || 0) > FIRE_EVERY * 1000) {
+        this.lastFire = now;
+        this.startFire();
+      }
+    }
+
     // Burning vehicles lose health until they blow up.
     const burnTick = t.burn <= 0;
     if (burnTick) t.burn = 1;
@@ -3073,7 +3166,7 @@ function isDoorToggle(old, b) {
 }
 
 const publicPlayer = c => ({ id: c.id, name: c.name, look: c.look, pos: c.pos, rot: c.rot });
-const publicVehicle = ({ id, kind, color, x, y, z, h, driver, passengers, hp, owner, loaded, fuel, dirt, siren }) => ({ id, kind, color, x, y, z, h, driver, passengers, hp: Math.round(hp), owner: owner || '', loaded: !!loaded, fuel: round3(fuel), dirt: round3(dirt), siren: siren ? 1 : 0 });
+const publicVehicle = ({ id, kind, color, x, y, z, h, driver, passengers, hp, owner, loaded, fuel, dirt, siren }) => ({ id, kind, color, x, y, z, h, driver, passengers, hp: Math.round(hp), owner: owner || '', loaded: !!loaded, fuel: round3(fuel), dirt: round3(dirt), siren: siren === 2 ? 2 : siren ? 1 : 0 });
 const round3 = n => Math.round(num(n) * 1000) / 1000;
 // A family's members, checked over: names and looks, a few of them.
 function cleanFamily(list) {

@@ -17,6 +17,7 @@ import { PalAsk } from './palui.js';
 import { LoopExpress } from './trainui.js';
 import { FunRides } from './funrides.js';
 import { ZooAnimals } from './zooanimals.js';
+import { FireHose, steam } from './firehose.js';
 import { ANIMALS } from './shared/zoo.js';
 import { GATE_BLOCK } from './shared/funland.js';
 import { gameTime, STOP_BLOCK } from './shared/train.js';
@@ -253,6 +254,7 @@ let lunchbox = null; // your lunchbox 🍱 (L): food to eat
 let funRides = null; // Fun Land's roller coaster and Ferris wheel
 let zooAnimals = null; // the zoo's animals
 let zooAim = null; // (the one under the crosshair)
+let fireHose = null; // fires in town, and the fire trucks' hoses
 let loopExpress = null; // the Loop Express (the train round the Outer Loop)
 let palAsk = null; // a kid at Friendship Park asking to be your best friend
 let flightLog = { air: 0, was: true }; // (for the Sky Pilots: how long we've been up, and were we on the ground)
@@ -730,6 +732,7 @@ function startGame(welcome, resume = false) {
   loopExpress.setStops(welcome.train);
   funRides.setPlace(welcome.funland);
   zooAnimals.setPlace(welcome.zoo);
+  fireHose.setFires(welcome.fires);
   weather.set(welcome.rain || 0, welcome.snow);
   agency.setGuards(welcome.guards);
   if (guardCatch) guardCatch.cooldown = 1.5; // (not until the server knows where we are)
@@ -1004,6 +1007,10 @@ loopExpress = new LoopExpress({
 });
 funRides = new FunRides({ scene, sounds, hud: { toast: text => hud.toast(text) } });
 zooAnimals = new ZooAnimals({ scene, effects, sounds });
+fireHose = new FireHose({ effects, sounds, net, hud: { toast: text => hud.toast(text) } });
+net.on('fires', ({ list }) => fireHose.setFires(list));
+net.on('fire_hp', ({ id, hp }) => fireHose.fireHp(id, hp));
+net.on('fire_alarm', () => fireHose.alarm());
 function openTrainPicker([x, , z]) {
   const st = loopExpress.stopAt(x + 0.5, z + 0.5);
   if (!st) return;
@@ -1082,7 +1089,13 @@ net.on('look', ({ id, look, name }) => {
 net.on('emote', ({ id, kind }) => avatars.list.get(id)?.emote(kind));
 net.on('fx', ({ kind, x, y, z, color, seed, dir, id, animal, i, liked }) => {
   if (kind === 'hearts') effects.heartsAt(x, y, z);
-  else if (kind === 'zoofed') {
+  else if (kind === 'doused' || kind === 'wreckout') {
+    // A fire put out (by a fire truck's hose): a big puff of steam.
+    steam(effects, x, y, z);
+    sounds.tone(900, 300, 0.5, 0.1, 'sine');
+    if (kind === 'wreckout') for (const w of wrecks) if (Math.hypot(w.x - x, w.z - z) < 8) w.t = Math.min(w.t, 0.5);
+    if (kind === 'doused' && id === myId) hud.toast('💦🔥 ✅');
+  } else if (kind === 'zoofed') {
     zooAnimals.fed(animal, i, liked, gameTime(worldDay, sky.time));
     sounds.tone(500, 900, 0.15, 0.12, 'sine');
   }
@@ -2159,7 +2172,9 @@ function hornStyle(car) {
 function carSpecial() {
   const special = myCar.kind === 'police' ? 'siren' : myCar.spec.special;
   if (!special) return;
-  myCar.siren = myCar.siren ? 0 : 1;
+  // (A fire truck: lights and siren, then the hose too, then off.)
+  myCar.siren = special === 'hose' ? (myCar.siren + 1) % 3 : myCar.siren ? 0 : 1;
+  if (special === 'hose') hud.toast(['🚒', '🚨', '🚨💦'][myCar.siren]);
   sounds.click();
   if (special === 'roof') hud.toast(myCar.siren ? '⛺ Pop! The roof is up.' : '⛺ Roof down. Ready to drive!');
   if (special === 'awning') hud.toast(myCar.siren ? '⛱️ The awning rolls out. Time to relax!' : '⛱️ Awning rolled up. Ready to drive!');
@@ -3411,7 +3426,7 @@ function sendState() {
   const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
   const balloon = hud.item === BALLOON && !riding() && !sleeping;
   const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || sliding || loopExpress?.riding || funRides?.riding || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
-    (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) | (sledding && !balloon ? FLAG.sled : 0) | (player.parachute && !balloon ? FLAG.parachute : 0) | (perks.has('zoo') && !balloon ? FLAG.parrot : 0) |
+    (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) | (sledding && !balloon ? FLAG.sled : 0) | (player.parachute && !balloon ? FLAG.parachute : 0) | (perks.has('zoo') && !balloon ? FLAG.parrot : 0) | (perks.has('fire') && !balloon ? FLAG.helmet : 0) |
     (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
   net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item, drone: agency.droneState(player.yaw) });
 }
@@ -6271,7 +6286,9 @@ function frame(timestamp) {
     }
     // No pet to fetch it? It pops back into your hand after a while.
     if (ball.active && !myBody.pet && ball.restTime > 4) ball.active = false;
-    fire = Math.max(updateStructures(dt, time), updateWrecks(dt));
+    fire = Math.max(updateStructures(dt, time), updateWrecks(dt), ...fireHose.fires.map(f => loudness(f.x, 0, f.z, 40) * Math.max(0.3, f.hp / 100)));
+    const look = camera.getWorldDirection(new THREE.Vector3());
+    fireHose.update(dt, camera.position, Math.atan2(-look.x, -look.z), [...cars.list.values()], myCar, perks, wrecks);
 
     sendTimer -= dt;
     if (sendTimer <= 0) {
@@ -6313,6 +6330,7 @@ function frame(timestamp) {
     myBody.sledding = sledding;
     myBody.parachute = !!player.parachute && !riding();
     myBody.parrot = perks.has('zoo');
+    myBody.helmet = perks.has('fire');
     myBody.crouching = player.crouching && !riding();
     myBody.pizza = !!job;
     myBody.balloon = hud.item === BALLOON && !riding() && !sleeping ? paintHex() : null;
@@ -6406,7 +6424,7 @@ function frame(timestamp) {
   // Loudest nearby siren, fire and helicopter.
   let siren = 0, rotor = 0, rotorSpin = 0, rotorEffort = 0.5;
   for (const car of cars.list.values()) {
-    if (car.siren && car.kind === 'police' && car.driver) siren = Math.max(siren, loudness(car.pos.x, car.pos.y, car.pos.z, 70)); // (G on other vehicles isn't a siren)
+    if (car.siren && (car.kind === 'police' || car.kind === 'firetruck') && car.driver) siren = Math.max(siren, loudness(car.pos.x, car.pos.y, car.pos.z, 70)); // (G on other vehicles isn't a siren)
     if (car.hp < FIRE_HP) fire = Math.max(fire, loudness(car.pos.x, car.pos.y, car.pos.z, 35));
     if (car.spec.flying && !car.spec.plane && car.rotorSpin > 0.02) {
       const level = car === riding() ? 1 : loudness(car.pos.x, car.pos.y, car.pos.z, 120);
@@ -6516,6 +6534,8 @@ window.buildzone = {
   get loopExpress() { return loopExpress; },
   get funRides() { return funRides; },
   get zooAnimals() { return zooAnimals; },
+  get fireHose() { return fireHose; },
+  requestEnter: car => requestEnter(car),
   gameNow: () => gameTime(worldDay, sky.time),
   scene, camera, sky, net, avatars, renderer, fireworks, effects, glow, reflections, view, sounds,
   get world() { return world; },

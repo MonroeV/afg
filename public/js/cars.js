@@ -144,7 +144,8 @@ export function buildCarModel(kind, color) {
   const mats = {
     // Car paint with a glossy clear coat on top, so it reflects the world around it.
     // (Vans and trucks have big flat sides: less shiny, so they show their color, not the sky.)
-    paint: ['camper', 'pickup', 'dump', 'rv'].includes(kind)
+    // (A fire truck: a deep fire-engine red that doesn't wash out in the sun.)
+    paint: kind === 'firetruck' ? new THREE.MeshPhysicalMaterial({ color, metalness: 0, roughness: 0.6, clearcoat: 0.25, clearcoatRoughness: 0.4, envMapIntensity: 0.35 }) : ['camper', 'pickup', 'dump', 'rv'].includes(kind)
       ? new THREE.MeshPhysicalMaterial({ color, metalness: 0.1, roughness: 0.55, clearcoat: 0.4, clearcoatRoughness: 0.3 })
       : new THREE.MeshPhysicalMaterial({ color, metalness: 0.5, roughness: 0.4, clearcoat: 1, clearcoatRoughness: 0.06 }),
     dark: new THREE.MeshStandardMaterial({ color: 0x1d1f24, roughness: 0.7 }),
@@ -156,7 +157,8 @@ export function buildCarModel(kind, color) {
     reverse: new THREE.MeshStandardMaterial({ color: 0xdddddd, emissive: 0xffffff, emissiveIntensity: 0.05 }),
     red: new THREE.MeshStandardMaterial({ color: 0x661111, emissive: 0xff1a1a, emissiveIntensity: 0.2 }),
     blue: new THREE.MeshStandardMaterial({ color: 0x112266, emissive: 0x1a5cff, emissiveIntensity: 0.2 }),
-    label: kind === 'police' ? new THREE.MeshStandardMaterial({ map: textTexture('POLICE', '#111111', '#ffffff'), roughness: 0.4 }) : null,
+    label: kind === 'police' ? new THREE.MeshStandardMaterial({ map: textTexture('POLICE', '#111111', '#ffffff'), roughness: 0.4 }) : kind === 'firetruck' ? new THREE.MeshStandardMaterial({ map: textTexture('FIRE DEPT', '#c62828', '#ffffff'), roughness: 0.4 }) : null,
+    flash: new THREE.MeshStandardMaterial({ color: 0x777777, emissive: 0xffffff, emissiveIntensity: 0.2 }),
     cream: new THREE.MeshStandardMaterial({ color: 0xf4efe4, roughness: 0.5 }),
     wood: new THREE.MeshStandardMaterial({ color: 0xb07a45, roughness: 0.7 }),
     cushion: new THREE.MeshStandardMaterial({ color: 0x5c6bc0, roughness: 0.9 }),
@@ -183,6 +185,7 @@ export function buildCarModel(kind, color) {
   else if (kind === 'sports') sportsBody(add, B, s);
   else if (kind === 'pickup') pickupBody(add, B, s);
   else if (kind === 'dump') extra.bed = dumpBody(add, B, s, g, mats);
+  else if (kind === 'firetruck') fireTruckBody(add, B, s);
   else {
     add(B(W, bodyH, L), 'paint', 0, bodyY, 0);
     // Cabin: glass all round with a painted roof and pillars.
@@ -199,15 +202,23 @@ export function buildCarModel(kind, color) {
     add(B(0.34, 0.14, 0.04), 'head', x * (W / 2 - 0.3), bodyY + 0.08, -L / 2 - 0.01);
     add(B(0.36, 0.16, 0.04), 'tail', x * (W / 2 - 0.3), bodyY + 0.08, L / 2 + 0.01);
     add(B(0.14, 0.08, 0.04), 'reverse', x * (W / 2 - 0.55), bodyY + 0.08, L / 2 + 0.01);
-    const mirrorZ = kind === 'camper' ? -L / 2 + 0.45 : kind === 'dump' ? -L / 2 + 0.35 : kind === 'rv' ? -L / 2 + 0.3 : kind === 'pickup' ? -1.2 : -0.55;
+    const mirrorZ = kind === 'camper' || kind === 'firetruck' ? -L / 2 + 0.45 : kind === 'dump' ? -L / 2 + 0.35 : kind === 'rv' ? -L / 2 + 0.3 : kind === 'pickup' ? -1.2 : -0.55;
     add(B(0.08, kind === 'rv' ? 0.3 : 0.06, 0.16), kind === 'rv' ? 'dark' : 'paint', x * (W / 2 + (kind === 'rv' ? 0.12 : 0.04)), kind === 'rv' ? ride + 1.5 : ride + bodyH + 0.02, mirrorZ);
   }
   // A third brake light along the top of the back window.
-  if (!extra.roof && !extra.bed && !extra.awning && kind !== 'pickup' && kind !== 'sports') add(B(cabinW * 0.4, 0.05, 0.03), 'brake', 0, ride + bodyH + cabinH - 0.09, 0.15 + cabinL / 2 + 0.03);
+  if (!extra.roof && !extra.bed && !extra.awning && kind !== 'pickup' && kind !== 'sports' && kind !== 'firetruck') add(B(cabinW * 0.4, 0.05, 0.03), 'brake', 0, ride + bodyH + cabinH - 0.09, 0.15 + cabinL / 2 + 0.03);
   const wz = L / 2 - wheelR - (kind === 'monster' ? 0.05 : 0.3);
   if (kind === 'monster') {
     for (const z of [-1, 1]) add(B(W - 0.2, 0.12, 0.12), 'chrome', 0, wheelR, z * wz);
     add(B(0.2, ride - wheelR + 0.1, L * 0.7), 'dark', 0, (ride + wheelR) / 2, 0);
+  }
+  if (kind === 'firetruck') {
+    // The light bar on the cab (red and white), and lights at the back corners.
+    const top = ride + bodyH + 0.08, cz = -L / 2 + 0.9;
+    add(B(0.6, 0.16, 0.3), 'red', -0.4, top, cz);
+    add(B(0.6, 0.16, 0.3), 'flash', 0.4, top, cz);
+    for (const x of [-1, 1]) add(B(0.18, 0.18, 0.18), x < 0 ? 'red' : 'flash', x * (W / 2 - 0.12), ride + 1.45, L / 2 - 0.1);
+    for (const x of [-1, 1]) add(new THREE.PlaneGeometry(L * 0.38, 0.4), 'label', x * (W / 2 + 0.005), ride + 0.95, 0.9, x * Math.PI / 2);
   }
   if (kind === 'police') {
     const top = ride + bodyH + cabinH + 0.1;
@@ -219,11 +230,11 @@ export function buildCarModel(kind, color) {
   const meshes = mergeParts(g, parts, mats);
   // The police light bar's glow: a big soft red and blue halo that flashes with the lights.
   let halos = null;
-  if (kind === 'police') {
-    const top = ride + bodyH + cabinH + 0.1;
-    halos = ['#ff2020', '#2a5cff'].map((c, i) => {
+  if (kind === 'police' || kind === 'firetruck') {
+    const fire = kind === 'firetruck', top = fire ? ride + bodyH + 0.08 : ride + bodyH + cabinH + 0.1, hz = fire ? -L / 2 + 0.9 : 0.15;
+    halos = ['#ff2020', fire ? '#ffffff' : '#2a5cff'].map((c, i) => {
       const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTexture(), color: c, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
-      halo.position.set(i ? 0.3 : -0.3, top + 0.05, 0.15);
+      halo.position.set(i ? 0.3 : -0.3, top + 0.05, hz);
       halo.scale.setScalar(2.4);
       g.add(halo);
       return halo;
@@ -249,7 +260,7 @@ export function buildCarModel(kind, color) {
 
   return {
     group: g, wheels, steerers, paint: mats.paint, paintMesh: meshes.paint, baseColor: new THREE.Color(color),
-    headMat: mats.head, tailMat: mats.tail, brakeMat: mats.brake, reverseMat: mats.reverse, siren: kind === 'police' ? { red: mats.red, blue: mats.blue, halos } : null,
+    headMat: mats.head, tailMat: mats.tail, brakeMat: mats.brake, reverseMat: mats.reverse, siren: kind === 'police' ? { red: mats.red, blue: mats.blue, halos } : kind === 'firetruck' ? { red: mats.red, blue: mats.flash, halos } : null,
     ...extra,
   };
 }
@@ -478,6 +489,29 @@ function dumpBody(add, B, { length: L, width: W, ride, bodyH, cabinH }, g, mats)
   mergeParts(bed, parts, mats);
   g.add(bed);
   return { group: bed, load, tip: 0 };
+}
+
+// A fire truck: a tall red cab at the front (big windows), the body behind it with lockers
+// down the sides and a white stripe, a ladder along the top, and the water cannon on its turret
+// (the water comes out at firehose.js's NOZZLE).
+function fireTruckBody(add, B, { length: L, width: W, ride, bodyH }) {
+  const cabL = 1.9, cabZ = -L / 2 + cabL / 2, bodyL = L - cabL - 0.1, bodyZ = L / 2 - bodyL / 2;
+  add(B(W * 0.8, 0.35, L - 0.2), 'dark', 0, ride + 0.18, 0); // the chassis
+  add(B(W, bodyH, cabL), 'paint', 0, ride + bodyH / 2 + 0.1, cabZ);
+  add(B(W * 0.94, 0.75, 0.05), 'glass', 0, ride + bodyH - 0.35, -L / 2 - 0.01); // the windshield
+  for (const x of [-1, 1]) add(B(0.05, 0.6, cabL * 0.75), 'glass', x * (W / 2 + 0.005), ride + bodyH - 0.4, cabZ);
+  add(B(W, bodyH - 0.15, bodyL), 'paint', 0, ride + (bodyH - 0.15) / 2 + 0.1, bodyZ);
+  add(B(W + 0.02, 0.14, L - 0.1), 'white', 0, ride + 0.55, 0); // the stripe
+  for (const x of [-1, 1]) for (let i = 0; i < 3; i++) add(B(0.03, 0.75, bodyL / 3 - 0.2), 'chrome', x * (W / 2 + 0.01), ride + 1.15, bodyZ - bodyL / 3 + (i * bodyL) / 3);
+  add(B(W * 0.5, 0.3, 0.03), 'chrome', 0, ride + 0.7, -L / 2 - 0.02); // the grille
+  // The ladder, along the top.
+  const ly = ride + bodyH + 0.12;
+  for (const x of [-0.45, 0.45]) add(B(0.07, 0.07, bodyL - 0.4), 'chrome', x, ly, bodyZ + 0.2);
+  for (let z = bodyZ - bodyL / 2 + 0.6; z < L / 2 - 0.1; z += 0.45) add(B(0.85, 0.05, 0.05), 'chrome', 0, ly, z);
+  for (const z of [bodyZ - bodyL / 2 + 0.6, L / 2 - 0.4]) add(B(1.0, 0.12, 0.12), 'dark', 0, ly - 0.08, z);
+  // The water cannon (turret and nozzle, pointing forward over the cab).
+  add(B(0.36, 0.3, 0.36), 'chrome', 0, ride + bodyH + 0.2, -L / 2 + cabL + 0.45);
+  add(B(0.14, 0.14, 0.9), 'chrome', 0, ride + bodyH + 0.42, -L / 2 + cabL + 0.05);
 }
 
 // Boxes with the same material are merged into one mesh, so each vehicle only costs a few draw calls.
@@ -760,7 +794,7 @@ export class Cars {
       targetH: data.h,
       hp: data.hp ?? MAX_HP,
       fuel: data.fuel ?? 1, dirt: 0,
-      speed: 0, steer: 0, siren: data.siren ? 1 : 0, vy: 0, spin: 0,
+      speed: 0, steer: 0, siren: data.siren || 0, vy: 0, spin: 0,
       gear: 1, rpm: 0, shiftT: 0,
       pitch: 0, roll: 0, targetPitch: 0, targetRoll: 0, yawRate: 0, collective: 0.5, rotorSpin: 0, rotorAngle: 0,
       outline: outlinePoints(spec),

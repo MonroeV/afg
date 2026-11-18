@@ -60,6 +60,14 @@ customize your character, drive cars, build anything and play with friends.
       **feed** it something from your lunchbox: it munches happily, with hearts, and each kind
       has a favorite food (🐘🍌 🦒🍎 🦁🥪 🦓🥕 🐧🧀 🐼🍪 🐒🍌) that gets it extra excited. Zookeeper
       Zara is by her hut
+    - **The Fire Station** 🚒 (since v0.54, on the south side of the Outer Loop): red brick, with
+      two open bays (a **fire truck** waiting in each) and the firefighters' room next door (bunk
+      beds, a table, a couch). In a fire truck, **G** turns on the lights and siren 🚨, and **G**
+      again the **hose** too 💦: it sprays water ahead of the truck (steer to aim). Every few
+      minutes a **fire** breaks out on a road in town (just flames and smoke: nothing really
+      burns): the alarm rings, a 🔥 arrow at the top of the screen points the way, and whoever puts
+      it out gets 3 🪙. The hose also saves burning vehicles, and puts out crashed airplanes. Fire
+      Chief Flint is out front
     - **The Loop Express** 🚆 (since v0.51): a train all the way round the Outer Loop, on a track
       high over the outside of the road, held up by concrete pillars. Three trains go round and
       round. At each stop (by the new places, and where the roads from town come out) there's a
@@ -543,6 +551,7 @@ customize your character, drive cars, build anything and play with friends.
   | 🧭 Explorer Club (v0.50) | Scout Juno, at Friendship Park | visit the airport, the church, Casa Fiesta, the salon and the grocery store, and go to the top of Sky Tower | 25 🪙, explorer's boots (you walk a bit faster) |
   | 🤝 Best Friends (v0.50) | Miss Joy, at Friendship Park | make a best friend, hang out together for 5 minutes, go down a slide 3 times | 20 🪙, your best friend brings you snacks |
   | 🦜 Zookeepers (v0.53) | Zookeeper Zara, at the zoo | see all 7 kinds of animals, feed animals 5 times, feed 3 different kinds | 20 🪙, a parrot friend rides on your shoulder |
+  | 🚒 Firefighters (v0.54) | Fire Chief Flint, at the fire station | turn on a fire truck's lights, put out 3 fires in town, save a burning vehicle | 25 🪙, a firefighter's helmet (and your hose sprays farther) |
 
   Each step pops up by the badge counter ("🔧 2/3"), and a new badge gets a big celebration with
   fireworks. The **daily bonus** grows every day in a row you play (+2 a day, up to +10)
@@ -682,7 +691,7 @@ customize your character, drive cars, build anything and play with friends.
 | Ctrl or C | Crouch: slow, and you won't fall off edges |
 | F | Fly (Space = up, C = down), but only once you know the secret magic words (see below) |
 | V | Switch camera: first person, behind you, in front of you |
-| G | Dance! (on a dance floor it starts a party). Driving: the police car's siren, the camper van's pop-up roof, the dump truck's bed, the RV's awning |
+| G | Dance! (on a dance floor it starts a party). Driving: the police car's siren, the camper van's pop-up roof, the dump truck's bed, the RV's awning, the fire truck's lights (and again: the hose 💦) |
 | J | The badge book: the clubs, what to do for each badge, and how close you are |
 | L | Your lunchbox 🍱: eat something |
 | B | Wave. In a parked camper van, or inside the RV: sleep (move to get up) |
@@ -965,6 +974,7 @@ public/
     trainui.js         The Loop Express: the track and trains you see, picking a stop, riding
     funrides.js        Fun Land's roller coaster and Ferris wheel: drawing and riding them
     zooanimals.js      The zoo's animals: their block models, wandering about their pens, feeding them
+    firehose.js        Fires in town (flames, smoke, the 🔥 arrow) and the fire trucks' hoses
     guardcatch.js      Bodyguards keeping you off their land: caught and walked off, blown away, flushed out
     guardui.js         Someone asking your bodyguards to let them in: your answer
     lighting.js        Live reflections and the glow effect
@@ -1016,6 +1026,7 @@ public/
       train.js         The Loop Express: its track, where the trains are, the stops, pillars and ticket machines
       funland.js       Fun Land: its layout, the bumper car arena, and the coaster's and wheel's shapes
       zoo.js           The zoo: its paths, the seven pens (and what's in them), Zara's hut, the animals' favorite foods
+      firestation.js   The fire station: its building, the fire trucks' bays, and how often fires break out
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/
   make-engine-sounds.py  Makes the engine recordings (needs numpy and ffmpeg; run it after changing a voice)

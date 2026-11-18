@@ -143,6 +143,13 @@ const NPCS = [
     hello: n => [`Welcome to the zoo, ${n}! 🦁🐘🦒`, `Hi ${n}! The animals love a snack! 🍎`],
     tips: ['🐘🍌 🦒🍎 🦁🥪 🦓🥕 🐧🧀 🐼🍪 🐒🍌', 'Right-click an animal to feed it! 🍱', 'The penguins love their pool! 🐧'],
   },
+  {
+    // The fire station: Fire Chief Flint (he runs the Firefighters club).
+    id: -70, place: 'firechief', name: 'Fire Chief Flint', title: 'Fire Chief Flint 🚒', roam: 3, club: 'fire',
+    look: { face: 'smile', hair: 'short', hat: 'cap', shirt: 'tshirt', pants: 'jeans', extra: 'none', skin: '#c68642', hairColor: '#3b2a1a', hatColor: '#d32f2f', shirtColor: '#263238', shirtColor2: '#fdd835', pantsColor: '#263238', shoesColor: '#111111' },
+    hello: n => [`Hi ${n}! Ready to fight some fires? 🚒`, `${n}! Hop in a fire truck! 🚨`],
+    tips: ['🚒 G: 🚨 · G again: 💦', 'When the alarm rings, follow the 🔥 arrow! 🧭', 'Spray burning cars to save them! 🚗💦', 'Stop, drop and roll! 🔥'],
+  },
   // ---------- Friendship Park ----------
   // Kids who'd love a best friend (talk to one!), and the leaders of two clubs.
   ...[

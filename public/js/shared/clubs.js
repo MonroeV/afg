@@ -123,6 +123,15 @@ export const CLUBS = [
     ],
     reward: { coins: 20, perk: '🦜', perkName: 'A parrot friend rides on your shoulder' },
   },
+  {
+    id: 'fire', name: 'Firefighters', icon: '🚒', color: '#d32f2f', leader: 'Fire Chief Flint', where: 'at the fire station',
+    tasks: [
+      { id: 'siren', icon: '🚨', goal: 1, what: 'Turn on a fire truck\'s lights (G)' },
+      { id: 'fires', icon: '🔥', goal: 3, what: 'Put out a fire in town with the hose (G twice: 💦)' },
+      { id: 'rescue', icon: '🚗', goal: 1, what: 'Save a burning vehicle with the hose' },
+    ],
+    reward: { coins: 25, perk: '⛑️', perkName: 'A firefighter\'s helmet, and your hose sprays farther' },
+  },
 ];
 
 export const clubById = id => CLUBS.find(c => c.id === id);

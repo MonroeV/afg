@@ -39,7 +39,7 @@ function nameTag(name, color) {
 
 // What a player is doing, sent with their position: bits of `flags`. The top 24 bits are
 // the color of the balloon they're holding.
-export const FLAG = { sleeping: 1, sitting: 2, crouching: 4, balloon: 8, jet: 16, trail: 32, pizza: 64, hotair: 128, sled: 256, parachute: 512, parrot: 1024 }; // (sled, parachute and parrot: only without a balloon, whose color takes those bits)
+export const FLAG = { sleeping: 1, sitting: 2, crouching: 4, balloon: 8, jet: 16, trail: 32, pizza: 64, hotair: 128, sled: 256, parachute: 512, parrot: 1024, helmet: 2048 }; // (sled, parachute, parrot and helmet: only without a balloon, whose color takes those bits)
 
 // A speech bubble: rounded and white, with up to two lines of text and a little tail.
 function speechBubble(text) {
@@ -471,6 +471,7 @@ export class Avatar {
     this.parachute = !(flags & FLAG.balloon) && !!(flags & FLAG.parachute);
     this.sledding = !(flags & FLAG.balloon) && !!(flags & FLAG.sled);
     this.parrot = !(flags & FLAG.balloon) && !!(flags & FLAG.parrot);
+    this.helmet = !(flags & FLAG.balloon) && !!(flags & FLAG.helmet);
   }
 
   emote(kind) {
@@ -519,6 +520,7 @@ export class Avatar {
     this.updateSled();
     this.updateParachute(time);
     this.updateParrot(time);
+    this.updateHelmet();
     this.root.rotation.order = 'YXZ';
     this.root.rotation.y = this.yaw;
     // Lying back into bed (or sitting up out of it), and sitting down, happen smoothly.
@@ -704,6 +706,29 @@ export class Avatar {
     head.rotation.y = Math.sin(time * 0.7) > 0.6 ? 0.8 : Math.sin(time * 0.5) < -0.7 ? -0.7 : 0;
     const flap = Math.sin(time * 0.37) > 0.92 ? Math.sin(time * 30) * 0.6 : 0;
     wings.forEach((w, i) => (w.rotation.z = (i ? -1 : 1) * (0.05 + Math.abs(flap))));
+  }
+
+  // A shiny red firefighter's helmet (the Firefighters club's prize), with a brim that sticks out
+  // at the back and a gold badge on the front. It goes on over any hat.
+  updateHelmet() {
+    if (!this.helmet && !this.helmetHat) return;
+    const head = this.character.head;
+    if (!this.helmetHat) {
+      const g = new THREE.Group(), red = new THREE.MeshStandardMaterial({ color: 0xc62828, roughness: 0.3, metalness: 0.2 });
+      const add = (geo, mat, x, y, z) => {
+        const m = new THREE.Mesh(geo, mat);
+        m.position.set(x, y, z);
+        m.castShadow = true;
+        g.add(m);
+      };
+      add(new THREE.SphereGeometry(0.33, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), red, 0, 0.42, 0);
+      add(new THREE.BoxGeometry(0.62, 0.04, 0.75), red, 0, 0.43, 0.06);
+      add(new THREE.BoxGeometry(0.06, 0.06, 0.6), red, 0, 0.72, 0.02); // (the ridge over the top)
+      add(new THREE.BoxGeometry(0.16, 0.18, 0.03), new THREE.MeshStandardMaterial({ color: 0xffc107, metalness: 0.7, roughness: 0.3 }), 0, 0.58, -0.32);
+      this.helmetHat = g;
+    }
+    if (this.helmetHat.parent !== head) head.add(this.helmetHat);
+    this.helmetHat.visible = !!this.helmet;
   }
 
   // A red sled under them (sledding).

@@ -44,6 +44,12 @@ export const VEHICLES = {
     name: 'Bumper Car', mass: 260, length: 2.1, width: 1.5, ride: 0.1, bodyH: 0.42, cabinH: 0.2, wheelR: 0.12, maxSpeed: 6.5, accel: 7, gears: 3, respawn: 20,
     seats: [[0, 0.32, 0.15]], bouncy: true, noDamage: true, engine: 'normal', pitch: 1.7,
   },
+  // A fire truck (at the fire station): big and red, with a ladder on top and a water cannon. G
+  // turns on its lights and siren, and G again the hose too (it sprays where you're heading).
+  firetruck: {
+    name: 'Fire Truck', mass: 9000, length: 7.0, width: 2.5, ride: 0.5, bodyH: 1.6, cabinH: 0.3, wheelR: 0.55, maxSpeed: 18, accel: 7, gears: 3, respawn: 30,
+    seats: [[-0.55, 1.1, -2.3], [0.55, 1.1, -2.3], [-0.55, 1.1, -1.3], [0.55, 1.1, -1.3]], special: 'hose', engine: 'diesel', pitch: 0.95,
+  },
   // A sports car: low, light and quick, with a spoiler on the back. Two seats.
   sports: {
     name: 'Sports Car', mass: 1100, length: 3.9, width: 1.86, ride: 0.2, bodyH: 0.42, cabinH: 0.5, wheelR: 0.33, maxSpeed: 24, accel: 13, gears: 3, respawn: 30,

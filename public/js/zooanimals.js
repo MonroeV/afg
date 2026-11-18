@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { ANIMALS } from './shared/zoo.js';
 
 const SLOT = 9; // (seconds between each animal picking somewhere new to go)
+const FLOOR = 1; // (the pens' sand, grass and ice are whole blocks on the ground: they stand on top)
 const hash = n => {
   const s = Math.sin(n * 12.9898) * 43758.5453;
   return s - Math.floor(s);
@@ -169,8 +170,8 @@ export class ZooAnimals {
       const k = Math.min(1, into / dur), e = k * k * (3 - 2 * k);
       const moving = k < 1 && !eating;
       // (Munching: it stays put where it was fed.)
-      if (eating) a.group.position.set(a.frozen[0], 0, a.frozen[1]);
-      else a.group.position.set(from[0] + (to[0] - from[0]) * e, 0, from[1] + (to[1] - from[1]) * e);
+      if (eating) a.group.position.set(a.frozen[0], FLOOR, a.frozen[1]);
+      else a.group.position.set(from[0] + (to[0] - from[0]) * e, FLOOR, from[1] + (to[1] - from[1]) * e);
       if (d > 0.1) a.group.rotation.y = Math.atan2(-(to[0] - from[0]), -(to[1] - from[1]));
       // Walking (legs swinging), a waddle, a hop, or (fed) munching away.
       const swing = moving ? Math.sin(t * (a.kind === 'monkey' ? 14 : 8) + a.seed) * 0.5 : 0;
@@ -179,9 +180,9 @@ export class ZooAnimals {
         else l.rotation.x = (j % 2 === (j < 2 ? 0 : 1) ? 1 : -1) * swing;
       });
       if (a.kind === 'penguin') a.group.rotation.z = moving ? Math.sin(t * 8 + a.seed) * 0.12 : 0;
-      if (a.kind === 'monkey') a.group.position.y = moving ? Math.abs(Math.sin(t * 7 + a.seed)) * 0.4 : 0;
+      if (a.kind === 'monkey') a.group.position.y = FLOOR + (moving ? Math.abs(Math.sin(t * 7 + a.seed)) * 0.4 : 0);
       if (a.head) a.head.rotation.x = eating ? -0.4 + Math.sin(t * 12) * 0.15 : Math.sin(t * 1.5 + a.seed) * 0.05;
-      if (eating && Math.random() < dt * 3) this.effects.heartsAt(a.group.position.x, a.height * a.scale + 0.3, a.group.position.z, a.liked ? 3 : 1);
+      if (eating && Math.random() < dt * 3) this.effects.heartsAt(a.group.position.x, FLOOR + a.height * a.scale + 0.3, a.group.position.z, a.liked ? 3 : 1);
     }
   }
 
@@ -191,7 +192,7 @@ export class ZooAnimals {
     let best = null, bestT = reach;
     for (const a of this.animals) {
       if (!a.group.visible) continue;
-      const c = a.group.position.clone().setY((a.height * a.scale) / 2), r = a.radius * a.scale + 0.3;
+      const c = a.group.position.clone().setY(FLOOR + (a.height * a.scale) / 2), r = a.radius * a.scale + 0.3;
       const oc = c.clone().sub(o), along = oc.dot(dir);
       if (along < 0 || along > bestT) continue;
       if (oc.lengthSq() - along * along < r * r) [best, bestT] = [a, along];
@@ -206,6 +207,6 @@ export class ZooAnimals {
     a.frozen = [a.group.position.x, a.group.position.z];
     a.fedUntil = t + 4;
     a.liked = liked;
-    this.effects.heartsAt(a.group.position.x, a.height * a.scale + 0.3, a.group.position.z, liked ? 8 : 4);
+    this.effects.heartsAt(a.group.position.x, FLOOR + a.height * a.scale + 0.3, a.group.position.z, liked ? 8 : 4);
   }
 }
