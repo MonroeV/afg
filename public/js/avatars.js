@@ -39,7 +39,7 @@ function nameTag(name, color) {
 
 // What a player is doing, sent with their position: bits of `flags`. The top 24 bits are
 // the color of the balloon they're holding.
-export const FLAG = { sleeping: 1, sitting: 2, crouching: 4, balloon: 8, jet: 16, trail: 32, pizza: 64, hotair: 128, sled: 256 }; // (sled: only without a balloon, whose color takes those bits)
+export const FLAG = { sleeping: 1, sitting: 2, crouching: 4, balloon: 8, jet: 16, trail: 32, pizza: 64, hotair: 128, sled: 256, parachute: 512 }; // (sled and parachute: only without a balloon, whose color takes those bits)
 
 // A speech bubble: rounded and white, with up to two lines of text and a little tail.
 function speechBubble(text) {
@@ -468,6 +468,7 @@ export class Avatar {
     this.trail = !!(flags & FLAG.trail);
     this.pizza = !!(flags & FLAG.pizza);
     this.hotair = !!(flags & FLAG.hotair);
+    this.parachute = !(flags & FLAG.balloon) && !!(flags & FLAG.parachute);
     this.sledding = !(flags & FLAG.balloon) && !!(flags & FLAG.sled);
   }
 
@@ -515,6 +516,7 @@ export class Avatar {
     this.root.position.copy(this.pos);
     if (this.sledding) this.root.position.y -= SLED_DROP; // (sitting down low, on the sled)
     this.updateSled();
+    this.updateParachute(time);
     this.root.rotation.order = 'YXZ';
     this.root.rotation.y = this.yaw;
     // Lying back into bed (or sitting up out of it), and sitting down, happen smoothly.
@@ -629,6 +631,36 @@ export class Avatar {
     const { armL, armR } = this.character;
     if (armL) armL.rotation.set(1.2, 0, 0.3);
     if (armR) armR.rotation.set(1.2, 0, -0.3);
+  }
+
+  // A parachute over them (jumped out of an airplane): a striped canopy on its lines, swaying.
+  updateParachute(time) {
+    if (!this.parachute && !this.chute) return;
+    if (!this.chute) {
+      const g = new THREE.Group();
+      const colors = [0xe53935, 0xffffff, 0x1e88e5, 0xffeb3b, 0xe53935, 0xffffff, 0x1e88e5, 0xffeb3b];
+      colors.forEach((c, i) => {
+        const panel = new THREE.Mesh(new THREE.SphereGeometry(2.1, 6, 6, (i / 8) * Math.PI * 2, Math.PI / 4, 0, Math.PI * 0.32), new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, side: THREE.DoubleSide }));
+        panel.scale.y = 0.55;
+        g.add(panel);
+      });
+      const line = new THREE.MeshBasicMaterial({ color: 0x333333 });
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2, top = new THREE.Vector3(Math.cos(a) * 1.75, 0.6, Math.sin(a) * 1.75), bottom = new THREE.Vector3(Math.cos(a) * 0.2, -2.6, Math.sin(a) * 0.2);
+        const geo = new THREE.CylinderGeometry(0.012, 0.012, top.distanceTo(bottom), 3);
+        geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), top.clone().sub(bottom).normalize()));
+        const m = new THREE.Mesh(geo, line);
+        m.position.copy(top).add(bottom).multiplyScalar(0.5);
+        g.add(m);
+      }
+      g.position.y = 4.4;
+      g.traverse(o => o.isMesh && (o.castShadow = true));
+      this.root.add(g);
+      this.chute = g;
+    }
+    this.chute.visible = !!this.parachute;
+    this.chute.rotation.z = Math.sin(time * 1.3) * 0.06;
+    this.chute.rotation.x = Math.sin(time * 0.9 + 1) * 0.05;
   }
 
   // A red sled under them (sledding).

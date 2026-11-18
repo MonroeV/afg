@@ -297,6 +297,10 @@ async function load() {
   player.hungerMul = hungerSpeed(hunger);
   player.bouncePower = trampolineBounce;
   player.onBoost = () => sounds.zoom();
+  player.onLanded = () => {
+    sounds.land();
+    hud.toast('🪂 👍 Safe landing!');
+  };
   cars = new Cars(scene, world, effects);
   cars.reflections = reflections;
   player.extraBoxes = () => cars.boxes(myCar?.id);
@@ -1009,6 +1013,13 @@ net.on('fx', ({ kind, x, y, z, color, seed, dir, id }) => {
   else if (kind === 'water') effects.splash(x, y, z);
   else if (kind === 'slam') sounds.door(false); // (a bodyguard slamming a door shut)
   else if (kind === 'harvest') effects.sparkle(x + 0.5, y + 0.5, z + 0.5, 14);
+  else if (kind === 'crash') {
+    // An airplane crashing: a huge ball of fire, and the wreck burns.
+    for (let i = 0; i < 3; i++) effects.explosion(x + (Math.random() - 0.5) * 3, y + 1 + i, z + (Math.random() - 0.5) * 3);
+    sounds.explode(loudness(x, y, z, 200));
+    wrecks.push({ x, y, z, t: 20 });
+    if (Math.hypot(player.pos.x - x, player.pos.z - z) < 150) hud.toast('💥🔥 ✈️');
+  }
   else if (kind === 'eat') {
     const a = avatars.list.get(id); // (somebody having a snack)
     if (a) effects.heartsAt(a.pos.x, a.pos.y + 1.6, a.pos.z, 3);
@@ -1273,6 +1284,33 @@ function showHeld(item = hud.item) {
   view.setItem(rodOut ? 'rod' : carryingCan ? 'gascan' : item);
 }
 
+// An airplane nobody's flying any more (its pilot jumped!): it falls out of the sky.
+net.on('plane_fall', ({ id, x, y, z, h, p, vx, vy, vz, spin }) => {
+  const car = cars.list.get(id);
+  if (!car) return;
+  car.track.clear();
+  car.pos.set(x, y, z);
+  car.h = car.targetH = h;
+  car.pitch = p;
+  car.falling = { vx, vy, vz, spin };
+});
+// Where airplanes crashed: burning wreckage for a while (fire and smoke).
+const wrecks = [];
+function updateWrecks(dt) {
+  for (let i = wrecks.length - 1; i >= 0; i--) {
+    const w = wrecks[i];
+    w.t -= dt;
+    if (w.t <= 0) {
+      wrecks.splice(i, 1);
+      continue;
+    }
+    const k = Math.min(1, w.t / 6); // (dying down at the end)
+    if (Math.random() < 0.8 * k) effects.flame(w.x + (Math.random() - 0.5) * 3, w.y + 0.3, w.z + (Math.random() - 0.5) * 3, 1.6 * k + 0.4);
+    if (Math.random() < 0.35) effects.smokePuff(w.x, w.y + 1.5, w.z, 1.2);
+  }
+  const near = wrecks.reduce((m, w) => Math.max(m, loudness(w.x, w.y, w.z, 40) * Math.min(1, w.t / 6)), 0);
+  return near;
+}
 net.on('car_destroy', ({ id, x, y, z }) => {
   const car = cars.list.get(id);
   const p = car ? car.pos : new THREE.Vector3(x, y, z);
@@ -1283,7 +1321,8 @@ net.on('car_destroy', ({ id, x, y, z }) => {
     if (myCar) leaveCar();
     else leaveRide();
     player.vel.set(0, 12, 0); // blown clear!
-    hud.addChat({ system: true, text: `💥 Boom! It'll be back in ${car?.spec.flying ? '5 minutes' : '30 seconds'}.` });
+    const back = car?.spec.respawn || 30;
+    hud.addChat({ system: true, text: `💥 Boom! It'll be back in ${back >= 60 ? `${Math.round(back / 60)} minute${back >= 120 ? 's' : ''}` : `${back} seconds`}.` });
   }
   cars.remove(id);
 });
@@ -2416,9 +2455,15 @@ function enterCar(car) {
   danceView = 0;
   hud.setCarHelp(car.kind);
   sounds.setEngineVoice(car.id, car.kind);
-  if (!car.spec.flying) sounds.engine(0.15, 0);
+  if (!car.spec.flying || car.spec.plane) sounds.engine(0.15, 0);
   sounds.spawnCar();
-  if (car.spec.flying && settings.heliTip !== 2) { // shown again when the controls change
+  if (car.spec.plane && settings.planeTip !== 1) {
+    hud.addChat({ system: true, text: touch
+      ? '✈️ Push the joystick up to open the throttle and roll down the runway. Fast enough? Hold ⬆ to lift off! Drag to look: it turns where you look. ⬆ climbs, ⬇ dives. Too slow and it stalls! Land gently on the runway, and pull the joystick down to brake.'
+      : '✈️ W opens the throttle (S closes it, and brakes on the ground). Roll down the runway, and when you\'re fast enough hold Space to lift off! It turns to where you look. Space climbs, Shift dives. Too slow and it stalls! Land gently on the runway. (Jump out up high and your parachute opens!)' });
+    settings.planeTip = 1;
+    saveSettings();
+  } else if (car.spec.flying && !car.spec.plane && settings.heliTip !== 2) { // shown again when the controls change
     hud.addChat({ system: true, text: touch
       ? '🚁 Wait for the rotor to spin up, then hold ⬆ to lift off and ⬇ to come down. It turns to face where you look (drag on the right side). The joystick tilts it forward and back (it stays tilted until you push the other way) and slides it sideways. Land gently!'
       : '🚁 Wait for the rotor to spin up, then hold Space to lift off. Steer with the mouse (it turns to where you look). W/S tilt it forward and back, and it stays tilted until you tilt it back (watch "Tilt" at the top). A/D slide sideways. Shift goes down. Land gently!' });
@@ -2455,10 +2500,11 @@ function leaveCar(tell = false) {
   const car = myCar;
   if (!car) return;
   wakeInVan();
-  if (tell && car.spec.flying && !car.onGround) dropHelicopter(car);
+  const bail = tell && car.spec.plane && !car.onGround && car.pos.y - groundBelow(car.pos.x, car.pos.y, car.pos.z) > 2;
+  if (tell && car.spec.flying && !car.spec.plane && !car.onGround) dropHelicopter(car);
   if (tell) {
     sendCarState();
-    net.send({ t: 'car_exit', id: car.id });
+    net.send(bail ? { t: 'car_exit', id: car.id, vel: [car.vel.x, car.vel.y, car.vel.z].map(v => Math.round(v * 100) / 100) } : { t: 'car_exit', id: car.id });
   }
   myCar = null;
   car.driver = 0;
@@ -2466,10 +2512,25 @@ function leaveCar(tell = false) {
   if (car.kind !== 'police') car.siren = 0; // (the police lights stay on: just the siren stops)
   car.braking = car.reversing = false;
   if (car.kind === 'rv' && tell) enterRV(car, 'cab'); // (out of the RV's driver's seat: still inside it)
+  else if (bail) bailOut(car);
   else stepOut(car, -1); // the driver's door is on the left
   hud.setCarHelp(null);
   hud.setVehicleInfo(null);
   sounds.engine(null);
+}
+
+// Jumping out of an airplane in the air: you tumble out of the door, and your parachute pops
+// open (you float gently down, and can steer). The plane flies on without you… and crashes.
+function bailOut(car) {
+  const right = new THREE.Vector3(Math.cos(car.h), 0, -Math.sin(car.h));
+  player.pos.set(car.pos.x - right.x * 1.8, car.pos.y + 0.6, car.pos.z - right.z * 1.8);
+  player.vel.set(car.vel.x * 0.3 - right.x * 3, 2, car.vel.z * 0.3 - right.z * 3);
+  player.flying = false;
+  player.yaw = car.h;
+  player.pitch = -0.2;
+  player.parachute = true;
+  sounds.whoosh();
+  hud.toast('🪂 Parachute open! Steer with WASD and float down…');
 }
 
 function leaveRide(tell = false) {
@@ -2657,7 +2718,7 @@ function washDebris(x, gy, z) {
 function updateDownwash(dt, time) {
   let wash = null;
   for (const car of cars.list.values()) {
-    if (!car.spec.flying || car.rotorSpin < 0.3) continue;
+    if (!car.spec.flying || car.spec.plane || car.rotorSpin < 0.3) continue;
     const ground = groundBelow(car.pos.x, car.pos.y, car.pos.z);
     const height = car.pos.y - ground;
     if (height > WASH_HEIGHT) continue;
@@ -3260,7 +3321,7 @@ function sendState() {
   const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
   const balloon = hud.item === BALLOON && !riding() && !sleeping;
   const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
-    (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) | (sledding && !balloon ? FLAG.sled : 0) |
+    (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) | (sledding && !balloon ? FLAG.sled : 0) | (player.parachute && !balloon ? FLAG.parachute : 0) |
     (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
   net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item, drone: agency.droneState(player.yaw) });
 }
@@ -5627,9 +5688,9 @@ function updateCamera(dt) {
     } else {
       if (Math.abs(car.speed) > 2 && !(car === myCar && s.flying)) carCam.yaw *= Math.exp(-1.5 * dt);
       const yaw = car.h + carCam.yaw + (carView === 2 ? Math.PI : 0);
-      const dist = s.flying ? 12 : s.length + 3.5;
+      const dist = s.plane ? 15 : s.flying ? 12 : s.length + 3.5;
       const focus = car.pos.clone().add(new THREE.Vector3(0, s.height * 0.8, 0));
-      const lift = (s.flying ? 3 : s.height + 1.2) - carCam.pitch * 4;
+      const lift = (s.plane ? 3.5 : s.flying ? 3 : s.height + 1.2) - carCam.pitch * 4;
       const desired = focus.clone().add(new THREE.Vector3(Math.sin(yaw) * dist, lift, Math.cos(yaw) * dist));
       camera.position.copy(avoidWalls(focus, desired));
       camera.lookAt(focus);
@@ -5748,9 +5809,10 @@ function frame(timestamp) {
       player.vel.set(0, 0, 0);
       if (myCar.noGas) {
         myCar.noGas = false;
-        hud.toast(myCar.spec.flying ? "⛽ Out of gas! You can't fly up without any: float down and land." : `⛽ Out of gas! Get out (E) and fetch a gas can from a gas station${nearestGas() ? ` (${nearestGas().trim()})` : ''}.`);
+        hud.toast(myCar.spec.plane ? '⛽ Out of gas! Glide down gently and land on something flat.' : myCar.spec.flying ? "⛽ Out of gas! You can't fly up without any: float down and land." : `⛽ Out of gas! Get out (E) and fetch a gas can from a gas station${nearestGas() ? ` (${nearestGas().trim()})` : ''}.`);
       }
-      if (myCar.spec.flying || cars.empty(myCar)) sounds.engine(null);
+      if (myCar.spec.plane) sounds.engine(cars.empty(myCar) ? null : 0.2 + 0.75 * myCar.rotorSpin, myCar.throttle || 0); // (the propeller's engine)
+      else if (myCar.spec.flying || cars.empty(myCar)) sounds.engine(null);
       else {
         // The engine note follows the revs smoothly (so you hear each gear change).
         myCar.rpmShown = (myCar.rpmShown ?? myCar.rpm) + (myCar.rpm - (myCar.rpmShown ?? myCar.rpm)) * Math.min(1, dt * 9);
@@ -6014,7 +6076,7 @@ function frame(timestamp) {
     }
     // No pet to fetch it? It pops back into your hand after a while.
     if (ball.active && !myBody.pet && ball.restTime > 4) ball.active = false;
-    fire = updateStructures(dt, time);
+    fire = Math.max(updateStructures(dt, time), updateWrecks(dt));
 
     sendTimer -= dt;
     if (sendTimer <= 0) {
@@ -6054,6 +6116,7 @@ function frame(timestamp) {
     myBody.sitting = !!seated || !!liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel';
     myBody.hotair = contraptions.riding === 'balloon';
     myBody.sledding = sledding;
+    myBody.parachute = !!player.parachute && !riding();
     myBody.crouching = player.crouching && !riding();
     myBody.pizza = !!job;
     myBody.balloon = hud.item === BALLOON && !riding() && !sleeping ? paintHex() : null;
@@ -6088,7 +6151,9 @@ function frame(timestamp) {
         const pct = Math.round(myCar.fuel * 100);
         const gas = usesFuel(myCar.kind) ? ` · ⛽ ${'▮'.repeat(Math.ceil(myCar.fuel * 5))}${'▯'.repeat(5 - Math.ceil(myCar.fuel * 5))} ${pct}%${pct <= 0 ? ' OUT OF GAS' : pct <= 10 ? ' LOW!' : ''}` : '';
         const mud = myCar.dirt >= 0.5 ? ' · 🟫 Muddy' : '';
-        hud.setVehicleInfo(myCar.spec.flying
+        hud.setVehicleInfo(myCar.spec.plane
+          ? `✈️ ⬆️ ${Math.max(0, Math.round(myCar.pos.y - ground))} m · ${kmh} km/h · 🔥 ${Math.round((myCar.throttle || 0) * 100)}%${!myCar.onGround && myCar.speed < 16 ? ' · ⚠️ STALL! Nose down!' : myCar.onGround && myCar.speed > 16 ? ' · 🛫 Space!' : ''} · ${health}${gas}`
+          : myCar.spec.flying
           ? `⬆️ ${Math.max(0, Math.round(myCar.pos.y - ground))} m · ${kmh} km/h · Tilt: ${tilt} · Rotor ${Math.round(myCar.rotorSpin * 100)}% · ${health}${gas}`
           : myCar.spec.boat ? `🚤 ${kmh} km/h · ${health}`
             : `Gear ${myCar.gear === 0 ? 'R' : myCar.gear === 3 ? '3 (overdrive)' : myCar.gear} · ${kmh} km/h · ${health}${gas}${mud}`);
@@ -6129,14 +6194,14 @@ function frame(timestamp) {
   if (inGame) {
     const near = [];
     for (const car of cars.list.values()) {
-      if (!car.driver || car.driver === myId || car === riding() || car.spec.flying) continue;
+      if (!car.driver || car.driver === myId || car === riding() || car.spec.flying && !car.spec.plane) continue;
       const level = loudness(car.pos.x, car.pos.y, car.pos.z, 45);
       if (level > 0.02) near.push({ car, level });
     }
     near.sort((a, b) => b.level - a.level);
     sounds.nearbyEngines(near.slice(0, 2).map(({ car, level }) => {
       // (We don't hear their revs, so they're made up from their speed, a gear at a time.)
-      const k = Math.min(1, Math.abs(car.speed || 0) / car.spec.maxSpeed);
+      const k = Math.min(1, Math.abs(car.speed || 0) / (car.spec.maxSpeed || 45));
       const frac = k < 0.3 ? k / 0.3 : k < 0.65 ? (k - 0.3) / 0.35 : (k - 0.65) / 0.35;
       return { id: car.id, kind: car.kind, seed: car.id, rpm: k < 0.02 ? 0.14 : 0.3 + 0.65 * frac, load: k < 0.02 ? 0 : 0.6, level };
     }));
@@ -6147,7 +6212,7 @@ function frame(timestamp) {
   for (const car of cars.list.values()) {
     if (car.siren && car.kind === 'police' && car.driver) siren = Math.max(siren, loudness(car.pos.x, car.pos.y, car.pos.z, 70)); // (G on other vehicles isn't a siren)
     if (car.hp < FIRE_HP) fire = Math.max(fire, loudness(car.pos.x, car.pos.y, car.pos.z, 35));
-    if (car.spec.flying && car.rotorSpin > 0.02) {
+    if (car.spec.flying && !car.spec.plane && car.rotorSpin > 0.02) {
       const level = car === riding() ? 1 : loudness(car.pos.x, car.pos.y, car.pos.z, 120);
       if (level > rotor) {
         rotor = level;
@@ -6248,7 +6313,7 @@ load();
 
 // Handy for poking at the game from the browser console.
 window.buildzone = {
-  tvs, news, newsCam,
+  tvs, news, newsCam, keys, getOut,
   scene, camera, sky, net, avatars, renderer, fireworks, effects, glow, reflections, view, sounds,
   get world() { return world; },
   get player() { return player; },
@@ -6273,6 +6338,7 @@ window.buildzone = {
   get wallet() { return wallet; },
   get wand() { return wand; },
   get flying() { return flying; },
+  get wrecks() { return wrecks; },
   get race() { return race; },
   get undoStack() { return undoStack; },
   undo: () => undo(),

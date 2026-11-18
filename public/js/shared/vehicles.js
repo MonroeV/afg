@@ -6,6 +6,13 @@ export const VEHICLES = {
   monster: { name: 'Monster Truck', mass: 3000, length: 4.0, width: 2.5, ride: 1.05, bodyH: 0.7, cabinH: 0.85, wheelR: 0.8, maxSpeed: 14, accel: 8, gears: 3, climb: true, respawn: 30 },
   boat: { name: 'Boat', mass: 700, length: 3.8, width: 1.7, ride: 0, bodyH: 0.55, cabinH: 0.4, wheelR: 0.3, height: 0.95, maxSpeed: 13, accel: 5.5, boat: true, respawn: 30 },
   heli: { name: 'Helicopter', mass: 1800, length: 3.4, width: 2.0, tail: 3.0, height: 2.4, rotor: 3.6, flying: true, respawn: 300 },
+  // A little propeller plane (high wings, two seats side by side). Unlike the helicopter it needs
+  // speed to fly: down the runway, then pull up (see flyPlane in cars.js). width: wingtip to
+  // wingtip.
+  plane: {
+    name: 'Airplane', mass: 1100, length: 7.2, width: 8.4, height: 2.8, flying: true, plane: true, respawn: 120,
+    seats: [[-0.32, 0.92, -1.0], [0.32, 0.92, -1.0]], engine: 'big', pitch: 0.62,
+  },
   // A camper van: four seats (two up front, two in the back), and G pops the roof up.
   camper: {
     name: 'Camper Van', mass: 2200, length: 4.6, width: 2.0, ride: 0.32, bodyH: 0.95, cabinH: 0.8, wheelR: 0.38, maxSpeed: 14, accel: 6.5, gears: 3, respawn: 30,
@@ -57,6 +64,7 @@ export const FIRE_HP = 25; // below this it's on fire and will burn up
 // Points around the outside of a vehicle (and, for the helicopter, its tail and rotor tips),
 // in the vehicle's own space: [x, y, z]. Forward is -z.
 export function outlinePoints(spec) {
+  if (spec.plane) return planePoints();
   const pts = [];
   const hw = spec.width / 2 - 0.1, hl = spec.length / 2 - 0.1;
   const heights = spec.flying ? [0.02, 1.2, 2.0] : spec.climb ? [0.3, 1.4, spec.height - 0.1] : [0.25, spec.height - 0.1];
@@ -72,6 +80,14 @@ export function outlinePoints(spec) {
   return pts;
 }
 
+// The airplane isn't a box: its body, the wings up top, the tail, and the wheels underneath.
+function planePoints() {
+  const pts = [[0, 1.2, -3.6], [0, 0.02, -2.6], [-1.1, 0.02, 0], [1.1, 0.02, 0], [0, 2.7, 3.4], [-1.5, 1.5, 3.3], [1.5, 1.5, 3.3]];
+  for (const y of [0.7, 1.4, 1.9]) for (const x of [-0.7, 0.7]) for (const z of [-3.4, -1.7, 0, 1.7, 3.4]) pts.push([x, y, z]);
+  for (const x of [-4.1, -3.3, -2.4, -1.4, 1.4, 2.4, 3.3, 4.1]) for (const z of [-1.0, 0.1]) pts.push([x, 2.05, z]);
+  return pts;
+}
+
 // A grid of points filling the whole vehicle, used when checking a spawn spot.
 export function densePoints(spec) {
   const pts = [];
@@ -79,7 +95,7 @@ export function densePoints(spec) {
   for (const y of [0.15, 0.75, 1.35, 1.95, spec.height - 0.05].filter(y => y < spec.height))
     for (let x = -hw; x <= hw + 1e-6; x += hw / 2)
       for (let z = -hl; z <= hl + 1e-6; z += hl / 4) pts.push([x, y, z]);
-  if (spec.flying) for (let t = 1; t <= 3; t++) pts.push([0, 1.3, hl + t * spec.tail / 3]);
+  if (spec.flying && !spec.plane) for (let t = 1; t <= 3; t++) pts.push([0, 1.3, hl + t * spec.tail / 3]);
   return pts;
 }
 

@@ -14,6 +14,17 @@ const TILT_RATE = 0.55; // how fast holding W/S/A/D tilts the helicopter (radian
 const MAX_TILT = 0.5; // how far it can tilt forward and back
 const STRAFE_LEAN = 0.32; // how far A/D lean it sideways
 const STRAFE_EASE = 1.25; // how quickly it leans over, and back to level (half as quick as it used to be)
+// The airplane (see flyPlane): blocks a second, and blocks a second each second.
+const PLANE = {
+  gravity: 9.8,
+  thrust: 7.5, // full throttle
+  liftSpeed: 21, // how fast it has to go for its wings to hold it up (flying level, nose a bit up)
+  stall: 15, // slower than this in the air and the wings stop working: the nose drops
+  rotate: 16, // fast enough down the runway to lift the nose
+  maxBank: 0.6, // how far it leans over in a turn
+  hardLanding: 6, // coming down faster than this hurts it
+  crash: 14, // hitting the ground (or anything) faster than this: a crash
+};
 export const SEAT_SCALE = 0.85;
 const GOLD = '#d9a21b'; // the color of gold car paint
 const LAMP_COLOR = new THREE.Color(0xffe0a8);
@@ -123,6 +134,7 @@ function ownerTag(text) {
 
 export function buildCarModel(kind, color) {
   if (kind === 'heli') return buildHeliModel(color);
+  if (kind === 'plane') return buildPlaneModel(color);
   if (kind === 'boat') return buildBoatModel(color);
   const s = CAR_SPECS[kind];
   const g = new THREE.Group();
@@ -531,6 +543,70 @@ function buildHeliModel(color) {
   };
 }
 
+// A little propeller plane: a round body with a pointed nose and a long tail, wings up on top
+// (held up by struts), a tail fin and tailplane, three wheels, a big propeller on the nose, and
+// red and green lights on the wingtips. Forward is -z; the wheels stand on y = 0.
+function buildPlaneModel(color) {
+  const g = new THREE.Group();
+  const mats = {
+    paint: new THREE.MeshPhysicalMaterial({ color, metalness: 0.15, roughness: 0.5, clearcoat: 0.5, clearcoatRoughness: 0.2 }),
+    white: new THREE.MeshPhysicalMaterial({ color: 0xe8e8e8, metalness: 0.1, roughness: 0.55, clearcoat: 0.4, clearcoatRoughness: 0.25 }),
+    dark: new THREE.MeshStandardMaterial({ color: 0x24272d, roughness: 0.6 }),
+    glass: new THREE.MeshStandardMaterial({ color: 0x223344, metalness: 0.6, roughness: 0.08, transparent: true, opacity: 0.55 }),
+    red: new THREE.MeshStandardMaterial({ color: 0xaa1111, emissive: 0xff2020, emissiveIntensity: 0.8 }),
+    green: new THREE.MeshStandardMaterial({ color: 0x0a6a14, emissive: 0x20ff50, emissiveIntensity: 0.8 }),
+    head: new THREE.MeshStandardMaterial({ color: 0xfff6d8, emissive: 0xfff2c0, emissiveIntensity: 0.3 }),
+  };
+  const parts = {};
+  const add = (geo, mat, x, y, z) => (parts[mat] ??= []).push(geo.translate(x, y, z));
+  const B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+  const along = (rTop, rBottom, len, seg = 12) => new THREE.CylinderGeometry(rTop, rBottom, len, seg).rotateX(Math.PI / 2); // (top end toward +z)
+  // A strut from a to b.
+  const strut = (a, b, r = 0.04) => {
+    const va = new THREE.Vector3(...a), vb = new THREE.Vector3(...b), len = va.distanceTo(vb);
+    const geo = new THREE.CylinderGeometry(r, r, len, 6);
+    geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), vb.clone().sub(va).normalize()));
+    const mid = va.add(vb).multiplyScalar(0.5);
+    add(geo, 'dark', mid.x, mid.y, mid.z);
+  };
+  add(along(0.7, 0.7, 4.0), 'paint', 0, 1.25, -0.8); // the cabin
+  add(along(0.7, 0.36, 0.8), 'paint', 0, 1.25, -3.2); // the nose (round, narrowing)
+  add(along(0.26, 0.7, 3.2), 'paint', 0, 1.38, 2.75); // the tail
+  add(B(1.0, 0.22, 3.6), 'white', 0, 0.62, -0.8); // (a white belly)
+  add(B(1.2, 0.5, 1.0), 'glass', 0, 1.82, -1.6); // the windshield
+  for (const x of [-1, 1]) add(B(0.06, 0.45, 1.5), 'glass', x * 0.68, 1.5, -0.9); // side windows
+  add(B(8.4, 0.12, 1.3), 'white', 0, 2.06, -0.45); // the wing
+  add(B(8.42, 0.13, 0.25), 'paint', 0, 2.06, -1.0); // (a stripe along its front edge)
+  add(B(3.2, 0.08, 0.8), 'white', 0, 1.48, 3.65); // the tailplane
+  add(B(0.08, 1.25, 0.95), 'paint', 0, 2.05, 3.7); // the tail fin
+  for (const x of [-1, 1]) {
+    strut([x * 0.62, 0.9, -0.6], [x * 2.4, 2.0, -0.45]);
+    // The main wheels on their legs.
+    strut([x * 0.5, 0.75, -0.3], [x * 1.1, 0.3, -0.25], 0.05);
+    add(new THREE.CylinderGeometry(0.3, 0.3, 0.2, 14).rotateZ(Math.PI / 2), 'dark', x * 1.1, 0.3, -0.25);
+  }
+  strut([0, 0.7, -2.6], [0, 0.25, -2.6], 0.05);
+  add(new THREE.CylinderGeometry(0.24, 0.24, 0.16, 12).rotateZ(Math.PI / 2), 'dark', 0, 0.25, -2.6);
+  add(along(0.18, 0.02, 0.4, 10), 'dark', 0, 1.25, -3.82); // the spinner
+  add(B(0.12, 0.08, 0.12), 'red', -4.18, 2.06, -0.45); // (left wingtip: red)
+  add(B(0.12, 0.08, 0.12), 'green', 4.18, 2.06, -0.45); // (right wingtip: green)
+  add(B(0.5, 0.06, 0.06), 'head', -1.6, 2.0, -1.12); // (a landing light in the wing)
+  const meshes = mergeParts(g, parts, mats);
+  // The propeller: two long blades, spinning (and a blur when it's going fast).
+  const prop = new THREE.Group();
+  prop.position.set(0, 1.25, -3.75);
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.3, 0.05), mats.dark);
+  blade.castShadow = true;
+  prop.add(blade);
+  const blur = new THREE.Mesh(new THREE.CircleGeometry(1.15, 28), new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+  prop.add(blur);
+  g.add(prop);
+  return {
+    group: g, wheels: [], steerers: [], rotor: prop, tailRotor: null, blur, paint: mats.paint, paintMesh: meshes.paint,
+    baseColor: new THREE.Color(color), headMat: mats.head, tailMat: mats.red, siren: null, plane: true,
+  };
+}
+
 // A little motorboat: a pointed hull, a wooden deck with two benches, a windshield and an
 // outboard motor at the back that turns when you steer. The hull sits a little way down in
 // the water.
@@ -652,7 +728,7 @@ export class Cars {
       gear: 1, rpm: 0, shiftT: 0,
       pitch: 0, roll: 0, targetPitch: 0, targetRoll: 0, yawRate: 0, collective: 0.5, rotorSpin: 0, rotorAngle: 0,
       outline: outlinePoints(spec),
-      rotorPts: spec.flying ? rotorPoints(spec) : null,
+      rotorPts: spec.flying && !spec.plane ? rotorPoints(spec) : null,
       fxTimer: 0, strikeTimer: 0,
       // Someone else driving it: their driving, replayed smoothly a moment behind (smooth.js).
       clock: new PlayClock(), track: new Track(6, { angles: [3], jump: 12 }), trackDriver: null,
@@ -878,8 +954,14 @@ export class Cars {
       if (car.id === exceptId) continue;
       // Three boxes along the car fit a turned car much better than one big box.
       const s = car.spec, c = Math.abs(Math.cos(car.h)), n = Math.abs(Math.sin(car.h));
-      const piece = s.length / 3;
-      const ex = c * s.width / 2 + n * piece / 2, ez = n * s.width / 2 + c * piece / 2;
+      const piece = s.length / 3, w = s.plane ? 1.5 : s.width; // (an airplane: its body, and its wing up high)
+      const ex = c * w / 2 + n * piece / 2, ez = n * w / 2 + c * piece / 2;
+      if (s.plane) {
+        const wx = c * s.width / 2 + n * 0.65, wz = n * s.width / 2 + c * 0.65;
+        const box = [car.pos.x - wx, car.pos.y + 1.95, car.pos.z - wz, car.pos.x + wx, car.pos.y + 2.15, car.pos.z + wz];
+        box.car = car;
+        out.push(box);
+      }
       const bottom = s.flying ? 0.3 : s.ride * 0.6, top = s.flying ? 2.0 : s.height;
       const fx = -Math.sin(car.h), fz = -Math.cos(car.h);
       for (const k of [-1, 0, 1]) {
@@ -1125,6 +1207,7 @@ export class Cars {
   drive(car, dt, keys, aimYaw = car.h) {
     this.myCarId = car.id;
     if (car.spec.boat) return this.sail(car, dt, keys);
+    if (car.spec.plane) return this.flyPlane(car, dt, keys, aimYaw);
     return car.spec.flying ? this.fly(car, dt, keys, aimYaw) : this.driveCar(car, dt, keys);
   }
 
@@ -1551,6 +1634,156 @@ export class Cars {
     return events;
   }
 
+  // The airplane. Like a real one, it needs air flowing over its wings to fly:
+  //  - W/S set the throttle (it stays where you leave it): the propeller pulls it along.
+  //  - Down the runway it picks up speed; once it's going fast enough, Space lifts the nose and
+  //    the wings lift it off (the faster it goes, the more they lift).
+  //  - In the air, it turns toward where you're looking, leaning into the turn (A/D lean it more).
+  //    Space pulls the nose up (climb), Shift pushes it down (dive); let go and it flies level.
+  //  - Too slow in the air and it stalls: the wings stop lifting and the nose drops (dive to
+  //    pick up speed again). Throttle right back on the ground (S) and it brakes.
+  //  - Land gently: come down slowly, on the wheels. Hitting the ground (or anything) hard is a
+  //    crash, and it blows up!
+  flyPlane(car, dt, keys, aimYaw = car.h) {
+    const P = PLANE, events = [];
+    const health = 0.6 + 0.4 * (car.hp / MAX_HP);
+    const empty = this.empty(car);
+    car.throttle ??= 0;
+    if (keys.has('KeyW')) car.throttle = Math.min(1, car.throttle + dt * 0.6);
+    if (keys.has('KeyS')) car.throttle = Math.max(0, car.throttle - dt * 0.6);
+    if (empty) {
+      if (car.throttle > 0 && keys.has('KeyW') && !car.noGasT) {
+        car.noGasT = 4;
+        car.noGas = true;
+      }
+      car.noGasT = Math.max(0, (car.noGasT || 0) - dt);
+      car.throttle = 0;
+    }
+    // The propeller spins up when you get in (and runs a little at idle).
+    const want = empty ? 0 : 0.3 + 0.7 * car.throttle;
+    car.rotorSpin += (want - car.rotorSpin) * Math.min(1, dt * 1.5);
+    const v = car.vel.length(), grounded = car.onGround;
+    const flow = Math.min(1, v / P.liftSpeed); // (how much the controls bite)
+
+    // Pitch: Space up, Shift down; neither and it eases toward flying level. On the ground it
+    // can only lift its nose once it's fast enough.
+    const up = keys.has('Space'), down = keys.has('ShiftLeft') || keys.has('ShiftRight');
+    const path = v > 1 ? Math.asin(Math.max(-1, Math.min(1, car.vel.y / v))) : 0;
+    // (Hands off: it holds its height, nose up just enough for the wings to carry it: see the lift
+    // below. Too slow and it can't, and sinks.)
+    // (And if it's getting slow, it glides down gently instead, to keep its speed up.)
+    const aoaNeed = Math.max(-0.1, Math.min(0.22, ((P.liftSpeed / Math.max(v, 5)) ** 2 - 0.3) / 3.2));
+    const hold = aoaNeed + (v < P.stall * 1.4 ? -0.15 : path + Math.max(-0.2, Math.min(0.2, -car.vel.y * 0.03)));
+    let pitchRate = (up ? 0.75 : down ? -0.75 : (hold - car.pitch) * 1.5) * flow * flow;
+    if (!grounded && v < P.stall) pitchRate = Math.min(pitchRate, 0) - (1 - v / P.stall) * 0.9; // (stalling: the nose drops)
+    car.pitch += pitchRate * dt;
+    car.pitch = Math.max(-0.75, Math.min(0.6, car.pitch));
+    if (grounded) car.pitch = v > P.rotate && up ? Math.max(0, Math.min(0.22, car.pitch)) : Math.max(0, car.pitch - dt * 0.6);
+
+    // Turning: in the air it leans toward where you're looking (and A/D lean it more), and
+    // leaning is what turns it. On the ground the nose wheel steers.
+    const off = Math.atan2(Math.sin(aimYaw - car.h), Math.cos(aimYaw - car.h));
+    const lean = (keys.has('KeyA') ? 1 : 0) - (keys.has('KeyD') ? 1 : 0);
+    if (grounded) {
+      car.roll += (0 - car.roll) * Math.min(1, dt * 6);
+      car.yawRate = (Math.max(-0.9, Math.min(0.9, off * 1.5)) + lean * 0.6) * Math.min(1, v / 5);
+    } else {
+      const bank = Math.max(-P.maxBank, Math.min(P.maxBank, off * 1.4 + lean * 0.5)) * flow;
+      car.roll += (bank - car.roll) * Math.min(1, dt * 1.8);
+      car.yawRate = (P.gravity * Math.tan(car.roll)) / Math.max(v, 10);
+    }
+    car.h += car.yawRate * dt;
+    // The way it's going turns with it (it doesn't skid sideways like a car on ice).
+    const c = Math.cos(car.yawRate * dt), sn = Math.sin(car.yawRate * dt);
+    [car.vel.x, car.vel.z] = [car.vel.x * c + car.vel.z * sn, -car.vel.x * sn + car.vel.z * c];
+    const fwd = new THREE.Vector3(-Math.sin(car.h) * Math.cos(car.pitch), Math.sin(car.pitch), -Math.cos(car.h) * Math.cos(car.pitch));
+    const right = new THREE.Vector3(Math.cos(car.h), 0, -Math.sin(car.h));
+    car.vel.addScaledVector(right, -car.vel.dot(right) * Math.min(1, dt * 4)); // (no sideways sliding)
+
+    // The forces: the propeller, air drag, the wings' lift, and gravity.
+    car.vel.addScaledVector(fwd, P.thrust * car.throttle * health * dt);
+    const drag = 0.004 * v * v + (grounded ? 0.5 + (car.throttle < 0.02 && keys.has('KeyS') ? 6 : 0) : 0);
+    if (v > 0.01) car.vel.multiplyScalar(Math.max(0, 1 - (drag * dt) / v));
+    const aoa = car.pitch - path; // (the angle the wings meet the air at)
+    let cl = 0.3 + aoa * 3.2;
+    if (aoa > 0.3) cl = Math.max(0, 1.26 - (aoa - 0.3) * 4); // (too steep: they stall)
+    if (v < P.stall) cl *= (v / P.stall) ** 2;
+    const lift = Math.min(2.5, Math.max(-0.5, cl * (v / P.liftSpeed) ** 2)) * P.gravity * Math.cos(car.roll) * health;
+    // (Lift pushes at right angles to the way it's going: climbing costs speed, diving gains it.)
+    if (v > 0.5) {
+      const ux = -car.vel.x * car.vel.y / (v * v), uy = 1 - (car.vel.y * car.vel.y) / (v * v), uz = -car.vel.z * car.vel.y / (v * v);
+      const ul = Math.hypot(ux, uy, uz) || 1;
+      car.vel.x += (ux / ul) * lift * dt;
+      car.vel.y += (uy / ul) * lift * dt;
+      car.vel.z += (uz / ul) * lift * dt;
+    }
+    car.vel.y -= P.gravity * dt;
+    if (grounded) car.vel.y = Math.max(car.vel.y, 0);
+
+    // Move one axis at a time (to land on things and slide along them).
+    const s = car.spec;
+    for (const axis of ['x', 'z', 'y']) {
+      const step = car.vel[axis] * dt;
+      if (!step) continue;
+      const next = car.pos.clone();
+      next[axis] += step;
+      if (axis === 'y' && next.y > WORLD.maxY + 36) {
+        car.vel.y = Math.min(car.vel.y, 0);
+        continue;
+      }
+      if (!this.blocked(s, next.x, next.y, next.z, car.h, car.id, car.outline)) {
+        car.pos.copy(next);
+        continue;
+      }
+      const speed = Math.abs(car.vel[axis]);
+      if (axis === 'y' && car.vel.y < 0) {
+        // Touching down: gently, or it hurts (and too hard is a crash).
+        const hard = speed > P.crash || Math.abs(car.roll) > 0.5 || car.pitch < -0.3 && speed > 3;
+        if (hard) events.push({ type: 'damage', amount: 100, impact: [0, 0, -3], crash: true });
+        else if (speed > P.hardLanding) events.push({ type: 'damage', amount: (speed - P.hardLanding) * 8, impact: [0, 0, 0] });
+        if (speed > 2) events.push({ type: 'land' });
+        for (let i = 0; i < 25 && !this.blocked(s, car.pos.x, car.pos.y - 0.02, car.pos.z, car.h, car.id, car.outline); i++) car.pos.y -= 0.02;
+        car.vel.y = 0;
+      } else if (this.lastHit) {
+        events.push(...this.collide(car, this.lastHit));
+        car.vel[axis] *= -0.2;
+      } else {
+        // Flying into something.
+        if (v > P.crash) events.push({ type: 'damage', amount: 100, impact: [0, 1.2, -3.5], crash: true });
+        else if (speed > 3) events.push({ type: 'damage', amount: (speed - 3) * 5, impact: [0, 1.2, -3.5] });
+        if (speed > 2) events.push({ type: 'bump', power: Math.min(1, speed / 15) });
+        car.vel[axis] *= -0.2;
+      }
+    }
+    car.onGround = this.blocked(s, car.pos.x, car.pos.y - 0.08, car.pos.z, car.h, car.id, car.outline);
+    car.speed = car.vel.length();
+    car.target.copy(car.pos);
+    car.targetH = car.h;
+    car.targetPitch = car.pitch;
+    car.targetRoll = car.roll;
+    return events;
+  }
+
+  // An airplane with nobody flying it (they jumped out!): it carries on the way it was going,
+  // nose dropping and slowly rolling over, down and down… The server says when it hits.
+  fallPlane(car, dt) {
+    const f = car.falling;
+    f.vy -= PLANE.gravity * 0.8 * dt;
+    f.vx *= Math.exp(-0.15 * dt);
+    f.vz *= Math.exp(-0.15 * dt);
+    const nx = car.pos.x + f.vx * dt, ny = car.pos.y + f.vy * dt, nz = car.pos.z + f.vz * dt;
+    if (ny < 0 || this.blocked(car.spec, nx, ny, nz, car.h, car.id, car.outline)) {
+      f.vx = f.vy = f.vz = 0; // (down: the server will say it's blown up)
+    } else car.pos.set(nx, ny, nz);
+    car.pitch += (-0.9 - car.pitch) * Math.min(1, dt * 0.6);
+    car.roll += f.spin * dt;
+    car.rotorSpin = Math.max(0, car.rotorSpin - dt / 3);
+    car.target.copy(car.pos);
+    car.targetPitch = car.pitch;
+    car.targetRoll = car.roll;
+    if (this.effects && Math.random() < 0.6) this.effects.smokePuff(car.pos.x, car.pos.y + 1.3, car.pos.z, 0.7);
+  }
+
   update(dt, time, nightK, myCarId) {
     this.myCarId = myCarId;
     const k = 1 - Math.exp(-10 * dt);
@@ -1578,6 +1811,7 @@ export class Cars {
           car.roll += (car.targetRoll - car.roll) * k;
         }
         if (car.spec.flying && !car.driver) car.rotorSpin = Math.max(0, car.rotorSpin - dt / 6);
+        if (car.falling) this.fallPlane(car, dt);
       }
       const s = car.spec;
       if (s.boat && !car.driver && !car.loose) {
@@ -1607,6 +1841,14 @@ export class Cars {
         car.tag.position.set(car.pos.x, car.pos.y + s.height + (s.flying ? 0.9 : 0.55), car.pos.z);
       }
       if (far) continue;
+      if (s.plane) {
+        // The propeller (and its blur when it's going fast); lights on the wingtips.
+        car.rotorAngle += car.rotorSpin * 40 * dt;
+        car.model.rotor.rotation.z = car.rotorAngle;
+        car.model.blur.material.opacity = Math.max(0, car.rotorSpin - 0.4) * 0.45;
+        car.model.headMat.emissiveIntensity = car.driver ? 0.6 + nightK * 2 : 0.2;
+        continue;
+      }
       if (s.flying) {
         car.rotorAngle += car.rotorSpin * 28 * dt;
         car.model.rotor.rotation.y = car.rotorAngle;

@@ -36,6 +36,11 @@ customize your character, drive cars, build anything and play with friends.
       and helping others), then another hymn and a closing prayer. Come and sit in for a minute
       and you get 10 coins as a thank-you (once each Sunday). Everyone sees the same meeting at
       the same time
+    - **BuildZone Airport** ✈️ (since v0.48, beside the Outer Loop): a long runway with a dashed
+      center line, stripes at the ends and edge lights, taxiways, an apron where four
+      **airplanes** park, a glass-fronted terminal (check-in desk, rows of seats looking out at
+      the planes), two hangars, and a control tower (climb the ladder inside to the glass cab at
+      the top). Captain Sky in the terminal has tips
   - **Up north, the snowy country** (the ground turns to snow and snowflakes start to fall): a
     **ski resort** with a big snowy mountain and a long ski run, a **ski lift** with chairs going
     up and down its cable (right-click the chair at the bottom to ride to the top, Space to hop
@@ -396,6 +401,19 @@ customize your character, drive cars, build anything and play with friends.
   the crops you pick in your garden go in your lunchbox too. Catching food when it rains tacos,
   ice cream, pizza or donuts gives you a little bite, and delivering a pizza fills you up a bit.
   Your hunger and lunchbox are saved
+- **Airplanes** ✈️ (since v0.48, at the airport): little propeller planes that fly like real
+  ones (more or less!). **W** opens the throttle (**S** closes it, and brakes on the ground).
+  Roll down the runway, and once you're going fast enough (the flight display says 🛫 Space!)
+  hold **Space** to lift the nose and take off. In the air it turns toward where you look,
+  leaning into the turn (A/D lean it more); Space climbs, Shift dives, and let go of both and it
+  flies level. Climbing slows you down and diving speeds you up. Too slow and it **stalls**:
+  the wings stop lifting and the nose drops (⚠️ on the flight display), so keep your speed up.
+  Throttle back and let go and it glides down gently. **Land** slowly and level, on the wheels;
+  hitting the ground (or anything) hard is a crash, and it blows up. **Jump out** (E) up in the
+  air and your **parachute** opens 🪂: you float gently down and can steer with WASD. The plane
+  flies on without you… and crashes to the ground in a ball of fire (the wreck burns for a
+  while). Everyone sees it. A new plane is back on the apron 2 minutes later. Planes use gas,
+  like everything else that drives
 - **Coins and the Luxe Store**: coins lie about all over town (walk, or drive, into them to
   collect them). What they're made of says what they're worth: **bronze** 🥉 1, **silver** 🥈 2,
   **gold** 🥇 3, and now and then a sparkly **diamond** 💎 worth 5. You also get
@@ -938,6 +956,7 @@ public/
       outerlands.js    The outer lands: the Outer Loop and the roads out to it, the far beach, trees and meadows
       food.js          Food and hunger: what there is to eat, how much it fills you, how hunger slows you
       church.js        The church: building it, and Sunday's meeting (when, who, what's said)
+      airport.js       The airport: finding room for it, the runway, terminal, tower and hangars
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/
   make-engine-sounds.py  Makes the engine recordings (needs numpy and ffmpeg; run it after changing a voice)

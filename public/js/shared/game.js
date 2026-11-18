@@ -13,6 +13,7 @@ import { buildGasStations, usesFuel, getsDirty, TANK_RANGE, GAS_PUMP, GAS_CAN, G
 import { MAX_TUNNELS, isTunnelY, tunnelKey, openBelow } from './underground.js';
 import { buildShops, buildOuterShops } from './shops.js';
 import { buildChurch, meetingOn, MEETING_COINS, MEETING_STAY } from './church.js';
+import { buildAirport } from './airport.js';
 import { findHomes } from './residents.js';
 import { buildWeatherStation, SHOWERS } from './weather.js';
 import { buildBuildPark } from './buildpark.js';
@@ -28,7 +29,7 @@ import { Structures } from '../structures.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
-export const SAVE_VERSION = 20;
+export const SAVE_VERSION = 21;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -280,6 +281,7 @@ export class GameRoom {
       this.upgradeTo18();
       this.upgradeTo19();
       this.upgradeTo20();
+      this.upgradeTo21();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -371,6 +373,7 @@ export class GameRoom {
     if (data.version < 18) this.upgradeTo18();
     if (data.version < 19) this.upgradeTo19();
     if (data.version < 20) this.upgradeTo20();
+    if (data.version < 21) this.upgradeTo21();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -768,6 +771,23 @@ export class GameRoom {
       this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), church: church.place };
     }
     this.log(`Added the church (${church ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
+  // Worlds saved before version 21: the airport (and its airplanes), out by the Outer Loop.
+  upgradeTo21() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const airport = buildAirport({ get, set, canUse: this.freeLand() });
+    if (airport) {
+      this.claims.push(airport.claim);
+      for (const [x, y, z, text] of airport.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+      this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), airport: airport.place };
+      for (const c of airport.cars) this.spawn(this.addHome(c));
+    }
+    this.log(`Added the airport (${airport ? 'yes' : 'no room'})`);
     this.onDirty();
   }
 
@@ -1333,7 +1353,9 @@ export class GameRoom {
     this.log(`${client.name} joined (${this.clients.size} online)`);
   }
 
-  leaveVehicle(client) {
+  // bail: jumping out of an airplane in flight, { vel } (how fast it was going): it carries on
+  // without you, and crashes.
+  leaveVehicle(client, bail = null) {
     const v = this.vehicles.get(client.car);
     client.car = 0;
     if (!v) return;
@@ -1355,8 +1377,18 @@ export class GameRoom {
     // (A police car's flashing lights stay on when you get out, if they were on: only the siren
     // stops. The camper's roof and such go back down.)
     if (v.kind !== 'police') v.siren = 0;
+    // An airplane in the air with nobody flying it: down it goes (see updateFalling)!
+    if (VEHICLES[v.kind].plane && this.airborne(v)) {
+      const vel = numbers(bail?.vel, 3) || v.vel || [0, 0, 0];
+      const sp = Math.hypot(...vel), k = sp > 60 ? 60 / sp : 1;
+      v.falling = { vx: vel[0] * k, vy: vel[1] * k, vz: vel[2] * k, spin: (Math.random() < 0.5 ? -1 : 1) * (0.4 + Math.random() * 0.6), t: 0 };
+      this.broadcast({ t: 'car_driver', ...publicVehicle(v) });
+      const { vx, vy, vz, spin } = v.falling;
+      this.broadcast({ t: 'plane_fall', id: v.id, x: v.x, y: v.y, z: v.z, h: v.h, p: v.pitch || 0, vx, vy, vz, spin });
+      return;
+    }
     // Nobody flying it any more? It drops to the ground.
-    if (VEHICLES[v.kind].flying) {
+    if (VEHICLES[v.kind].flying && !VEHICLES[v.kind].plane) {
       const x = Math.floor(v.x), z = Math.floor(v.z), start = v.y;
       v.y = Math.ceil(v.y - 0.05);
       while (v.y > 0 && !this.isSolid(x, v.y - 1, z)) v.y--;
@@ -1367,6 +1399,36 @@ export class GameRoom {
     }
     this.broadcast({ t: 'car_driver', ...publicVehicle(v) });
     this.onDirty();
+  }
+
+  // Is this vehicle up in the air (more than a couple of blocks above what's under it)?
+  airborne(v) {
+    const x = Math.floor(v.x), z = Math.floor(v.z);
+    for (let y = Math.floor(v.y + 0.05); y > Math.floor(v.y) - 3; y--) if (y <= 0 || this.isSolid(x, y - 1, z)) return false;
+    return true;
+  }
+
+  // Airplanes nobody's flying any more, falling out of the sky (everyone's game shows the same
+  // fall: see fallPlane in cars.js). When one hits: a crash, and a ball of fire!
+  updateFalling(dt) {
+    for (const v of this.vehicles.values()) {
+      const f = v.falling;
+      if (!f) continue;
+      f.t += dt;
+      f.vy -= 9.8 * 0.8 * dt;
+      f.vx *= Math.exp(-0.15 * dt);
+      f.vz *= Math.exp(-0.15 * dt);
+      const nx = clampWorld(v.x + f.vx * dt), ny = v.y + f.vy * dt, nz = clampWorld(v.z + f.vz * dt);
+      const hit = ny <= 0 || f.t > 40 || [[0, 0], [1.5, 0], [-1.5, 0], [0, 1.5], [0, -1.5]].some(([dx, dz]) => this.isSolid(Math.floor(nx + dx), Math.floor(ny + 0.3), Math.floor(nz + dz)));
+      if (!hit) {
+        [v.x, v.y, v.z] = [nx, ny, nz];
+        continue;
+      }
+      v.y = Math.max(0, Math.min(v.y, ny + 0.5));
+      this.broadcast({ t: 'fx', kind: 'crash', x: v.x, y: v.y, z: v.z });
+      this.log(`An airplane crashed (nobody was flying it)`);
+      this.destroyVehicle(v);
+    }
   }
 
   destroyVehicle(v) {
@@ -1781,7 +1843,7 @@ export class GameRoom {
     // The first one in drives; up to two more can ride along as passengers.
     car_enter(client, { id }) {
       const v = this.vehicles.get(id);
-      if (!v || client.car) return;
+      if (!v || client.car || v.falling) return;
       if (!v.driver) {
         // Someone's own vehicle: only they can drive it (anyone can ride along with them).
         if (v.key && v.key !== nameKey(client.name)) {
@@ -1794,8 +1856,8 @@ export class GameRoom {
       this.broadcast({ t: 'car_driver', ...publicVehicle(v) });
     },
 
-    car_exit(client) {
-      this.leaveVehicle(client);
+    car_exit(client, msg) {
+      this.leaveVehicle(client, msg);
     },
 
     car_state(client, msg) {
@@ -1817,6 +1879,10 @@ export class GameRoom {
       v.loaded = !!(v.flags & 4);
       v.ts = Number.isFinite(msg.ts) ? msg.ts : null;
       v.fresh = true;
+      // (How fast it's going, for an airplane someone jumps out of.)
+      const now = Date.now(), gap = (now - (v.stateAt || 0)) / 1000;
+      if (gap > 0.02 && gap < 1) v.vel = [(v.x - was[0]) / gap, (v.y - was[1]) / gap, (v.z - was[2]) / gap];
+      v.stateAt = now;
       this.driven(v, was);
     },
 
@@ -1828,7 +1894,9 @@ export class GameRoom {
       if (client.car !== v.id && !close) return;
       if (v.key && v.key !== nameKey(client.name)) return; // (someone's own vehicle: only they can bash it)
       const impact = numbers(msg.impact, 3) || [0, 1, 0];
-      this.damageVehicle(v, Math.max(0, Math.min(45, num(msg.amount))), impact);
+      // (A plane crash, reported by its pilot, can blow it up all at once.)
+      const most = VEHICLES[v.kind].plane && client.car === v.id ? 100 : 45;
+      this.damageVehicle(v, Math.max(0, Math.min(most, num(msg.amount))), impact);
     },
 
     // The Paint Brush on a vehicle: a new color, for good (it comes back that color, too).
@@ -2728,6 +2796,7 @@ export class GameRoom {
       t.crops = 2;
       this.updateCrops();
     }
+    this.updateFalling(dt);
     if (t.church <= 0) {
       t.church = 1;
       this.updateChurch(1);

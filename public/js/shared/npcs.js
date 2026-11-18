@@ -130,6 +130,13 @@ const NPCS = [
     tips: ['⛪ Sunday ☀️ 9:00', 'Everyone is welcome here! 🤝', 'Jesus Christ loves everyone! ❤️'],
   },
   {
+    // BuildZone Airport: Captain Sky, a pilot, in the terminal (tips on flying the airplanes).
+    id: -29, place: 'airport', name: 'Captain Sky', title: 'Captain Sky ✈️', roam: 2,
+    look: { face: 'cool', hair: 'short', hat: 'cap', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#d39a6a', hairColor: '#3b2314', hatColor: '#263238', shirtColor: '#263238', shirtColor2: '#ffd54f', pantsColor: '#263238', shoesColor: '#111111' },
+    hello: n => [`Welcome aboard, ${n}! Ready to fly? ✈️`, `${n}! The planes are out on the apron. Take one up! 🛫`],
+    tips: ['W: throttle up. Fast down the runway, then Space to lift off! 🛫', 'Too slow up there and you stall: nose down to speed up! ⚠️', 'Land gently on the runway: slow and level! 🛬', 'Jump out up high and your parachute opens! 🪂', 'Climb the ladder in the tower for the best view! 🗼'],
+  },
+  {
     // Snip & Style, the hair salon (premium hairdos).
     id: -26, place: 'shop_salon', name: 'Stella', title: 'Stella 💇', roam: 2, store: 'salon',
     look: { face: 'wink', hair: 'princess', hat: 'none', shirt: 'dress', pants: 'skirt', extra: 'none', skin: '#f5c9a0', hairColor: '#ff5fa2', shirtColor: '#ec407a', shirtColor2: '#ffffff', pantsColor: '#ec407a', shoesColor: '#ffffff' },

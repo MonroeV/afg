@@ -16,6 +16,7 @@ const JUMP_SPEED = 9;
 const BOUNCE_SPEED = 19;
 const CROUCH_SPEED = 2.4;
 const BOOST_SPEED = 22; // speed pads
+const PARACHUTE_FALL = 3.2; // how fast you float down under a parachute
 const BOOST_TIME = 0.7;
 const BALLOON_FALL = 2.4; // holding a balloon, you float down this fast
 const SKI_MAX = 24; // the fastest you can go on skis
@@ -93,6 +94,11 @@ export class Player {
       const up = (keys.has('Space') ? 1 : 0) - (keys.has('KeyC') || keys.has('ControlLeft') ? 1 : 0);
       const target = new THREE.Vector3(wish.x * speed, up * speed, wish.z * speed);
       this.vel.lerp(target, 1 - Math.exp(-10 * dt));
+    } else if (this.parachute) {
+      // Floating down under a parachute: steer it gently with WASD (it keeps drifting a little).
+      const k = 1 - Math.exp(-1.5 * dt);
+      this.vel.x += (wish.x * 5 - this.vel.x) * k;
+      this.vel.z += (wish.z * 5 - this.vel.z) * k;
     } else if (this.skiOn(wish, keys, dt)) {
       // (Skiing: see skiOn.)
     } else {
@@ -141,6 +147,14 @@ export class Player {
     this.moveAxis('y', this.vel.y * dt);
     if (falling && !this.onGround) this.vel.y -= gravity * dt / 2;
     if (this.balloon && falling && this.vel.y < -BALLOON_FALL) this.vel.y += (-BALLOON_FALL - this.vel.y) * (1 - Math.exp(-5 * dt));
+    if (this.parachute) {
+      if (this.vel.y < -PARACHUTE_FALL) this.vel.y += (-PARACHUTE_FALL - this.vel.y) * (1 - Math.exp(-3 * dt));
+      // Down safely: the parachute folds away.
+      if (this.onGround || this.climbing || this.flying) {
+        this.parachute = false;
+        this.onLanded?.();
+      }
+    }
     if (this.onGround && this.flying && !wasOnGround) this.flying = false;
   }
 
