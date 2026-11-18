@@ -5,6 +5,7 @@
 // dancing and water balloons.
 import { sanitizeLook } from './avatar.js';
 import { isTacoTuesday } from './seasons.js';
+import { isSunday } from './church.js';
 import { BLOCKS, isSolidBlock, blockId, itemOf, shapeOf, blockMeta, blockKey, toggleDoorValue, isNightTime, DOOR_OPEN, DOOR_TOP, SHOP_TOOLS } from './blocks.js';
 import { claimAt } from './claims.js';
 import { liftColumn, liftStops } from './elevator.js';
@@ -119,6 +120,14 @@ const NPCS = [
     look: { face: 'cool', hair: 'short', hat: 'cowboy', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#d39a6a', hairColor: '#1b1209', hatColor: '#111111', shirtColor: '#111111', shirtColor2: '#ffd54f', pantsColor: '#111111', shoesColor: '#3b2314' },
     hello: (n, room) => (isTacoTuesday(room?.day) ? [`🎺🎸🎶 ¡Fiesta, ${n}!`, `🎶 Dance with us, ${n}! 💃`] : [`🎸 Hola ${n}!`, `🎶 Come back on Taco Tuesday, ${n}! 🌮`]),
     tips: ['🎸🎶', '🎺🎸🎻🎶', '💃🕺🎶'],
+  },
+  {
+    // The church: Sister Grace welcomes everyone in the foyer (any day). On Sundays there's a
+    // meeting in the chapel (see church.js and churchui.js).
+    id: -28, place: 'church', name: 'Sister Grace', title: 'Sister Grace ⛪', roam: 2,
+    look: { face: 'smile', hair: 'buns', hat: 'none', shirt: 'dress', pants: 'skirt', extra: 'none', skin: '#8d5a34', hairColor: '#1b1209', shirtColor: '#26a69a', shirtColor2: '#ffffff', pantsColor: '#26a69a', shoesColor: '#111111' },
+    hello: (n, room) => (isSunday(room?.day) ? [`Welcome, ${n}! We're so glad you came! 😊`, `Hi ${n}! The meeting is in the chapel. Come on in! ⛪`] : [`Hello ${n}! Welcome! 😊`, `Hi ${n}! Come visit us on Sunday morning! ⛪`]),
+    tips: ['⛪ Sunday ☀️ 9:00', 'Everyone is welcome here! 🤝', 'Jesus Christ loves everyone! ❤️'],
   },
   {
     // Snip & Style, the hair salon (premium hairdos).

@@ -8,6 +8,8 @@
 //  - Driving: a stop sign, and your vehicle's pushed back out.
 //  - Tunnelling underneath: they hear the digging and flush you out with a bucket of water.
 // Whoever's watching sees it too: you're moved for real, and the guards are where they are.
+import { possessive } from './shared/claims.js';
+
 const ESCORT_SPEED = 3; // (the same as the guard walking beside you: see guardChase)
 const FAILSAFE = 15; // seconds of being chased with no word from the server: shoo
 const COOLDOWN = 2;
@@ -154,7 +156,7 @@ export class GuardCatch {
       if (s.i >= s.path.length || s.t > 25) {
         const end = s.path.at(-1);
         p.set(end.x, Math.max(p.y, end.y), end.z);
-        return this.done(s.gentle ? `🛡️ Time's up on ${s.land.owner}'s land. Bye for now! 👋` : `🛡️ The bodyguards walked you off ${s.land.owner}'s land. Guests only! (🔔 Right-click a bodyguard to ask to come in.)`);
+        return this.done(s.gentle ? `🛡️ Time's up on ${possessive(s.land.owner)} land. Bye for now! 👋` : `🛡️ The bodyguards walked you off ${possessive(s.land.owner)} land. Guests only! (🔔 Right-click a bodyguard to ask to come in.)`);
       }
     } else if (s.kind === 'slide') {
       const k = Math.min(1, s.t / 0.5);
@@ -162,7 +164,7 @@ export class GuardCatch {
       p.z = s.from.z + (s.to.z - s.from.z) * k;
       pl.vel.set(0, 0, 0);
       if (Math.random() < 0.5) this.effects.powder(p.x, p.y + 0.1, p.z, 0.6);
-      if (k >= 1) this.done(`👋 SHOO! ${s.land.owner}'s bodyguards chased you off. Guests only! (🔔 Ask a bodyguard to let you in.)`);
+      if (k >= 1) this.done(`👋 SHOO! ${possessive(s.land.owner)} bodyguards chased you off. Guests only! (🔔 Ask a bodyguard to let you in.)`);
     } else if (s.kind === 'wind') {
       // Swept up and away on a big gust (easing out), with puffs of wind behind.
       const k = Math.min(1, s.t / 0.9), e = 1 - (1 - k) ** 3;
@@ -173,7 +175,7 @@ export class GuardCatch {
       this.effects.powder(p.x, p.y + 0.6, p.z, 0.8);
       if (k >= 1) {
         const dx = s.to.x - s.from.x, dz = s.to.z - s.from.z, d = Math.hypot(dx, dz) || 1;
-        this.done(`💨 ${s.land.owner}'s bodyguards huffed and puffed and BLEW you off their land! (🔔 Ask a bodyguard to let you in.)`);
+        this.done(`💨 ${possessive(s.land.owner)} bodyguards huffed and puffed and BLEW you off their land! (🔔 Ask a bodyguard to let you in.)`);
         pl.vel.set((dx / d) * 4, 2, (dz / d) * 4); // (still drifting a bit)
       }
     } else if (s.kind === 'car') {
@@ -187,7 +189,7 @@ export class GuardCatch {
       if (k >= 1) {
         this.state = null;
         this.cooldown = COOLDOWN;
-        this.hud.toast(`🚧 STOP! No vehicles on ${s.land.owner}'s land, say the bodyguards. (🔔 Ask a bodyguard to let you in.)`);
+        this.hud.toast(`🚧 STOP! No vehicles on ${possessive(s.land.owner)} land, say the bodyguards. (🔔 Ask a bodyguard to let you in.)`);
       }
     } else if (s.kind === 'flush') {
       // Water everywhere, then you pop up out of the ground, just off the land.
@@ -196,7 +198,7 @@ export class GuardCatch {
         const to = this.exit(s.land, p)[0];
         p.set(to.x, 0, to.z);
         this.effects.splash(p.x, 0.2, p.z);
-        this.done(`🪣💦 ${s.land.owner}'s bodyguards heard digging and FLUSHED you out of the tunnel!`);
+        this.done(`🪣💦 ${possessive(s.land.owner)} bodyguards heard digging and FLUSHED you out of the tunnel!`);
       }
     }
   }

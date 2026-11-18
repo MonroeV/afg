@@ -1,7 +1,7 @@
 // Shows land claims: glowing borders on the ground, corner posts and the owner's name.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { nameKey, claimSize } from './shared/claims.js';
+import { nameKey, claimSize, possessive } from './shared/claims.js';
 
 function label(text, color) {
   const c = document.createElement('canvas');
@@ -58,7 +58,7 @@ export class LandView {
       const color = c.key === mine ? (c.vacation ? '#4fd2ff' : '#7dff8a') : '#ffb321';
       const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85 });
       this.group.add(new THREE.Mesh(borderGeometry(c, 3), mat));
-      const tag = label(c.vacation ? (c.key === mine ? '🏖️ Your vacation land' : `🏖️ ${c.owner}'s vacation land`) : c.key === mine ? `🏠 Your land` : `🏠 ${c.owner}'s land`, color);
+      const tag = label(c.vacation ? (c.key === mine ? '🏖️ Your vacation land' : `🏖️ ${possessive(c.owner)} vacation land`) : c.key === mine ? `🏠 Your land` : `🏠 ${possessive(c.owner)} land`, color);
       tag.position.set((c.x0 + c.x1 + 1) / 2, 3.2, (c.z0 + c.z1 + 1) / 2);
       this.group.add(tag);
     }

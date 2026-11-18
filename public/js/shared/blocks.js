@@ -215,6 +215,12 @@ export const BLOCKS = {
   138: { name: 'Piñata', shape: 'model', model: 'pinata', hidden: true, worldOnly: true, box: [0.2, 0.25, 0.2, 0.8, 1, 0.8] },
   139: { name: 'Cactus', shape: 'model', model: 'cactusPot', hidden: true, worldOnly: true, box: [0.2, 0, 0.2, 0.8, 0.95, 0.8] },
   140: { name: 'Salon Chair', shape: 'model', model: 'salonChair', facing: true, seat: 0.5, hidden: true, worldOnly: true, box: [0.12, 0, 0.12, 0.88, 0.55, 0.88] },
+  // The church (see church.js).
+  141: { name: 'Pew', shape: 'model', model: 'pew', facing: true, seat: 0.45, hidden: true, worldOnly: true, box: [0, 0, 0.1, 1, 0.45, 0.9] },
+  142: { name: 'Pulpit', shape: 'model', model: 'pulpit', facing: true, hidden: true, worldOnly: true, box: [0.15, 0, 0.15, 0.85, 1.1, 0.85] },
+  143: { name: 'Organ', shape: 'model', model: 'organ', facing: true, hidden: true, worldOnly: true, box: [0.02, 0, 0.3, 0.98, 1, 0.98] },
+  144: { name: 'Sacrament Table', shape: 'model', model: 'sacramentTable', facing: true, hidden: true, worldOnly: true, box: [0, 0, 0.1, 1, 0.8, 0.9] },
+  145: { name: 'Steeple', shape: 'model', model: 'spire', hidden: true, worldOnly: true, box: [0.2, 0, 0.2, 1.8, 1, 1.8] },
 };
 // Crops: how grown (0 seeds .. 3 ripe) and whether they've just been watered.
 export const CROP_RIPE = 3, CROP_WET = 4;

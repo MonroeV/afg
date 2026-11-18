@@ -11,6 +11,8 @@ import { generateWorld } from './shared/worldgen.js';
 import { randomLook, sanitizeLook, cleanName, PREMIUM_HAIR, hairItem } from './shared/avatar.js';
 import { WEEKDAYS, weekday, isTacoTuesday } from './shared/seasons.js';
 import { FiestaBand } from './fiesta.js';
+import { ChurchMeeting } from './churchui.js';
+import { meetingAt, isSunday, MEETING_COINS } from './shared/church.js';
 import { generateTextures } from './textures.js';
 import { World, createBlockMaterials, blockMaterial, RAILING, WIND, rayBox } from './world.js';
 import { Player, EYE_HEIGHT, CROUCH_DROP } from './player.js';
@@ -18,7 +20,7 @@ import { Network } from './network.js';
 import { Avatar, Avatars, FLAG } from './avatars.js';
 import { Cars, SEAT_SCALE } from './cars.js';
 import { MAX_HP, FIRE_HP, SMOKE_HP, PERSON_MASS, seatCount, toWorld } from './shared/vehicles.js';
-import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_MAX } from './shared/claims.js';
+import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_MAX, possessive } from './shared/claims.js';
 import { Structures } from './structures.js';
 import { TVs, CHANNELS, LIVE_ASPECT } from './tv.js';
 import { Reflections, Glow } from './lighting.js';
@@ -242,6 +244,7 @@ let weatherPicker = null; // Stormy's menu: what shall it rain?
 let lunchbox = null; // your lunchbox 🍱 (L): food to eat
 let hunger = HUNGER_FULL; // how full you are (out of 100: the server counts it down as you play)
 let tacoTuesday = { day: -1, n: 0 }; // free tacos had (on which Tuesday)
+let churchPlace = null, churchMeeting = null, churchHello = -1; // the church, Sunday's meeting there, and the last Sunday we said hello
 let fiestaBand = null, tacoToldDay = -1; // Mateo's band at Casa Fiesta; the last Taco Tuesday we said so
 let seasonLook = null, worldDay = 0; // the seasons (the server counts the days)
 let autoJoin = false; // joining by itself (back after a lost connection, or an update)
@@ -703,6 +706,7 @@ function startGame(welcome, resume = false) {
   gasStations = (welcome.landmarks || []).filter(([k]) => /^gas\d/.test(k));
   landmarks = welcome.landmarks || [];
   worldDay = welcome.day || 0;
+  churchPlace = welcome.church || null;
   weather.set(welcome.rain || 0, welcome.snow);
   agency.setGuards(welcome.guards);
   if (guardCatch) guardCatch.cooldown = 1.5; // (not until the server knows where we are)
@@ -947,6 +951,11 @@ function setHunger(h) {
   for (const at of [35, 15]) if (was >= at && hunger < at) hud.toast(`🍽️ ${at < 20 ? '😩' : '😋'} ➡ 🍱 (L)`);
 }
 net.on('hunger', ({ h }) => setHunger(h));
+net.on('church_thanks', ({ coins }) => {
+  sounds.magic();
+  effects.heartsAt(player.pos.x, player.pos.y + 1.6, player.pos.z, 6);
+  hud.toast(`⛪ 😊 Thanks for coming! +${coins} 🪙`);
+});
 net.on('food_got', ({ food, n }) => {
   sounds.pop();
   hud.toast(`${FOODS[food]?.icon || '🍽️'} ➡ 🍱 × ${n}`);
@@ -2082,7 +2091,7 @@ const myVehicles = () => [...cars.list.values()].filter(c => c.owner && nameKey(
 
 function claimVehicleClick(car) {
   const name = car.spec.name;
-  if (car.owner && nameKey(car.owner) !== nameKey(settings.name)) return hud.toast(`🔑 That's ${car.owner}'s ${name}.`);
+  if (car.owner && nameKey(car.owner) !== nameKey(settings.name)) return hud.toast(`🔑 That's ${possessive(car.owner)} ${name}.`);
   if (car.owner) {
     ask(`🔑 Give your ${name} back?`, `It goes back to the town, and anyone can drive the town's ones. You can claim another vehicle (up to ${MAX_OWNED_VEHICLES}) whenever you like.`,
       '🔑 Give it back', 'Keep it', () => net.send({ t: 'car_unclaim', id: car.id }));
@@ -2385,7 +2394,7 @@ function requestEnter(car) {
     return;
   }
   if (!car.driver && car.owner && nameKey(car.owner) !== nameKey(settings.name)) {
-    hud.toast(`🔑 This ${car.spec.name} is ${car.owner}'s. Only ${car.owner} can drive it, but you can ride along when they do!`);
+    hud.toast(`🔑 This ${car.spec.name} is ${possessive(car.owner)}. Only ${car.owner} can drive it, but you can ride along when they do!`);
     return;
   }
   net.send({ t: 'car_enter', id: car.id });
@@ -2719,7 +2728,7 @@ const canBuildAt = (x, z) => canBuild(claims, settings.name, x, z);
 function notifyLand(x, z) {
   if (performance.now() - landMsgTime < 2000) return;
   landMsgTime = performance.now();
-  hud.toast(`🚧 This is ${claimAt(claims, x, z).owner}'s land. You can visit, but not build.`);
+  hud.toast(`🚧 This is ${possessive(claimAt(claims, x, z).owner)} land. You can visit, but not build.`);
 }
 
 // The two Land Flags: the plain one (your home land) and the Vacation Flag (a second piece of
@@ -2732,7 +2741,7 @@ function claimProblem(rect, vacation = false) {
   const me = nameKey(settings.name);
   const clash = claims.find(c => (c.key !== me || !!c.vacation !== vacation) && rectsOverlap(c, rect));
   if (!clash) return null;
-  return clash.key === me ? `🚩 That overlaps your ${clash.vacation ? 'vacation ' : ''}land.` : `🚩 That overlaps ${clash.owner}'s land.`;
+  return clash.key === me ? `🚩 That overlaps your ${clash.vacation ? 'vacation ' : ''}land.` : `🚩 That overlaps ${possessive(clash.owner)} land.`;
 }
 
 function claimCell() {
@@ -5198,7 +5207,7 @@ function changeMany(changes, label) {
     undo.push(x, y, z, old);
   }
   if (!cells.length) {
-    hud.toast(blocked ? `🚧 That's ${claimAt(claims, changes[0][0], changes[0][2])?.owner || 'someone'}'s land.` : '✨ Nothing to change there.');
+    hud.toast(blocked ? `🚧 That's ${possessive(claimAt(claims, changes[0][0], changes[0][2])?.owner || 'someone')} land.` : '✨ Nothing to change there.');
     return false;
   }
   applyMany(cells);
@@ -5510,6 +5519,17 @@ function updateFiesta(dt) {
   if (tuesday && tacoToldDay !== worldDay) {
     tacoToldDay = worldDay;
     hud.toast('🌮🎉 TACO TUESDAY! 🆓🌮 ➡ Casa Fiesta 🎸');
+  }
+}
+
+// Sunday at the church: the meeting (everyone sees the same one), and a hello as you come in.
+function updateChurch(dt, time) {
+  churchMeeting ??= new ChurchMeeting({ scene, sounds, effects });
+  churchMeeting.update(dt, time, { place: churchPlace, day: worldDay, now: sky.time, camera: camera.position });
+  const c = churchPlace?.chapel, p = player.pos;
+  if (c && churchHello !== worldDay && meetingAt(worldDay, sky.time) && p.x >= c[0] && p.x <= c[2] + 1 && p.z >= c[1] && p.z <= c[3] + 1 && p.y < 6) {
+    churchHello = worldDay;
+    hud.toast(`⛪ 😊 🤝 ⏳ 🪙 ${MEETING_COINS}`);
   }
 }
 
@@ -6047,7 +6067,7 @@ function frame(timestamp) {
       const key = c ? c.key : null;
       if (key !== lastLandKey) {
         lastLandKey = key;
-        if (c) hud.toast(c.key === nameKey(settings.name) ? (c.vacation ? '🏖️ Welcome to your vacation land!' : '🏠 Welcome home! This is your land.') : `${c.vacation ? '🏖️' : '🏠'} ${c.owner}'s ${c.vacation ? 'vacation ' : ''}land. You can visit, but not build.`);
+        if (c) hud.toast(c.key === nameKey(settings.name) ? (c.vacation ? '🏖️ Welcome to your vacation land!' : '🏠 Welcome home! This is your land.') : `${c.vacation ? '🏖️' : '🏠'} ${possessive(c.owner)} ${c.vacation ? 'vacation ' : ''}land. You can visit, but not build.`);
       }
     }
 
@@ -6085,7 +6105,7 @@ function frame(timestamp) {
       hudTimer = 0.5;
       fps = Math.round(fpsFrames / Math.max(fpsTime, 1e-3));
       fpsFrames = fpsTime = 0;
-      hud.updateInfo({ online: online || (reconnecting ? 'reconnecting' : false), fps, pos: player.pos, flying: player.flying, clock: `${seasonLook.season.icon} ${WEEKDAYS[weekday(worldDay)]}${isTacoTuesday(worldDay) ? ' 🌮' : ''} ${sky.clockText()}` });
+      hud.updateInfo({ online: online || (reconnecting ? 'reconnecting' : false), fps, pos: player.pos, flying: player.flying, clock: `${seasonLook.season.icon} ${WEEKDAYS[weekday(worldDay)]}${isTacoTuesday(worldDay) ? ' 🌮' : isSunday(worldDay) ? ' ⛪' : ''} ${sky.clockText()}` });
       hud.updatePlayers([{ name: settings.name + ' (you)', color: settings.look.shirtColor }, ...[...avatars.list.values()].map(a => ({ name: a.name, color: a.color }))]);
     }
     hud.update(dt);
@@ -6164,6 +6184,7 @@ function frame(timestamp) {
     updateCoins(dt, time);
     updateSparkly(dt, time);
     updateFiesta(dt);
+    updateChurch(dt, time);
   }
   cars.setView(camera.position, scene.fog.far);
   if (inGame) questHud.update(time, player, camera, npcs);
@@ -6263,6 +6284,8 @@ window.buildzone = {
   get contraptions() { return contraptions; },
   get showers() { return showers; },
   get weatherPicker() { return weatherPicker; },
+  get churchPlace() { return churchPlace; },
+  get churchMeeting() { return churchMeeting; },
   get lunchbox() { return lunchbox; },
   get hunger() { return hunger; },
   get guardCatch() { return guardCatch; },

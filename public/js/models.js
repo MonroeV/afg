@@ -645,6 +645,46 @@ MODELS.salonChair = {
   colors: { body: 0xf06292, trim: 0xcfd8dc, accent: 0xb0bec5, metal: 0.6 },
 };
 
+// ---------- The church ----------
+// A pew: a long wooden bench with a tall back (it faces +z), sides at the ends. Pews side by side
+// make a long row.
+MODELS.pew = {
+  body: [box(1, 0.07, 0.5, 0.5, 0.42, 0.5), box(1, 0.5, 0.06, 0.5, 0.72, 0.22), box(1, 0.05, 0.1, 0.5, 0.98, 0.21), box(1, 0.3, 0.04, 0.5, 0.2, 0.3)],
+  accent: [box(1, 0.04, 0.42, 0.5, 0.47, 0.52)], // (a soft cushion)
+  colors: { body: 0x8d5a34, accent: 0x6a1b9a, metal: 0 },
+};
+// The pulpit: a wooden stand with a sloping top, and a little microphone.
+MODELS.pulpit = {
+  body: [box(0.66, 1, 0.5, 0.5, 0.5, 0.45), box(0.74, 0.06, 0.4, 0.5, 1.03, 0.6)],
+  trim: [box(0.74, 0.05, 0.56, 0.5, 0.03, 0.45), box(0.5, 0.04, 0.02, 0.5, 0.7, 0.71)],
+  accent: [cyl(0.008, 0.008, 0.3, 0.5, 1.22, 0.45, 5), ball(0.03, 0.5, 1.37, 0.47)],
+  colors: { body: 0x8d5a34, trim: 0x5d3a1f, accent: 0x37474f, metal: 0.3 },
+};
+// The organ: a wooden console with two keyboards, and tall shiny pipes behind it.
+MODELS.organ = {
+  body: [box(0.96, 0.75, 0.55, 0.5, 0.375, 0.68), box(0.96, 0.4, 0.12, 0.5, 0.95, 0.9)],
+  accent: [box(0.84, 0.03, 0.14, 0.5, 0.76, 0.4), box(0.84, 0.03, 0.12, 0.5, 0.84, 0.47)], // (the keys)
+  trim: [...Array(7)].map((_, i) => {
+    const h = 1.7 - Math.abs(3 - i) * 0.15; // (tallest in the middle)
+    return cyl(0.045, 0.045, h, 0.14 + i * 0.12, 0.75 + h / 2, 0.92, 10);
+  }),
+  glow: [box(0.84, 0.012, 0.13, 0.5, 0.78, 0.4)],
+  colors: { body: 0x6d4c33, accent: 0xfafafa, trim: 0xd4af37, glow: 0x222222, metal: 0.55 },
+};
+// The sacrament table: a table with a white cloth over it.
+MODELS.sacramentTable = {
+  body: [...[[0.08, 0.2], [0.92, 0.2], [0.08, 0.8], [0.92, 0.8]].map(([x, z]) => box(0.06, 0.74, 0.06, x, 0.37, z))],
+  accent: [box(1, 0.04, 0.72, 0.5, 0.76, 0.5), box(1, 0.4, 0.02, 0.5, 0.58, 0.14), box(1, 0.4, 0.02, 0.5, 0.58, 0.86)],
+  colors: { body: 0x6d4c33, accent: 0xffffff, metal: 0 },
+};
+// The steeple's spire: tall, white and slender, standing on a 2 x 2 tower (it's centered on the
+// corner of its block, so it covers all four).
+MODELS.spire = {
+  body: [box(1.6, 1, 1.6, 1, 0.5, 1), box(1.2, 1.2, 1.2, 1, 1.6, 1), new THREE.ConeGeometry(0.62, 6.5, 8).translate(1, 5.45, 1)],
+  trim: [box(1.7, 0.12, 1.7, 1, 1.02, 1), box(1.3, 0.1, 1.3, 1, 2.2, 1)],
+  colors: { body: 0xffffff, trim: 0xeceff1, metal: 0 },
+};
+
 // ---------- Crops (the garden) ----------
 // Four looks for each: 0 seeds in a little mound of soil, 1 a sprout, 2 growing, 3 ripe.
 // body: the soil, accent: the leaves and stems, trim: the carrots, berries, pumpkin or petals,

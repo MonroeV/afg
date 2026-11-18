@@ -12,6 +12,7 @@ import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot, seatCount } from './vehicle
 import { buildGasStations, usesFuel, getsDirty, TANK_RANGE, GAS_PUMP, GAS_CAN, GAS_CAN_PRICE, FULL_TANK_PRICE, PUMP_REACH, DIRT_RANGE, WASH_TIME, fillPrice, paved, isWash } from './fuel.js';
 import { MAX_TUNNELS, isTunnelY, tunnelKey, openBelow } from './underground.js';
 import { buildShops, buildOuterShops } from './shops.js';
+import { buildChurch, meetingOn, MEETING_COINS, MEETING_STAY } from './church.js';
 import { findHomes } from './residents.js';
 import { buildWeatherStation, SHOWERS } from './weather.js';
 import { buildBuildPark } from './buildpark.js';
@@ -25,9 +26,9 @@ import { FOODS, FOOD_KINDS, MAX_PANTRY, HUNGER_FULL, HUNGER_MINUTES, CROP_FOOD, 
 import { doorAt } from './homenav.js';
 import { Structures } from '../structures.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
-import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
+import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
-export const SAVE_VERSION = 19;
+export const SAVE_VERSION = 20;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -132,7 +133,7 @@ export class GameRoom {
     this.nextHomeId = 1;
     this.time = DAY_LENGTH * 0.08; // start in the morning
     this.day = 0; // how many days have gone by (for the seasons: see seasons.js)
-    this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0, holes: 5, crops: 2, guardThings: 1, hunger: 5 };
+    this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0, holes: 5, crops: 2, guardThings: 1, hunger: 5, church: 1 };
     this.isSolid = (x, y, z) =>
       y < 0 || x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max ||
       blocksVehicles(this.world.get(blockKey(x, y, z)) || 0);
@@ -278,6 +279,7 @@ export class GameRoom {
       this.upgradeTo17();
       this.upgradeTo18();
       this.upgradeTo19();
+      this.upgradeTo20();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -319,6 +321,7 @@ export class GameRoom {
         pantry: Object.fromEntries(FOOD_KINDS.map(f => [f, Math.min(MAX_PANTRY, Math.max(0, Math.floor(Number(w.pantry?.[f]) || 0)))]).filter(([, n]) => n > 0)),
         // Taco Tuesday: which Tuesday (the day count), and how many free tacos they've had.
         tacoDay: Number.isInteger(w.tacoDay) ? w.tacoDay : -1,
+        churchDay: Number.isInteger(w.churchDay) ? w.churchDay : -1, // (the last Sunday they came to church)
         tacos: Number.isInteger(w.tacos) && w.tacos > 0 ? w.tacos : 0,
         noAsk: Array.isArray(w.noAsk) ? w.noAsk.filter(k => typeof k === 'string').slice(0, 50) : [], // (people who can't ask your bodyguards to let them in)
         challenges: Array.isArray(w.challenges) ? w.challenges.filter(id => CHALLENGES.some(c => c.id === id)) : [], // Builder Bea's cards done
@@ -367,6 +370,7 @@ export class GameRoom {
     if (data.version < 17) this.upgradeTo17();
     if (data.version < 18) this.upgradeTo18();
     if (data.version < 19) this.upgradeTo19();
+    if (data.version < 20) this.upgradeTo20();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -749,6 +753,48 @@ export class GameRoom {
     const built = this.addOuterShops(['fiesta', 'salon']);
     this.log(`Added Casa Fiesta and Snip & Style (${built.join(', ') || 'no room'})`);
     this.onDirty();
+  }
+
+  // Worlds saved before version 20: the church, out on the Outer Loop.
+  upgradeTo20() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const church = buildChurch({ get, set, canUse: this.freeLand() });
+    if (church) {
+      this.claims.push(church.claim);
+      for (const [x, y, z, text] of church.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+      this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), church: church.place };
+    }
+    this.log(`Added the church (${church ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
+  // Sunday's meeting at the church: everyone there for a minute of it gets a thank-you (once each
+  // Sunday). Every second.
+  updateChurch(secs) {
+    const chapel = this.places?.church?.chapel;
+    if (!chapel || !meetingOn(this.day, this.time)) {
+      this.churchTime?.clear();
+      return;
+    }
+    this.churchTime ??= new Map();
+    const [x0, z0, x1, z1] = chapel;
+    for (const c of this.clients.values()) {
+      if (!c.joined) continue;
+      const [x, y, z] = c.pos, w = this.wallet(c);
+      if (w.churchDay === this.day || x < x0 || x > x1 + 1 || z < z0 || z > z1 + 1 || y > 6) continue;
+      const t = (this.churchTime.get(c.id) || 0) + secs;
+      this.churchTime.set(c.id, t);
+      if (t < MEETING_STAY) continue;
+      w.churchDay = this.day;
+      w.coins += MEETING_COINS;
+      this.sendWallet(c);
+      c.send({ t: 'church_thanks', coins: MEETING_COINS });
+      this.log(`${c.name} came to church (+${MEETING_COINS} coins)`);
+      this.onDirty();
+    }
   }
 
   // How many free tacos this player has left today (Taco Tuesday: 0 on other days).
@@ -1263,6 +1309,7 @@ export class GameRoom {
       files: (this.places?.files || []).map(f => f.slice(0, 3)),
       shower: this.showerLeft() > 0 ? { kind: this.shower.kind, left: this.showerLeft() } : null, // (raining tacos, or ice cream…? for how much longer)
       mast: this.places?.weather?.mast || null, // the weather station's mast (its cups spin)
+      church: this.places?.church || null, // (where everyone sits for Sunday's meeting: see churchui.js)
       landmarks: Object.entries(this.places || {}).filter(([, p]) => p && Number.isFinite(p.x) && Number.isFinite(p.z)).map(([k, p]) => [k, p.x, p.z]),
     });
     // Coins: your wallet, and a little present the first time you play each day.
@@ -1577,7 +1624,7 @@ export class GameRoom {
         this.onDirty();
       }
       if (back.length) client.send({ t: 'many', cells: back });
-      if (blocked && this.allow(client, 'claimMsg', 0.2, 1)) client.send({ t: 'chat', system: true, text: `🚧 Some of that is ${blocked.owner}'s land, so it was left alone.` });
+      if (blocked && this.allow(client, 'claimMsg', 0.2, 1)) client.send({ t: 'chat', system: true, text: `🚧 Some of that is ${possessive(blocked.owner)} land, so it was left alone.` });
       if (tooFast) client.send({ t: 'chat', system: true, text: '🐢 Whoa, slow down! Wait a moment between big builds.' });
     },
 
@@ -1738,7 +1785,7 @@ export class GameRoom {
       if (!v.driver) {
         // Someone's own vehicle: only they can drive it (anyone can ride along with them).
         if (v.key && v.key !== nameKey(client.name)) {
-          return client.send({ t: 'chat', system: true, text: `🔑 This ${VEHICLES[v.kind].name} is ${v.owner}'s. Only ${v.owner} can drive it, but you can ride along when they do!` });
+          return client.send({ t: 'chat', system: true, text: `🔑 This ${VEHICLES[v.kind].name} is ${possessive(v.owner)}. Only ${v.owner} can drive it, but you can ride along when they do!` });
         }
         v.driver = client.id;
       } else if (v.passengers.length < seatCount(VEHICLES[v.kind]) - 1) v.passengers.push(client.id);
@@ -1794,7 +1841,7 @@ export class GameRoom {
       if (!this.nearVehicle(client, v)) return client.send({ t: 'car_color', id: v.id, color: v.color });
       if (v.key && v.key !== nameKey(client.name)) {
         client.send({ t: 'car_color', id: v.id, color: v.color });
-        return client.send({ t: 'chat', system: true, text: `🔑 That's ${v.owner}'s ${VEHICLES[v.kind].name}: only ${v.owner} can paint it.` });
+        return client.send({ t: 'chat', system: true, text: `🔑 That's ${possessive(v.owner)} ${VEHICLES[v.kind].name}: only ${v.owner} can paint it.` });
       }
       v.color = color;
       const home = this.homes.get(v.home);
@@ -1813,7 +1860,7 @@ export class GameRoom {
       if (!v || !this.allow(client, 'carClaim', 1, 3) || !this.nearVehicle(client, v)) return;
       const key = nameKey(client.name), name = VEHICLES[v.kind].name;
       if (v.key === key) return reply(`🔑 This ${name} is already yours!`);
-      if (v.key) return reply(`🔑 This ${name} is ${v.owner}'s.`);
+      if (v.key) return reply(`🔑 This ${name} is ${possessive(v.owner)}.`);
       if (v.driver && v.driver !== client.id) return reply(`🔑 Someone's driving it right now.`);
       if (this.ownedVehicles(key).length >= MAX_OWNED_VEHICLES) return reply(`🔑 You have ${MAX_OWNED_VEHICLES} vehicles already! Give one back first (click it with the Land Flag).`);
       const town = this.homes.get(v.home);
@@ -1870,7 +1917,7 @@ export class GameRoom {
       const name = VEHICLES[v.kind].name;
       if (Math.hypot(v.x - x - 0.5, v.z - z - 0.5) > PUMP_REACH) return reply(`⛽ Park the ${name} right next to the pump first.`);
       if (v.driver && v.driver !== client.id) return reply(`⛽ Someone's driving that ${name}.`);
-      if (v.key && v.key !== nameKey(client.name)) return reply(`🔑 That's ${v.owner}'s ${name}: only ${v.owner} can fill it up.`);
+      if (v.key && v.key !== nameKey(client.name)) return reply(`🔑 That's ${possessive(v.owner)} ${name}: only ${v.owner} can fill it up.`);
       if (v.fuel >= 0.995) return reply(`⛽ The ${name}'s tank is already full!`);
       const price = fillPrice(v.fuel, half);
       if (w.coins <= 0) return reply(`🪙 Filling up costs ${price} coins, and you don't have any. Find some coins around town!`);
@@ -1948,7 +1995,7 @@ export class GameRoom {
       // (Your two pieces of land can't overlap each other, either.)
       const vacation = !!msg.vacation;
       const clash = this.claims.find(c => (c.key !== key || !!c.vacation !== vacation) && rectsOverlap(c, rect));
-      if (clash) return reply(clash.key === key ? `🚧 That overlaps your ${clash.vacation ? 'vacation ' : ''}land. Try somewhere else!` : `🚧 That overlaps ${clash.owner}'s land. Try somewhere else!`);
+      if (clash) return reply(clash.key === key ? `🚧 That overlaps your ${clash.vacation ? 'vacation ' : ''}land. Try somewhere else!` : `🚧 That overlaps ${possessive(clash.owner)} land. Try somewhere else!`);
       if (vacation) {
         // Vacation land: a Vacation Flag from the Luxe Store, used up when you plant it. It
         // can't be moved (but it can be given up).
@@ -2680,6 +2727,10 @@ export class GameRoom {
     if (t.crops <= 0) {
       t.crops = 2;
       this.updateCrops();
+    }
+    if (t.church <= 0) {
+      t.church = 1;
+      this.updateChurch(1);
     }
     if (t.hunger <= 0) {
       t.hunger = 5;

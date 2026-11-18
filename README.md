@@ -23,6 +23,19 @@ customize your character, drive cars, build anything and play with friends.
       Braids 🥨, Top Bun 🧅, Flat Top, Faux-hawk 🔥, Princess Waves 👸 (with a tiara), Rainbow
       Spikes 🌈 and Galaxy Hair 🌌 (it glows, with twinkling stars). A new hairdo goes straight
       on; change it any time in 🎨 Customize (hairdos you haven't bought show a 🔒 and a price)
+    - **The church** ⛪ (since v0.47, on the Outer Loop, east side): a meetinghouse of The Church
+      of Jesus Christ of Latter-day Saints, in red brick with white trim and a tall white
+      steeple, a lawn with flower beds, and signs out front ("Visitors Welcome!"). Inside: a
+      foyer with couches, and the chapel with rows of pews, a carpet up the aisle, chandeliers,
+      and the stand with the pulpit, the speakers' chairs, the sacrament table and the organ.
+      Sister Grace welcomes everyone in the foyer any day. **On Sundays** (the game's week:
+      the clock shows ⛪) there's a meeting in the morning (from about 9 AM): members fill the
+      pews, Bishop Allen welcomes everybody, Sister Moss plays the organ and everyone sings a
+      hymn (the tune of "Praise God, From Whom All Blessings Flow"), there's a prayer, Sister
+      Taylor and Brother Jensen give short talks (about Jesus Christ, kindness, prayer, families
+      and helping others), then another hymn and a closing prayer. Come and sit in for a minute
+      and you get 10 coins as a thank-you (once each Sunday). Everyone sees the same meeting at
+      the same time
   - **Up north, the snowy country** (the ground turns to snow and snowflakes start to fall): a
     **ski resort** with a big snowy mountain and a long ski run, a **ski lift** with chairs going
     up and down its cable (right-click the chair at the bottom to ride to the top, Space to hop
@@ -878,6 +891,7 @@ public/
     weatherui.js       Stormy's menu: what shall it rain?
     lunchbox.js        Your lunchbox: how full you are, and food to eat
     fiesta.js          Mateo's band at Casa Fiesta (the whole band on Taco Tuesday)
+    churchui.js        Sunday's meeting at the church: the members, the talks, the organ and the hymn
     guardcatch.js      Bodyguards keeping you off their land: caught and walked off, blown away, flushed out
     guardui.js         Someone asking your bodyguards to let them in: your answer
     lighting.js        Live reflections and the glow effect
@@ -923,6 +937,7 @@ public/
       buildpark.js     The Build Park: one of each of the newest Build Book things, with signs
       outerlands.js    The outer lands: the Outer Loop and the roads out to it, the far beach, trees and meadows
       food.js          Food and hunger: what there is to eat, how much it fills you, how hunger slows you
+      church.js        The church: building it, and Sunday's meeting (when, who, what's said)
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/
   make-engine-sounds.py  Makes the engine recordings (needs numpy and ffmpeg; run it after changing a voice)

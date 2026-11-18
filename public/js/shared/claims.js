@@ -1,6 +1,9 @@
 // Land claims: a player can claim up to 18 x 18 blocks (from the ground to the sky).
 // Only someone using the owner's name can build or break there. Doors still work for everyone.
 
+// Whose: "Mia's", but "…Latter-day Saints'" (a name ending in s just gets the apostrophe).
+export const possessive = name => (/s$/i.test(name) ? `${name}'` : `${name}'s`);
+
 export const CLAIM_MAX = 18; // longest side, in blocks
 export const CLAIM_EXPIRE_DAYS = 30;
 

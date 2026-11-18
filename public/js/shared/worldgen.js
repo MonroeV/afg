@@ -7,6 +7,7 @@ import { buildFarCountry, moreVehicles } from './farcountry.js';
 import { buildSecretBase, hideSecretFiles, AGENT_SPOT } from './secretbase.js';
 import { buildGasStations } from './fuel.js';
 import { buildShops, buildOuterShops } from './shops.js';
+import { buildChurch } from './church.js';
 import { findHomes } from './residents.js';
 import { buildWeatherStation } from './weather.js';
 import { buildBuildPark } from './buildpark.js';
@@ -499,10 +500,13 @@ export function generateWorld(seed = 2024) {
   // The outer lands (all round the outside, since the world grew): the Outer Loop and its roads.
   const outer = buildOuterLands({ get: getB, set: put, canUse: free, canPave: () => true });
   for (const a of outer.areas) markUsed(...a);
-  // The stores out along the Outer Loop: the grocery store.
+  // The stores out along the Outer Loop: the grocery store, Casa Fiesta, Snip & Style.
   const outerShops = buildOuterShops({ get: getB, set: put, canUse: free });
   for (const a of outerShops.areas) markUsed(...a);
-  const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null, pizza: pizza?.place || null, lodge: frontier.places.lodge, ...far.places, ...(base?.places || {}), ...gas.places, ...shops.places, ...outerShops.places, weather: weather?.place || null, buildpark: buildPark?.place || null, ...Object.fromEntries(homes.map((h, i) => [`home${i + 1}`, h])), agent: AGENT_SPOT };
+  // The church, out on the Outer Loop too.
+  const church = buildChurch({ get: getB, set: put, canUse: free });
+  if (church) markUsed(...church.area);
+  const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null, pizza: pizza?.place || null, lodge: frontier.places.lodge, ...far.places, ...(base?.places || {}), ...gas.places, ...shops.places, ...outerShops.places, church: church?.place || null, weather: weather?.place || null, buildpark: buildPark?.place || null, ...Object.fromEntries(homes.map((h, i) => [`home${i + 1}`, h])), agent: AGENT_SPOT };
   // The three TOP SECRET files (find them all for Top Secret clearance).
   places.files = hideSecretFiles({ get: getB, set: put, canUse: () => true, places });
 
@@ -559,7 +563,7 @@ export function generateWorld(seed = 2024) {
     const [x, y, z] = k.split(',').map(Number);
     blocks.push([x, y, z, v]);
   }
-  return { blocks, cars: placed, places, claims: [store?.claim, pizza?.claim, ...gas.claims, ...shops.claims, ...outerShops.claims, ...frontier.claims, ...far.claims, base?.claim, weather?.claim].filter(Boolean), signs: [...posts.signs, ...fishing.signs, ...far.signs, ...(base?.signs || []), ...gas.signs, ...shops.signs, ...(weather?.signs || []), ...(buildPark?.signs || []), ...outer.signs, ...outerShops.signs] };
+  return { blocks, cars: placed, places, claims: [store?.claim, pizza?.claim, ...gas.claims, ...shops.claims, ...outerShops.claims, church?.claim, ...frontier.claims, ...far.claims, base?.claim, weather?.claim].filter(Boolean), signs: [...posts.signs, ...fishing.signs, ...far.signs, ...(base?.signs || []), ...gas.signs, ...shops.signs, ...(weather?.signs || []), ...(buildPark?.signs || []), ...outer.signs, ...outerShops.signs, ...(church?.signs || [])] };
 }
 
 // Saved worlds from before the new lamps: put proper lamp heads on the town's street lamps
