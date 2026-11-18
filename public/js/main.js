@@ -12,6 +12,7 @@ import { randomLook, sanitizeLook, cleanName, PREMIUM_HAIR, hairItem } from './s
 import { WEEKDAYS, weekday, isTacoTuesday } from './shared/seasons.js';
 import { FiestaBand } from './fiesta.js';
 import { ChurchMeeting } from './churchui.js';
+import { HopperWindow } from './tvgame.js';
 import { meetingAt, isSunday, MEETING_COINS } from './shared/church.js';
 import { generateTextures } from './textures.js';
 import { World, createBlockMaterials, blockMaterial, RAILING, WIND, rayBox } from './world.js';
@@ -242,6 +243,7 @@ let inGame = false;
 let showers = null, weatherMast = null; // it's raining tacos (or ice cream, or cats and dogs…)! (and the weather station's mast)
 let weatherPicker = null; // Stormy's menu: what shall it rain?
 let lunchbox = null; // your lunchbox 🍱 (L): food to eat
+let hopper = null, hopperTV = null; // playing Block Hopper on a TV (and which TV)
 let hunger = HUNGER_FULL; // how full you are (out of 100: the server counts it down as you play)
 let tacoTuesday = { day: -1, n: 0 }; // free tacos had (on which Tuesday)
 let churchPlace = null, churchMeeting = null, churchHello = -1; // the church, Sunday's meeting there, and the last Sunday we said hello
@@ -972,6 +974,25 @@ net.on('ate', ({ food }) => {
   effects.heartsAt(p.x, p.y + 1.6, p.z, 3);
   hud.toast(`${FOODS[food]?.icon || '🍽️'} 😋`);
 });
+// Block Hopper, the video game on the TV's Game channel.
+hopper = new HopperWindow({
+  sounds,
+  onClose: () => {
+    lock();
+    updateOverlays();
+  },
+  onChannel: () => {
+    const name = hopperTV && tvs.nextChannel(hopperTV);
+    if (name) hud.toast(`📺 ${name}`);
+  },
+});
+function playHopper(tv) {
+  hopperTV = tv;
+  keys.clear();
+  unlock();
+  hopper.show();
+  updateOverlays();
+}
 lunchbox = new Lunchbox({
   onEat: food => net.send({ t: 'eat', food }),
   onClose: () => {
@@ -1473,7 +1494,7 @@ function goFullscreen() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!cards?.open || !!gameUI?.pickerOpen || !!weatherPicker?.open || !!lunchbox?.open || !!guardAsk?.open || !!conn);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!cards?.open || !!gameUI?.pickerOpen || !!weatherPicker?.open || !!lunchbox?.open || !!hopper?.open || !!guardAsk?.open || !!conn);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -1507,7 +1528,7 @@ $('exit-menu').addEventListener('click', () => {
     location.reload();
   }, 150); // a moment for "I got out of the car" to reach the server
 });
-canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !petMenu?.open && !cards?.open && !gameUI?.pickerOpen && !weatherPicker?.open && !lunchbox?.open && !guardAsk?.open && !familyEdit && lock());
+canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !petMenu?.open && !cards?.open && !gameUI?.pickerOpen && !weatherPicker?.open && !lunchbox?.open && !hopper?.open && !guardAsk?.open && !familyEdit && lock());
 $('sensitivity').addEventListener('input', e => {
   settings.sensitivity = Number(e.target.value);
   saveSettings();
@@ -1819,6 +1840,7 @@ window.addEventListener('keydown', e => {
     if (e.code === 'Escape' || e.code === 'KeyL') lunchbox.close();
     return;
   }
+  if (hopper?.open) return hopper.key(e);
   if (guardAsk?.open) return; // (answer it with the buttons)
   if (elevators.panel) {
     elevators.panelKey(e);
@@ -4293,6 +4315,7 @@ function interact() {
     if (s?.type === 'cannon') return fireCannon(s);
     if (s && ['swing', 'zipline', 'balloon'].includes(s.type)) return startContraption(s);
     if (s && ['rocket', 'carousel', 'volcano', 'fishtank', 'well', 'snowman'].includes(s.type)) return playWith(s);
+    if (s?.type === 'tv' && tvs.onGame(s)) return playHopper(s); // (the Game channel: play!)
     if (s?.type === 'tv') {
       const name = tvs.nextChannel(s);
       if (name) {
@@ -5762,7 +5785,7 @@ let menuSpin = 0, lastFrame = 0, frameCount = 0, crouchK = 0;
 // menu (nothing much is moving then).
 function frameRateNow() {
   if (!inGame) return 30;
-  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel || petMenu?.open || cards?.open || gameUI?.pickerOpen || weatherPicker?.open || lunchbox?.open || guardAsk?.open) return 12;
+  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel || petMenu?.open || cards?.open || gameUI?.pickerOpen || weatherPicker?.open || lunchbox?.open || hopper?.open || guardAsk?.open) return 12;
   return settings.fps || 1000;
 }
 
@@ -6012,7 +6035,7 @@ function frame(timestamp) {
       else if (s?.type === 'zipline') hint = '🧗 Right-click to zip down the line!';
       else if (s?.type === 'balloon') hint = '🎈 Right-click to fly the balloon!';
       else if (s?.type === 'hoop') hint = '🏀 Throw the Pet Ball through the hoop!';
-      else if (s?.type === 'tv') hint = '📺 Right-click to change the channel';
+      else if (s?.type === 'tv') hint = tvs.onGame(s) ? '🎮 Right-click to play Block Hopper!' : '📺 Right-click to change the channel';
       else if (item === CLAIM) hint = `🚩 Click a corner to start claiming land (max ${CLAIM_MAX}×${CLAIM_MAX}), or a vehicle to make it yours` + (myVehicles().length ? ` · 🔑 ${whereMyVehicles()}` : '');
       else if (item === VACATION) hint = myLand(true) ? '🏖️ You have vacation land already' : `🏖️ Click a corner to claim your vacation land (max ${CLAIM_MAX}×${CLAIM_MAX}). It stays put for good!`;
       else if (item === WATER_BALLOON) hint = '💦 Click to throw a water balloon!';
@@ -6313,7 +6336,7 @@ load();
 
 // Handy for poking at the game from the browser console.
 window.buildzone = {
-  tvs, news, newsCam, keys, getOut,
+  tvs, news, newsCam, keys, getOut, playHopper,
   scene, camera, sky, net, avatars, renderer, fireworks, effects, glow, reflections, view, sounds,
   get world() { return world; },
   get player() { return player; },

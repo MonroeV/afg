@@ -41,6 +41,9 @@ customize your character, drive cars, build anything and play with friends.
       **airplanes** park, a glass-fronted terminal (check-in desk, rows of seats looking out at
       the planes), two hangars, and a control tower (climb the ladder inside to the glass cab at
       the top). Captain Sky in the terminal has tips
+    - **Sky Tower and Cloud Tower** 🏙️ (since v0.49, on the east side of the Outer Loop): the two
+      tallest buildings in the world, 100 and 80 blocks high, with an elevator up every floor,
+      offices on every floor, and a helipad on top of Sky Tower
   - **Up north, the snowy country** (the ground turns to snow and snowflakes start to fall): a
     **ski resort** with a big snowy mountain and a long ski run, a **ski lift** with chairs going
     up and down its cable (right-click the chair at the bottom to ride to the top, Space to hop
@@ -215,7 +218,10 @@ customize your character, drive cars, build anything and play with friends.
 - **Logs grow into trees**: put a lone log on the grass and watch it grow
 - **Build Book**: special things you can make out of blocks: beds, trampolines, campfires,
   teleporters, cannons, fountains, dance floors and TVs (with cartoons, news, weather, silly
-  commercials and BZ Live), and ten you can ride or play with:
+  commercials, BZ Live, and since v0.49 the Space Show 🚀, Animal Friends 🦁 and a video game:
+  **Block Hopper** 🎮. On the game channel the TV plays it by itself; right-click to play it
+  yourself: Space, ↑ or tap to hop, twice for a double jump, over gaps and blocks, grabbing
+  stars. Your best score is kept), and ten you can ride or play with:
   - **Swing**: two Log posts, 3 tall and 2 apart, with 3 Logs across the top. A swing hangs
     from it: right-click to sit, hold W to swing higher, press Space to jump off and fly
   - **Zip Line**: three Logs with a Metal Plate on top. Build two, one up high (a hill, a roof, a
@@ -244,6 +250,10 @@ customize your character, drive cars, build anything and play with friends.
   **Build Park**, near town, has one of each of the newest six, working, with a noticeboard by each
   saying what it's made of: try them, then build your own (there's room). Right-click any of its
   signs to open the Build Book
+- **The planets** 🪐 (since v0.49): at night, Mercury, Venus, Mars, Jupiter (with its stripes
+  and Great Red Spot), Saturn (with its rings), Uranus and Neptune come out with the stars,
+  strung across the sky along the moon's path (much bigger than they'd really look, so you can
+  spot them all)
 - **Seasons** 🌸☀️🍂❄️: spring, summer, fall and winter, two game days each (a whole year in 80
   minutes), shown by the little picture next to the clock. Each season comes in slowly over its
   first half day. Skye announces each new one on BZ Live.
@@ -910,6 +920,7 @@ public/
     lunchbox.js        Your lunchbox: how full you are, and food to eat
     fiesta.js          Mateo's band at Casa Fiesta (the whole band on Taco Tuesday)
     churchui.js        Sunday's meeting at the church: the members, the talks, the organ and the hymn
+    tvgame.js          Block Hopper, the video game on the TV's Game channel
     guardcatch.js      Bodyguards keeping you off their land: caught and walked off, blown away, flushed out
     guardui.js         Someone asking your bodyguards to let them in: your answer
     lighting.js        Live reflections and the glow effect

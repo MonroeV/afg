@@ -12,7 +12,7 @@ import { buildAirport } from './airport.js';
 import { findHomes } from './residents.js';
 import { buildWeatherStation } from './weather.js';
 import { buildBuildPark } from './buildpark.js';
-import { buildOuterLands } from './outerlands.js';
+import { buildOuterLands, ringRoads, RING } from './outerlands.js';
 
 const B = {
   grass: 1, dirt: 2, stone: 3, cobble: 4, brick: 5, planks: 6, log: 7, leaves: 8, glass: 9,
@@ -507,13 +507,16 @@ export function generateWorld(seed = 2024) {
   // The church, out on the Outer Loop too.
   const church = buildChurch({ get: getB, set: put, canUse: free });
   if (church) markUsed(...church.area);
+  // The two big skyscrapers out on the Outer Loop.
+  const outerTowers = buildOuterTowers({ get: getB, set: put, canUse: free });
+  for (const a of outerTowers.areas) markUsed(...a);
   // The airport (it finds a big empty patch beside the Outer Loop), with its airplanes.
   const airport = buildAirport({ get: getB, set: put, canUse: free });
   if (airport) {
     markUsed(...airport.area);
     cars.push(...airport.cars);
   }
-  const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null, pizza: pizza?.place || null, lodge: frontier.places.lodge, ...far.places, ...(base?.places || {}), ...gas.places, ...shops.places, ...outerShops.places, church: church?.place || null, airport: airport?.place || null, weather: weather?.place || null, buildpark: buildPark?.place || null, ...Object.fromEntries(homes.map((h, i) => [`home${i + 1}`, h])), agent: AGENT_SPOT };
+  const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null, pizza: pizza?.place || null, lodge: frontier.places.lodge, ...far.places, ...(base?.places || {}), ...gas.places, ...shops.places, ...outerShops.places, church: church?.place || null, airport: airport?.place || null, skytowers: outerTowers.towers.length ? { x: outerTowers.towers[0].x, z: outerTowers.towers[0].z, towers: outerTowers.towers } : null, weather: weather?.place || null, buildpark: buildPark?.place || null, ...Object.fromEntries(homes.map((h, i) => [`home${i + 1}`, h])), agent: AGENT_SPOT };
   // The three TOP SECRET files (find them all for Top Secret clearance).
   places.files = hideSecretFiles({ get: getB, set: put, canUse: () => true, places });
 
@@ -680,6 +683,37 @@ export function buildLandmarks({ get, set, canUse }) {
     }
   }
   return { cars, areas };
+}
+
+// The two big new skyscrapers out on the Outer Loop (since v0.49), the tallest in the world:
+// Sky Tower (100 high) and Cloud Tower (80 high), side by side. Elevators to every floor, offices
+// furnished, and a helipad on top. Each takes the free spot nearest where it'd like to be.
+export const OUTER_TOWERS = [
+  { name: 'Sky Tower', size: 13, height: 100, style: 0, near: [RING, -230] },
+  { name: 'Cloud Tower', size: 11, height: 80, style: 1, near: [RING, -185] },
+];
+export function buildOuterTowers({ get, set, canUse }) {
+  const roads = ringRoads(), out = { areas: [], towers: [] };
+  const used = [];
+  for (const wish of OUTER_TOWERS) {
+    const L = wish.size + 2, D = wish.size + 2, sites = [];
+    for (const road of Object.values(roads)) for (const side of [-1, 1]) for (let a = road.from + 30; a + L <= road.to - 30; a += 3) sites.push(makeSite(road, side, a));
+    const centre = st => st.at(L / 2, D / 2);
+    sites.sort((p, q) => Math.hypot(centre(p)[0] - wish.near[0], centre(p)[1] - wish.near[1]) - Math.hypot(centre(q)[0] - wish.near[0], centre(q)[1] - wish.near[1]));
+    const site = sites.find(st => !used.some(([x, z]) => Math.hypot(x - centre(st)[0], z - centre(st)[1]) < 25) && siteFree(st, L, D, wish.height + 4, get, canUse));
+    if (!site) continue;
+    used.push(centre(site));
+    skyscraper(site, wish, set, get);
+    const [xa, za] = site.at(-1, -1), [xb, zb] = site.at(L, D);
+    out.areas.push([Math.min(xa, xb), Math.min(za, zb), Math.max(xa, xb), Math.max(za, zb)]);
+    // (The tower itself: from its first wall to its last, for the furniture.)
+    const [ta, tza] = site.at(1, 1), [tb, tzb] = site.at(wish.size, wish.size);
+    const rect = { x0: Math.min(ta, tb), x1: Math.max(ta, tb), z0: Math.min(tza, tzb), z1: Math.max(tza, tzb) };
+    furnishTower(rect, get, set, () => true);
+    const [cx, cz] = centre(site);
+    out.towers.push({ name: wish.name, x: cx, z: cz, top: wish.height, rect: [rect.x0, rect.z0, rect.x1, rect.z1] });
+  }
+  return out;
 }
 
 // A site beside a road: u runs along the road, v away from it (v = 0 touches the sidewalk).

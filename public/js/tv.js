@@ -1,7 +1,10 @@
 // TVs built from blocks (see the Build Book) show a little broadcast:
-// silly commercials, the weather, a cartoon, the news, and BZ Live: a live camera following
-// Skye Summers, the town's roving reporter, wherever she is. Right-click to change channel.
+// silly commercials, the weather, a cartoon, the news, BZ Live (a live camera following Skye
+// Summers, the town's roving reporter, wherever she is), the Space Show, Animal Friends, and a
+// video game (Block Hopper: on the Game channel right-click to play it). Right-click to change
+// channel.
 import * as THREE from 'three';
+import { BlockHopper } from './tvgame.js';
 
 const PX = 128, PY = 96; // canvas pixels per screen block
 
@@ -253,12 +256,119 @@ function live(ctx, W, H, t, info) {
   fitText(ctx, shown, 8, y + 29, W - 14, 11, '#ffeb3b');
 }
 
+// ---------- The Space Show ----------
+// The planets going round the sun, a rocket zooming past, and a fact about space.
+const SPACE_FACTS = [
+  'Jupiter is the biggest planet!', 'Saturn\'s rings are made of ice!', 'Mars is red because it\'s rusty!',
+  'The Sun is a star!', 'Venus is the hottest planet!', 'A day on Mercury is very long!',
+  'Neptune has the strongest winds!', 'Uranus spins on its side!', 'Look up at night: you can see them all!',
+];
+const ORBITS = [['#b5aba0', 0.12, 2, 4.1], ['#f3d9a4', 0.18, 3, 1.6], ['#4f9ff0', 0.25, 3.2, 1], ['#d2573a', 0.32, 2.6, 0.53], ['#d9b48a', 0.41, 6, 0.08], ['#e8d39a', 0.5, 5, 0.034, true]];
+function space(ctx, W, H, t) {
+  rect(ctx, '#05051a', 0, 0, W, H);
+  for (let i = 0; i < 60; i++) rect(ctx, i % 7 ? '#ffffff' : '#ffeb3b', (i * 73) % W, (i * 37) % H, 1.5, 1.5);
+  const cx = W * 0.36, cy = H * 0.55, R = Math.min(W * 0.9, H * 2.1);
+  ctx.fillStyle = '#ffb300';
+  ctx.beginPath();
+  ctx.arc(cx, cy, H * 0.09, 0, Math.PI * 2);
+  ctx.fill();
+  for (const [c, r, size, speed, rings] of ORBITS) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, r * R, r * R * 0.35, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    const a = t * speed * 0.6 + r * 20;
+    const px = cx + Math.cos(a) * r * R, py = cy + Math.sin(a) * r * R * 0.35;
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.arc(px, py, size, 0, Math.PI * 2);
+    ctx.fill();
+    if (rings) {
+      ctx.strokeStyle = '#e8d39a';
+      ctx.beginPath();
+      ctx.ellipse(px, py, size * 2, size * 0.6, -0.3, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+  // A rocket going by every so often.
+  const rx = ((t * 40) % (W + 200)) - 100, ry = H * 0.25 + Math.sin(t) * 6;
+  rect(ctx, '#eceff1', rx - 14, ry - 4, 22, 8);
+  rect(ctx, '#e53935', rx + 8, ry - 3, 6, 6);
+  rect(ctx, Math.sin(t * 30) > 0 ? '#ffb300' : '#ff7043', rx - 22, ry - 3, 8, 6);
+  rect(ctx, 'rgba(0,0,0,0.5)', 0, H - 20, W, 20);
+  fitText(ctx, SPACE_FACTS[Math.floor(t / 6) % SPACE_FACTS.length], W / 2, H - 10, W - 12, 11, '#ffeb3b', 'center');
+  fitText(ctx, '🚀 THE SPACE SHOW', 6, 10, W - 12, 11, '#80d8ff');
+}
+
+// ---------- Animal Friends ----------
+// Animals out on the savanna, one after another, with a fact about each.
+const ANIMALS = [
+  { name: 'Elephant', fact: 'Elephants never forget!', body: '#90a4ae', w: 46, h: 30, leg: 12, head: 18, trunk: true },
+  { name: 'Giraffe', fact: 'Giraffes have long necks to reach leaves!', body: '#f9c74f', w: 34, h: 18, leg: 22, head: 10, neck: 34, spots: '#a0522d' },
+  { name: 'Lion', fact: 'Lions sleep up to 20 hours a day!', body: '#e0a458', w: 38, h: 18, leg: 12, head: 16, mane: '#8d5524' },
+  { name: 'Zebra', fact: 'Every zebra has its own stripes!', body: '#ffffff', w: 36, h: 18, leg: 16, head: 12, stripes: '#222' },
+  { name: 'Penguin', fact: 'Penguins can\'t fly, but they swim fast!', body: '#263238', w: 16, h: 26, leg: 3, head: 12, belly: '#ffffff' },
+  { name: 'Panda', fact: 'Pandas eat bamboo all day long!', body: '#ffffff', w: 34, h: 22, leg: 10, head: 16, patches: '#222' },
+];
+function animals(ctx, W, H, t) {
+  gradient(ctx, W, H, '#ffcc80', '#fff3e0');
+  rect(ctx, '#c5e1a5', 0, H * 0.72, W, H * 0.28);
+  // An acacia tree.
+  rect(ctx, '#6d4c41', W * 0.82, H * 0.38, 5, H * 0.34);
+  ctx.fillStyle = '#7cb342';
+  ctx.beginPath();
+  ctx.ellipse(W * 0.82 + 2, H * 0.36, 34, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const a = ANIMALS[Math.floor(t / 7) % ANIMALS.length], k = (t % 7) / 7;
+  const x = -60 + k * (W + 120), ground = H * 0.78, step = Math.sin(t * 8) * 3;
+  const top = ground - a.leg - a.h;
+  for (const lx of [x - a.w / 2 + 3, x + a.w / 2 - 9]) {
+    rect(ctx, a.body === '#ffffff' && a.patches ? a.patches : a.body, lx, ground - a.leg, 6, a.leg + step * (lx > x ? 1 : -1) * 0.3);
+  }
+  rect(ctx, a.body, x - a.w / 2, top, a.w, a.h);
+  if (a.belly) rect(ctx, a.belly, x - a.w / 2 + 3, top + 4, a.w - 6, a.h - 6);
+  if (a.stripes) for (let i = 0; i < 5; i++) rect(ctx, a.stripes, x - a.w / 2 + 4 + i * 7, top, 3, a.h);
+  if (a.spots) for (let i = 0; i < 4; i++) rect(ctx, a.spots, x - a.w / 2 + 4 + i * 8, top + 4 + (i % 2) * 6, 4, 4);
+  if (a.patches) rect(ctx, a.patches, x - a.w / 2, top, 10, a.h);
+  const neck = a.neck || 0, hx = x + a.w / 2 - 4, hy = top - neck - a.head * 0.5;
+  if (neck) rect(ctx, a.body, hx - 2, hy + a.head * 0.5, 7, neck + 2);
+  if (a.mane) {
+    ctx.fillStyle = a.mane;
+    ctx.beginPath();
+    ctx.arc(hx + a.head * 0.4, hy + a.head * 0.4, a.head * 0.85, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  rect(ctx, a.body, hx, hy, a.head, a.head);
+  if (a.patches) rect(ctx, a.patches, hx + a.head * 0.55, hy + a.head * 0.2, 4, 4);
+  if (a.trunk) rect(ctx, a.body, hx + a.head - 2, hy + a.head * 0.6, 5, a.head + 4);
+  rect(ctx, '#111', hx + a.head * 0.6, hy + a.head * 0.3, 2, 2);
+  rect(ctx, 'rgba(0,0,0,0.45)', 0, H - 20, W, 20);
+  fitText(ctx, `${a.name}: ${a.fact}`, W / 2, H - 10, W - 12, 11, '#fff', 'center');
+  fitText(ctx, '🦁 ANIMAL FRIENDS', 6, 10, W - 12, 11, '#5d4037');
+}
+
+// ---------- The Game channel ----------
+// Block Hopper playing itself (right-click the TV to play it yourself: see tvgame.js).
+const demo = new BlockHopper({ demo: true });
+let demoT = null;
+function game(ctx, W, H, t) {
+  if (demoT === null || t - demoT > 1) demoT = t;
+  for (let left = t - demoT; left > 0; left -= 1 / 60) demo.step(Math.min(left, 1 / 60));
+  demoT = t;
+  demo.draw(ctx, W, H, t);
+  rect(ctx, 'rgba(0,0,0,0.5)', 0, H - 18, W, 18);
+  fitText(ctx, '🖱️ ▶ 🎮', W / 2, H - 9, W - 12, 12, '#7dff8a', 'center');
+}
+
 export const CHANNELS = [
   { name: 'Commercials', draw: commercials, glow: '#9575cd' },
   { name: 'Weather', draw: weather, glow: '#64b5f6' },
   { name: 'Cartoons', draw: cartoon, glow: '#aed581' },
   { name: 'News', draw: news, glow: '#5c8bd6' },
   { name: 'BZ Live 🎤', draw: live, glow: '#b0bec5', live: true },
+  { name: 'The Space Show 🚀', draw: space, glow: '#3949ab' },
+  { name: 'Animal Friends 🦁', draw: animals, glow: '#ffb74d' },
+  { name: 'Block Hopper 🎮', draw: game, glow: '#4fc3f7', game: true },
 ];
 // The shape of the live camera's picture (it's cropped to fit each TV).
 export const LIVE_ASPECT = 16 / 9;
@@ -355,6 +465,11 @@ export class TVs {
 
   find(tv) {
     return this.screens.get(this.key(tv));
+  }
+
+  // Is this TV on the Game channel?
+  onGame(tv) {
+    return !!CHANNELS[this.find(tv)?.channel]?.game;
   }
 
   nextChannel(tv) {

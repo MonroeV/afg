@@ -80,6 +80,69 @@ function moonTexture() {
   return tex;
 }
 
+// The planets, out in the night sky along the moon's path (bigger than they'd really look, so
+// you can tell them apart): each a little picture. [name, color, size, how far along from the
+// moon, a bit up or down, extras]
+const PLANETS = [
+  ['Mercury', '#b5aba0', 18, -1.05, 0.04],
+  ['Venus', '#f3d9a4', 30, -0.75, -0.02],
+  ['Mars', '#d2573a', 24, -0.42, 0.06],
+  ['Jupiter', '#d9b48a', 56, 0.45, -0.03, 'bands'],
+  ['Saturn', '#e8d39a', 46, 0.8, 0.05, 'rings'],
+  ['Uranus', '#9fe0e6', 28, 1.12, -0.04],
+  ['Neptune', '#4f74e8', 28, 1.38, 0.03],
+];
+function planetTexture([, color, , , , extra]) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const ctx = c.getContext('2d');
+  const r = extra === 'rings' ? 30 : 44;
+  // A soft glow, the planet (lit from one side), and its stripes or rings.
+  const glow = ctx.createRadialGradient(64, 64, r * 0.8, 64, 64, 64);
+  glow.addColorStop(0, 'rgba(255,255,255,0.18)');
+  glow.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, 128, 128);
+  if (extra === 'rings') {
+    ctx.strokeStyle = 'rgba(230,210,160,0.85)';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.ellipse(64, 64, 58, 16, -0.35, Math.PI, Math.PI * 2);
+    ctx.stroke();
+  }
+  const body = ctx.createRadialGradient(64 - r * 0.4, 64 - r * 0.4, r * 0.1, 64, 64, r);
+  body.addColorStop(0, '#ffffff');
+  body.addColorStop(0.25, color);
+  body.addColorStop(1, '#1a1a24');
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.arc(64, 64, r, 0, Math.PI * 2);
+  ctx.fill();
+  if (extra === 'bands') {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(64, 64, r, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.fillStyle = 'rgba(150,90,50,0.45)';
+    for (const y of [-22, -8, 6, 20]) ctx.fillRect(0, 64 + y, 128, 6);
+    ctx.fillStyle = 'rgba(190,70,40,0.7)';
+    ctx.beginPath();
+    ctx.ellipse(76, 74, 8, 5, 0, 0, Math.PI * 2); // (the Great Red Spot)
+    ctx.fill();
+    ctx.restore();
+  }
+  if (extra === 'rings') {
+    ctx.strokeStyle = 'rgba(230,210,160,0.9)';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.ellipse(64, 64, 58, 16, -0.35, 0, Math.PI);
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 // Moves one of the real lights to another lamp (or nowhere), starting dark there.
 function moveLight(l, n) {
   l.userData.lamp = n || null;
@@ -136,6 +199,16 @@ export class DayNight {
     this.moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTexture(), transparent: true, fog: false, depthWrite: false }));
     this.moon.scale.setScalar(120);
     scene.add(this.moon);
+    // The planets, strung across the night sky along the moon's path.
+    this.planets = PLANETS.map(def => {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: planetTexture(def), transparent: true, fog: false, depthWrite: false, opacity: 0 }));
+      sprite.scale.setScalar(def[2] * (def[5] === 'rings' ? 2 : 1.45));
+      sprite.userData = { along: def[3], lift: def[4] };
+      sprite.renderOrder = -1;
+      scene.add(sprite);
+      return sprite;
+    });
+    this.planetDir = new THREE.Vector3();
 
     // A few real lights that sit in the lamps closest to you at night.
     this.lampLights = [];
@@ -190,6 +263,7 @@ export class DayNight {
     const p = this.phase;
     const sunA = p < DAY_FRACTION ? Math.PI * (p / DAY_FRACTION) : Math.PI + Math.PI * ((p - DAY_FRACTION) / (1 - DAY_FRACTION));
     const moonA = sunA - Math.PI;
+    this.moonA = moonA;
     this.sunDir.set(Math.cos(sunA), Math.sin(sunA) * 0.88, 0.42).normalize();
     this.moonDir.set(Math.cos(moonA), Math.sin(moonA) * 0.8, -0.35).normalize();
     const h = this.sunDir.y;
@@ -278,6 +352,14 @@ export class DayNight {
     this.stars.rotation.y = this.time * 0.002;
     this.moon.position.copy(camera.position).addScaledVector(this.moonDir, 700);
     this.moon.material.opacity = smooth(-0.1, 0.05, this.moonDir.y) * (1 - 0.85 * wet);
+    // The planets come out with the stars, along the moon's path across the sky.
+    for (const p of this.planets) {
+      const a = this.moonA + p.userData.along;
+      this.planetDir.set(Math.cos(a), Math.sin(a) * 0.8, -0.35 + p.userData.lift * 4).normalize();
+      p.position.copy(camera.position).addScaledVector(this.planetDir, 690);
+      p.material.opacity = smooth(0.35, 0.9, nightK) * smooth(-0.05, 0.08, this.planetDir.y) * (1 - wet);
+      p.visible = p.material.opacity > 0.01;
+    }
 
     // Lamps glow at night (indoor ones all the time) and light up their surroundings.
     const lampK = smooth(0.25, 0.85, nightK);

@@ -3,7 +3,7 @@
 // the browser runs its own copy so single player works exactly the same way.
 import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, isExclusive, DOOR_OPEN, DOOR_TOP, DAY_LENGTH, WORLD, isNightTime, SHOP_ITEMS, BLOCKS, SHOP_TOOLS, FOUND_GEAR, HOLE_HEAL, SIGN, cleanSignText, cleanWords, isCrop, cropStage, cropWet, CROP_RIPE, CROP_WET, makeBlock, blockMeta, toggleDoorValue } from './blocks.js';
 import { sanitizeLook, cleanName, randomLook, PREMIUM_HAIR, hairItem } from './avatar.js';
-import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines, buildStore, furnishHouses, furnishTowers, elevatorTowers } from './worldgen.js';
+import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines, buildStore, furnishHouses, furnishTowers, elevatorTowers, buildOuterTowers } from './worldgen.js';
 import { buildSecretBase, hideSecretFiles, AGENCY, AGENT_SPOT, FILES_NEEDED, FILE_HINTS, inZone } from './secretbase.js';
 import { NpcCrew, NPC_ACT } from './npcs.js';
 import { buildFrontier, buildPizzeria, buildSignposts, refurnish, addFishingSpots } from './frontier.js';
@@ -29,7 +29,7 @@ import { Structures } from '../structures.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
-export const SAVE_VERSION = 21;
+export const SAVE_VERSION = 22;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -282,6 +282,7 @@ export class GameRoom {
       this.upgradeTo19();
       this.upgradeTo20();
       this.upgradeTo21();
+      this.upgradeTo22();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -374,6 +375,7 @@ export class GameRoom {
     if (data.version < 19) this.upgradeTo19();
     if (data.version < 20) this.upgradeTo20();
     if (data.version < 21) this.upgradeTo21();
+    if (data.version < 22) this.upgradeTo22();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -788,6 +790,22 @@ export class GameRoom {
       for (const c of airport.cars) this.spawn(this.addHome(c));
     }
     this.log(`Added the airport (${airport ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
+  // Worlds saved before version 22: Sky Tower and Cloud Tower, the two big new skyscrapers.
+  upgradeTo22() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const ours = new Set(); // (only ever onto empty spots, or what we've just put there ourselves)
+    const set = (x, y, z, v) => {
+      const k = blockKey(x, y, z);
+      if (!inBounds(x, y, z) || !v || (this.world.has(k) && !ours.has(k))) return;
+      this.world.set(k, v);
+      ours.add(k);
+    };
+    const { towers } = buildOuterTowers({ get, set, canUse: this.freeLand() });
+    if (towers.length) this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), skytowers: { x: towers[0].x, z: towers[0].z, towers } };
+    this.log(`Added the skyscrapers (${towers.map(t => t.name).join(', ') || 'no room'})`);
     this.onDirty();
   }
 
