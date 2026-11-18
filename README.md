@@ -44,6 +44,13 @@ customize your character, drive cars, build anything and play with friends.
     - **Sky Tower and Cloud Tower** 🏙️ (since v0.49, on the east side of the Outer Loop): the two
       tallest buildings in the world, 100 and 80 blocks high, with an elevator up every floor,
       offices on every floor, and a helipad on top of Sky Tower
+    - **The Loop Express** 🚆 (since v0.51): a train all the way round the Outer Loop, on a track
+      high over the outside of the road, held up by concrete pillars. Three trains go round and
+      round. At each stop (by the new places, and where the roads from town come out) there's a
+      blue ticket machine 🚉: right-click it and pick where you're going (big pictures), wait
+      for the next train (a countdown), and you're lifted up into a car. Sit back and enjoy the
+      view: it sets you down at your stop. Press E on the train to get off at the next stop
+      instead. Everyone sees the same trains
     - **Friendship Park** 🤝 (since v0.50, on the north side of the Outer Loop): paths and flower
       beds, trees, picnic tables, a fountain, a swing set and two big **slides**. Six kids hang
       out here (Sunny, Milo, Rosie, Ollie, Kiko and Nova), and each would love a **best friend**:
@@ -938,6 +945,7 @@ public/
     churchui.js        Sunday's meeting at the church: the members, the talks, the organ and the hymn
     tvgame.js          Block Hopper, the video game on the TV's Game channel
     palui.js           A kid at Friendship Park asking to be your best friend
+    trainui.js         The Loop Express: the track and trains you see, picking a stop, riding
     guardcatch.js      Bodyguards keeping you off their land: caught and walked off, blown away, flushed out
     guardui.js         Someone asking your bodyguards to let them in: your answer
     lighting.js        Live reflections and the glow effect
@@ -986,6 +994,7 @@ public/
       church.js        The church: building it, and Sunday's meeting (when, who, what's said)
       airport.js       The airport: finding room for it, the runway, terminal, tower and hangars
       park.js          Friendship Park: the paths, flowers, trees, swings and slides
+      train.js         The Loop Express: its track, where the trains are, the stops, pillars and ticket machines
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/
   make-engine-sounds.py  Makes the engine recordings (needs numpy and ffmpeg; run it after changing a voice)

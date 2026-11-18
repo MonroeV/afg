@@ -223,6 +223,8 @@ export const BLOCKS = {
   145: { name: 'Steeple', shape: 'model', model: 'spire', hidden: true, worldOnly: true, box: [0.2, 0, 0.2, 1.8, 1, 1.8] },
   // A slide: place them in a line going down, one step lower each, all facing the way down
   // (with a Ladder up to the top). Right-click it to slide! (Low, so you can walk over it.)
+  // A Loop Express ticket machine (see train.js): right-click it to catch the train.
+  147: { name: 'Train Stop', shape: 'model', model: 'trainStop', hidden: true, worldOnly: true, box: [0.25, 0, 0.25, 0.75, 1.6, 0.75], light: { color: 0x9ad6ff, power: 0.4, range: 8, always: true, y: 1.4 } },
   146: { name: 'Slide', shape: 'model', model: 'slide', facing: true, slide: true, box: [0, 0, 0, 1, 0.12, 1] },
 };
 // Crops: how grown (0 seeds .. 3 ripe) and whether they've just been watered.

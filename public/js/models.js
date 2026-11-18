@@ -645,6 +645,16 @@ MODELS.salonChair = {
   colors: { body: 0xf06292, trim: 0xcfd8dc, accent: 0xb0bec5, metal: 0.6 },
 };
 
+// ---------- The Loop Express ----------
+// A ticket machine: a blue post with a big glowing screen and a red button (catch the train!).
+MODELS.trainStop = {
+  body: [box(0.4, 1.3, 0.3, 0.5, 0.65, 0.5), box(0.6, 0.5, 0.36, 0.5, 1.45, 0.5)],
+  glow: [box(0.5, 0.36, 0.02, 0.5, 1.47, 0.68), box(0.5, 0.36, 0.02, 0.5, 1.47, 0.32)],
+  accent: [new THREE.CylinderGeometry(0.07, 0.07, 0.06, 10).rotateX(Math.PI / 2).translate(0.5, 1.0, 0.66)],
+  trim: [box(0.5, 0.06, 0.4, 0.5, 0.03, 0.5)],
+  colors: { body: 0x1565c0, glow: 0xbbe6ff, accent: 0xe53935, trim: 0x9e9e9e, metal: 0.3 },
+};
+
 // ---------- The slide ----------
 // A shiny chute sloping down toward +z (from the top of its block at the back to the bottom at
 // the front), with low sides. Lined up in a staircase, they make one long slide.

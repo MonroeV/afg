@@ -10,6 +10,7 @@ import { buildShops, buildOuterShops } from './shops.js';
 import { buildChurch } from './church.js';
 import { buildAirport } from './airport.js';
 import { buildPark as buildFriendPark } from './park.js';
+import { buildTrainLine } from './train.js';
 import { findHomes } from './residents.js';
 import { buildWeatherStation } from './weather.js';
 import { buildBuildPark } from './buildpark.js';
@@ -521,6 +522,8 @@ export function generateWorld(seed = 2024) {
     cars.push(...airport.cars);
   }
   const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null, pizza: pizza?.place || null, lodge: frontier.places.lodge, ...far.places, ...(base?.places || {}), ...gas.places, ...shops.places, ...outerShops.places, church: church?.place || null, park: friendPark?.place || null, airport: airport?.place || null, skytowers: outerTowers.towers.length ? { x: outerTowers.towers[0].x, z: outerTowers.towers[0].z, towers: outerTowers.towers } : null, weather: weather?.place || null, buildpark: buildPark?.place || null, ...Object.fromEntries(homes.map((h, i) => [`home${i + 1}`, h])), agent: AGENT_SPOT };
+  // The Loop Express: pillars for its track, and ticket machines at the stops (by the places).
+  places.train = { stops: buildTrainLine({ get: getB, set: put, canUse: free, places }) };
   // The three TOP SECRET files (find them all for Top Secret clearance).
   places.files = hideSecretFiles({ get: getB, set: put, canUse: () => true, places });
 

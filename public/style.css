@@ -1032,3 +1032,10 @@ body.touch #quest-card { top: 96px; left: 8px; font-size: 13px; }
 .pal-choices { display: flex; gap: 14px; }
 .pal-choices button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 22px; font-size: 18px; font-weight: 800; }
 .pal-choices .big { font-size: 44px; line-height: 1; }
+
+/* The Loop Express: where to? */
+.train-panel { width: min(640px, 100%); }
+.train-stops { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; width: 100%; }
+.train-stops button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; font-size: 12px; font-weight: 800; }
+.train-stops .big { font-size: 34px; line-height: 1.1; }
+.train-stops button.here { opacity: 0.45; outline: 3px solid #7dff8a; }
