@@ -74,6 +74,46 @@ export const CLUBS = [
     ],
     reward: { coins: 20, perk: '💌×2', perkName: 'Neighbors pay you twice as much' },
   },
+  // ---------- Since v0.50 ----------
+  {
+    id: 'pilot', name: 'Sky Pilots', icon: '🛩️', color: '#0288d1', leader: 'Captain Sky', where: 'at the airport',
+    tasks: [
+      { id: 'takeoff', icon: '🛫', goal: 1, what: 'Take off in an airplane' },
+      { id: 'land', icon: '🛬', goal: 2, what: 'Land an airplane safely' },
+      { id: 'chute', icon: '🪂', goal: 1, what: 'Jump out of an airplane and float down on your parachute' },
+    ],
+    reward: { coins: 20, perk: '✈️💨', perkName: 'Jet engine: airplanes fly faster' },
+  },
+  {
+    id: 'foodie', name: 'Foodie Club', icon: '😋', color: '#ef6c00', leader: 'Mateo', where: 'at Casa Fiesta',
+    tasks: [
+      { id: 'eat', icon: '🍽️', goal: 10, what: 'Eat something from your lunchbox (press L)' },
+      { id: 'kinds', icon: '🍎', goal: 5, what: 'Eat different kinds of food' },
+      { id: 'taco', icon: '🌮', goal: 1, what: 'Get a free taco on Taco Tuesday at Casa Fiesta' },
+    ],
+    reward: { coins: 15, perk: '🍱✨', perkName: 'Food fills you up twice as much' },
+  },
+  {
+    id: 'explorer', name: 'Explorer Club', icon: '🧭', color: '#6d4c41', leader: 'Scout Juno', where: 'at Friendship Park',
+    tasks: [
+      { id: 'airport', icon: '✈️', goal: 1, what: 'Visit the airport' },
+      { id: 'church', icon: '⛪', goal: 1, what: 'Visit the church' },
+      { id: 'fiesta', icon: '🌮', goal: 1, what: 'Visit Casa Fiesta' },
+      { id: 'salon', icon: '💇', goal: 1, what: 'Visit Snip & Style, the hair salon' },
+      { id: 'grocery', icon: '🛒', goal: 1, what: 'Visit FreshMart Grocery' },
+      { id: 'skytop', icon: '🏙️', goal: 1, what: 'Go up to the very top of Sky Tower' },
+    ],
+    reward: { coins: 25, perk: '🥾', perkName: "Explorer's boots: you walk a bit faster" },
+  },
+  {
+    id: 'friends', name: 'Best Friends', icon: '🤝', color: '#ec407a', leader: 'Miss Joy', where: 'at Friendship Park',
+    tasks: [
+      { id: 'friend', icon: '🤝', goal: 1, what: 'Make a best friend at Friendship Park' },
+      { id: 'hangout', icon: '⏱️', goal: 5, what: 'Hang out with your best friend (minutes)' },
+      { id: 'slide', icon: '🎢', goal: 3, what: 'Go down a slide' },
+    ],
+    reward: { coins: 20, perk: '🍪💕', perkName: 'Your best friend brings you snacks' },
+  },
 ];
 
 export const clubById = id => CLUBS.find(c => c.id === id);

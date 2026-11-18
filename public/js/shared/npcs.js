@@ -116,7 +116,7 @@ const NPCS = [
   },
   {
     // Mateo plays his guitar at Casa Fiesta (on Taco Tuesday, the whole band plays: 🎺🎸🎶).
-    id: -27, place: 'shop_fiesta', name: 'Mateo', title: 'Mateo 🎸', roam: 2,
+    id: -27, place: 'shop_fiesta', name: 'Mateo', title: 'Mateo 🎸', roam: 2, club: 'foodie',
     look: { face: 'cool', hair: 'short', hat: 'cowboy', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#d39a6a', hairColor: '#1b1209', hatColor: '#111111', shirtColor: '#111111', shirtColor2: '#ffd54f', pantsColor: '#111111', shoesColor: '#3b2314' },
     hello: (n, room) => (isTacoTuesday(room?.day) ? [`🎺🎸🎶 ¡Fiesta, ${n}!`, `🎶 Dance with us, ${n}! 💃`] : [`🎸 Hola ${n}!`, `🎶 Come back on Taco Tuesday, ${n}! 🌮`]),
     tips: ['🎸🎶', '🎺🎸🎻🎶', '💃🕺🎶'],
@@ -129,9 +129,40 @@ const NPCS = [
     hello: (n, room) => (isSunday(room?.day) ? [`Welcome, ${n}! We're so glad you came! 😊`, `Hi ${n}! The meeting is in the chapel. Come on in! ⛪`] : [`Hello ${n}! Welcome! 😊`, `Hi ${n}! Come visit us on Sunday morning! ⛪`]),
     tips: ['⛪ Sunday ☀️ 9:00', 'Everyone is welcome here! 🤝', 'Jesus Christ loves everyone! ❤️'],
   },
+  // ---------- Friendship Park ----------
+  // Kids who'd love a best friend (talk to one!), and the leaders of two clubs.
+  ...[
+    { id: -60, name: 'Sunny', face: 'grin', hair: 'pigtails', shirt: 'striped', pants: 'shorts', skin: '#f5c9a0', hairColor: '#d9a441', shirtColor: '#fdd835', shirtColor2: '#ff7043', pantsColor: '#1e88e5',
+      lines: ['This is the best day ever! ☀️', 'Race you! 🏃', 'Let\'s go down the slide! 🎢', 'I love hanging out with you! 💛', 'Ooh, what are we doing next? 😄'] },
+    { id: -61, name: 'Milo', face: 'cool', hair: 'spiky', shirt: 'hoodie', pants: 'jeans', skin: '#8d5a34', hairColor: '#1b1209', shirtColor: '#43a047', shirtColor2: '#ffffff', pantsColor: '#37474f',
+      lines: ['Cool! 😎', 'Let\'s build something awesome! 🧱', 'Wanna go fly a plane? ✈️', 'You\'re my best buddy! 🤝', 'High five! ✋'] },
+    { id: -62, name: 'Rosie', face: 'smile', hair: 'braids', shirt: 'dress', pants: 'skirt', skin: '#e8b088', hairColor: '#c23b22', shirtColor: '#ec407a', shirtColor2: '#ffffff', pantsColor: '#ec407a',
+      lines: ['Look at the flowers! 🌸', 'I like your style! 💇', 'Let\'s get a snack! 🍪', 'Friends forever! 💕', 'What a pretty day! 🌈'] },
+    { id: -63, name: 'Ollie', face: 'silly', hair: 'curly', shirt: 'tshirt', pants: 'shorts', skin: '#d39a6a', hairColor: '#6b3e1f', shirtColor: '#ff7043', shirtColor2: '#ffffff', pantsColor: '#3949ab',
+      lines: ['Hee hee! 😜', 'Bet I can jump higher! 🦘', 'Do you have a pet? I love pets! 🐶', 'Tacos! Tacos! 🌮', 'You\'re so funny! 😂'] },
+    { id: -64, name: 'Kiko', face: 'wink', hair: 'topbun', shirt: 'jacket', pants: 'jeans', skin: '#ffe0c4', hairColor: '#1b1209', shirtColor: '#7e57c2', shirtColor2: '#ffffff', pantsColor: '#263238',
+      lines: ['Let\'s explore! 🧭', 'Have you been to the top of Sky Tower? 🏙️', 'I wonder what\'s over there! 👀', 'Adventure time! 🗺️', 'Best friends! 🤝'] },
+    { id: -65, name: 'Nova', face: 'starry', hair: 'galaxy', shirt: 'tshirt', pants: 'jeans', skin: '#b07548', hairColor: '#2a1b5e', shirtColor: '#283593', shirtColor2: '#ffeb3b', pantsColor: '#311b92',
+      lines: ['Did you see the planets last night? 🪐', 'I want to be an astronaut! 🚀', 'Stars are so pretty! ⭐', 'Let\'s watch the Space Show! 📺', 'You\'re out of this world! 🌌'] },
+  ].map(k => ({
+    id: k.id, place: 'park', name: k.name, title: `${k.name} 🤝`, roam: 6, pal: true, lines: k.lines,
+    look: { face: k.face, hair: k.hair, hat: 'none', shirt: k.shirt, pants: k.pants, extra: 'none', skin: k.skin, hairColor: k.hairColor, shirtColor: k.shirtColor, shirtColor2: k.shirtColor2, pantsColor: k.pantsColor, shoesColor: '#ffffff' },
+    hello: n => [`Hi ${n}! Wanna be friends? 🤝`, `Hey ${n}! Come play! 😄`],
+    tips: k.lines,
+  })),
+  {
+    id: -66, place: 'park', name: 'Scout Juno', title: 'Scout Juno 🧭', roam: 3, club: 'explorer',
+    look: { face: 'grin', hair: 'ponytail', hat: 'cowboy', shirt: 'jacket', pants: 'shorts', extra: 'backpack', skin: '#e8b088', hairColor: '#a0632b', hatColor: '#8d6e63', shirtColor: '#6d4c41', shirtColor2: '#ffd54f', pantsColor: '#5d4037', shoesColor: '#3b2314', extraColor: '#43a047' },
+    hello: n => [`Hi ${n}! Ready to explore? 🧭`, `${n}! There's so much to see out there! 🗺️`], tips: ['🧭🗺️'],
+  },
+  {
+    id: -67, place: 'park', name: 'Miss Joy', title: 'Miss Joy 💕', roam: 3, club: 'friends',
+    look: { face: 'smile', hair: 'long', hat: 'none', shirt: 'dress', pants: 'skirt', extra: 'none', skin: '#8d5a34', hairColor: '#1b1209', shirtColor: '#f06292', shirtColor2: '#ffffff', pantsColor: '#f06292', shoesColor: '#ffffff' },
+    hello: n => [`Welcome to Friendship Park, ${n}! 💕`, `Hi ${n}! Everyone here would love a friend! 🤝`], tips: ['🤝💕🎢'],
+  },
   {
     // BuildZone Airport: Captain Sky, a pilot, in the terminal (tips on flying the airplanes).
-    id: -29, place: 'airport', name: 'Captain Sky', title: 'Captain Sky ✈️', roam: 2,
+    id: -29, place: 'airport', name: 'Captain Sky', title: 'Captain Sky ✈️', roam: 2, club: 'pilot',
     look: { face: 'cool', hair: 'short', hat: 'cap', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#d39a6a', hairColor: '#3b2314', hatColor: '#263238', shirtColor: '#263238', shirtColor2: '#ffd54f', pantsColor: '#263238', shoesColor: '#111111' },
     hello: n => [`Welcome aboard, ${n}! Ready to fly? ✈️`, `${n}! The planes are out on the apron. Take one up! 🛫`],
     tips: ['W: throttle up. Fast down the runway, then Space to lift off! 🛫', 'Too slow up there and you stall: nose down to speed up! ⚠️', 'Land gently on the runway: slow and level! 🛬', 'Jump out up high and your parachute opens! 🪂', 'Climb the ladder in the tower for the best view! 🗼'],
@@ -271,7 +302,9 @@ export class NpcCrew {
           : def.place === 'kids' ? { x: -3.5 + (def.id % 3) * 2, y: 0, z: -3.5, face: Math.PI, area: [-9, -9, 9, 9] }
             : places?.[def.place];
       if (!place) continue;
-      const home = this.findStand(place.x, place.y ?? 0, place.z, def) || [place.x, place.y ?? 0, place.z];
+      // (The park's kids spread out round it.)
+      const spread = def.pal ? [((-def.id) % 3 - 1) * 5, (Math.floor((-def.id) / 3) % 2 ? 1 : -1) * 4] : [0, 0];
+      const home = this.findStand(place.x + spread[0], place.y ?? 0, place.z + spread[1], def) || this.findStand(place.x, place.y ?? 0, place.z, def) || [place.x, place.y ?? 0, place.z];
       this.list.push({
         def, id: def.id, home, area: place.area, face: place.face ?? 0,
         pos: home.slice(), yaw: place.face ?? 0, goal: null, wait: 2 + Math.random() * 4,
@@ -370,6 +403,10 @@ export class NpcCrew {
       if (n.game) continue; // (a kid in a game of tag or hide-and-seek: playground.js moves them)
       if (n.catch || n.escort) {
         this.guardChase(n, dt); // (a bodyguard running after an intruder, or walking them off the land)
+        continue;
+      }
+      if (n.follow) {
+        this.followFriend(n, dt, now); // (someone's best friend: they come everywhere with them)
         continue;
       }
       if (n.def.reporter) this.report(n, dt, players);
@@ -1104,6 +1141,15 @@ export class NpcCrew {
       else c.send({ t: 'games_open' });
     } else if (n.def.kid && this.room.playground.game?.ids.includes(n.id)) {
       this.say(n, pickOne(['Hee hee! 😆', 'Can\'t catch me! 🏃']), true);
+    } else if (n.def.pal) {
+      // A kid at Friendship Park: be best friends? (Your answer: the pal message, in game.js.)
+      const mine = n.follow === c.id, other = n.follow && !mine ? this.room.clients.get(n.follow) : null;
+      if (other) this.say(n, pickOne([`I'm hanging out with ${other.name} right now! 😊`, `${other.name} is my best friend! 💕`]), true);
+      else {
+        this.say(n, mine ? pickOne([`I'm right here, ${c.name}! 😄`, 'Best friends! 💕']) : pickOne([`Want to be best friends, ${c.name}? 🤝`, `Hi ${c.name}! Be my friend? 😊`]), true);
+        const current = this.list.find(m => m.id === this.room.wallet(c).pal);
+        c.send({ t: 'pal_open', id: n.id, name: n.def.name, mine, current: !mine && current ? current.def.name : null });
+      }
     } else if (n.def.challenges) {
       this.say(n, pickOne([`Let's see what you've built, ${c.name}! 🔍`, 'Pick a card and build it! 🃏', 'Build it on your land, then show me! 🏗️']), true);
       this.room.sendChallenges(c);
@@ -1114,6 +1160,73 @@ export class NpcCrew {
       c.send({ t: 'club_open', club: n.def.club });
     } else {
       this.say(n, pickOne(n.def.tips), true);
+    }
+  }
+
+  // ---------- Best friends ----------
+  // A kid from Friendship Park who's someone's best friend walks along with them (running to
+  // catch up, hopping up and down steps), sits when they sit, chats now and then, and pops up
+  // beside them if they've gone far ahead (in a car, flying, through a teleporter). When their
+  // friend leaves the game they go home to the park.
+  followFriend(n, dt, now) {
+    const c = this.room.clients.get(n.follow);
+    if (!c?.joined) {
+      n.follow = null;
+      n.pos = n.home.slice();
+      n.pose = 0;
+      n.action = NPC_ACT.idle;
+      return;
+    }
+    const [px, py, pz] = c.pos;
+    const dx = px - n.pos[0], dz = pz - n.pos[2], d = Math.hypot(dx, dz), dy = py - n.pos[1];
+    n.stuckT ??= 0;
+    if (d > 28 || Math.abs(dy) > 4 || n.stuckT > 2.5) {
+      // Too far behind: pop up just beside them.
+      for (const [sx, sz] of [[-1.6, 1.2], [1.6, 1.2], [0, 2], [-1.6, -1.2], [1.6, -1.2]].map(([ox, oz]) => [px + ox, pz + oz])) {
+        const spot = this.findStand(sx, Math.max(0, Math.floor(py + 0.05)), sz, n.def);
+        if (!spot) continue;
+        n.pos = spot;
+        n.stuckT = 0;
+        this.room.broadcast({ t: 'fx', kind: 'sparkle', x: spot[0], y: spot[1] + 0.5, z: spot[2] });
+        break;
+      }
+      n.stuckT = 0;
+      return;
+    }
+    const sitting = !!(c.flags & 2);
+    if (d > 2.2) {
+      n.pose = 0;
+      const speed = d > 6 ? 5.6 : 3.4, step = Math.min(d - 1.8, speed * dt);
+      const nx = n.pos[0] + (dx / d) * step, nz = n.pos[2] + (dz / d) * step, y = Math.floor(n.pos[1] + 0.05);
+      const fy = [y, y + 1, y - 1].find(t => t >= 0 && this.standable(Math.floor(nx), t, Math.floor(nz), n.def));
+      if (fy === undefined) n.stuckT += dt;
+      else {
+        n.pos = [nx, fy, nz];
+        n.stuckT = Math.max(0, n.stuckT - dt);
+      }
+      n.yaw = turn(n.yaw, Math.atan2(-dx, -dz), dt * 8);
+      n.action = NPC_ACT.walk;
+    } else {
+      n.stuckT = 0;
+      if (n.action === NPC_ACT.walk) n.action = NPC_ACT.idle;
+      n.yaw = turn(n.yaw, Math.atan2(-dx, -dz), dt * 4);
+      n.pose = sitting ? NPC_POSE.sit : 0;
+    }
+    // A chat now and then.
+    n.chatAt ??= now + 20 * SECOND;
+    if (now > n.chatAt) {
+      n.chatAt = now + (35 + Math.random() * 40) * SECOND;
+      this.say(n, pickOne(n.def.lines));
+      if (Math.random() < 0.3) this.act(n, NPC_ACT.cheer, 1.5);
+    }
+    // Hanging out together (the Best Friends club counts the minutes), and a snack now and then
+    // once you've got its badge.
+    if (d < 10) {
+      n.together = (n.together || 0) + dt;
+      if (n.together >= 60) {
+        n.together = 0;
+        this.room.hangout(c, n);
+      }
     }
   }
 

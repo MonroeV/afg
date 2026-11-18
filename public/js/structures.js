@@ -28,6 +28,7 @@ export const RECIPES = [
   { type: 'well', icon: '⭐', name: 'Wishing Well', grid: [[0, 4, 0], [4, 36, 4], [0, 4, 0]], how: 'Water with Cobblestone on all four sides.', use: 'Right-click to toss in a coin and make a wish!' },
   { type: 'rainbow', icon: '🌈', name: 'Rainbow', grid: [[28]], side: [[28], [31]], how: 'A Rainbow block on top of a Sky Paint block.', use: 'A real rainbow arches across the sky from it!' },
   { type: 'snowman', icon: '⛄', name: 'Snowman', grid: [[87]], side: [[87], [87], [87]], how: 'Three Snow blocks stacked up.', use: 'Eyes, a carrot nose, a hat, a scarf and stick arms appear! Right-click it to say hi.' },
+  { type: 'slide', icon: '🎢', name: 'Slide', grid: [[53, 146, 146, 146]], side: [[53, 146, 0, 0], [53, 0, 146, 0], [53, 0, 0, 146]], how: 'Slide blocks in a line going down, each one a step lower than the last (place them facing down the slope), with a Ladder up to the top.', use: 'Whee! Climb up and right-click the slide to zoom down it!' },
   { type: 'balloon', icon: '🎈', name: 'Hot Air Balloon', grid: [[6, 6, 6], [6, 45, 6], [6, 6, 6]], how: 'A Lantern in the middle of eight Planks.', use: 'A balloon floats above it. Right-click to fly! Space fires the burner (up), Shift lets air out (down), WASD steers.' },
 ];
 

@@ -1701,7 +1701,7 @@ export class Cars {
     car.vel.addScaledVector(right, -car.vel.dot(right) * Math.min(1, dt * 4)); // (no sideways sliding)
 
     // The forces: the propeller, air drag, the wings' lift, and gravity.
-    car.vel.addScaledVector(fwd, P.thrust * car.throttle * health * dt);
+    car.vel.addScaledVector(fwd, P.thrust * (this.jetEngine ? 1.2 : 1) * car.throttle * health * dt); // (Sky Pilots: a jet engine)
     const drag = 0.004 * v * v + (grounded ? 0.5 + (car.throttle < 0.02 && keys.has('KeyS') ? 6 : 0) : 0);
     if (v > 0.01) car.vel.multiplyScalar(Math.max(0, 1 - (drag * dt) / v));
     const aoa = car.pitch - path; // (the angle the wings meet the air at)

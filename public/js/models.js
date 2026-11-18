@@ -645,6 +645,15 @@ MODELS.salonChair = {
   colors: { body: 0xf06292, trim: 0xcfd8dc, accent: 0xb0bec5, metal: 0.6 },
 };
 
+// ---------- The slide ----------
+// A shiny chute sloping down toward +z (from the top of its block at the back to the bottom at
+// the front), with low sides. Lined up in a staircase, they make one long slide.
+MODELS.slide = {
+  body: [new THREE.BoxGeometry(0.8, 0.05, 1.42).rotateX(Math.PI / 4).translate(0.5, 0.5, 0.5)],
+  accent: [-0.42, 0.42].map(x => new THREE.BoxGeometry(0.06, 0.2, 1.42).rotateX(Math.PI / 4).translate(0.5 + x, 0.58, 0.58)),
+  colors: { body: 0xffca28, accent: 0xe53935, metal: 0.3 },
+};
+
 // ---------- The church ----------
 // A pew: a long wooden bench with a tall back (it faces +z), sides at the ends. Pews side by side
 // make a long row.

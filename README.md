@@ -44,6 +44,14 @@ customize your character, drive cars, build anything and play with friends.
     - **Sky Tower and Cloud Tower** 🏙️ (since v0.49, on the east side of the Outer Loop): the two
       tallest buildings in the world, 100 and 80 blocks high, with an elevator up every floor,
       offices on every floor, and a helipad on top of Sky Tower
+    - **Friendship Park** 🤝 (since v0.50, on the north side of the Outer Loop): paths and flower
+      beds, trees, picnic tables, a fountain, a swing set and two big **slides**. Six kids hang
+      out here (Sunny, Milo, Rosie, Ollie, Kiko and Nova), and each would love a **best friend**:
+      talk to one and they'll ask (🤝 yes, ❌ no). Your best friend comes everywhere with you:
+      they walk (or run to keep up) beside you, sit when you sit, chat now and then, and pop up
+      next to you if you zoom off in a car or a plane. Leave the game and they go home to the
+      park; come back and they're with you again. One best friend at a time (talk to yours to
+      say 👋 bye for now). Scout Juno runs the Explorer Club and Miss Joy the Best Friends club
   - **Up north, the snowy country** (the ground turns to snow and snowflakes start to fall): a
     **ski resort** with a big snowy mountain and a long ski run, a **ski lift** with chairs going
     up and down its cable (right-click the chair at the bottom to ride to the top, Space to hop
@@ -411,6 +419,10 @@ customize your character, drive cars, build anything and play with friends.
   the crops you pick in your garden go in your lunchbox too. Catching food when it rains tacos,
   ice cream, pizza or donuts gives you a little bite, and delivering a pizza fills you up a bit.
   Your hunger and lunchbox are saved
+- **Slides** 🎢 (since v0.50): Slide blocks (in the 🎉 Fun tab) in a line going down, each one a
+  step lower, make a slide (a new one placed below and beside another lines up with it); put a
+  Ladder up to the top. Climb up and right-click the slide: you zoom down it, faster and faster,
+  and shoot off the end. It's in the Build Book too
 - **Airplanes** ✈️ (since v0.48, at the airport): little propeller planes that fly like real
   ones (more or less!). **W** opens the throttle (**S** closes it, and brakes on the ground).
   Roll down the runway, and once you're going fast enough (the flight display says 🛫 Space!)
@@ -503,6 +515,10 @@ customize your character, drive cars, build anything and play with friends.
   | 🏡 Good Neighbors | Grandma Rose, in her house | take 3 packages, bring 3 things, go and see 2 places | 20 🪙, neighbors pay you twice as much |
   | ⛏️ Tunnel Diggers | Digger Dot, at Big Rock Quarry | dig 15 holes, put a block in 3 holes, tip out a dump truck of dirt | 15 🪙, secret tunnels under the ground |
   | 🕶️ Secret Agency | Agent Shadow | find the 3 TOP SECRET files | Top Secret clearance |
+  | 🛩️ Sky Pilots (v0.50) | Captain Sky, at the airport | take off in an airplane, land safely twice, parachute down | 20 🪙, a jet engine (airplanes fly faster) |
+  | 😋 Foodie Club (v0.50) | Mateo, at Casa Fiesta | eat 10 things, 5 different kinds, get a free Taco Tuesday taco | 15 🪙, food fills you twice as much |
+  | 🧭 Explorer Club (v0.50) | Scout Juno, at Friendship Park | visit the airport, the church, Casa Fiesta, the salon and the grocery store, and go to the top of Sky Tower | 25 🪙, explorer's boots (you walk a bit faster) |
+  | 🤝 Best Friends (v0.50) | Miss Joy, at Friendship Park | make a best friend, hang out together for 5 minutes, go down a slide 3 times | 20 🪙, your best friend brings you snacks |
 
   Each step pops up by the badge counter ("🔧 2/3"), and a new badge gets a big celebration with
   fireworks. The **daily bonus** grows every day in a row you play (+2 a day, up to +10)
@@ -921,6 +937,7 @@ public/
     fiesta.js          Mateo's band at Casa Fiesta (the whole band on Taco Tuesday)
     churchui.js        Sunday's meeting at the church: the members, the talks, the organ and the hymn
     tvgame.js          Block Hopper, the video game on the TV's Game channel
+    palui.js           A kid at Friendship Park asking to be your best friend
     guardcatch.js      Bodyguards keeping you off their land: caught and walked off, blown away, flushed out
     guardui.js         Someone asking your bodyguards to let them in: your answer
     lighting.js        Live reflections and the glow effect
@@ -968,6 +985,7 @@ public/
       food.js          Food and hunger: what there is to eat, how much it fills you, how hunger slows you
       church.js        The church: building it, and Sunday's meeting (when, who, what's said)
       airport.js       The airport: finding room for it, the runway, terminal, tower and hangars
+      park.js          Friendship Park: the paths, flowers, trees, swings and slides
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/
   make-engine-sounds.py  Makes the engine recordings (needs numpy and ffmpeg; run it after changing a voice)

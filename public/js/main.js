@@ -13,6 +13,7 @@ import { WEEKDAYS, weekday, isTacoTuesday } from './shared/seasons.js';
 import { FiestaBand } from './fiesta.js';
 import { ChurchMeeting } from './churchui.js';
 import { HopperWindow } from './tvgame.js';
+import { PalAsk } from './palui.js';
 import { meetingAt, isSunday, MEETING_COINS } from './shared/church.js';
 import { generateTextures } from './textures.js';
 import { World, createBlockMaterials, blockMaterial, RAILING, WIND, rayBox } from './world.js';
@@ -243,6 +244,8 @@ let inGame = false;
 let showers = null, weatherMast = null; // it's raining tacos (or ice cream, or cats and dogs…)! (and the weather station's mast)
 let weatherPicker = null; // Stormy's menu: what shall it rain?
 let lunchbox = null; // your lunchbox 🍱 (L): food to eat
+let palAsk = null; // a kid at Friendship Park asking to be your best friend
+let flightLog = { air: 0, was: true }; // (for the Sky Pilots: how long we've been up, and were we on the ground)
 let hopper = null, hopperTV = null; // playing Block Hopper on a TV (and which TV)
 let hunger = HUNGER_FULL; // how full you are (out of 100: the server counts it down as you play)
 let tacoTuesday = { day: -1, n: 0 }; // free tacos had (on which Tuesday)
@@ -300,6 +303,7 @@ async function load() {
   player.bouncePower = trampolineBounce;
   player.onBoost = () => sounds.zoom();
   player.onLanded = () => {
+    net.send({ t: 'flight', what: 'chute' });
     sounds.land();
     hud.toast('🪂 👍 Safe landing!');
   };
@@ -899,6 +903,7 @@ net.on('wallet', ({ coins, owned, vacation, found = [], agent, can, clubs, badge
   // Club badges, and what they give you: a turbo in everything you drive, a coin magnet.
   perks = new Set(badges || []);
   cars.turbo = perks.has('speed') ? TURBO : 1;
+  cars.jetEngine = perks.has('pilot'); // (the Sky Pilots' badge: faster airplanes)
   world.digger = perks.has('tunnel'); // (Tunnel Diggers can dig down into the earth)
   book.set({ clubs, badges, agent });
   if (!!can !== carryingCan) {
@@ -974,6 +979,21 @@ net.on('ate', ({ food }) => {
   effects.heartsAt(p.x, p.y + 1.6, p.z, 3);
   hud.toast(`${FOODS[food]?.icon || '🍽️'} 😋`);
 });
+// Friendship Park: a kid asking to be your best friend.
+palAsk = new PalAsk({
+  onAnswer: (id, yes) => net.send({ t: 'pal', id, yes }),
+  onClose: () => {
+    lock();
+    updateOverlays();
+  },
+});
+net.on('pal_open', msg => {
+  keys.clear();
+  unlock();
+  palAsk.show(msg);
+  updateOverlays();
+});
+
 // Block Hopper, the video game on the TV's Game channel.
 hopper = new HopperWindow({
   sounds,
@@ -1494,7 +1514,7 @@ function goFullscreen() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!cards?.open || !!gameUI?.pickerOpen || !!weatherPicker?.open || !!lunchbox?.open || !!hopper?.open || !!guardAsk?.open || !!conn);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!cards?.open || !!gameUI?.pickerOpen || !!weatherPicker?.open || !!lunchbox?.open || !!hopper?.open || !!palAsk?.open || !!guardAsk?.open || !!conn);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -1528,7 +1548,7 @@ $('exit-menu').addEventListener('click', () => {
     location.reload();
   }, 150); // a moment for "I got out of the car" to reach the server
 });
-canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !petMenu?.open && !cards?.open && !gameUI?.pickerOpen && !weatherPicker?.open && !lunchbox?.open && !hopper?.open && !guardAsk?.open && !familyEdit && lock());
+canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !petMenu?.open && !cards?.open && !gameUI?.pickerOpen && !weatherPicker?.open && !lunchbox?.open && !hopper?.open && !palAsk?.open && !guardAsk?.open && !familyEdit && lock());
 $('sensitivity').addEventListener('input', e => {
   settings.sensitivity = Number(e.target.value);
   saveSettings();
@@ -1841,6 +1861,10 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (hopper?.open) return hopper.key(e);
+  if (palAsk?.open) {
+    if (e.code === 'Escape') palAsk.close();
+    return;
+  }
   if (guardAsk?.open) return; // (answer it with the buttons)
   if (elevators.panel) {
     elevators.panelKey(e);
@@ -2468,6 +2492,7 @@ function enterCar(car) {
   wakeUp(true);
   standUp(true);
   myCar = car;
+  flightLog = { air: 0, was: true };
   car.driver = myId;
   car.gear = 1;
   car.vel.set(0, 0, 0);
@@ -3342,7 +3367,7 @@ function sendState() {
   const rot = myCar ? [r(myCar.h), 0] : inBed() ? [r(sleeping.yaw), 0] : [r(player.yaw), r(player.pitch)];
   const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
   const balloon = hud.item === BALLOON && !riding() && !sleeping;
-  const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
+  const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || sliding || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
     (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) | (sledding && !balloon ? FLAG.sled : 0) | (player.parachute && !balloon ? FLAG.parachute : 0) |
     (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
   net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item, drone: agency.droneState(player.yaw) });
@@ -4051,6 +4076,83 @@ function fillHole(item, x, y, z) {
   return true;
 }
 
+// ---------- Slides ----------
+// Slide blocks go down in a line, a step lower each. A new one placed just below and beside
+// another lines up with it (it carries on the way that one goes); otherwise it slopes down away
+// from you.
+const FACE_DIRS = [[0, 1], [1, 0], [0, -1], [-1, 0]]; // (which way each facing points)
+const isSlide = (x, y, z) => !!BLOCKS[blockId(world.get(x, y, z))]?.slide;
+function slideFacing(x, y, z) {
+  for (let f = 0; f < 4; f++) {
+    const [dx, dz] = FACE_DIRS[f];
+    if (isSlide(x - dx, y + 1, z - dz)) return f; // (one above, behind: carry on its way)
+  }
+  return null;
+}
+// The whole slide a block is part of, top to bottom: [[x, y, z], ...].
+function slideChain(x, y, z) {
+  const step = (cx, cy, cz, up) => {
+    for (const [dx, dz] of FACE_DIRS) if (isSlide(cx + dx, cy + (up ? 1 : -1), cz + dz)) return [cx + dx, cy + (up ? 1 : -1), cz + dz];
+    return null;
+  };
+  let top = [x, y, z];
+  for (let i = 0; i < 64; i++) {
+    const up = step(...top, true);
+    if (!up) break;
+    top = up;
+  }
+  const chain = [top];
+  for (let i = 0; i < 64; i++) {
+    const down = step(...chain.at(-1), false);
+    if (!down || chain.some(c => c[0] === down[0] && c[1] === down[1] && c[2] === down[2])) break;
+    chain.push(down);
+  }
+  return chain;
+}
+// Whee! Down the slide (sitting, faster and faster), and off the end.
+let sliding = null;
+function startSlide(x, y, z) {
+  const chain = slideChain(x, y, z);
+  if (riding() || sliding) return;
+  const last = chain.at(-1), prev = chain.at(-2) || [last[0], last[1] + 1, last[2]];
+  const dir = [last[0] - prev[0], last[2] - prev[2]];
+  // The path: from the top of the first block's high end, down each one, and out past the end.
+  const pts = chain.map(([cx, cy, cz], i) => {
+    const next = chain[i + 1] || [cx + dir[0], cy - 1, cz + dir[1]];
+    const dx = next[0] - cx, dz = next[2] - cz;
+    return new THREE.Vector3(cx + 0.5 - dx * 0.5, cy + 1, cz + 0.5 - dz * 0.5);
+  });
+  pts.push(new THREE.Vector3(last[0] + 0.5 + dir[0] * 0.5, last[1] + 0.12, last[2] + 0.5 + dir[1] * 0.5));
+  sliding = { pts, i: 0, speed: 3, dir };
+  player.vel.set(0, 0, 0);
+  player.pos.copy(pts[0]);
+  sounds.whoosh();
+  net.send({ t: 'slid' });
+}
+function updateSlide(dt) {
+  const s = sliding;
+  s.speed = Math.min(11, s.speed + dt * 9);
+  let left = s.speed * dt;
+  while (left > 0 && s.i < s.pts.length - 1) {
+    const to = s.pts[s.i + 1], d = player.pos.distanceTo(to);
+    if (d <= left) {
+      player.pos.copy(to);
+      left -= d;
+      s.i++;
+    } else {
+      player.pos.lerp(to, left / d);
+      left = 0;
+    }
+  }
+  player.vel.set(0, 0, 0);
+  if (s.i >= s.pts.length - 1) {
+    // Off the end, still going!
+    sliding = null;
+    player.vel.set(s.dir[0] * s.speed * 0.6, 1.5, s.dir[1] * s.speed * 0.6);
+    hud.toast('🎢 Wheee!');
+  }
+}
+
 function placeBlock(item) {
   const def = BLOCKS[item];
   if (hit.place[1] < 0 && fillHole(item, ...hit.place)) return;
@@ -4058,7 +4160,8 @@ function placeBlock(item) {
   if (def.shape === 'picture') return placePicture(item);
   // Furniture turns to face you, speed pads point the way you're looking, and each new
   // music block plays the next note up.
-  const placed = def.speedPad ? makeBlock(item, facingTowards(player.yaw + Math.PI))
+  const placed = def.slide ? makeBlock(item, slideFacing(...hit.place) ?? facingTowards(player.yaw + Math.PI))
+    : def.speedPad ? makeBlock(item, facingTowards(player.yaw + Math.PI))
     : def.facing ? makeBlock(item, facingTowards(player.yaw)) : def.music ? makeBlock(item, nextNote) : item;
   if (def.crop) {
     // Seeds: in grass or dirt (the ground, or a Grass or Dirt block), with nothing there yet.
@@ -4310,6 +4413,7 @@ function interact() {
       if (setBlock(...hit.block, turnLine(hit.value))) sounds.click();
       return;
     }
+    if (BLOCKS[blockId(hit.value)]?.slide) return startSlide(...hit.block);
     const s = structures.at(...hit.block);
     if (s?.type === 'bed') return goToBed(s);
     if (s?.type === 'cannon') return fireCannon(s);
@@ -5785,7 +5889,7 @@ let menuSpin = 0, lastFrame = 0, frameCount = 0, crouchK = 0;
 // menu (nothing much is moving then).
 function frameRateNow() {
   if (!inGame) return 30;
-  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel || petMenu?.open || cards?.open || gameUI?.pickerOpen || weatherPicker?.open || lunchbox?.open || hopper?.open || guardAsk?.open) return 12;
+  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel || petMenu?.open || cards?.open || gameUI?.pickerOpen || weatherPicker?.open || lunchbox?.open || hopper?.open || palAsk?.open || guardAsk?.open) return 12;
   return settings.fps || 1000;
 }
 
@@ -5828,6 +5932,17 @@ function frame(timestamp) {
       const aim = myCar.h + carCam.yaw;
       for (const ev of cars.drive(myCar, dt, active && !vanSleep ? held : noKeys, aim)) vehicleEvent(ev, myCar);
       if (myCar.spec.flying) carCam.yaw = Math.atan2(Math.sin(aim - myCar.h), Math.cos(aim - myCar.h));
+      if (myCar.spec.plane) {
+        // The Sky Pilots: taking off, and landing (in one piece) after a proper flight.
+        if (!myCar.onGround) flightLog.air += dt;
+        if (flightLog.was && !myCar.onGround && myCar.speed > 12) net.send({ t: 'flight', what: 'takeoff' });
+        if (!flightLog.was && myCar.onGround && flightLog.air > 6 && myCar.hp > 0) {
+          net.send({ t: 'flight', what: 'land' });
+          hud.toast('🛬 👍');
+        }
+        if (myCar.onGround) flightLog.air = 0;
+        flightLog.was = myCar.onGround;
+      }
       player.pos.copy(vanSleep ? cars.bed(myCar, 0).position : cars.seat(myCar).position);
       player.vel.set(0, 0, 0);
       if (myCar.noGas) {
@@ -5875,7 +5990,9 @@ function frame(timestamp) {
       player.sledding = sledding;
       player.winter = !!seasonLook?.winter;
       player.sneakers = hud.wearing(SNEAKERS);
-      player.update(dt, active && !guardCatch?.frozen ? held : noKeys); // (not while the bodyguards have hold of you)
+      player.explorerBoots = perks.has('explorer'); // (the Explorer Club's boots: a bit faster)
+      if (sliding) updateSlide(dt); // (whee: down a slide)
+      else player.update(dt, active && !guardCatch?.frozen ? held : noKeys); // (not while the bodyguards have hold of you)
       if (sledding && player.onGround && !player.surface()) sled(false); // (off the snow: off the sled)
       // (Never inside the ground, even if a hole grew back over us a moment ago.)
       if (player.pos.y < 0 && world.isSolid(Math.floor(player.pos.x), Math.floor(player.pos.y + 0.05), Math.floor(player.pos.z))) {
@@ -6136,7 +6253,7 @@ function frame(timestamp) {
     myBody.targetPitch = inBed() ? 0 : player.pitch;
     myBody.flying = player.flying;
     myBody.swing = view.swingT;
-    myBody.sitting = !!seated || !!liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel';
+    myBody.sitting = !!seated || !!sliding || !!liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel';
     myBody.hotair = contraptions.riding === 'balloon';
     myBody.sledding = sledding;
     myBody.parachute = !!player.parachute && !riding();
@@ -6336,7 +6453,7 @@ load();
 
 // Handy for poking at the game from the browser console.
 window.buildzone = {
-  tvs, news, newsCam, keys, getOut, playHopper,
+  tvs, news, newsCam, keys, getOut, playHopper, startSlide, slideChain,
   scene, camera, sky, net, avatars, renderer, fireworks, effects, glow, reflections, view, sounds,
   get world() { return world; },
   get player() { return player; },

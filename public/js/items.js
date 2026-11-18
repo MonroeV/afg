@@ -79,7 +79,7 @@ export const familyOf = item => FAMILY_OF.get(item) || null;
 // shows up once, where its first style is.) Lamps are in Home, outdoor lights in Town.
 const HOME = [94, 60, 74, 95, 61, 62, 73, 64, 63, 65, 66, 78, 67, 68, 39, 40, 41, 42, 44, 43, 21, 53, 103, 54, 25, 35, 20, 75, 76, 77, 79, 80, 81, 86, 92, 126, 127, 128, 129, 130];
 const TOWN = [22, 23, 56, 24, 58, 46, 47, 45, 48, 49, 27, 36, 1, 7, 8, 89, 87, 88, 91, 90, 97, 98, 99, 100, 101, 102, 116, 117, 118, 119, 120, WATERING_CAN, 131, 132, 133, 134];
-const FUN = [93, SHOWTIME, 83, 84, 82, 85, BALL, TREATS, FIREWORKS, WATER_BALLOON, SNOWBALL, SLED, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28, 121, 122, 123, 124, 125];
+const FUN = [93, SHOWTIME, 83, 84, 82, 85, BALL, TREATS, FIREWORKS, WATER_BALLOON, SNOWBALL, SLED, BUBBLES, BALLOON, 19, 70, 69, 71, 72, 28, 146, 121, 122, 123, 124, 125];
 const listed = new Set([...HOME, ...TOWN, ...FUN]);
 const visible = i => typeof i !== 'number' || !BLOCKS[i].hidden;
 export const TABS = [

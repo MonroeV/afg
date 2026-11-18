@@ -1025,3 +1025,10 @@ body.touch #quest-card { top: 96px; left: 8px; font-size: 13px; }
 .hopper-panel canvas { width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; border: 4px solid #222; touch-action: none; image-rendering: pixelated; }
 .hopper-buttons { display: flex; gap: 10px; margin-top: 10px; }
 .hopper-buttons .hop-btn { font-size: 22px; padding: 10px 28px; }
+
+/* A kid at Friendship Park: be best friends? */
+.pal-panel { width: min(380px, 100%); align-items: center; text-align: center; }
+.pal-note { font-size: 18px; min-height: 22px; margin-bottom: 8px; }
+.pal-choices { display: flex; gap: 14px; }
+.pal-choices button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 22px; font-size: 18px; font-weight: 800; }
+.pal-choices .big { font-size: 44px; line-height: 1; }

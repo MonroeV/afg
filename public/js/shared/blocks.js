@@ -221,6 +221,9 @@ export const BLOCKS = {
   143: { name: 'Organ', shape: 'model', model: 'organ', facing: true, hidden: true, worldOnly: true, box: [0.02, 0, 0.3, 0.98, 1, 0.98] },
   144: { name: 'Sacrament Table', shape: 'model', model: 'sacramentTable', facing: true, hidden: true, worldOnly: true, box: [0, 0, 0.1, 1, 0.8, 0.9] },
   145: { name: 'Steeple', shape: 'model', model: 'spire', hidden: true, worldOnly: true, box: [0.2, 0, 0.2, 1.8, 1, 1.8] },
+  // A slide: place them in a line going down, one step lower each, all facing the way down
+  // (with a Ladder up to the top). Right-click it to slide! (Low, so you can walk over it.)
+  146: { name: 'Slide', shape: 'model', model: 'slide', facing: true, slide: true, box: [0, 0, 0, 1, 0.12, 1] },
 };
 // Crops: how grown (0 seeds .. 3 ripe) and whether they've just been watered.
 export const CROP_RIPE = 3, CROP_WET = 4;

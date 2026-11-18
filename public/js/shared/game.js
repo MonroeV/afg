@@ -14,6 +14,7 @@ import { MAX_TUNNELS, isTunnelY, tunnelKey, openBelow } from './underground.js';
 import { buildShops, buildOuterShops } from './shops.js';
 import { buildChurch, meetingOn, MEETING_COINS, MEETING_STAY } from './church.js';
 import { buildAirport } from './airport.js';
+import { buildPark } from './park.js';
 import { findHomes } from './residents.js';
 import { buildWeatherStation, SHOWERS } from './weather.js';
 import { buildBuildPark } from './buildpark.js';
@@ -29,7 +30,7 @@ import { Structures } from '../structures.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
-export const SAVE_VERSION = 22;
+export const SAVE_VERSION = 23;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -283,6 +284,7 @@ export class GameRoom {
       this.upgradeTo20();
       this.upgradeTo21();
       this.upgradeTo22();
+      this.upgradeTo23();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -325,6 +327,8 @@ export class GameRoom {
         // Taco Tuesday: which Tuesday (the day count), and how many free tacos they've had.
         tacoDay: Number.isInteger(w.tacoDay) ? w.tacoDay : -1,
         churchDay: Number.isInteger(w.churchDay) ? w.churchDay : -1, // (the last Sunday they came to church)
+        pal: Number.isInteger(w.pal) ? w.pal : null, // their best friend (a kid from Friendship Park)
+        ate: Array.isArray(w.ate) ? w.ate.filter(f => FOODS[f]) : [], // the kinds of food they've eaten
         tacos: Number.isInteger(w.tacos) && w.tacos > 0 ? w.tacos : 0,
         noAsk: Array.isArray(w.noAsk) ? w.noAsk.filter(k => typeof k === 'string').slice(0, 50) : [], // (people who can't ask your bodyguards to let them in)
         challenges: Array.isArray(w.challenges) ? w.challenges.filter(id => CHALLENGES.some(c => c.id === id)) : [], // Builder Bea's cards done
@@ -376,6 +380,7 @@ export class GameRoom {
     if (data.version < 20) this.upgradeTo20();
     if (data.version < 21) this.upgradeTo21();
     if (data.version < 22) this.upgradeTo22();
+    if (data.version < 23) this.upgradeTo23();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -809,6 +814,55 @@ export class GameRoom {
     this.onDirty();
   }
 
+  // Worlds saved before version 23: Friendship Park.
+  upgradeTo23() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const park = buildPark({ get, set, canUse: this.freeLand() });
+    if (park) {
+      this.claims.push(park.claim);
+      for (const [x, y, z, text] of park.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+      this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), park: park.place };
+    }
+    this.log(`Added Friendship Park (${park ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
+  // Their best friend from Friendship Park (the NPC), if they have one.
+  palOf(client) {
+    const id = this.wallet(client).pal;
+    return id ? this.npcs.list.find(n => n.id === id) || null : null;
+  }
+
+  // A minute hanging out with your best friend (the Best Friends club counts them). With the
+  // club's badge, your friend brings you a snack now and then.
+  hangout(client, n) {
+    this.progress(client, 'friends', 'hangout');
+    const w = this.wallet(client);
+    w.palMinutes = (w.palMinutes || 0) + 1;
+    if (this.perk(client, 'friends') && w.palMinutes % 4 === 0 && (w.pantry?.cookie || 0) < MAX_PANTRY) {
+      w.pantry = { ...(w.pantry || {}), cookie: (w.pantry?.cookie || 0) + 1 };
+      this.npcs.say(n, `🍪 For you, ${client.name}! 💕`, true);
+      this.sendWallet(client);
+      client.send({ t: 'food_got', food: 'cookie', n: w.pantry.cookie });
+    }
+  }
+
+  // The Explorer Club: who's got to which of the faraway places (every couple of seconds).
+  updateExplorers() {
+    const keys = { airport: 'airport', church: 'church', fiesta: 'store fiesta', salon: 'store salon', grocery: 'store grocery' };
+    const rects = Object.entries(keys).map(([task, key]) => [task, this.claims.find(c => c.key === key)]).filter(([, c]) => c);
+    const sky = this.places?.skytowers?.towers?.[0];
+    for (const c of this.clients.values()) {
+      if (!c.joined) continue;
+      const [x, y, z] = c.pos, w = this.wallet(c), done = w.clubs?.explorer || {};
+      for (const [task, r] of rects) if (!done[task] && x >= r.x0 && x <= r.x1 + 1 && z >= r.z0 && z <= r.z1 + 1) this.progress(c, 'explorer', task);
+      if (sky && !done.skytop && y >= sky.top - 1 && Math.hypot(x - sky.x, z - sky.z) < 10) this.progress(c, 'explorer', 'skytop');
+    }
+  }
+
   // Sunday's meeting at the church: everyone there for a minute of it gets a thank-you (once each
   // Sunday). Every second.
   updateChurch(secs) {
@@ -1108,6 +1162,7 @@ export class GameRoom {
     w.streak ??= 0;
     w.hunger ??= HUNGER_FULL; // (full up, to start with)
     w.pantry ??= {}; // your lunchbox
+    w.ate ??= [];
     return w;
   }
 
@@ -1319,6 +1374,9 @@ export class GameRoom {
       old.drop?.();
     }
     this.seen(client.name);
+    // Your best friend (from Friendship Park) comes along again.
+    const pal = this.palOf(client);
+    if (pal && !pal.follow) pal.follow = client.id;
     client.send({
       t: 'welcome',
       id: client.id,
@@ -1752,6 +1810,7 @@ export class GameRoom {
           w.tacoDay = this.day;
           w.tacos = (w.tacos || 0) + 1;
           reply(`🎉🌮 Taco Tuesday! FREE! (${FREE_TACOS - w.tacos} 🌮🆓 left)`);
+          this.progress(client, 'foodie', 'taco');
         } else w.coins -= price;
         w.pantry[food] = (w.pantry[food] || 0) + 1;
         this.sendWallet(client);
@@ -2134,11 +2193,54 @@ export class GameRoom {
       if (!FOODS[food] || !(w.pantry?.[food] > 0) || !this.allow(client, 'eat', 2, 3)) return;
       w.pantry[food]--;
       if (!w.pantry[food]) delete w.pantry[food];
-      this.feed(client, FOODS[food].fill);
+      this.feed(client, FOODS[food].fill * (this.perk(client, 'foodie') ? 2 : 1)); // (the Foodie Club's badge: twice as filling)
+      if (!w.ate.includes(food)) w.ate.push(food);
+      this.progress(client, 'foodie', 'eat');
+      this.progress(client, 'foodie', 'kinds', w.ate.length, true);
       this.sendWallet(client);
       client.send({ t: 'ate', food });
       this.broadcast({ t: 'fx', kind: 'eat', id: client.id, food }, client);
       this.onDirty();
+    },
+
+    // Be best friends with a kid from Friendship Park (yes), or say bye for now (no, to yours).
+    pal(client, { id, yes }) {
+      const n = this.npcs.list.find(m => m.id === id && m.def.pal);
+      if (!n || !this.allow(client, 'pal', 1, 3)) return;
+      const w = this.wallet(client);
+      if (yes) {
+        if (n.follow && n.follow !== client.id) return;
+        if (Math.hypot(client.pos[0] - n.pos[0], client.pos[2] - n.pos[2]) > 12) return; // (you have to be there)
+        const before = this.palOf(client);
+        if (before && before !== n) {
+          before.follow = null;
+          before.pos = before.home.slice();
+          before.pose = 0;
+        }
+        w.pal = n.id;
+        n.follow = client.id;
+        this.npcs.act(n, NPC_ACT.cheer, 2);
+        this.npcs.say(n, `Yay! Best friends, ${client.name}! 🎉💕`, true);
+        this.broadcast({ t: 'fx', kind: 'hearts', x: n.pos[0], y: n.pos[1] + 1.8, z: n.pos[2] });
+        this.progress(client, 'friends', 'friend');
+      } else if (w.pal === n.id) {
+        w.pal = null;
+        this.npcs.say(n, `Bye for now, ${client.name}! Come back and play! 👋`, true);
+        n.follow = null;
+        n.pos = n.home.slice();
+        n.pose = 0;
+      }
+      this.onDirty();
+    },
+
+    // Done something in an airplane (the Sky Pilots club): took off, landed, parachuted down.
+    flight(client, { what }) {
+      if (['takeoff', 'land', 'chute'].includes(what) && this.allow(client, 'flight', 0.5, 2)) this.progress(client, 'pilot', what);
+    },
+
+    // Went down a slide (the Best Friends club).
+    slid(client) {
+      if (this.allow(client, 'slid', 0.4, 2)) this.progress(client, 'friends', 'slide');
     },
 
     // Caught something good to eat when it rained food (a little bite each).
@@ -2815,6 +2917,10 @@ export class GameRoom {
       this.updateCrops();
     }
     this.updateFalling(dt);
+    if (!(t.explore > 0)) {
+      t.explore = 2;
+      this.updateExplorers();
+    }
     if (t.church <= 0) {
       t.church = 1;
       this.updateChurch(1);
