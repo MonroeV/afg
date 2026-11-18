@@ -53,6 +53,13 @@ customize your character, drive cars, build anything and play with friends.
       - **bumper cars** in a fenced arena: they bounce off each other (BOING) and never get hurt
       - a merry-go-round (the Build Book's), and Pete's snack stand (🍿 🍭 🍦 🌭 🍋)
       The Loop Express stops right by it
+    - **The BuildZone Zoo** 🦁🐘 (since v0.53, on the north side of the Outer Loop): seven pens
+      of animals made of blocks, each wandering about its pen (everyone sees them in the same
+      places): elephants 🐘, giraffes 🦒, lions 🦁, zebras 🦓, penguins 🐧 (with a pool), pandas
+      🐼 (with bamboo) and monkeys 🐒 (with trees to play round). Right-click an animal to
+      **feed** it something from your lunchbox: it munches happily, with hearts, and each kind
+      has a favorite food (🐘🍌 🦒🍎 🦁🥪 🦓🥕 🐧🧀 🐼🍪 🐒🍌) that gets it extra excited. Zookeeper
+      Zara is by her hut
     - **The Loop Express** 🚆 (since v0.51): a train all the way round the Outer Loop, on a track
       high over the outside of the road, held up by concrete pillars. Three trains go round and
       round. At each stop (by the new places, and where the roads from town come out) there's a
@@ -535,6 +542,7 @@ customize your character, drive cars, build anything and play with friends.
   | 😋 Foodie Club (v0.50) | Mateo, at Casa Fiesta | eat 10 things, 5 different kinds, get a free Taco Tuesday taco | 15 🪙, food fills you twice as much |
   | 🧭 Explorer Club (v0.50) | Scout Juno, at Friendship Park | visit the airport, the church, Casa Fiesta, the salon and the grocery store, and go to the top of Sky Tower | 25 🪙, explorer's boots (you walk a bit faster) |
   | 🤝 Best Friends (v0.50) | Miss Joy, at Friendship Park | make a best friend, hang out together for 5 minutes, go down a slide 3 times | 20 🪙, your best friend brings you snacks |
+  | 🦜 Zookeepers (v0.53) | Zookeeper Zara, at the zoo | see all 7 kinds of animals, feed animals 5 times, feed 3 different kinds | 20 🪙, a parrot friend rides on your shoulder |
 
   Each step pops up by the badge counter ("🔧 2/3"), and a new badge gets a big celebration with
   fireworks. The **daily bonus** grows every day in a row you play (+2 a day, up to +10)
@@ -956,6 +964,7 @@ public/
     palui.js           A kid at Friendship Park asking to be your best friend
     trainui.js         The Loop Express: the track and trains you see, picking a stop, riding
     funrides.js        Fun Land's roller coaster and Ferris wheel: drawing and riding them
+    zooanimals.js      The zoo's animals: their block models, wandering about their pens, feeding them
     guardcatch.js      Bodyguards keeping you off their land: caught and walked off, blown away, flushed out
     guardui.js         Someone asking your bodyguards to let them in: your answer
     lighting.js        Live reflections and the glow effect
@@ -1006,6 +1015,7 @@ public/
       park.js          Friendship Park: the paths, flowers, trees, swings and slides
       train.js         The Loop Express: its track, where the trains are, the stops, pillars and ticket machines
       funland.js       Fun Land: its layout, the bumper car arena, and the coaster's and wheel's shapes
+      zoo.js           The zoo: its paths, the seven pens (and what's in them), Zara's hut, the animals' favorite foods
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/
   make-engine-sounds.py  Makes the engine recordings (needs numpy and ffmpeg; run it after changing a voice)

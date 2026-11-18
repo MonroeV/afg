@@ -114,6 +114,15 @@ export const CLUBS = [
     ],
     reward: { coins: 20, perk: '🍪💕', perkName: 'Your best friend brings you snacks' },
   },
+  {
+    id: 'zoo', name: 'Zookeepers', icon: '🦓', color: '#558b2f', leader: 'Zookeeper Zara', where: 'at the zoo',
+    tasks: [
+      { id: 'see', icon: '👀', goal: 7, what: 'Go and see every kind of animal at the zoo' },
+      { id: 'feed', icon: '🍎', goal: 5, what: 'Feed an animal (right-click it, with food in your lunchbox)' },
+      { id: 'kinds', icon: '🦒', goal: 3, what: 'Feed different kinds of animals' },
+    ],
+    reward: { coins: 20, perk: '🦜', perkName: 'A parrot friend rides on your shoulder' },
+  },
 ];
 
 export const clubById = id => CLUBS.find(c => c.id === id);

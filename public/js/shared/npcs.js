@@ -136,6 +136,13 @@ const NPCS = [
     hello: n => [`Step right up, ${n}! Popcorn! Cotton candy! 🍿🍭`, `Hi ${n}! Ridden the roller coaster yet? 🎢`],
     tips: ['🍿🍭🍦🌭🍋', 'The Ferris wheel goes REALLY high! 🎡', 'Bumper cars: bump into everybody! 🚗💥'],
   },
+  {
+    // The zoo: Zookeeper Zara (she runs the Zookeepers club).
+    id: -69, place: 'zookeeper', name: 'Zookeeper Zara', title: 'Zookeeper Zara 🦓', roam: 3, club: 'zoo',
+    look: { face: 'smile', hair: 'braids', hat: 'cowboy', shirt: 'tshirt', pants: 'shorts', extra: 'none', skin: '#8d5a34', hairColor: '#1b1209', hatColor: '#c8a165', shirtColor: '#558b2f', shirtColor2: '#ffffff', pantsColor: '#a1887f', shoesColor: '#5d4037' },
+    hello: n => [`Welcome to the zoo, ${n}! 🦁🐘🦒`, `Hi ${n}! The animals love a snack! 🍎`],
+    tips: ['🐘🍌 🦒🍎 🦁🥪 🦓🥕 🐧🧀 🐼🍪 🐒🍌', 'Right-click an animal to feed it! 🍱', 'The penguins love their pool! 🐧'],
+  },
   // ---------- Friendship Park ----------
   // Kids who'd love a best friend (talk to one!), and the leaders of two clubs.
   ...[

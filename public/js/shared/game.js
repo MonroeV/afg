@@ -17,6 +17,7 @@ import { buildAirport } from './airport.js';
 import { buildPark } from './park.js';
 import { buildTrainLine } from './train.js';
 import { buildFunLand } from './funland.js';
+import { buildZoo, ANIMALS } from './zoo.js';
 import { findHomes } from './residents.js';
 import { buildWeatherStation, SHOWERS } from './weather.js';
 import { buildBuildPark } from './buildpark.js';
@@ -32,7 +33,7 @@ import { Structures } from '../structures.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
-export const SAVE_VERSION = 25;
+export const SAVE_VERSION = 26;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -289,6 +290,7 @@ export class GameRoom {
       this.upgradeTo23();
       this.upgradeTo24();
       this.upgradeTo25();
+      this.upgradeTo26();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -333,6 +335,8 @@ export class GameRoom {
         churchDay: Number.isInteger(w.churchDay) ? w.churchDay : -1, // (the last Sunday they came to church)
         pal: Number.isInteger(w.pal) ? w.pal : null, // their best friend (a kid from Friendship Park)
         ate: Array.isArray(w.ate) ? w.ate.filter(f => FOODS[f]) : [], // the kinds of food they've eaten
+        zooSeen: Array.isArray(w.zooSeen) ? w.zooSeen.filter(k => ANIMALS[k]) : [], // the animals they've been to see
+        zooFed: Array.isArray(w.zooFed) ? w.zooFed.filter(k => ANIMALS[k]) : [], // and fed
         tacos: Number.isInteger(w.tacos) && w.tacos > 0 ? w.tacos : 0,
         noAsk: Array.isArray(w.noAsk) ? w.noAsk.filter(k => typeof k === 'string').slice(0, 50) : [], // (people who can't ask your bodyguards to let them in)
         challenges: Array.isArray(w.challenges) ? w.challenges.filter(id => CHALLENGES.some(c => c.id === id)) : [], // Builder Bea's cards done
@@ -387,6 +391,7 @@ export class GameRoom {
     if (data.version < 23) this.upgradeTo23();
     if (data.version < 24) this.upgradeTo24();
     if (data.version < 25) this.upgradeTo25();
+    if (data.version < 26) this.upgradeTo26();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -862,6 +867,23 @@ export class GameRoom {
     this.onDirty();
   }
 
+  // Worlds saved before version 26: the zoo (and a train stop by it).
+  upgradeTo26() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const zoo = buildZoo({ get, set, canUse: this.freeLand() });
+    if (zoo) {
+      this.claims.push(zoo.claim);
+      for (const [x, y, z, text] of zoo.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+      this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...zoo.places };
+      this.addTrainStops();
+    }
+    this.log(`Added the zoo (${zoo ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
   addTrainStops() {
     const get = (x, y, z) => this.get(x, y, z);
     const set = (x, y, z, v) => {
@@ -901,6 +923,13 @@ export class GameRoom {
       const [x, y, z] = c.pos, w = this.wallet(c), done = w.clubs?.explorer || {};
       for (const [task, r] of rects) if (!done[task] && x >= r.x0 && x <= r.x1 + 1 && z >= r.z0 && z <= r.z1 + 1) this.progress(c, 'explorer', task);
       if (sky && !done.skytop && y >= sky.top - 1 && Math.hypot(x - sky.x, z - sky.z) < 10) this.progress(c, 'explorer', 'skytop');
+      // The zoo: which animals they've been to see (by their pens).
+      for (const pen of this.places?.zoo?.pens || []) {
+        const [x0, z0, x1, z1] = pen.rect;
+        if (x < x0 - 3 || x > x1 + 3 || z < z0 - 3 || z > z1 + 3 || w.zooSeen?.includes(pen.kind)) continue;
+        w.zooSeen = [...(w.zooSeen || []), pen.kind];
+        this.progress(c, 'zoo', 'see', w.zooSeen.length, true);
+      }
     }
   }
 
@@ -1449,6 +1478,7 @@ export class GameRoom {
       church: this.places?.church || null, // (where everyone sits for Sunday's meeting: see churchui.js)
       train: this.places?.train?.stops || [], // the Loop Express's stops (see train.js)
       funland: this.places?.funland || null, // where Fun Land's rides are (see funrides.js)
+      zoo: this.places?.zoo || null, // the zoo's pens (see zooanimals.js)
       landmarks: Object.entries(this.places || {}).filter(([, p]) => p && Number.isFinite(p.x) && Number.isFinite(p.z)).map(([k, p]) => [k, p.x, p.z]),
     });
     // Coins: your wallet, and a little present the first time you play each day.
@@ -2280,6 +2310,26 @@ export class GameRoom {
     // Done something in an airplane (the Sky Pilots club): took off, landed, parachuted down.
     flight(client, { what }) {
       if (['takeoff', 'land', 'chute'].includes(what) && this.allow(client, 'flight', 0.5, 2)) this.progress(client, 'pilot', what);
+    },
+
+    // Feeding an animal at the zoo (something from your lunchbox: what it likes best, if you've
+    // got it). Everyone sees it munch.
+    zoo_feed(client, { kind, i }) {
+      const pen = this.places?.zoo?.pens?.find(p => p.kind === kind), a = ANIMALS[kind];
+      if (!pen || !a || !this.allow(client, 'zooFeed', 1, 2)) return;
+      const [x0, z0, x1, z1] = pen.rect, [x, , z] = client.pos;
+      if (x < x0 - 5 || x > x1 + 5 || z < z0 - 5 || z > z1 + 5) return;
+      const w = this.wallet(client), pantry = w.pantry || {};
+      const food = pantry[a.likes] > 0 ? a.likes : FOOD_KINDS.find(f => pantry[f] > 0);
+      if (!food) return client.send({ t: 'zoo_hungry' });
+      pantry[food]--;
+      if (!pantry[food]) delete pantry[food];
+      w.zooFed = [...new Set([...(w.zooFed || []), kind])];
+      this.sendWallet(client);
+      this.progress(client, 'zoo', 'feed');
+      this.progress(client, 'zoo', 'kinds', w.zooFed.length, true);
+      this.broadcast({ t: 'fx', kind: 'zoofed', animal: kind, i: Math.max(0, Math.min(9, num(i))), food, liked: food === a.likes });
+      this.onDirty();
     },
 
     // Went down a slide (the Best Friends club).

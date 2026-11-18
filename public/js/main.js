@@ -16,6 +16,8 @@ import { HopperWindow } from './tvgame.js';
 import { PalAsk } from './palui.js';
 import { LoopExpress } from './trainui.js';
 import { FunRides } from './funrides.js';
+import { ZooAnimals } from './zooanimals.js';
+import { ANIMALS } from './shared/zoo.js';
 import { GATE_BLOCK } from './shared/funland.js';
 import { gameTime, STOP_BLOCK } from './shared/train.js';
 import { meetingAt, isSunday, MEETING_COINS } from './shared/church.js';
@@ -249,6 +251,8 @@ let showers = null, weatherMast = null; // it's raining tacos (or ice cream, or 
 let weatherPicker = null; // Stormy's menu: what shall it rain?
 let lunchbox = null; // your lunchbox 🍱 (L): food to eat
 let funRides = null; // Fun Land's roller coaster and Ferris wheel
+let zooAnimals = null; // the zoo's animals
+let zooAim = null; // (the one under the crosshair)
 let loopExpress = null; // the Loop Express (the train round the Outer Loop)
 let palAsk = null; // a kid at Friendship Park asking to be your best friend
 let flightLog = { air: 0, was: true }; // (for the Sky Pilots: how long we've been up, and were we on the ground)
@@ -725,6 +729,7 @@ function startGame(welcome, resume = false) {
   churchPlace = welcome.church || null;
   loopExpress.setStops(welcome.train);
   funRides.setPlace(welcome.funland);
+  zooAnimals.setPlace(welcome.zoo);
   weather.set(welcome.rain || 0, welcome.snow);
   agency.setGuards(welcome.guards);
   if (guardCatch) guardCatch.cooldown = 1.5; // (not until the server knows where we are)
@@ -818,6 +823,7 @@ net.on('states', ({ list, cars: carStates, npcs: npcStates, ts }) => {
   }
 });
 net.on('news', ({ place, guest }) => Object.assign(news, { on: true, place, guest, caption: '', cut: true }));
+net.on('zoo_hungry', () => hud.toast('🍱❓ ➡ 🛒'));
 net.on('npc_say', ({ id, text }) => {
   const a = npcs.get(id);
   if (!a) return;
@@ -997,6 +1003,7 @@ loopExpress = new LoopExpress({
   },
 });
 funRides = new FunRides({ scene, sounds, hud: { toast: text => hud.toast(text) } });
+zooAnimals = new ZooAnimals({ scene, effects, sounds });
 function openTrainPicker([x, , z]) {
   const st = loopExpress.stopAt(x + 0.5, z + 0.5);
   if (!st) return;
@@ -1073,8 +1080,12 @@ net.on('look', ({ id, look, name }) => {
   if (name) a?.setName(name);
 });
 net.on('emote', ({ id, kind }) => avatars.list.get(id)?.emote(kind));
-net.on('fx', ({ kind, x, y, z, color, seed, dir, id }) => {
+net.on('fx', ({ kind, x, y, z, color, seed, dir, id, animal, i, liked }) => {
   if (kind === 'hearts') effects.heartsAt(x, y, z);
+  else if (kind === 'zoofed') {
+    zooAnimals.fed(animal, i, liked, gameTime(worldDay, sky.time));
+    sounds.tone(500, 900, 0.15, 0.12, 'sine');
+  }
   else if (kind === 'bubbles') effects.blowBubbles(x, y, z, dir || [0, 0.3, 0], 4);
   else if (kind === 'balloon') letBalloonGo(x, y, z, color);
   else if (kind === 'sparkle') effects.sparkle(x, y, z, 30);
@@ -3400,7 +3411,7 @@ function sendState() {
   const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
   const balloon = hud.item === BALLOON && !riding() && !sleeping;
   const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || sliding || loopExpress?.riding || funRides?.riding || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
-    (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) | (sledding && !balloon ? FLAG.sled : 0) | (player.parachute && !balloon ? FLAG.parachute : 0) |
+    (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) | (sledding && !balloon ? FLAG.sled : 0) | (player.parachute && !balloon ? FLAG.parachute : 0) | (perks.has('zoo') && !balloon ? FLAG.parrot : 0) |
     (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
   net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item, drone: agency.droneState(player.yaw) });
 }
@@ -4389,6 +4400,9 @@ function interact() {
     net.send({ t: 'npc_talk', id: target.npc.id });
     return;
   }
+  // A zoo animal: feed it (something from your lunchbox).
+  const animal = !riding() && zooAnimals.aimed(camera);
+  if (animal) return net.send({ t: 'zoo_feed', kind: animal.kind, i: animal.i });
   // Pointing at a rocket, a volcano, a merry-go-round… (their models, not just their blocks).
   const toy = contraptions.pick(camera.position, lookDir, hit && !hit.ground ? camera.position.distanceTo(new THREE.Vector3(hit.block[0] + 0.5, hit.block[1] + 0.5, hit.block[2] + 0.5)) + 0.5 : 7);
   if (toy) return playWith(toy);
@@ -6131,6 +6145,9 @@ function frame(timestamp) {
       }
     } else if (target?.pet) {
       hint = item === BALL && target.avatar === myBody ? '🎾 Click to throw the ball · Right-click to pet' : '🐾 Right-click to pet';
+    } else if (!target && !riding() && (zooAim = zooAnimals.aimed(camera))) {
+      const like = ANIMALS[zooAim.kind];
+      hint = `${like.icon} Right-click to feed · ❤️ ${FOODS[like.likes]?.icon || ''}`;
     } else if (target?.npc) {
       hint = target.npc.id === -1 ? '🛍️ Right-click to shop at the Luxe Store' : `💬 Right-click to talk to ${target.npc.name.replace(/ \S+$/, '')}`;
     } else if (hitState.key) {
@@ -6295,6 +6312,7 @@ function frame(timestamp) {
     myBody.hotair = contraptions.riding === 'balloon';
     myBody.sledding = sledding;
     myBody.parachute = !!player.parachute && !riding();
+    myBody.parrot = perks.has('zoo');
     myBody.crouching = player.crouching && !riding();
     myBody.pizza = !!job;
     myBody.balloon = hud.item === BALLOON && !riding() && !sleeping ? paintHex() : null;
@@ -6429,6 +6447,7 @@ function frame(timestamp) {
     updateFiesta(dt);
     loopExpress.update(dt, gameTime(worldDay, sky.time), camera.position);
     funRides.update(dt, gameTime(worldDay, sky.time), camera.position);
+    zooAnimals.update(dt, gameTime(worldDay, sky.time), camera.position);
     updateChurch(dt, time);
   }
   cars.setView(camera.position, scene.fog.far);
@@ -6496,6 +6515,7 @@ window.buildzone = {
   tvs, news, newsCam, keys, getOut, playHopper, startSlide, slideChain, openTrainPicker,
   get loopExpress() { return loopExpress; },
   get funRides() { return funRides; },
+  get zooAnimals() { return zooAnimals; },
   gameNow: () => gameTime(worldDay, sky.time),
   scene, camera, sky, net, avatars, renderer, fireworks, effects, glow, reflections, view, sounds,
   get world() { return world; },

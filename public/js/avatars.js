@@ -39,7 +39,7 @@ function nameTag(name, color) {
 
 // What a player is doing, sent with their position: bits of `flags`. The top 24 bits are
 // the color of the balloon they're holding.
-export const FLAG = { sleeping: 1, sitting: 2, crouching: 4, balloon: 8, jet: 16, trail: 32, pizza: 64, hotair: 128, sled: 256, parachute: 512 }; // (sled and parachute: only without a balloon, whose color takes those bits)
+export const FLAG = { sleeping: 1, sitting: 2, crouching: 4, balloon: 8, jet: 16, trail: 32, pizza: 64, hotair: 128, sled: 256, parachute: 512, parrot: 1024 }; // (sled, parachute and parrot: only without a balloon, whose color takes those bits)
 
 // A speech bubble: rounded and white, with up to two lines of text and a little tail.
 function speechBubble(text) {
@@ -470,6 +470,7 @@ export class Avatar {
     this.hotair = !!(flags & FLAG.hotair);
     this.parachute = !(flags & FLAG.balloon) && !!(flags & FLAG.parachute);
     this.sledding = !(flags & FLAG.balloon) && !!(flags & FLAG.sled);
+    this.parrot = !(flags & FLAG.balloon) && !!(flags & FLAG.parrot);
   }
 
   emote(kind) {
@@ -517,6 +518,7 @@ export class Avatar {
     if (this.sledding) this.root.position.y -= SLED_DROP; // (sitting down low, on the sled)
     this.updateSled();
     this.updateParachute(time);
+    this.updateParrot(time);
     this.root.rotation.order = 'YXZ';
     this.root.rotation.y = this.yaw;
     // Lying back into bed (or sitting up out of it), and sitting down, happen smoothly.
@@ -661,6 +663,47 @@ export class Avatar {
     this.chute.visible = !!this.parachute;
     this.chute.rotation.z = Math.sin(time * 1.3) * 0.06;
     this.chute.rotation.x = Math.sin(time * 0.9 + 1) * 0.05;
+  }
+
+  // A parrot friend on the right shoulder (the Zookeepers club's prize): it bobs, looks about
+  // and flaps now and then.
+  updateParrot(time) {
+    if (!this.parrot && !this.parrotBird) return;
+    const g = this.character.group;
+    if (!this.parrotBird) {
+      const bird = new THREE.Group(), mat = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7 });
+      const box = (w, h, d, c, x, y, z, parent = bird) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(c));
+        m.position.set(x, y, z);
+        m.castShadow = true;
+        parent.add(m);
+        return m;
+      };
+      box(0.12, 0.17, 0.14, 0x2e9e44, 0, 0.1, 0);
+      const head = new THREE.Group();
+      head.position.set(0, 0.23, -0.02);
+      box(0.11, 0.1, 0.11, 0xe53935, 0, 0, 0, head);
+      box(0.04, 0.05, 0.05, 0xffc107, 0, -0.02, -0.07, head);
+      for (const s of [-1, 1]) box(0.015, 0.025, 0.025, 0x111111, s * 0.056, 0.015, -0.025, head);
+      bird.add(head);
+      const tail = box(0.06, 0.2, 0.04, 0x1e88e5, 0, 0.0, 0.09);
+      tail.rotation.x = 0.5;
+      const wings = [-1, 1].map(s => {
+        const w = new THREE.Group();
+        w.position.set(s * 0.065, 0.16, 0);
+        box(0.02, 0.15, 0.12, 0x1e88e5, 0, -0.06, 0, w);
+        bird.add(w);
+        return w;
+      });
+      this.parrotBird = { bird, head, wings };
+    }
+    const { bird, head, wings } = this.parrotBird;
+    if (bird.parent !== g) g.add(bird); // (a new look: a new body to sit on)
+    bird.visible = !!this.parrot;
+    bird.position.set(0.24, 1.38 + Math.abs(Math.sin(time * 2.2)) * 0.015, 0.02);
+    head.rotation.y = Math.sin(time * 0.7) > 0.6 ? 0.8 : Math.sin(time * 0.5) < -0.7 ? -0.7 : 0;
+    const flap = Math.sin(time * 0.37) > 0.92 ? Math.sin(time * 30) * 0.6 : 0;
+    wings.forEach((w, i) => (w.rotation.z = (i ? -1 : 1) * (0.05 + Math.abs(flap))));
   }
 
   // A red sled under them (sledding).
