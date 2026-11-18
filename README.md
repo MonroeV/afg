@@ -427,7 +427,7 @@ customize your character, drive cars, build anything and play with friends.
   ones (more or less!). **W** opens the throttle (**S** closes it, and brakes on the ground).
   Roll down the runway, and once you're going fast enough (the flight display says 🛫 Space!)
   hold **Space** to lift the nose and take off. In the air it turns toward where you look,
-  leaning into the turn (A/D lean it more); Space climbs, Shift dives, and let go of both and it
+  leaning right over into the turn (A/D or ←/→ turn it harder; a U-turn takes about 3 seconds); Space climbs, Shift dives, and let go of both and it
   flies level. Climbing slows you down and diving speeds you up. Too slow and it **stalls**:
   the wings stop lifting and the nose drops (⚠️ on the flight display), so keep your speed up.
   Throttle back and let go and it glides down gently. **Land** slowly and level, on the wheels;

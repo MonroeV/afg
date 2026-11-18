@@ -21,7 +21,9 @@ const PLANE = {
   liftSpeed: 21, // how fast it has to go for its wings to hold it up (flying level, nose a bit up)
   stall: 15, // slower than this in the air and the wings stop working: the nose drops
   rotate: 16, // fast enough down the runway to lift the nose
-  maxBank: 0.6, // how far it leans over in a turn
+  maxBank: 1.0, // how far it leans over in a turn
+  turnBoost: 2.4, // (turns are tighter than a real plane's: the map isn't that big!)
+  maxTurn: 1.1, // the fastest it turns (radians a second)
   hardLanding: 6, // coming down faster than this hurts it
   crash: 14, // hitting the ground (or anything) faster than this: a crash
 };
@@ -1683,14 +1685,15 @@ export class Cars {
     // Turning: in the air it leans toward where you're looking (and A/D lean it more), and
     // leaning is what turns it. On the ground the nose wheel steers.
     const off = Math.atan2(Math.sin(aimYaw - car.h), Math.cos(aimYaw - car.h));
-    const lean = (keys.has('KeyA') ? 1 : 0) - (keys.has('KeyD') ? 1 : 0);
+    const lean = (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0) - (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0);
     if (grounded) {
       car.roll += (0 - car.roll) * Math.min(1, dt * 6);
       car.yawRate = (Math.max(-0.9, Math.min(0.9, off * 1.5)) + lean * 0.6) * Math.min(1, v / 5);
     } else {
-      const bank = Math.max(-P.maxBank, Math.min(P.maxBank, off * 1.4 + lean * 0.5)) * flow;
-      car.roll += (bank - car.roll) * Math.min(1, dt * 1.8);
-      car.yawRate = (P.gravity * Math.tan(car.roll)) / Math.max(v, 10);
+      const bank = Math.max(-P.maxBank, Math.min(P.maxBank, off * 2.2 + lean * 0.9)) * flow;
+      car.roll += (bank - car.roll) * Math.min(1, dt * 3);
+      const turnRate = (P.turnBoost * P.gravity * Math.tan(car.roll)) / Math.max(v, 10) + lean * 0.25 * flow; // (and a little rudder)
+      car.yawRate = Math.max(-P.maxTurn, Math.min(P.maxTurn, turnRate));
     }
     car.h += car.yawRate * dt;
     // The way it's going turns with it (it doesn't skid sideways like a car on ice).
@@ -1708,7 +1711,7 @@ export class Cars {
     let cl = 0.3 + aoa * 3.2;
     if (aoa > 0.3) cl = Math.max(0, 1.26 - (aoa - 0.3) * 4); // (too steep: they stall)
     if (v < P.stall) cl *= (v / P.stall) ** 2;
-    const lift = Math.min(2.5, Math.max(-0.5, cl * (v / P.liftSpeed) ** 2)) * P.gravity * Math.cos(car.roll) * health;
+    const lift = Math.min(2.5, Math.max(-0.5, cl * (v / P.liftSpeed) ** 2)) * P.gravity * Math.cos(car.roll * 0.5) * health; // (leaning over loses a little lift)
     // (Lift pushes at right angles to the way it's going: climbing costs speed, diving gains it.)
     if (v > 0.5) {
       const ux = -car.vel.x * car.vel.y / (v * v), uy = 1 - (car.vel.y * car.vel.y) / (v * v), uz = -car.vel.z * car.vel.y / (v * v);
