@@ -328,7 +328,7 @@ export function blockMaterial(materials, v) {
 
 // The world is split into square chunks so the game only draws what you can see.
 const CHUNK = 64;
-const CHUNK_RADIUS = Math.hypot(CHUNK / 2, CHUNK / 2, 32);
+const CHUNK_RADIUS = Math.hypot(CHUNK / 2, CHUNK / 2, (WORLD.maxY + 1) / 2); // (a chunk's blocks, the whole height of the world)
 
 // Solid, see-through-nowhere cubes: one completely surrounded by these (inside a mountain, or a
 // thick wall) can't be seen from anywhere, so it isn't drawn at all.
@@ -684,7 +684,7 @@ export class World {
         // Each layer has its own copy of the shape, to hold its blocks' painted sides.
         geometry: (def.shape === 'model' ? modelGeometry(modelName(v, renderKey)) : def.shape === 'rail' ? railGeometry(blockMeta(v)) : GEOMETRY[def.shape || 'cube']).clone(),
         material: this.materials[renderKey] ?? this.materials[blockId(v)],
-        center: new THREE.Vector3(cx, 32, cz),
+        center: new THREE.Vector3(cx, (WORLD.maxY + 1) / 2, cz),
       };
       this.grow(layer, 64);
     }

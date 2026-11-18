@@ -313,7 +313,9 @@ function charactersApi(req, res) {
 
 // ---------- Multiplayer ----------
 
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 8192 });
+// Big messages (the whole world, when someone joins) go compressed; the little ones (every move)
+// don't need it.
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 8192, perMessageDeflate: { threshold: 16384, zlibDeflateOptions: { level: 6 } } });
 
 wss.on('connection', ws => {
   const client = room.connect(msg => ws.readyState === ws.OPEN && ws.send(JSON.stringify(msg)), () => ws.terminate());

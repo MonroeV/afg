@@ -10,6 +10,7 @@ import { buildShops } from './shops.js';
 import { findHomes } from './residents.js';
 import { buildWeatherStation } from './weather.js';
 import { buildBuildPark } from './buildpark.js';
+import { buildOuterLands } from './outerlands.js';
 
 const B = {
   grass: 1, dirt: 2, stone: 3, cobble: 4, brick: 5, planks: 6, log: 7, leaves: 8, glass: 9,
@@ -495,6 +496,9 @@ export function generateWorld(seed = 2024) {
   // The Secret Agency's base, out in the south-east.
   const base = buildSecretBase({ get: getB, set: put, canUse: free });
   if (base) markUsed(...base.area);
+  // The outer lands (all round the outside, since the world grew): the Outer Loop and its roads.
+  const outer = buildOuterLands({ get: getB, set: put, canUse: free, canPave: () => true });
+  for (const a of outer.areas) markUsed(...a);
   const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null, pizza: pizza?.place || null, lodge: frontier.places.lodge, ...far.places, ...(base?.places || {}), ...gas.places, ...shops.places, weather: weather?.place || null, buildpark: buildPark?.place || null, ...Object.fromEntries(homes.map((h, i) => [`home${i + 1}`, h])), agent: AGENT_SPOT };
   // The three TOP SECRET files (find them all for Top Secret clearance).
   places.files = hideSecretFiles({ get: getB, set: put, canUse: () => true, places });
@@ -552,7 +556,7 @@ export function generateWorld(seed = 2024) {
     const [x, y, z] = k.split(',').map(Number);
     blocks.push([x, y, z, v]);
   }
-  return { blocks, cars: placed, places, claims: [store?.claim, pizza?.claim, ...gas.claims, ...shops.claims, ...frontier.claims, ...far.claims, base?.claim, weather?.claim].filter(Boolean), signs: [...posts.signs, ...fishing.signs, ...far.signs, ...(base?.signs || []), ...gas.signs, ...shops.signs, ...(weather?.signs || []), ...(buildPark?.signs || [])] };
+  return { blocks, cars: placed, places, claims: [store?.claim, pizza?.claim, ...gas.claims, ...shops.claims, ...frontier.claims, ...far.claims, base?.claim, weather?.claim].filter(Boolean), signs: [...posts.signs, ...fishing.signs, ...far.signs, ...(base?.signs || []), ...gas.signs, ...shops.signs, ...(weather?.signs || []), ...(buildPark?.signs || []), ...outer.signs] };
 }
 
 // Saved worlds from before the new lamps: put proper lamp heads on the town's street lamps
@@ -901,7 +905,7 @@ function furnishTower({ x0, x1, z0, z1 }, get, set, canUse) {
   const kept = (x, z) => keep.some(([kx, kz]) => Math.abs(kx - x) <= 1 && Math.abs(kz - z) <= 1);
   // Floors: the marble slabs inside (the top one is the roof).
   let roof = 0;
-  for (let y = 1; y < 64; y++) if (blockId(get(ix0 + mid, y, iz0 + mid)) === B.marble) roof = y;
+  for (let y = 1; y <= WORLD.maxY; y++) if (blockId(get(ix0 + mid, y, iz0 + mid)) === B.marble) roof = y;
   const floors = [0];
   for (let y = 4; y < roof; y += 4) if (blockId(get(ix0 + mid, y, iz0 + mid)) === B.marble) floors.push(y);
   const LIGHTS = new Set([B.ceilingLight, B.chandelier, B.ladder, ELEVATOR, B.concrete]);

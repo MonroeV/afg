@@ -5,7 +5,11 @@ customize your character, drive cars, build anything and play with friends.
 
 - **Towns to explore**: a main town around the spawn square plus four villages, joined by roads,
   with houses you can walk into, shops, parks, playgrounds, a beach and street lamps
-- **A big world beyond the towns** (640 × 640 blocks):
+- **A big world beyond the towns** (1280 × 1280 blocks, and you can build up to 128 high):
+  - **The outer lands** (since v0.44, all round the outside of the old world): the **Outer Loop**, a
+    ring road all the way round, with roads out to it (east past the quarry, west past the farm,
+    north through the snowy woods), trees and wildflower meadows, and the bay at Sunny Shores
+    carrying on south to a far beach. New places go along the Outer Loop
   - **Up north, the snowy country** (the ground turns to snow and snowflakes start to fall): a
     **ski resort** with a big snowy mountain and a long ski run, a **ski lift** with chairs going
     up and down its cable (right-click the chair at the bottom to ride to the top, Space to hop

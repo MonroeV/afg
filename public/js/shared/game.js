@@ -15,6 +15,7 @@ import { buildShops } from './shops.js';
 import { findHomes } from './residents.js';
 import { buildWeatherStation, SHOWERS } from './weather.js';
 import { buildBuildPark } from './buildpark.js';
+import { buildOuterLands } from './outerlands.js';
 import { seasonAt, WINTER, SEASON_ICONS } from './seasons.js';
 import { Quests, cleanQuest } from './quests.js';
 import { TRICKS, TRICK_TRIES, TREATS, trickIndex, hatItem } from './tricks.js';
@@ -25,7 +26,7 @@ import { Structures } from '../structures.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX } from './claims.js';
 
-export const SAVE_VERSION = 16;
+export const SAVE_VERSION = 17;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -273,6 +274,7 @@ export class GameRoom {
       this.upgradeTo14();
       this.upgradeTo15();
       this.upgradeTo16();
+      this.upgradeTo17();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -353,6 +355,7 @@ export class GameRoom {
     if (data.version < 14) this.upgradeTo14();
     if (data.version < 15) this.upgradeTo15();
     if (data.version < 16) this.upgradeTo16();
+    if (data.version < 17) this.upgradeTo17();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -671,6 +674,21 @@ export class GameRoom {
     for (const [x, y, z, text] of park?.signs || []) this.signs.set(blockKey(x, y, z), cleanSignText(text));
     this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), weather: weather?.place || null, buildpark: park?.place || null };
     this.log(`Added the weather station (${weather ? 'yes' : 'no room'}) and the Build Park (${park ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
+  // Worlds saved before version 17: the world's twice as big now (1280 x 1280, and twice as tall).
+  // The outer lands all round: the Outer Loop road and the roads out to it, the bay on south to a
+  // far shore, trees and meadows. Only onto empty land nobody owns (nothing of the old world is
+  // touched: it's all past the old edge, but for the roads out to the Outer Loop).
+  upgradeTo17() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const outer = buildOuterLands({ get, set, canUse: this.freeLand(), canPave: (x, z) => !claimAt(this.claims, x, z) });
+    for (const [x, y, z, text] of outer.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+    this.log(`The world grew to 1280 x 1280: added the outer lands (${outer.count} blocks)`);
     this.onDirty();
   }
 

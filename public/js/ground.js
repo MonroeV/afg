@@ -107,14 +107,14 @@ export class Ground {
     this.seasonSnow ??= { value: 0 };
     this.seasonTint ??= { value: new THREE.Color(1, 1, 1) };
     const groundTex = textures.grass_top;
-    const repeat = 1000;
+    const repeat = Math.ceil((WORLD.max - WORLD.min + 1) / 100) * 100 + 160; // (the whole world, and a bit past the edge)
     const map = groundTex.map.clone();
     const normalMap = groundTex.normalMap.clone();
     for (const t of [map, normalMap]) {
       t.repeat.set(repeat, repeat);
       t.needsUpdate = true;
     }
-    const geo = new THREE.PlaneGeometry(repeat, repeat, 200, 200).rotateX(-Math.PI / 2);
+    const geo = new THREE.PlaneGeometry(repeat, repeat, 240, 240).rotateX(-Math.PI / 2);
     // Gentle large-scale color variation hides the texture repeating.
     const colors = [];
     const pos = geo.attributes.position;

@@ -8,7 +8,7 @@
 //
 // It all goes past the old edge of the world, where nobody could build before. Only the roads
 // out to it cross the old land, and those only go on empty land (like the frontier's roads).
-import { WORLD, SIGN, SNOW_LINE, makeBlock, stack } from './blocks.js';
+import { WORLD, OLD_WORLD, SIGN, SNOW_LINE, makeBlock, stack } from './blocks.js';
 import { makeRoads, rng, bumps, faceDir, tree, pine, skiHeight, SKI, OLD_EDGE, FAR_ROADS } from './frontier.js';
 
 const B = {
@@ -38,7 +38,7 @@ export function moreVehicles() {
 }
 
 // Where the sea's shore is along the south edge (it curves round into a bay).
-const seaShore = x => 296 + Math.round(2 * Math.sin(x * 0.045) + 1.5 * Math.sin(x * 0.11 + 1) + Math.max(0, Math.abs(x - SX) - 95) * 0.9);
+export const seaShore = x => 296 + Math.round(2 * Math.sin(x * 0.045) + 1.5 * Math.sin(x * 0.11 + 1) + Math.max(0, Math.abs(x - SX) - 95) * 0.9);
 
 // get(x, y, z) reads the world, set(x, y, z, v) writes it, canUse(x, z) says whether a column of
 // land may be built on, canPave(x, z) whether a sidewalk there may become road (where a new road
@@ -150,12 +150,12 @@ export function buildFarCountry({ get, set, canUse, canPave = canUse, finishMoun
   // The sea and the beach.
   for (let x = SX - 140; x <= SX + 140; x++) {
     const shore = seaShore(x);
-    for (let z = shore - 11; z <= WORLD.max; z++) {
+    for (let z = shore - 11; z <= OLD_WORLD.max; z++) { // (on past the old edge: see outerlands.js)
       if (z >= shore) put(x, 0, z, B.water);
       else if (z >= shore - 9 - ((x * 7 + 3) % 3 === 0 ? 1 : 0)) put(x, 0, z, B.sand);
     }
   }
-  area(SX - 140, Math.min(...[SX - 140, SX, SX + 140].map(seaShore)) - 12, SX + 140, WORLD.max);
+  area(SX - 140, Math.min(...[SX - 140, SX, SX + 140].map(seaShore)) - 12, SX + 140, OLD_WORLD.max);
   // Beach umbrellas with towels, and palm trees at the back of the beach.
   for (let x = SX - 72; x <= SX + 72; x += 12) {
     if (Math.abs(x - pierX) < 5 || Math.abs(x - towerX) < 5) continue;
@@ -368,7 +368,7 @@ export function buildFarCountry({ get, set, canUse, canPave = canUse, finishMoun
   mark(SKI.px - SKI.radius - 3, SKI.pz - SKI.radius - 3, SKI.px + SKI.radius + 3, SKI.pz + SKI.radius + 3);
   let pines = 0, tries = 0;
   while (pines < 60 && tries++ < 4000) {
-    const x = WORLD.min + 4 + Math.floor(rand() * (WORLD.max - WORLD.min - 8)), z = WORLD.min + 4 + Math.floor(rand() * (OLD_EDGE.min - WORLD.min - 6));
+    const x = OLD_WORLD.min + 4 + Math.floor(rand() * (OLD_WORLD.max - OLD_WORLD.min - 8)), z = OLD_WORLD.min + 4 + Math.floor(rand() * (OLD_EDGE.min - OLD_WORLD.min - 6));
     if (!free(x, z, 3) || !clearAt(x, z, 9, 1)) continue;
     pine(put, x, z, 0, 5 + Math.floor(rand() * 3));
     mark(x - 1, z - 1, x + 1, z + 1);
@@ -379,8 +379,8 @@ export function buildFarCountry({ get, set, canUse, canPave = canUse, finishMoun
   tries = 0;
   while (trees < 80 && tries++ < 5000) {
     const east = rand() < 0.5;
-    const x = east ? OLD_EDGE.max + 4 + Math.floor(rand() * (WORLD.max - OLD_EDGE.max - 8)) : WORLD.min + 4 + Math.floor(rand() * (OLD_EDGE.min - WORLD.min - 8));
-    const z = OLD_EDGE.min + Math.floor(rand() * (Math.min(WORLD.max - 4, seaShore(x) - 14) - OLD_EDGE.min));
+    const x = east ? OLD_EDGE.max + 4 + Math.floor(rand() * (OLD_WORLD.max - OLD_EDGE.max - 8)) : OLD_WORLD.min + 4 + Math.floor(rand() * (OLD_EDGE.min - OLD_WORLD.min - 8));
+    const z = OLD_EDGE.min + Math.floor(rand() * (Math.min(OLD_WORLD.max - 4, seaShore(x) - 14) - OLD_EDGE.min));
     if (!free(x, z, 3) || !clearAt(x, z, 9, 1)) continue;
     if (z < SNOW_LINE) pine(put, x, z, 0, 5 + Math.floor(rand() * 3)); // (up north, in the snow)
     else tree(put, x, z, 4 + Math.floor(rand() * 3), rand);

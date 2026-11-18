@@ -471,7 +471,9 @@ export function doorBox(meta, hinge = -1) {
 
 // Playable area (block coordinates, inclusive): 640 x 640 blocks. (It was 448 x 448 before the
 // far country came: see farcountry.js.)
-export const WORLD = { min: -320, max: 319, maxY: 63 };
+export const WORLD = { min: -640, max: 639, maxY: 127 }; // (it was 640 x 640 and 64 high until v0.44)
+// The world as it was before that (the far country was made to fit it; the outer lands are beyond).
+export const OLD_WORLD = { min: -320, max: 319 };
 // North of this line (smaller z) it's the snowy country: the ground is snow.
 export const SNOW_LINE = -138;
 export const isSnowyAt = (x, z) => z < SNOW_LINE;

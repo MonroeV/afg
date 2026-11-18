@@ -3,7 +3,7 @@
 // on every floor. They walk across rooms, step up stairs, climb ladders, go through doors (and
 // shut them behind them: see npcs.js) and ride elevators to every floor of a tower. Garage
 // doors are for cars: they keep away from those.
-import { BLOCKS, blockId, blockMeta, itemOf, shapeOf, DOOR_TOP, ELEVATOR, BED_FOOT } from './blocks.js';
+import { BLOCKS, blockId, blockMeta, itemOf, shapeOf, DOOR_TOP, ELEVATOR, BED_FOOT, WORLD } from './blocks.js';
 import { liftColumn, liftStops, liftFront } from './elevator.js';
 
 export const STAND = 1, LADDER = 2, DOOR = 4;
@@ -13,7 +13,8 @@ const MAX_NODES = 6000;
 const TOP = 62;
 const SIDES = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const CORNERS = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
-export const cellKey = (x, y, z) => ((x + 512) * 128 + (y + 1)) * 1024 + (z + 512);
+// (Packed into one number: x and z from -1024 to 1023, y from -1 to 254.)
+export const cellKey = (x, y, z) => ((x + 1024) * 256 + (y + 1)) * 2048 + (z + 1024);
 
 // A door's column (lo to hi) and whether it's a garage door (three or more wide, or three or
 // more tall), or null if there's no door at (x, y, z).
@@ -27,7 +28,7 @@ export function doorAt(get, x, y, z) {
   };
   let lo = y, hi = y;
   while (lo > 0 && y - lo < 24 && same(x, lo - 1, z)) lo--;
-  while (hi < 63 && hi - y < 24 && same(x, hi + 1, z)) hi++;
+  while (hi < WORLD.maxY && hi - y < 24 && same(x, hi + 1, z)) hi++;
   const [ax, az] = f % 2 === 0 ? [1, 0] : [0, 1];
   const beside = (a, c) => {
     const n = itemOf(get(a, lo, c));

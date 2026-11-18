@@ -5,7 +5,7 @@
 //
 // The shaft is solid: you ride it by right-clicking its doors and picking a floor, and a little
 // cab (with doors that slide open) carries you up or down.
-import { ELEVATOR, LIFT_SHAFT, LIFT_DOOR, LIFT_DOOR_TOP, blockId, blockMeta, makeBlock, liftRole } from './blocks.js';
+import { ELEVATOR, LIFT_SHAFT, LIFT_DOOR, LIFT_DOOR_TOP, blockId, blockMeta, makeBlock, liftRole, WORLD } from './blocks.js';
 
 // Which way an elevator's doors face (out of the shaft): its facing (meta & 3).
 export const liftFront = facing => [[0, 1], [1, 0], [0, -1], [-1, 0]][facing & 3];
@@ -21,7 +21,7 @@ export function liftColumn(get, x, y, z) {
   };
   let lo = y, hi = y;
   while (lo > 0 && same(lo - 1)) lo--;
-  while (hi < 63 && same(hi + 1)) hi++;
+  while (hi < WORLD.maxY && same(hi + 1)) hi++;
   return { lo, hi, facing };
 }
 

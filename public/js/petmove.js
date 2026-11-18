@@ -13,10 +13,10 @@ const MAX_DROP = 3; // the furthest a pet will jump down (any higher and it look
 const MAX_NODES = 2500; // how hard it looks for a route before settling for the closest spot
 const WINDUP = 0.1; // the little crouch before a jump
 
-// A cell packed into one number: x and z from -512 to 511 (the whole world, with room to grow),
-// y from -1 (down a hole) to 126.
-const pack = (x, y, z) => ((x + 512) * 128 + (y + 1)) * 1024 + (z + 512);
-const unpack = k => [Math.floor(k / 131072) - 512, (Math.floor(k / 1024) % 128) - 1, (k % 1024) - 512];
+// A cell packed into one number: x and z from -1024 to 1023 (the whole world, with room to grow),
+// y from -1 (down a hole) to 254.
+const pack = (x, y, z) => ((x + 1024) * 256 + (y + 1)) * 2048 + (z + 1024);
+const unpack = k => [Math.floor(k / 524288) - 1024, (Math.floor(k / 2048) % 256) - 1, (k % 2048) - 1024];
 const TRAPPED = 40; // a pet that can only get to fewer cells than this (and not to you) is trapped
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
@@ -47,7 +47,7 @@ export class PetNav {
   }
 
   inside(x, y, z) {
-    return y >= -1 && y < 63 && x >= WORLD.min && x <= WORLD.max && z >= WORLD.min && z <= WORLD.max;
+    return y >= -1 && y < WORLD.maxY && x >= WORLD.min && x <= WORLD.max && z >= WORLD.min && z <= WORLD.max;
   }
 
   // Room for a pet's body in the middle of this cell? (An open door or a railing along the

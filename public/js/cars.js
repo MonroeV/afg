@@ -1,7 +1,7 @@
 // Cars you can spawn, drive and share with other players.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { BLOCKS, blockId, blockMeta, itemOf, floorOf, isWaterBlock } from './shared/blocks.js';
+import { BLOCKS, blockId, blockMeta, itemOf, floorOf, isWaterBlock, WORLD } from './shared/blocks.js';
 import { PlayClock, Track } from './smooth.js';
 import { VEHICLES, MAX_HP, SMOKE_HP, FIRE_HP, PERSON_MASS, outlinePoints, rotorPoints, vehicleBlocked, toWorld, afloat } from './shared/vehicles.js';
 import { usesFuel } from './shared/fuel.js';
@@ -1499,7 +1499,7 @@ export class Cars {
       if (!step) continue;
       const next = car.pos.clone();
       next[axis] += step;
-      if (axis === 'y' && next.y > 120) {
+      if (axis === 'y' && next.y > WORLD.maxY + 36) { // (well above the tallest towers)
         car.vel.y = Math.min(car.vel.y, 0);
         continue;
       }
