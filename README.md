@@ -64,10 +64,12 @@ customize your character, drive cars, build anything and play with friends.
     - **The Fire Station** 🚒 (since v0.54, on the south side of the Outer Loop): red brick, with
       two open bays (a **fire truck** waiting in each) and the firefighters' room next door (bunk
       beds, a table, a couch). In a fire truck, **G** turns on the lights and siren 🚨, and **G**
-      again the **hose** too 💦: it sprays water ahead of the truck (steer to aim). Every few
-      minutes a **fire** breaks out on a road in town (just flames and smoke: nothing really
-      burns): the alarm rings, a 🔥 arrow at the top of the screen points the way, and whoever puts
-      it out gets 3 🪙. The hose also saves burning vehicles, and puts out crashed airplanes. Fire
+      again the **hose** too 💦: it sprays water ahead of the truck (steer to aim). **Fires** only
+      happen while somebody's driving a fire truck (since v0.55.4): a little while after you get
+      in, a call comes in, and a fire breaks out on a road in town (just flames and smoke: nothing
+      really burns). The alarm rings and a 🔥 arrow at the top of your screen points the way (just
+      for whoever's in a fire truck), and whoever puts it out gets 3 🪙. The next call comes a
+      minute later. With nobody in a fire truck, a fire still burning soon goes out by itself. The hose also saves burning vehicles, and puts out crashed airplanes. Fire
       Chief Flint is out front
     - **The Loop Express** 🚆 (since v0.51; two tracks and real stations since v0.55): an
       elevated railway all the way round the Outer Loop, high over the outside of the road on

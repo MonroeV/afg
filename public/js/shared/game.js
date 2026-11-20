@@ -18,7 +18,7 @@ import { buildPark } from './park.js';
 import { buildTrainLine, fixPlatforms } from './train.js';
 import { buildFunLand } from './funland.js';
 import { buildZoo, ANIMALS } from './zoo.js';
-import { buildFireStation, FIRE_EVERY, FIRE_LIFE, DOUSE, FIRE_REWARD, HOSE_RANGE } from './firestation.js';
+import { buildFireStation, FIRE_CALL, FIRE_GAP, FIRE_OUT, FIRE_LIFE, DOUSE, FIRE_REWARD, HOSE_RANGE } from './firestation.js';
 import { findHomes } from './residents.js';
 import { buildWeatherStation, SHOWERS } from './weather.js';
 import { buildBuildPark } from './buildpark.js';
@@ -141,7 +141,7 @@ export class GameRoom {
     this.nextHomeId = 1;
     this.time = DAY_LENGTH * 0.08; // start in the morning
     this.day = 0; // how many days have gone by (for the seasons: see seasons.js)
-    this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0, holes: 5, crops: 2, guardThings: 1, hunger: 5, church: 1, fire: 90 };
+    this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0, holes: 5, crops: 2, guardThings: 1, hunger: 5, church: 1, fire: 2 };
     this.isSolid = (x, y, z) =>
       y < 0 || x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max ||
       blocksVehicles(this.world.get(blockKey(x, y, z)) || 0);
@@ -937,7 +937,6 @@ export class GameRoom {
       if (!open) continue;
       const f = { id: this.nextFire++, x: x + 0.5, z: z + 0.5, hp: 100, until: Date.now() + FIRE_LIFE * 1000 };
       this.fires.push(f);
-      this.broadcast({ t: 'fire_alarm', x: f.x, z: f.z });
       this.sendFires();
       return f;
     }
@@ -2404,6 +2403,7 @@ export class GameRoom {
         f.hp -= DOUSE;
         if (f.hp > 0) return this.broadcast({ t: 'fire_hp', id: f.id, hp: Math.round(f.hp) });
         this.fires = this.fires.filter(o => o !== f);
+        this.lastFire = Date.now(); // (the next call in a minute)
         this.pay(client, FIRE_REWARD);
         this.progress(client, 'fire', 'fires');
         this.broadcast({ t: 'fx', kind: 'doused', x: f.x, y: 0, z: f.z, id: client.id });
@@ -3094,17 +3094,29 @@ export class GameRoom {
       }
     }
 
-    // Now and then a fire in town (while someone's about, and once the last one's out); and
-    // fires nobody came to burn out by themselves.
+    // Fires in town: only while somebody's driving a fire truck (a call comes in a little while
+    // after they get in, and again a minute after each one's out). With nobody in a fire truck
+    // for a while, a fire still burning goes out by itself.
     if (t.fire <= 0) {
-      t.fire = 15;
+      t.fire = 2;
+      const crews = [...this.vehicles.values()].filter(v => v.kind === 'firetruck' && v.driver && this.clients.get(v.driver)?.joined);
+      if (crews.length) {
+        this.crewSince ??= now;
+        this.noCrewSince = null;
+      } else {
+        this.crewSince = null;
+        this.noCrewSince ??= now;
+      }
       const n = this.fires.length;
-      this.fires = this.fires.filter(f => f.until > now);
-      if (this.fires.length < n) this.sendFires();
-      const online = [...this.clients.values()].some(c => c.joined);
-      if (online && !this.fires.length && this.places?.firestation && now - (this.lastFire || 0) > FIRE_EVERY * 1000) {
+      this.fires = this.fires.filter(f => f.until > now && !(this.noCrewSince && now - this.noCrewSince > FIRE_OUT * 1000));
+      if (this.fires.length < n) {
         this.lastFire = now;
-        this.startFire();
+        this.sendFires();
+      }
+      if (crews.length && !this.fires.length && this.places?.firestation && now - this.crewSince > FIRE_CALL * 1000 && now - (this.lastFire || 0) > FIRE_GAP * 1000) {
+        const f = this.startFire();
+        // (The alarm rings for the fire crews.)
+        if (f) for (const v of crews) this.clients.get(v.driver)?.send({ t: 'fire_alarm', x: f.x, z: f.z });
       }
     }
 

@@ -50,9 +50,10 @@ export class FireHose {
       for (let n = dt * 40 * k; n > 0; n--) if (n >= 1 || Math.random() < n) this.effects.flame(f.x + (Math.random() - 0.5) * 2.2, 0.1, f.z + (Math.random() - 0.5) * 2.2, 1.6 * k + 0.4);
       if (Math.random() < dt * 5) this.effects.smokePuff(f.x, 1.5 + Math.random(), f.z, 0.8);
     }
-    // The arrow to the nearest fire (unless you're right there).
-    this.chip.style.display = nearest && nd > 12 ? 'block' : 'none';
-    if (nearest && nd > 12) {
+    // The arrow to the nearest fire (for the fire truck's driver: unless you're right there).
+    const crew = myCar?.kind === 'firetruck';
+    this.chip.style.display = crew && nearest && nd > 12 ? 'block' : 'none';
+    if (crew && nearest && nd > 12) {
       const a = Math.atan2(-(nearest.x - viewer.x), -(nearest.z - viewer.z)) - yaw;
       this.chip.querySelector('.arrow').style.transform = `rotate(${-a}rad)`;
       this.chip.querySelector('.dist').textContent = `${Math.round(nd)}`;

@@ -99,12 +99,15 @@ function stationAt(site, set) {
 }
 
 // ---------- Fires in town ----------
-// Every few minutes (while someone's playing) a fire breaks out on a road somewhere in town:
-// nothing burns down (it's just flames and smoke), but it needs putting out! Spray it with a
-// fire truck's hose (G, twice: lights, then water) till it's out. It burns out by itself if
-// nobody comes.
-export const FIRE_EVERY = 240; // seconds between fires (once one is out)
-export const FIRE_LIFE = 300; // how long one burns if nobody comes
+// While somebody's driving a fire truck (and only then: there's no point otherwise!), a call
+// comes in: a fire on a road somewhere in town. Nothing burns down (it's just flames and smoke),
+// but it needs putting out! Spray it with the truck's hose (G, twice: lights, then water) till
+// it's out. The alarm and the 🔥 arrow are just for whoever's in a fire truck. Nobody in a fire
+// truck for a while? Then any fire still burning goes out by itself.
+export const FIRE_CALL = 12; // seconds after you get in a fire truck till the first call
+export const FIRE_GAP = 60; // seconds after a fire's out till the next call
+export const FIRE_OUT = 60; // seconds with nobody in a fire truck before a fire goes out by itself
+export const FIRE_LIFE = 600; // (and nobody comes at all: it burns out after this long anyway)
 export const DOUSE = 6; // how much each squirt of the hose puts out (of 100)
 export const FIRE_REWARD = 3; // coins for putting one out
 export const HOSE_RANGE = 15; // how far the hose reaches (with the Firefighters' badge: more)
