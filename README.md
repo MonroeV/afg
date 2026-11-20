@@ -93,6 +93,17 @@ customize your character, drive cars, build anything and play with friends.
       claimed one (only you can drive it, it stays where you park it), and a new car rolls into
       its spot once you've driven yours away. The town keeps just a few cars of its own now (the
       rest went to the dealership; nobody's own cars were touched). The Loop Express stops there
+    - **The Space Center** 🚀 (since v0.61, by the Outer Loop, with its own Loop Express stop):
+      a tall white **rocket** stands on the launch pad beside its gantry tower. **Right-click
+      the gate at the foot of the tower** to climb aboard (four seats: anyone else has 15
+      seconds to hop in too), then the countdown (big numbers on the screen: 10… 9… 8…) and
+      **LIFTOFF**: flames, smoke and a rumble, and up it goes, faster and faster, high above the
+      whole world. Up there the capsule floats in space for a moment, then comes back down
+      under three big parachutes 🪂 onto the landing zone (the red-and-white target). Look
+      around the whole way! Everyone sees the same launch. Next door: **Mission Control** (rows
+      of desks and computers facing the big screens: Commander Nova runs the **Space Cadets**
+      club) and the **Space Museum**, with the Sun, Earth, Mars, Jupiter and Saturn hanging
+      from the ceiling, a moon rock and fun facts
     - **Thunder Raceway** 🏎️ (since v0.60, on the north side of the Outer Loop, with its own
       Loop Express stop): a long twisty **go-kart track** with red-and-white curbs and black
       tire walls, a **grandstand** of seats along the main straight, and a **gantry** over the
@@ -638,6 +649,7 @@ customize your character, drive cars, build anything and play with friends.
   | 🦜 Zookeepers (v0.53) | Zookeeper Zara, at the zoo | see all 7 kinds of animals, feed animals 5 times, feed 3 different kinds | 20 🪙, a parrot friend rides on your shoulder |
   | 🚒 Firefighters (v0.54) | Fire Chief Flint, at the fire station | turn on a fire truck's lights, put out 3 fires in town, save a burning vehicle | 25 🪙, a firefighter's helmet (and your hose sprays farther) |
   | 🌾 Farmhands (v0.59) | Farmer Wren, at Sunny Acres Farm | pet 5 farm animals, pick 5 crops in the fields, get milk or eggs twice, drive a tractor | 20 🪙, farm fresh: twice the milk, eggs and crops at the farm |
+  | 🚀 Space Cadets (v0.61) | Commander Nova, in Mission Control | visit the Space Museum, watch a rocket launch from nearby, fly to space | 25 🪙, moon boots (you jump higher) |
 
   Each step pops up by the badge counter ("🔧 2/3"), and a new badge gets a big celebration with
   fireworks. The **daily bonus** grows every day in a row you play (+2 a day, up to +10)
@@ -1063,6 +1075,7 @@ public/
     zooanimals.js      The zoo's animals: their block models, wandering about their pens, feeding them
     farmanimals.js     The farm's animals (cows, horses, sheep, pigs, hens) and the windmill's sails
     kartui.js          Thunder Raceway's start lights, the Best Laps board and your lap time
+    rocketui.js        The Space Center's rocket: countdown, liftoff, the ride to space, parachutes; museum planets
     firehose.js        Fires in town (flames, smoke, the 🔥 arrow) and the fire trucks' hoses
     guardcatch.js      Bodyguards keeping you off their land: caught and walked off, blown away, flushed out
     guardui.js         Someone asking your bodyguards to let them in: your answer
@@ -1117,6 +1130,7 @@ public/
       zoo.js           The zoo: its paths, the seven pens (and what's in them), Zara's hut, the animals' favorite foods
       farm.js          Sunny Acres Farm: fields, barn, silo, windmill, farmhouse, pastures, farm stand, tractors
       karts.js         Thunder Raceway: the track (a smooth curve), curbs, tire walls, pits, grandstand, karts
+      space.js         The Space Center: launch pad, tower, Mission Control, museum, landing zone; the flight's timing
       firestation.js   The fire station: its building, the fire trucks' bays, and how often fires break out
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/

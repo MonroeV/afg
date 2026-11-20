@@ -22,6 +22,7 @@ const BOOST_TIME = 0.7;
 const BALLOON_FALL = 2.4; // holding a balloon, you float down this fast
 const SKI_MAX = 24; // the fastest you can go on skis
 const SNEAKER_SPEED = 1.7, SNEAKER_JUMP = 11.5; // Super Sneakers
+const MOON_JUMP = 10.8; // the Space Cadets' moon boots
 const AXES = { x: 0, y: 1, z: 2 };
 
 export class Player {
@@ -114,7 +115,7 @@ export class Player {
       this.vel.x += (wish.x * speed + this.boost.x * push - this.vel.x) * k;
       this.vel.z += (wish.z * speed + this.boost.z * push - this.vel.z) * k;
       if (keys.has('Space') && this.onGround) {
-        this.vel.y = this.sneakers ? SNEAKER_JUMP : JUMP_SPEED;
+        this.vel.y = this.sneakers ? SNEAKER_JUMP : this.moonBoots ? MOON_JUMP : JUMP_SPEED;
         this.onGround = false;
       }
     }

@@ -19,6 +19,7 @@ import { FunRides } from './funrides.js';
 import { ZooAnimals } from './zooanimals.js';
 import { FarmAnimals } from './farmanimals.js';
 import { KartUI } from './kartui.js';
+import { RocketUI } from './rocketui.js';
 import { FireHose, steam } from './firehose.js';
 import { AirportLights } from './airportlights.js';
 import { ANIMALS } from './shared/zoo.js';
@@ -256,7 +257,7 @@ let showers = null, weatherMast = null; // it's raining tacos (or ice cream, or 
 let weatherPicker = null; // Stormy's menu: what shall it rain?
 let lunchbox = null; // your lunchbox 🍱 (L): food to eat
 let funRides = null; // Fun Land's roller coaster and Ferris wheel
-let zooAnimals = null, farmAnimals = null, kartUI = null; // the zoo's animals, the farm's, and the go-kart track's lights and lap times
+let zooAnimals = null, farmAnimals = null, kartUI = null, rocketUI = null, spaceGate = null; // the zoo's animals, the farm's, and the go-kart track's lights and lap times
 let zooAim = null; // (the one under the crosshair)
 let fireHose = null; // fires in town, and the fire trucks' hoses
 let airportLights = null; // the airport's runway, taxiway and approach lights
@@ -739,6 +740,8 @@ function startGame(welcome, resume = false) {
   zooAnimals.setPlace(welcome.zoo);
   farmAnimals.setPlace(welcome.farm);
   kartUI.setPlace(welcome.raceway, welcome.laps);
+  rocketUI.setPlace(welcome.space, welcome.rocket);
+  spaceGate = welcome.space?.gate || null;
   fireHose.setFires(welcome.fires);
   airportLights.setPlace(welcome.airport);
   weather.set(welcome.rain || 0, welcome.snow);
@@ -1016,7 +1019,12 @@ loopExpress = new LoopExpress({ scene, sounds, hud: { toast: text => hud.toast(t
 funRides = new FunRides({ scene, sounds, hud: { toast: text => hud.toast(text) } });
 zooAnimals = new ZooAnimals({ scene, effects, sounds });
 farmAnimals = new FarmAnimals({ scene, effects, sounds });
-kartUI = new KartUI({ scene, sounds, hud });
+// (The HUD is made later, when the game starts: they ask for it when they need it.)
+const lateHud = { toast: (...a) => hud?.toast(...a) };
+kartUI = new KartUI({ scene, sounds, hud: lateHud });
+rocketUI = new RocketUI({ scene, sounds, effects, hud: lateHud });
+net.on('rocket', msg => rocketUI.setState(msg));
+net.on('rocket_busy', ({ phase, since }) => hud.toast(`🚀 ⏳ ${phase === 'boarding' ? '👩‍🚀👩‍🚀👩‍🚀👩‍🚀' : `${Math.max(1, Math.ceil(64 - since))}s`}`));
 net.on('kart_board', ({ board }) => kartUI.setBoard(board));
 net.on('kart_go', () => kartUI.go());
 net.on('kart_cp', ({ i, of }) => kartUI.checkpoint(i, of));
@@ -4546,6 +4554,7 @@ function interact() {
     }
     if (BLOCKS[blockId(hit.value)]?.slide) return startSlide(...hit.block);
     if (blockId(hit.value) === STOP_BLOCK) return trainTimes(hit.block);
+    if (blockId(hit.value) === GATE_BLOCK && spaceGate && Math.hypot(hit.block[0] + 0.5 - spaceGate[0], hit.block[2] + 0.5 - spaceGate[1]) < 6) return net.send({ t: 'rocket_board' });
     if (blockId(hit.value) === GATE_BLOCK) return funRides.board(hit.block[0] + 0.5, hit.block[2] + 0.5, player, gameTime(worldDay, sky.time));
     const s = structures.at(...hit.block);
     if (s?.type === 'bed') return goToBed(s);
@@ -6125,10 +6134,12 @@ function frame(timestamp) {
       player.winter = !!seasonLook?.winter;
       player.sneakers = hud.wearing(SNEAKERS);
       player.explorerBoots = perks.has('explorer'); // (the Explorer Club's boots: a bit faster)
+      player.moonBoots = perks.has('space'); // (the Space Cadets' moon boots: jump higher)
       if (sliding) updateSlide(dt); // (whee: down a slide)
       else if (loopExpress.step(dt, gameTime(worldDay, sky.time), player, active && !guardCatch?.frozen ? held : noKeys)) {
         // (Riding a train: you walk about in your car as it goes.)
       }
+      else if (rocketUI.updateRide(dt, player, myId)) player.flying = false; // (aboard the rocket: off to space!)
       else if (funRides.updateRide(dt, gameTime(worldDay, sky.time), player)) player.flying = false; // (on a ride at Fun Land)
       else player.update(dt, active && !guardCatch?.frozen ? held : noKeys); // (not while the bodyguards have hold of you)
       if (sledding && player.onGround && !player.surface()) sled(false); // (off the snow: off the sled)
@@ -6305,7 +6316,7 @@ function frame(timestamp) {
       else if (s?.type === 'balloon') hint = '🎈 Right-click to fly the balloon!';
       else if (s?.type === 'hoop') hint = '🏀 Throw the Pet Ball through the hoop!';
       else if (hit && blockId(hit.value) === STOP_BLOCK && !tool) hint = '🚉 Right-click: when do the trains come?';
-      else if (hit && blockId(hit.value) === GATE_BLOCK) hint = '🎟️ Right-click to ride!';
+      else if (hit && blockId(hit.value) === GATE_BLOCK) hint = spaceGate && Math.hypot(hit.block[0] + 0.5 - spaceGate[0], hit.block[2] + 0.5 - spaceGate[1]) < 6 ? '🚀 Right-click to fly to space!' : '🎟️ Right-click to ride!';
       else if (s?.type === 'tv') hint = tvs.onGame(s) ? '🎮 Right-click to play Block Hopper!' : '📺 Right-click to change the channel';
       else if (item === CLAIM) hint = `🚩 Click a corner to start claiming land (max ${CLAIM_MAX}×${CLAIM_MAX}), or a vehicle to make it yours` + (myVehicles().length ? ` · 🔑 ${whereMyVehicles()}` : '');
       else if (item === VACATION) hint = myLand(true) ? '🏖️ You have vacation land already' : `🏖️ Click a corner to claim your vacation land (max ${CLAIM_MAX}×${CLAIM_MAX}). It stays put for good!`;
@@ -6409,7 +6420,7 @@ function frame(timestamp) {
     myBody.targetPitch = inBed() ? 0 : player.pitch;
     myBody.flying = player.flying;
     myBody.swing = view.swingT;
-    myBody.sitting = !!seated || !!sliding || loopExpress.sitting || funRides.riding || !!liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel';
+    myBody.sitting = !!seated || !!sliding || loopExpress.sitting || funRides.riding || rocketUI.riding || !!liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel';
     myBody.hotair = contraptions.riding === 'balloon';
     myBody.sledding = sledding;
     myBody.parachute = !!player.parachute && !riding();
@@ -6554,6 +6565,7 @@ function frame(timestamp) {
     zooAnimals.update(dt, gameTime(worldDay, sky.time), camera.position);
     farmAnimals.update(dt, gameTime(worldDay, sky.time), camera.position);
     kartUI.update(gameTime(worldDay, sky.time), myCar, camera.position);
+    rocketUI.update(dt, camera.position);
     airportLights.update(performance.now() / 1000, camera.position, 1 - sky.dayK);
     updateChurch(dt, time);
   }
@@ -6625,6 +6637,7 @@ window.buildzone = {
   get zooAnimals() { return zooAnimals; },
   get farmAnimals() { return farmAnimals; },
   get kartUI() { return kartUI; },
+  get rocketUI() { return rocketUI; },
   get airportLights() { return airportLights; },
   get fireHose() { return fireHose; },
   requestEnter: car => requestEnter(car),

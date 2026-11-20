@@ -171,6 +171,13 @@ const NPCS = [
     tips: ['🏎️💨 🏁', 'Hop in a kart (E) and drive out onto the track! 🏎️', 'Go all the way round, past the start line: your lap time shows at the top! ⏱️', 'Wait for the lights: red, red, red… GREEN! 🚦', 'Beat your best lap for coins! A new track record: 10 more! 🏆', 'Brake a little before the corners! 🛑'],
   },
   {
+    // The Space Center: Commander Nova in Mission Control (she runs the Space Cadets club).
+    id: -75, place: 'space_control', name: 'Commander Nova', title: 'Commander Nova 🚀', roam: 3, club: 'space',
+    look: { face: 'smile', hair: 'ponytail', hat: 'none', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#8d5524', hairColor: '#1b1209', hatColor: '#000000', shirtColor: '#eceff1', shirtColor2: '#1e88e5', pantsColor: '#eceff1', shoesColor: '#263238' },
+    hello: n => [`Welcome to the Space Center, ${n}! 🚀`, `Ready for liftoff, ${n}? 👩‍🚀`],
+    tips: ['🚀🌍🌙✨', 'Right-click the gate by the tower to fly! 🚀', 'Friends can hop in too: you wait 15 seconds for them 👫', 'The capsule comes down on parachutes! 🪂', 'Visit the Space Museum next door! 🪐'],
+  },
+  {
     // BuildZone Motors: Dealer Dana, at the sales desk in the showroom.
     id: -71, place: 'dealer_desk', name: 'Dealer Dana', title: 'Dealer Dana 🚗', roam: 1,
     look: { face: 'smile', hair: 'ponytail', hat: 'none', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#e0ac69', hairColor: '#6d3b16', hatColor: '#000000', shirtColor: '#1a237e', shirtColor2: '#ffffff', pantsColor: '#263238', shoesColor: '#111111' },

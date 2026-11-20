@@ -142,6 +142,15 @@ export const CLUBS = [
     ],
     reward: { coins: 20, perk: '🌾', perkName: 'Farm fresh: twice the milk, eggs and crops at the farm' },
   },
+  {
+    id: 'space', name: 'Space Cadets', icon: '🚀', color: '#3949ab', leader: 'Commander Nova', where: 'at the Space Center',
+    tasks: [
+      { id: 'museum', icon: '🪐', goal: 1, what: 'Visit the Space Museum' },
+      { id: 'watch', icon: '👀', goal: 1, what: 'Watch a rocket launch from nearby' },
+      { id: 'ride', icon: '🚀', goal: 1, what: 'Fly to space in the rocket (right-click its gate)' },
+    ],
+    reward: { coins: 25, perk: '🌙', perkName: 'Moon boots: you jump higher' },
+  },
 ];
 
 export const clubById = id => CLUBS.find(c => c.id === id);

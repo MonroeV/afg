@@ -20,6 +20,7 @@ import { buildFunLand, rideSigns } from './funland.js';
 import { buildZoo, ANIMALS } from './zoo.js';
 import { buildFarm, FARM_ANIMALS, GIVE_EVERY, inFarmField } from './farm.js';
 import { buildRaceway, minLap, KART_COINS, RECORD_COINS, BOARD_SIZE } from './karts.js';
+import { buildSpaceCenter, BOARDING, COUNTDOWN, FLIGHT, SEATS } from './space.js';
 import { buildDealership, newCarFor, LOT_KINDS, SHOW_KINDS, townCarsToKeep } from './dealership.js';
 import { buildFireStation, FIRE_CALL, FIRE_GAP, FIRE_OUT, FIRE_LIFE, DOUSE, FIRE_REWARD, HOSE_RANGE } from './firestation.js';
 import { findHomes } from './residents.js';
@@ -38,7 +39,7 @@ import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
 const PLANE_HOME_AFTER = 300; // seconds a town airplane sits idle away from the airport before it's taken back
-export const SAVE_VERSION = 37;
+export const SAVE_VERSION = 38;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -316,6 +317,7 @@ export class GameRoom {
       this.upgradeTo35();
       this.upgradeTo36();
       this.upgradeTo37();
+      this.upgradeTo38();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -430,6 +432,7 @@ export class GameRoom {
     if (data.version < 35) this.upgradeTo35();
     if (data.version < 36) this.upgradeTo36();
     if (data.version < 37) this.upgradeTo37();
+    if (data.version < 38) this.upgradeTo38();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -1127,6 +1130,58 @@ export class GameRoom {
     this.onDirty();
   }
 
+  // Worlds saved before version 38: the Space Center (and a train stop by it).
+  upgradeTo38() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const space = buildSpaceCenter({ get, set, canUse: this.freeLand() });
+    if (space) {
+      this.claims.push(space.claim);
+      for (const [x, y, z, text] of space.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+      this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...space.places };
+      this.addTrainStops();
+    }
+    this.log(`Added the Space Center (${space ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
+  // ---------- The Space Center's launches ----------
+  // Boarding (15 seconds for others to hop in), the countdown, then the flight; then the rocket's
+  // back on the pad, ready to go again. Everyone's game draws it from what the server says.
+  rocketState() {
+    const r = this.rocket;
+    return { t: 'rocket', phase: r?.phase || 'idle', since: r ? (Date.now() - r.at) / 1000 : 0, riders: r?.riders || [] };
+  }
+
+  setRocket(phase, riders = this.rocket?.riders || []) {
+    this.rocket = phase === 'idle' ? null : { phase, at: Date.now(), riders };
+    this.broadcast(this.rocketState());
+  }
+
+  updateRocket() {
+    const r = this.rocket;
+    if (!r) return;
+    const secs = (Date.now() - r.at) / 1000;
+    r.riders = r.riders.filter(id => this.clients.get(id)?.joined);
+    if (r.phase === 'boarding' && secs >= BOARDING) {
+      if (!r.riders.length) return this.setRocket('idle');
+      this.setRocket('countdown');
+    } else if (r.phase === 'countdown' && secs >= COUNTDOWN) {
+      this.setRocket('flight');
+      // Everyone watching from nearby saw a launch (the Space Cadets club).
+      const pad = this.places?.space?.rocket;
+      for (const c of this.clients.values()) if (c.joined && pad && !r.riders.includes(c.id) && Math.hypot(c.pos[0] - pad.x, c.pos[2] - pad.z) < 160) this.progress(c, 'space', 'watch', 1, true);
+    } else if (r.phase === 'flight' && secs >= FLIGHT) {
+      for (const id of r.riders) {
+        const c = this.clients.get(id);
+        if (c) this.progress(c, 'space', 'ride', 1, true);
+      }
+      this.setRocket('idle', []);
+    }
+  }
+
   // A go-kart going round Thunder Raceway (from its driver's updates): past each checkpoint in
   // turn, and back over the line, is a lap. The server times it (from the line to the line), and
   // the Best Laps board keeps the ten best (each driver's best).
@@ -1243,6 +1298,9 @@ export class GameRoom {
       const [x, y, z] = c.pos, w = this.wallet(c), done = w.clubs?.explorer || {};
       for (const [task, r] of rects) if (!done[task] && x >= r.x0 && x <= r.x1 + 1 && z >= r.z0 && z <= r.z1 + 1) this.progress(c, 'explorer', task);
       if (sky && !done.skytop && y >= sky.top - 1 && Math.hypot(x - sky.x, z - sky.z) < 10) this.progress(c, 'explorer', 'skytop');
+      // The Space Museum (the Space Cadets club).
+      const museum = this.places?.space?.museum;
+      if (museum && !w.clubs?.space?.museum && x >= museum[0] && x <= museum[2] + 1 && z >= museum[1] && z <= museum[3] + 1) this.progress(c, 'space', 'museum', 1, true);
       // The zoo: which animals they've been to see (by their pens).
       for (const pen of this.places?.zoo?.pens || []) {
         const [x0, z0, x1, z1] = pen.rect;
@@ -1804,6 +1862,8 @@ export class GameRoom {
       farm: this.places?.farm || null, // the farm's pastures, fields and windmill (see farmanimals.js)
       raceway: this.places?.raceway || null, // the go-kart track: its lights, checkpoints and board (see kartui.js)
       laps: this.laps.map(r => [r.name, r.ms]),
+      space: this.places?.space || null, // the Space Center: the rocket, the gate, the landing zone (see rocketui.js)
+      rocket: this.rocketState(),
       airport: this.places?.airport || null, // the airport (its lights: see airportlights.js)
       fires: this.fires.map(({ id, x, z, hp }) => ({ id, x, z, hp: Math.round(hp) })), // fires burning in town (see firehose.js)
       landmarks: Object.entries(this.places || {}).filter(([, p]) => p && Number.isFinite(p.x) && Number.isFinite(p.z)).map(([k, p]) => [k, p.x, p.z]),
@@ -2787,6 +2847,20 @@ export class GameRoom {
       this.onDirty();
     },
 
+    // Climbing aboard the rocket at the Space Center (at its gate).
+    rocket_board(client) {
+      const place = this.places?.space;
+      if (!place || client.car || !this.allow(client, 'rocket', 1, 3)) return;
+      const [x, , z] = client.pos;
+      if (Math.hypot(x - place.gate[0], z - place.gate[1]) > 7) return;
+      const r = this.rocket;
+      if (r?.riders.includes(client.id)) return;
+      if (!r) return this.setRocket('boarding', [client.id]);
+      if (r.phase !== 'boarding' || r.riders.length >= SEATS) return client.send({ t: 'rocket_busy', phase: r.phase, since: (Date.now() - r.at) / 1000 });
+      r.riders.push(client.id);
+      this.broadcast(this.rocketState());
+    },
+
     // Found one of Youth Night's hidden gifts (first come, first served: then it's gone for
     // everyone).
     church_gift(client, { i }) {
@@ -3530,6 +3604,10 @@ export class GameRoom {
     if (!(t.explore > 0)) {
       t.explore = 2;
       this.updateExplorers();
+    }
+    if (!(t.rocket > 0)) {
+      t.rocket = 0.5;
+      this.updateRocket();
     }
     if (t.church <= 0) {
       t.church = 1;
