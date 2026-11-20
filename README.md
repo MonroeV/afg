@@ -77,8 +77,9 @@ customize your character, drive cars, build anything and play with friends.
       and pulls away. The stations are island platforms between the two tracks, with a roof,
       lamps, benches and the station's name, and **stairs** down to the ground. No tickets: climb
       the stairs, wait on the platform (the hint at the bottom says how many seconds till the next
-      train each way), **walk in** through the open doors, ride (walk about the car if you like,
-      and watch the world go by), and **walk out** at any station you want. The hint on the train
+      train each way), **walk in** through the open doors, ride (walk about the car, or right-click
+      a bench to sit down and watch the world go by; move to get up), and **walk out** at any
+      station you want. The hint on the train
       says where it stops next. Everyone sees the same trains. (The old blue ticket machines still
       stand by the stations: right-click one to see when the trains come.)
     - **Friendship Park** 🤝 (since v0.50, on the north side of the Outer Loop): paths and flower

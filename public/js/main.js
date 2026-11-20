@@ -3041,7 +3041,7 @@ function fireCannon(s) {
 let helping = null; // helping someone out of bed (then it's our turn): { bed, until }
 
 function goToBed(bed) {
-  if (riding() || sleeping || helping) return;
+  if (riding() || sleeping || helping || loopExpress.riding) return;
   const px = bed.x + 0.5, pz = bed.z + 0.5, bx = bed.x + bed.dx + 0.5, bz = bed.z + bed.dz + 0.5;
   const dir = { x: px - bx, z: pz - bz };
   const top = bed.top ?? bed.y + 1;
@@ -3410,7 +3410,7 @@ function sendState() {
   const rot = myCar ? [r(myCar.h), 0] : inBed() ? [r(sleeping.yaw), 0] : [r(player.yaw), r(player.pitch)];
   const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
   const balloon = hud.item === BALLOON && !riding() && !sleeping;
-  const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || sliding || funRides?.riding || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
+  const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || sliding || loopExpress?.sitting || funRides?.riding || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
     (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) | (sledding && !balloon ? FLAG.sled : 0) | (player.parachute && !balloon ? FLAG.parachute : 0) | (perks.has('zoo') && !balloon ? FLAG.parrot : 0) | (perks.has('fire') && !balloon ? FLAG.helmet : 0) |
     (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
   net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item, drone: agency.droneState(player.yaw) });
@@ -4378,6 +4378,9 @@ function useItem() {
 function interact() {
   if (agency.active) return agency.stop();
   if (elevators.riding) return;
+  // On a train: sit down on a bench.
+  const trainSeat = loopExpress.pickSeat(eye, lookDir);
+  if (trainSeat) return loopExpress.sit(trainSeat, player);
   if (rv.inside) return rvAct(rvSpot);
   // Wands: right-click empties the Fill box, or forgets what was copied.
   if (hud.item === FILL && wand.b) return fillClick(true);
@@ -4862,7 +4865,7 @@ let pictureCount = 0;
 
 // Sit down on a chair or couch, facing out of it.
 function sitOn(x, y, z, v) {
-  if (riding() || sleeping || seated) return;
+  if (riding() || sleeping || seated || loopExpress.riding) return;
   const def = BLOCKS[blockId(v)], a = (blockMeta(v) & 3) * Math.PI / 2;
   const fx = Math.sin(a), fz = Math.cos(a);
   // Get up in front of it, or else behind or beside it: somewhere with ground (not water) to
@@ -6091,6 +6094,10 @@ function frame(timestamp) {
         target = nearest;
         hit = null;
       }
+      // (A train's walls are in the way: nothing past them can be reached, from inside or out.)
+      const wall = loopExpress.wallDistance(eye, lookDir);
+      if (hit && hit.distance > wall) hit = null;
+      if (target && target.distance > wall) target = null;
     }
     const item = hud.item;
     const railPreview = item === RAILING && hit && railSpot();
@@ -6125,7 +6132,7 @@ function frame(timestamp) {
       hint = agency.hint();
     } else if (elevators.riding) {
       hint = elevators.hint();
-    } else if ((trainHint = loopExpress.hint(player, gameTime(worldDay, sky.time)))) {
+    } else if ((trainHint = loopExpress.hint(player, gameTime(worldDay, sky.time), eye, lookDir))) {
       hint = trainHint;
     } else if (rv.inside) {
       hint = rv.bed >= 0 ? '😴 Zzz… (move to get up)' : rv.sit ? '🛋️ Move to get up' : rvSpot?.hint || '🚐 Walk around (WASD) · Right-click things · E: go outside';
@@ -6314,7 +6321,7 @@ function frame(timestamp) {
     myBody.targetPitch = inBed() ? 0 : player.pitch;
     myBody.flying = player.flying;
     myBody.swing = view.swingT;
-    myBody.sitting = !!seated || !!sliding || funRides.riding || !!liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel';
+    myBody.sitting = !!seated || !!sliding || loopExpress.sitting || funRides.riding || !!liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel';
     myBody.hotair = contraptions.riding === 'balloon';
     myBody.sledding = sledding;
     myBody.parachute = !!player.parachute && !riding();

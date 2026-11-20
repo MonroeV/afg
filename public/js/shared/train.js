@@ -277,13 +277,14 @@ function buildStation(st, set, signs, text) {
   const { ax, a0, across, end } = st;
   const cell = (a, c) => (ax ? [a, c] : [c, a]);
   const faceDir = (dx, dz) => (dz > 0 ? 0 : dx > 0 ? 1 : dz < 0 ? 2 : 3);
-  const B = { concrete: 13, white: 12, yellow: 16, log: 7, lamp: 41, chair: 60, lantern: 45 };
+  const B = { concrete: 13, stone: 3, white: 12, yellow: 16, log: 7, lamp: 41, chair: 60, lantern: 45 };
   const P = PLATFORM_Y, mid = across + 1;
-  // The platform: concrete, with yellow lines along both edges (mind the gap!).
+  // The platform: stone, with yellow lines along both edges (mind the gap!). (Not concrete: a
+  // Concrete block beside a Paint block, with nothing on top, makes a Build Book bed!)
   for (let a = a0; a < a0 + PLATFORM; a++)
     for (let c = across; c < across + 3; c++) {
       const [x, z] = cell(a, c);
-      set(x, P, z, c === mid ? B.concrete : B.yellow);
+      set(x, P, z, c === mid ? B.stone : B.yellow);
       set(x, P + 4, z, B.white); // (the roof)
     }
   // Posts holding up the roof (down the middle), lamps under it, benches between.
@@ -321,4 +322,22 @@ function buildStation(st, set, signs, text) {
     const [x, z] = cell(foot, c);
     set(x, 0, z, B.lantern);
   }
+}
+
+// (v0.55's stations had concrete down the middle of their platforms, beside the yellow edges:
+// which the game took for Build Book beds. Right-click one from a train and you lay down on the
+// platform. Their middles become stone, as new stations' are: only our own concrete, there.)
+export function fixPlatforms({ get, set, stations }) {
+  let fixed = 0;
+  for (const st of stations || []) {
+    if (!Number.isFinite(st.a0) || !Number.isFinite(st.across)) continue;
+    for (let a = st.a0; a < st.a0 + PLATFORM; a++) {
+      const [x, z] = st.ax ? [a, st.across + 1] : [st.across + 1, a];
+      if (get(x, PLATFORM_Y, z) === 13) {
+        set(x, PLATFORM_Y, z, 3);
+        fixed++;
+      }
+    }
+  }
+  return fixed;
 }

@@ -19,6 +19,10 @@ const ROOF = FLOOR_Y + CAR_HEIGHT; // (the underside of the roof, above TRACK_Y)
 const SEE = 260; // (trains farther away than this aren't drawn)
 const NO_WORLD = { cellBoxes() {}, get: () => 0, isSolid: () => false }; // (inside a moving car: just the car)
 
+// The benches along each side of a car (x0, x1 across; z0, z1 along), in its own space.
+const BENCHES = [-1, 1].flatMap(sx => [[-1, 1], [L / 2 - 0.85, L / 2 - T], [-L / 2 + T, -L / 2 + 0.85]].map(([z0, z1]) => ({ sx, x0: sx > 0 ? W / 2 - 0.75 : -W / 2 + T, x1: sx > 0 ? W / 2 - T : -W / 2 + 0.75, z0, z1 })));
+const SEAT_TOP = TRACK_Y + FLOOR_Y + 0.45;
+
 // A car's solid parts, in its own space (x across, z along: -z is the way it goes; y up from
 // the ground): the floor, the roof, the ends, the sides round the doorways, the benches, and the
 // doors themselves (shut: `open` is which side's doors are open, -1 or 1, or 0 for none).
@@ -33,10 +37,9 @@ function carBoxes(open) {
     const cuts = [-L / 2, ...DOOR_AT.flatMap(d => [d - DOOR_WIDTH / 2, d + DOOR_WIDTH / 2]), L / 2];
     for (let i = 0; i < cuts.length; i += 2) out.push([x0, y0, cuts[i], x1, y1, cuts[i + 1]]);
     if (open !== sx) for (const d of DOOR_AT) out.push([x0, y0, d - DOOR_WIDTH / 2, x1, y1, d + DOOR_WIDTH / 2]);
-    // Benches along the side: in the middle, and at the ends.
-    const bx0 = sx > 0 ? W / 2 - 0.75 : -W / 2 + T, bx1 = sx > 0 ? W / 2 - T : -W / 2 + 0.75;
-    for (const [z0, z1] of [[-1, 1], [L / 2 - 0.85, L / 2 - T], [-L / 2 + T, -L / 2 + 0.85]]) out.push([bx0, y0, z0, bx1, y0 + 0.45, z1]);
   }
+  // Benches along the sides: in the middle, and at the ends.
+  for (const b of BENCHES) out.push([b.x0, y0, b.z0, b.x1, SEAT_TOP, b.z1]);
   return out;
 }
 const BOXES = { [-1]: carBoxes(-1), 0: carBoxes(0), 1: carBoxes(1) };
@@ -53,6 +56,23 @@ function worldBox(b, cx, cz, yaw) {
   const [ax, az] = toWorld(b[0], b[2], cx, cz, yaw), [bx, bz] = toWorld(b[3], b[5], cx, cz, yaw);
   return [Math.min(ax, bx), b[1], Math.min(az, bz), Math.max(ax, bx), b[4], Math.max(az, bz)];
 }
+
+// Where a ray (from o, along d) goes in and out of a box in a car's space: [in, out], or null.
+function rayCarBox(car, o, d, b) {
+  const [ox, oz] = toLocal(o.x, o.z, car.x, car.z, car.yaw), [dx, dz] = toLocal(d.x, d.z, 0, 0, car.yaw);
+  let t0 = -Infinity, t1 = Infinity;
+  for (const [p, v, lo, hi] of [[ox, dx, b[0], b[3]], [o.y, d.y, b[1], b[4]], [oz, dz, b[2], b[5]]]) {
+    if (Math.abs(v) < 1e-9) {
+      if (p < lo || p > hi) return null;
+      continue;
+    }
+    const a = (lo - p) / v, c = (hi - p) / v;
+    t0 = Math.max(t0, Math.min(a, c));
+    t1 = Math.min(t1, Math.max(a, c));
+  }
+  return t0 <= t1 ? [t0, t1] : null;
+}
+const SHELL = [-W / 2, TRACK_Y + 0.15, -L / 2, W / 2, TRACK_Y + ROOF + 0.2, L / 2]; // (a whole car, outside to outside)
 
 export class LoopExpress {
   constructor({ scene, sounds, hud }) {
@@ -164,6 +184,51 @@ export class LoopExpress {
     return !!this.aboard;
   }
 
+  get sitting() {
+    return !!this.aboard?.seat;
+  }
+
+  // The bench you're looking at (on your train, within reach): where you'd sit on it.
+  pickSeat(o, d, reach = 3.5) {
+    if (!this.aboard || this.aboard.seat) return null;
+    const car = this.carOf(this.aboard);
+    let best = null;
+    for (const b of BENCHES) {
+      const r = rayCarBox(car, o, d, [b.x0, SEAT_TOP - 0.45, b.z0, b.x1, SEAT_TOP, b.z1]);
+      if (!r || r[0] < 0 || r[0] > reach || (best && r[0] > best.t)) continue;
+      const [, hz] = toLocal(o.x + d.x * r[0], o.z + d.z * r[0], car.x, car.z, car.yaw);
+      const half = Math.min(0.3, (b.z1 - b.z0) / 2);
+      best = { t: r[0], lx: b.sx * (W / 2 - 0.42), lz: Math.max(b.z0 + half, Math.min(b.z1 - half, hz)) };
+    }
+    return best;
+  }
+
+  // Sit down on a bench (facing across the car).
+  sit(seat, player) {
+    const car = this.carOf(this.aboard);
+    this.aboard.seat = seat;
+    this.aboard.prev = [car.x, car.z, car.yaw];
+    player.vel.set(0, 0, 0);
+    player.flying = false;
+    player.yaw = car.yaw + (seat.lx > 0 ? Math.PI / 2 : -Math.PI / 2);
+    player.pitch = Math.max(player.pitch, -0.3);
+    this.sounds.tone(300, 260, 0.12, 0.08, 'sine');
+    this.hud.toast('💺 Move to get up');
+  }
+
+  // How far you can reach along a ray before a train's wall is in the way (on board: to the
+  // inside of your car; outside: to the outside of a car). Nothing past it can be touched.
+  wallDistance(o, d) {
+    let best = Infinity;
+    for (const car of this.cars) {
+      if (car.x === undefined || Math.abs(car.x - o.x) > 15 || Math.abs(car.z - o.z) > 15) continue;
+      const r = rayCarBox(car, o, d, SHELL);
+      if (!r || r[1] < 0) continue;
+      best = Math.min(best, r[0] < 0 ? r[1] : r[0]);
+    }
+    return best;
+  }
+
   carOf(a) {
     return this.cars.find(c => c.track === a.track && c.k === a.k && c.c === a.c);
   }
@@ -180,6 +245,24 @@ export class LoopExpress {
   step(dt, t, player, keys) {
     this.place(t);
     const p = player.pos;
+    if (this.aboard?.seat) {
+      // Sitting on a bench: carried along on it (turning with the car), till you move.
+      const car = this.carOf(this.aboard), seat = this.aboard.seat;
+      const stick = player.stick && (player.stick.x || player.stick.y);
+      if (!stick && !['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space'].some(k => keys.has(k))) {
+        const [wx, wz] = toWorld(seat.lx, seat.lz, car.x, car.z, car.yaw);
+        player.pos.set(wx, SEAT_TOP - 0.72, wz);
+        player.vel.set(0, 0, 0);
+        player.yaw += car.yaw - this.aboard.prev[2];
+        this.aboard.prev = [car.x, car.z, car.yaw];
+        return true;
+      }
+      // Up you get, into the aisle.
+      const [wx, wz] = toWorld(0, seat.lz, car.x, car.z, car.yaw);
+      player.pos.set(wx, TRACK_Y + FLOOR_Y + 0.01, wz);
+      this.aboard.seat = null;
+      this.aboard.prev = [car.x, car.z, car.yaw];
+    }
     if (this.aboard) {
       const car = this.carOf(this.aboard);
       // (Where we are in the car: from where the car was a moment ago.)
@@ -276,9 +359,11 @@ export class LoopExpress {
   }
 
   // A hint for the bottom of the screen: on a platform, when the trains come; aboard, the next stop.
-  hint(player, t) {
+  hint(player, t, eye, dir) {
     if (this.aboard) {
       const car = this.carOf(this.aboard), next = this.nextStop(car);
+      if (this.aboard.seat) return `💺 ${next?.icon || ''} ${next?.name || ''} · Move to get up`;
+      if (eye && this.pickSeat(eye, dir)) return `💺 Right-click to sit · ⏭️ ${next?.icon || ''}`;
       return car.v === 0 && car.doors > 0 ? `🚆 ${next?.icon || ''} ${next?.name || ''} · 🚪 Walk out to get off` : `🚆 ⏭️ ${next?.icon || ''} ${next?.name || ''}`;
     }
     const p = player.pos;
