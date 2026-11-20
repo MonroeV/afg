@@ -479,7 +479,10 @@ customize your character, drive cars, build anything and play with friends.
   the wings stop lifting and the nose drops, so keep your speed up. A blinking red **⚠️
   Stalling!** warns you a few seconds before (too slow, or nose up too high and sinking): nose
   down (Shift) to get your speed back.
-  Throttle back and let go and it glides down gently. **Land** slowly and level, on the wheels;
+  Throttle back and let go and it glides down gently. **Land** slowly and level, on the wheels,
+  then **hold S to brake** (an orange 🛑 Hold S to brake! pops up when you touch down; S on the
+  ground cuts the engine and brakes hard straight away: since v0.56.2). Off the end of the
+  runway is flat grass now, too, not a curb;
   hitting the ground (or anything) hard is a crash, and it blows up. **Jump out** (E) up in the
   air and your **parachute** opens 🪂: you float gently down and can steer with WASD. The plane
   flies on without you… and crashes to the ground in a ball of fire (the wreck burns for a

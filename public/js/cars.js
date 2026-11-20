@@ -27,6 +27,7 @@ const PLANE = {
   hardLanding: 6, // coming down faster than this hurts it
   crash: 14, // hitting the ground (or anything) faster than this: a crash
   dragK: 0.004, // air drag (with the thrust, it sets the top speed)
+  brakes: 11, // the wheel brakes, on the ground (S): blocks a second slower, each second
 };
 // (The Sky Cub and the jet have their own: see `flight` in shared/vehicles.js.)
 export const planeFlight = spec => (spec.flight ? { ...PLANE, ...spec.flight } : PLANE);
@@ -1832,6 +1833,9 @@ export class Cars {
     car.throttle ??= 0;
     if (keys.has('KeyW')) car.throttle = Math.min(1, car.throttle + dt * 0.6);
     if (keys.has('KeyS')) car.throttle = Math.max(0, car.throttle - dt * 0.6);
+    // (On the ground S is the brakes: the engine straight back to idle, and the wheel brakes on.)
+    const braking = car.onGround && keys.has('KeyS') && !keys.has('KeyW');
+    if (braking) car.throttle = 0;
     if (empty) {
       if (car.throttle > 0 && keys.has('KeyW') && !car.noGasT) {
         car.noGasT = 4;
@@ -1884,7 +1888,7 @@ export class Cars {
 
     // The forces: the propeller, air drag, the wings' lift, and gravity.
     car.vel.addScaledVector(fwd, P.thrust * (this.jetEngine ? 1.2 : 1) * car.throttle * health * dt); // (Sky Pilots: a jet engine)
-    const drag = P.dragK * v * v + (grounded ? 0.5 + (car.throttle < 0.02 && keys.has('KeyS') ? 6 : 0) : 0);
+    const drag = P.dragK * v * v + (grounded ? 0.5 + (braking ? P.brakes : 0) : 0);
     if (v > 0.01) car.vel.multiplyScalar(Math.max(0, 1 - (drag * dt) / v));
     const aoa = car.pitch - path; // (the angle the wings meet the air at)
     let cl = 0.3 + aoa * 3.2;

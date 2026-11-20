@@ -692,7 +692,7 @@ export class Hud {
       : kind === 'boat'
         ? '<kbd>W</kbd> Go <kbd>S</kbd> Slow down / back up <kbd>A</kbd><kbd>D</kbd> Steer <kbd>Shift</kbd> Boost <kbd>H</kbd> Horn <kbd>V</kbd> Camera <kbd>E</kbd> Get out'
         : kind === 'plane'
-          ? '<kbd>W</kbd><kbd>S</kbd> Throttle <kbd>Mouse</kbd> Turn <kbd>Space</kbd> Nose up <kbd>Shift</kbd> Nose down <kbd>A</kbd><kbd>D</kbd> Turn harder <kbd>V</kbd> Camera <kbd>E</kbd> Jump out 🪂'
+          ? '<kbd>W</kbd><kbd>S</kbd> Throttle (S on the ground: brakes) <kbd>Mouse</kbd> Turn <kbd>Space</kbd> Nose up <kbd>Shift</kbd> Nose down <kbd>A</kbd><kbd>D</kbd> Turn harder <kbd>V</kbd> Camera <kbd>E</kbd> Jump out 🪂'
         : kind === 'heli'
       ? '<kbd>Mouse</kbd> Steer <kbd>Space</kbd> Up <kbd>Shift</kbd> Down <kbd>W</kbd><kbd>S</kbd> Tilt (stays tilted) <kbd>A</kbd><kbd>D</kbd> Slide <kbd>V</kbd> Camera <kbd>E</kbd> Get out'
       : '<kbd>W</kbd><kbd>S</kbd> Drive <kbd>A</kbd><kbd>D</kbd> Steer <kbd>Space</kbd> Brake ' +

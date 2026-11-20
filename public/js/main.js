@@ -1077,13 +1077,16 @@ function flightAlert(car) {
     const soon = v + Math.min(0, car.alertRate ?? 0) * 2.5 < P.stall;
     // (Or the nose is up too high for the way it's going: the wings stall, and it drops.)
     const path = v > 1 ? Math.asin(Math.max(-1, Math.min(1, car.vel.y / v))) : 0, mushing = car.pitch - path > 0.28 && car.vel.y < -2;
-    if (car.onGround && v > P.rotate && car.pitch < 0.05) [text, kind] = [touch?.enabled ? '🛫 Push ⬆!' : '🛫 Push SPACE!', 'go'];
+    if (!car.onGround) car.airborneAt = now;
+    const landed = car.onGround && now - (car.airborneAt ?? -99) < 30; // (just touched down)
+    if (landed && v > 3) [text, kind] = [touch?.enabled ? '🛑 Pull the joystick ⬇ to brake!' : '🛑 Hold S to brake!', 'brake'];
+    else if (car.onGround && v > P.rotate && car.pitch < 0.05) [text, kind] = [touch?.enabled ? '🛫 Push ⬆!' : '🛫 Push SPACE!', 'go'];
     else if (!car.onGround && up > 2 && (v < P.stall * 1.25 || soon || mushing)) [text, kind] = [touch?.enabled ? '⚠️ Stalling! Nose down ⬇!' : '⚠️ Stalling! Nose down (Shift)!', 'stall'];
   }
   if (flightNote.textContent !== text) flightNote.textContent = text;
   flightNote.style.display = text ? 'block' : 'none';
   if (!text) return;
-  flightNote.style.background = kind === 'go' ? 'rgba(46, 160, 67, 0.85)' : 'rgba(211, 47, 47, 0.9)';
+  flightNote.style.background = kind === 'go' ? 'rgba(46, 160, 67, 0.85)' : kind === 'brake' ? 'rgba(239, 108, 0, 0.9)' : 'rgba(211, 47, 47, 0.9)';
   flightNote.style.opacity = kind === 'stall' ? (Math.sin(performance.now() / 120) > -0.3 ? '1' : '0.35') : '1'; // (the stall warning blinks)
 }
 
@@ -2590,7 +2593,7 @@ function enterCar(car) {
   if (car.spec.plane && settings.planeTip !== 1) {
     hud.addChat({ system: true, text: touch
       ? '✈️ Push the joystick up to open the throttle and roll down the runway. Fast enough? Hold ⬆ to lift off! Drag to look: it turns where you look. ⬆ climbs, ⬇ dives. Too slow and it stalls! Land gently on the runway, and pull the joystick down to brake.'
-      : '✈️ W opens the throttle (S closes it, and brakes on the ground). Roll down the runway, and when you\'re fast enough hold Space to lift off! It turns to where you look. Space climbs, Shift dives. Too slow and it stalls! Land gently on the runway. (Jump out up high and your parachute opens!)' });
+      : '✈️ W opens the throttle (S closes it, and brakes on the ground). Roll down the runway, and when you\'re fast enough hold Space to lift off! It turns to where you look. Space climbs, Shift dives. Too slow and it stalls! Land gently on the runway, then hold S to brake. (Jump out up high and your parachute opens!)' });
     settings.planeTip = 1;
     saveSettings();
   } else if (car.spec.flying && !car.spec.plane && settings.heliTip !== 2) { // shown again when the controls change

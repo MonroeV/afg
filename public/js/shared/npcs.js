@@ -186,7 +186,7 @@ const NPCS = [
     id: -29, place: 'airport', name: 'Captain Sky', title: 'Captain Sky ✈️', roam: 2, club: 'pilot',
     look: { face: 'cool', hair: 'short', hat: 'cap', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#d39a6a', hairColor: '#3b2314', hatColor: '#263238', shirtColor: '#263238', shirtColor2: '#ffd54f', pantsColor: '#263238', shoesColor: '#111111' },
     hello: n => [`Welcome aboard, ${n}! Ready to fly? ✈️`, `${n}! The planes are out on the apron. Take one up! 🛫`],
-    tips: ['W: throttle up. Fast down the runway, then Space to lift off! 🛫', 'Too slow up there and you stall: nose down to speed up! ⚠️', 'Land gently on the runway: slow and level! 🛬', 'Jump out up high and your parachute opens! 🪂', 'Climb the ladder in the tower for the best view! 🗼', 'Want to see the sights? Take the slow Sky Cub, in the first hangar! 🐢✈️', 'Feeling brave? The jet is in the second hangar: zoom! 🚀', 'The jet needs lots of runway, and a long, slow landing! 🛬'],
+    tips: ['W: throttle up. Fast down the runway, then Space to lift off! 🛫', 'Too slow up there and you stall: nose down to speed up! ⚠️', 'Land gently on the runway: slow and level! 🛬', 'Landed? Hold S to brake! 🛑', 'Jump out up high and your parachute opens! 🪂', 'Climb the ladder in the tower for the best view! 🗼', 'Want to see the sights? Take the slow Sky Cub, in the first hangar! 🐢✈️', 'Feeling brave? The jet is in the second hangar: zoom! 🚀', 'The jet needs lots of runway, and a long, slow landing! 🛬'],
   },
   {
     // Snip & Style, the hair salon (premium hairdos).

@@ -220,8 +220,8 @@ function airportAt(site, set) {
     put(u, 0, RUNWAY[1] + 1, B.gardenLight);
     put(u, 0, RUNWAY[0] - 1, B.gardenLight);
   }
-  // Grass in the corners that are left, so it's tidy.
-  for (let u = 0; u < L; u++) for (let v = 0; v < D; v++) if (u < 2 || u > L - 3 || v === D - 1) put(u, 0, v, B.grass);
+  // (The edges are left as the ground they're on. Before v0.56.2 they were a strip of Grass
+  // blocks: a curb a block high at both ends of the runway, that blew up planes running off it.)
 
   // The airplanes, parked on the apron, noses toward the runway.
   const h = Math.atan2(-fx, -fz);
@@ -247,4 +247,19 @@ function airportAt(site, set) {
     // The place (Captain Sky in the terminal), and the runway's two ends (for the clubs).
     place: { x: gx, y: 0, z: gz, face: Math.atan2(fx, fz), area: [Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz)], runway: [r0x, r0z, r1x, r1z], along: [ux, uz] },
   };
+}
+
+// That curb, in worlds from before v0.56.2: the Grass blocks along the airport's edges (only
+// those: anything else built there stays). [[x, z], ...]
+export function airportCurb(place) {
+  const f = airportFrame(place);
+  if (!f) return [];
+  const out = [];
+  for (let u = 0; u < L; u++)
+    for (let v = 0; v < D; v++) {
+      if (!(u < 2 || u > L - 3 || v === D - 1)) continue;
+      const [x, z] = f.pos(u + 0.5, v + 0.5);
+      out.push([Math.floor(x), Math.floor(z)]);
+    }
+  return out;
 }
