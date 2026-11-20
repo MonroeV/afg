@@ -144,6 +144,13 @@ const NPCS = [
     tips: ['🐘🍌 🦒🍎 🦁🥪 🦓🥕 🐧🧀 🐼🍪 🐒🍌', 'Right-click an animal to feed it! 🍱', 'The penguins love their pool! 🐧'],
   },
   {
+    // BuildZone Motors: Dealer Dana, at the sales desk in the showroom.
+    id: -71, place: 'dealer_desk', name: 'Dealer Dana', title: 'Dealer Dana 🚗', roam: 1,
+    look: { face: 'smile', hair: 'ponytail', hat: 'none', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#e0ac69', hairColor: '#6d3b16', hatColor: '#000000', shirtColor: '#1a237e', shirtColor2: '#ffffff', pantsColor: '#263238', shoesColor: '#111111' },
+    hello: n => [`Welcome to BuildZone Motors, ${n}! 🚗✨`, `${n}! Looking for a new ride? 🔑`],
+    tips: ['Right-click any car to buy it! 💰', '🚗 30 · 🛻 45 · 🚐 60 · 🏎️ 90 · 🚙 120 · 🚌 200 🪙', 'The fanciest ones are in here, in the showroom! ✨', 'Buy one and only you can drive it! 🔑', 'Sold one? A new car rolls onto the lot soon! 🚚'],
+  },
+  {
     // The fire station: Fire Chief Flint (he runs the Firefighters club).
     id: -70, place: 'firechief', name: 'Fire Chief Flint', title: 'Fire Chief Flint 🚒', roam: 3, club: 'fire',
     look: { face: 'smile', hair: 'short', hat: 'cap', shirt: 'tshirt', pants: 'jeans', extra: 'none', skin: '#c68642', hairColor: '#3b2a1a', hatColor: '#d32f2f', shirtColor: '#263238', shirtColor2: '#fdd835', pantsColor: '#263238', shoesColor: '#111111' },

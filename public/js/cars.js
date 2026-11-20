@@ -918,7 +918,7 @@ export class Cars {
     this.list.set(car.id, car);
     if (car.color === 'gold') this.finish(car);
     this.scene.add(model.group);
-    this.setOwner(car, data.owner || '');
+    this.setOwner(car, data.owner || '', data.price || 0);
     // Shiny paint and windows reflect the world around them.
     model.group.traverse(o => {
       if (o.isMesh && o.material.metalness !== undefined && o.material.roughness < 0.5) this.reflections?.addShiny(o.material, o.material.transparent ? 1.4 : 1);
@@ -930,16 +930,18 @@ export class Cars {
   }
 
   // Someone's own vehicle (or nobody's, with ''): the sign over it.
-  setOwner(car, owner) {
+  setOwner(car, owner, price = car.price) {
     car.owner = owner;
+    car.price = price || 0;
     if (car.tag) {
       this.scene.remove(car.tag);
       car.tag.material.map.dispose();
       car.tag.material.dispose();
       car.tag = null;
     }
-    if (!owner) return;
-    car.tag = ownerTag(`🔑 ${owner}'s ${car.spec.name}`);
+    if (!owner && !car.price) return;
+    // (Someone's own; or for sale at the dealership, with its price.)
+    car.tag = ownerTag(owner ? `🔑 ${owner}'s ${car.spec.name}` : `💰 ${car.spec.name} · ${car.price} 🪙`);
     this.scene.add(car.tag);
   }
 

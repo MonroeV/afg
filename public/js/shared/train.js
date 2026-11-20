@@ -176,7 +176,7 @@ export function nextTrain(table, stationId, t) {
 const STOP_PLACES = [
   ['shop_grocery', '🛒', 'FreshMart'], ['shop_fiesta', '🌮', 'Casa Fiesta'], ['shop_salon', '💇', 'Snip & Style'],
   ['church', '⛪', 'Church'], ['airport', '✈️', 'Airport'], ['skytowers', '🏙️', 'Sky Tower'], ['park', '🤝', 'Friendship Park'],
-  ['funland', '🎢', 'Fun Land'], ['zoo', '🦁', 'Zoo'], ['firestation', '🚒', 'Fire Station'],
+  ['funland', '🎢', 'Fun Land'], ['zoo', '🦁', 'Zoo'], ['firestation', '🚒', 'Fire Station'], ['dealer', '🚗', 'BuildZone Motors'],
 ];
 const ROAD_STOPS = [[-RING, FAR_ROADS.west, '🏘️', 'West Road'], [RING, -60, '🏘️', 'East Road'], [-100, -RING, '🏘️', 'North Road']];
 const MERGE = 60;
@@ -217,13 +217,18 @@ export function buildTrainLine({ get, set, canUse, places, old = [] }) {
   const stations = (Array.isArray(old) ? old : []).filter(st => Number.isFinite(st?.x)).map(st => ({ ...st }));
   const signs = [];
   let nextId = stations.reduce((m, st) => Math.max(m, st.id + 1), 0);
+  const renamed = new Set();
   for (const stop of trainStops(places)) {
     // (Already a station by this stop? Then that's it, with its name brought up to date.)
     const have = stations.find(st => Math.abs(mod(st.sc - stop.s + TRACK.length / 2, TRACK.length) - TRACK.length / 2) < MERGE + 30);
     if (have) {
-      if (have.name !== stop.name) {
-        Object.assign(have, { icon: stop.icon, name: stop.name });
-        for (const [x, y, z] of have.signs || []) signs.push([x, y, z, `🚉 ${stop.icon} ${stop.name}`]);
+      // (Two stops sharing a station this time round: it gets both their names.)
+      const both = renamed.has(have) && !have.name.includes(stop.name);
+      const icon = both ? have.icon + (have.icon.includes(stop.icon) ? '' : stop.icon) : stop.icon, name = both ? `${have.name} · ${stop.name}` : stop.name;
+      renamed.add(have);
+      if (have.name !== name) {
+        Object.assign(have, { icon, name });
+        for (const [x, y, z] of have.signs || []) signs.push([x, y, z, `🚉 ${have.icon} ${name}`]);
       }
       continue;
     }

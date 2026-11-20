@@ -2288,10 +2288,10 @@ function whereMyVehicles() {
   }).join(' · ');
 }
 
-net.on('car_owner', ({ id, owner }) => {
+net.on('car_owner', ({ id, owner, price }) => {
   const car = cars.list.get(id);
   if (!car) return;
-  cars.setOwner(car, owner);
+  cars.setOwner(car, owner, price ?? car.price);
   if (owner && nameKey(owner) === nameKey(settings.name)) {
     sounds.coin();
     effects.sparkle(car.pos.x, car.pos.y + car.spec.height, car.pos.z, 24);
@@ -2564,6 +2564,12 @@ function petThePet(t) {
 
 // Climb in: you drive if the seat is free, otherwise you ride along (two passengers at most).
 function requestEnter(car) {
+  // For sale at the dealership: buy it?
+  if (car.price && !car.driver) {
+    const name = car.spec.name;
+    ask(`🚗 ${name}`, `Buy this ${name} for ${car.price} 🪙? It'll be yours: only you can drive it, and it stays where you park it. (You have ${wallet.coins} 🪙.)`, `💰 Buy it! (${car.price} 🪙)`, 'Not now', () => net.send({ t: 'car_buy', id: car.id }));
+    return;
+  }
   if (car.driver && car.passengers.length >= seatCount(car.spec) - 1) {
     hud.addChat({ system: true, text: "It's full! Every seat is taken." });
     return;
@@ -6187,11 +6193,13 @@ function frame(timestamp) {
       hint = !fishing ? '🎣 Click to cast · Move to get up' : fishing.phase === 'bite' ? '❗ A bite! Click, quick!' : fishing.phase === 'reel' ? '🎣 Reeling in…' : '🎣 Wait for the bobber to dip…';
     } else if (target?.car) {
       const what = target.car.spec.flying ? '🚁 Right-click or E to fly' : target.car.spec.boat ? '🚤 Right-click or E to drive the boat' : '🚗 Right-click or E to drive';
+      const forSale = target.car.price && !target.car.driver ? `💰 Right-click to buy this ${target.car.spec.name}: ${target.car.price} 🪙` : '';
       const full = target.car.driver && target.car.passengers.length >= seatCount(target.car.spec) - 1;
       const owner = target.car.owner, mine = owner && nameKey(owner) === nameKey(settings.name);
       const health = Math.max(0, Math.round((target.car.hp / MAX_HP) * 100));
       const state = target.car.hp < FIRE_HP ? '🔥 On fire! ' : target.car.hp < SMOKE_HP ? '💨 Smoking! ' : '';
-      if (item === WRENCH) hint = health >= 100 ? '🔧 Good as new!' : `🔧 ${state}Click (or hold) to fix it · ${health}%`;
+      if (forSale && item !== WRENCH) hint = forSale;
+      else if (item === WRENCH) hint = health >= 100 ? '🔧 Good as new!' : `🔧 ${state}Click (or hold) to fix it · ${health}%`;
       else if (item === BRUSH) hint = `🎨 Click to paint it ${paintName()}`;
       else if (isFlag(item)) hint = mine ? `🔑 Your ${target.car.spec.name} · Click to give it back` : owner ? `🔑 ${owner}'s ${target.car.spec.name}` : `🔑 Click to make this ${target.car.spec.name} yours!`;
       else if (carryingCan && usesFuel(target.car.kind) && target.car.fuel < 0.995) hint = `⛽ Right-click to pour your gas can into the ${target.car.spec.name} (${Math.round(target.car.fuel * 100)}% full)`;

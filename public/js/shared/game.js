@@ -18,6 +18,7 @@ import { buildPark } from './park.js';
 import { buildTrainLine, fixPlatforms } from './train.js';
 import { buildFunLand } from './funland.js';
 import { buildZoo, ANIMALS } from './zoo.js';
+import { buildDealership, newCarFor, LOT_KINDS, SHOW_KINDS, townCarsToKeep } from './dealership.js';
 import { buildFireStation, FIRE_CALL, FIRE_GAP, FIRE_OUT, FIRE_LIFE, DOUSE, FIRE_REWARD, HOSE_RANGE } from './firestation.js';
 import { findHomes } from './residents.js';
 import { buildWeatherStation, SHOWERS } from './weather.js';
@@ -35,7 +36,7 @@ import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
 const PLANE_HOME_AFTER = 300; // seconds a town airplane sits idle away from the airport before it's taken back
-export const SAVE_VERSION = 33;
+export const SAVE_VERSION = 34;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -220,7 +221,7 @@ export class GameRoom {
 
   // A vehicle's home: where it's parked when the world starts, and where it comes back after it
   // blows up. Someone's own vehicle (owner, key) has a home of its own: where they last parked it.
-  addHome({ id, kind, color, x, y, z, h, owner, key }) {
+  addHome({ id, kind, color, x, y, z, h, owner, key, dealer, price }) {
     const home = {
       id: id || this.nextHomeId++,
       kind: VEHICLES[kind] ? kind : 'car',
@@ -228,6 +229,8 @@ export class GameRoom {
       x: num(x), y: num(y), z: num(z), h: num(h),
     };
     if (typeof key === 'string' && key) Object.assign(home, { owner: cleanName(owner), key: key.slice(0, 32) });
+    // (A spot at the car dealership: its car is for sale.)
+    else if ((dealer === 'lot' || dealer === 'show') && num(price) > 0) Object.assign(home, { dealer, price: Math.round(num(price)) });
     this.nextHomeId = Math.max(this.nextHomeId, home.id + 1);
     this.homes.set(home.id, home);
     return home;
@@ -237,6 +240,8 @@ export class GameRoom {
   spawn(home) {
     const spot = findVehicleSpot(this.isSolid, VEHICLES[home.kind], home, [...this.vehicles.values()], this.isWater);
     if (!spot) return null;
+    // (A new car at the dealership goes right in its spot: not till the last one's driven off.)
+    if (home.dealer && Math.hypot(spot.x - home.x, spot.z - home.z) > 0.5) return null;
     return this.addVehicle({ ...home, ...spot, home: home.id, hp: MAX_HP });
   }
 
@@ -248,6 +253,7 @@ export class GameRoom {
       hp: Math.max(1, Math.min(MAX_HP, Number.isFinite(hp) ? hp : MAX_HP)),
       speed: 0, steer: 0, siren: 0, pitch: 0, roll: 0, rotor: 0, flags: 0, driver: 0, passengers: [],
       owner: owned?.key ? owned.owner : '', key: owned?.key || '', loaded: false,
+      price: !owned?.key && owned?.dealer ? owned.price : 0, // (for sale at the dealership: what it costs)
       // Gas in the tank (0..1) and how dirty it is (0..1). New ones come full and clean.
       fuel: Number.isFinite(fuel) ? Math.max(0, Math.min(1, fuel)) : 1,
       dirt: Number.isFinite(dirt) ? Math.max(0, Math.min(1, dirt)) : 0,
@@ -302,6 +308,7 @@ export class GameRoom {
       this.upgradeTo31();
       this.upgradeTo32();
       this.upgradeTo33();
+      this.upgradeTo34();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -410,6 +417,7 @@ export class GameRoom {
     if (data.version < 31) this.upgradeTo31();
     if (data.version < 32) this.upgradeTo32();
     if (data.version < 33) this.upgradeTo33();
+    if (data.version < 34) this.upgradeTo34();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -1034,6 +1042,40 @@ export class GameRoom {
       if (claim) Object.assign(claim, { x0: Math.min(claim.x0, done.rect[0]), z0: Math.min(claim.z0, done.rect[1]), x1: Math.max(claim.x1, done.rect[2]), z1: Math.max(claim.z1, done.rect[3]) });
     }
     this.log(`Gave the airport a taxiway (${done ? 'yes' : ap?.away ? 'it has one already' : 'no room'})`);
+    this.onDirty();
+  }
+
+  // Worlds saved before version 34: BuildZone Motors (a car dealership, its cars for sale) on
+  // empty land by the Outer Loop; and just a few of the town's ordinary cars kept (the ones
+  // nobody owns: anyone's own cars aren't touched).
+  upgradeTo34() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const dealer = buildDealership({ get, set, canUse: this.freeLand() });
+    if (dealer) {
+      this.claims.push(dealer.claim);
+      for (const [x, y, z, text] of dealer.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+      this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...dealer.places };
+      for (const c of dealer.cars) this.spawn(this.addHome(c));
+      this.addTrainStops();
+    }
+    // The town's ordinary cars: keep a few (nearest the middle of town), and send the rest away
+    // (not anyone's own, and not one somebody's in).
+    const town = [...this.homes.values()].filter(h => h.kind === 'car' && !h.key && !h.dealer);
+    const keep = new Set(townCarsToKeep(town));
+    let gone = 0;
+    for (const home of town) {
+      if (keep.has(home)) continue;
+      const v = [...this.vehicles.values()].find(o => o.home === home.id);
+      if (v && (v.driver || v.passengers.length || v.key)) continue;
+      if (v) this.vehicles.delete(v.id);
+      this.homes.delete(home.id);
+      this.respawns = this.respawns.filter(r => r.home !== home.id);
+      gone++;
+    }
+    this.log(`Opened BuildZone Motors (${dealer ? 'yes' : 'no room'}), and ${gone} of the town's cars went to it`);
     this.onDirty();
   }
 
@@ -2190,6 +2232,7 @@ export class GameRoom {
     car_enter(client, { id }) {
       const v = this.vehicles.get(id);
       if (!v || client.car || v.falling) return;
+      if (v.price) return client.send({ t: 'chat', system: true, text: `💰 This ${VEHICLES[v.kind].name} is for sale: ${v.price} 🪙. Right-click it to buy it!` });
       if (!v.driver) {
         // Someone's own vehicle: only they can drive it (anyone can ride along with them).
         if (v.key && v.key !== nameKey(client.name)) {
@@ -2269,11 +2312,40 @@ export class GameRoom {
     // Yours: only you can drive it (friends can ride along), nobody else can bash or paint it, it
     // stays wherever you park it, and if it blows up it comes back there. The town gets a new one
     // of its own in its place.
+    // Buying a car at the dealership: it's yours (like one you've claimed: only you can drive
+    // it, and it stays where you park it), and a new one rolls into its spot a little later.
+    car_buy(client, { id }) {
+      const v = this.vehicles.get(id);
+      const reply = text => client.send({ t: 'chat', system: true, text });
+      if (!v || !v.price || !this.allow(client, 'carBuy', 1, 3) || !this.nearVehicle(client, v)) return;
+      const key = nameKey(client.name), name = VEHICLES[v.kind].name, w = this.wallet(client);
+      if (v.driver) return;
+      if (this.ownedVehicles(key).length >= MAX_OWNED_VEHICLES) return reply(`🔑 You have ${MAX_OWNED_VEHICLES} vehicles already! Give one back first (click it with the Land Flag).`);
+      if (w.coins < v.price) return reply(`🪙 The ${name} costs ${v.price} 🪙: you need ${v.price - w.coins} more!`);
+      const paid = v.price;
+      w.coins -= paid;
+      const lot = this.homes.get(v.home);
+      const home = this.addHome({ kind: v.kind, color: v.color, x: v.x, y: v.y, z: v.z, h: v.h, owner: client.name, key });
+      Object.assign(v, { home: home.id, owner: home.owner, key, price: 0 });
+      // (The next car for that spot: something different, maybe.)
+      if (lot?.dealer) {
+        Object.assign(lot, newCarFor(lot.dealer === 'show' ? SHOW_KINDS : LOT_KINDS));
+        this.respawns.push({ home: lot.id, at: Date.now() + 20000 });
+      }
+      this.sendWallet(client);
+      this.broadcast({ t: 'car_owner', id: v.id, owner: v.owner, price: 0 });
+      this.broadcast({ t: 'fx', kind: 'sparkle', x: v.x, y: v.y + 2, z: v.z });
+      reply(`🎉🔑 The ${name} is yours! Hop in and drive it home. (Only you can drive it.)`);
+      this.log(`${client.name} bought a ${name} for ${paid} coins`);
+      this.onDirty();
+    },
+
     car_claim(client, { id }) {
       const v = this.vehicles.get(id);
       const reply = text => client.send({ t: 'chat', system: true, text });
       if (!v || !this.allow(client, 'carClaim', 1, 3) || !this.nearVehicle(client, v)) return;
       const key = nameKey(client.name), name = VEHICLES[v.kind].name;
+      if (v.price) return reply(`💰 This ${name} is for sale (${v.price} 🪙): right-click it to buy it!`);
       if (v.key === key) return reply(`🔑 This ${name} is already yours!`);
       if (v.key) return reply(`🔑 This ${name} is ${possessive(v.owner)}.`);
       if (v.driver && v.driver !== client.id) return reply(`🔑 Someone's driving it right now.`);
@@ -3326,7 +3398,7 @@ function isDoorToggle(old, b) {
 }
 
 const publicPlayer = c => ({ id: c.id, name: c.name, look: c.look, pos: c.pos, rot: c.rot });
-const publicVehicle = ({ id, kind, color, x, y, z, h, driver, passengers, hp, owner, loaded, fuel, dirt, siren }) => ({ id, kind, color, x, y, z, h, driver, passengers, hp: Math.round(hp), owner: owner || '', loaded: !!loaded, fuel: round3(fuel), dirt: round3(dirt), siren: siren === 2 ? 2 : siren ? 1 : 0 });
+const publicVehicle = ({ id, kind, color, x, y, z, h, driver, passengers, hp, owner, loaded, fuel, dirt, siren, price }) => ({ id, kind, color, x, y, z, h, driver, passengers, hp: Math.round(hp), owner: owner || '', loaded: !!loaded, fuel: round3(fuel), dirt: round3(dirt), siren: siren === 2 ? 2 : siren ? 1 : 0, price: price || 0 });
 const round3 = n => Math.round(num(n) * 1000) / 1000;
 // A family's members, checked over: names and looks, a few of them.
 function cleanFamily(list) {

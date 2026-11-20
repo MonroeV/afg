@@ -71,6 +71,16 @@ customize your character, drive cars, build anything and play with friends.
       **feed** it something from your lunchbox: it munches happily, with hearts, and each kind
       has a favorite food (🐘🍌 🦒🍎 🦁🥪 🦓🥕 🐧🧀 🐼🍪 🐒🍌) that gets it extra excited. Zookeeper
       Zara is by her hut
+    - **BuildZone Motors** 🚗 (since v0.57, on the east side of the Outer Loop, by Sky Tower):
+      a big car dealership. Out front, a lot full of cars for sale (a price tag floats over each),
+      with flags and party lights on tall marble poles; behind it a glass showroom with marble
+      pillars, neon along the roof and a canopy over the wide drive-out entrance, where the
+      fanciest cars are on display under chandeliers, with a red carpet up to Dealer Dana's desk
+      and couches to wait on. **Right-click a car to buy it** (it asks first): Car 30 🪙, Pickup
+      Truck 45, Camper Van 60, Sports Car 90, Monster Truck 120, RV 200. It's yours, like a
+      claimed one (only you can drive it, it stays where you park it), and a new car rolls into
+      its spot once you've driven yours away. The town keeps just a few cars of its own now (the
+      rest went to the dealership; nobody's own cars were touched). The Loop Express stops there
     - **The Fire Station** 🚒 (since v0.54, on the south side of the Outer Loop): red brick, with
       two open bays (a **fire truck** waiting in each) and the firefighters' room next door (bunk
       beds, a table, a couch). In a fire truck, **G** turns on the lights and siren 🚨, and **G**
@@ -816,8 +826,9 @@ give your land up. You have one piece of home land: if you already have some and
 else, the game asks first ("Move your land here?"), because your old land is then given up and
 anyone could build there.
 
-**Your own vehicles:** hold the Land Flag and click a car, truck, camper van, boat or helicopter to
-make it yours (it asks first). Up to 3 vehicles can be yours. Only you can drive yours (friends can
+**Your own vehicles:** buy one at BuildZone Motors (see above), or hold the Land Flag and click
+one of the town's cars, trucks, camper vans, boats or helicopters to make it yours (it asks first;
+not the dealership's: those you buy). Up to 3 vehicles can be yours. Only you can drive yours (friends can
 ride along with you), nobody else can bash it with the hammer or paint it, and it stays wherever
 you park it, even when you leave the game. If it ever blows up, it comes back where you last
 parked it. A little sign over it says whose it is, and with the Land Flag in your hand the hint
