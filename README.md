@@ -486,7 +486,7 @@ customize your character, drive cars, build anything and play with friends.
   while). Everyone sees it. A new plane is back on the apron 2 minutes later. Planes use gas,
   like everything else that drives
 - **Three kinds of airplanes** (since v0.56): the four on the apron are the ordinary propeller
-  planes (top speed about 155 km/h). In the first hangar is the **Sky Cub** 🐢: a little yellow
+  planes (top speed about 155 km/h), parked out of the way of the hangar doors (since v0.56.1). In the first hangar is the **Sky Cub** 🐢: a little yellow
   plane with big wings, fat tires and big windows, for **sightseeing**. It takes off after a
   short run, tops out at about 85 km/h and cruises slower still (it can fly at 30 km/h without
   stalling), so landing is easy. In the second hangar is the **Jet** 🚀: sleek and grey, swept

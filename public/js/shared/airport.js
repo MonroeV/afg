@@ -20,26 +20,60 @@ const TALL = 12; // (how high it has to be empty)
 // Rows (v): the terminal 7-17, the hangars 6-18, the apron 19-27, the taxiways 28-31, the runway
 // 32-40 (its center line at 36), the edge lights at 31 and 41.
 const RUNWAY = [32, 40], APRON = [19, 27];
-const PARKED = [22, 36, 54, 78]; // (where the airplanes park along the apron, u)
+const PARKED = [22, 36, 96, 108]; // (where the airplanes park along the apron, u: not in front of the hangars)
+export const HANGARS = [[44, 64], [68, 88]]; // (u0, u1 of each hangar: their doors open onto the apron)
+// (Before v0.56.1 two of them parked at 54 and 78, right in front of the hangar doors.)
+const OLD_PARKED = [54, 78];
 const PLANE_COLORS = ['#e53935', '#fdd835', '#1e88e5', '#f5f5f5'];
 // (Since v0.56, a plane in each hangar, nose out: the Sky Cub, a slow one for sightseeing, and a
 // fast jet.)
 const HANGAR_PLANES = [{ kind: 'cub', u: 54.5, v: 12.5, color: '#ffb300' }, { kind: 'jet', u: 78.5, v: 12.5, color: '#546e7a' }];
 
-// The hangar planes for an airport that's already built (worked out from where its terminal
-// and runway are), for worlds from before they were added.
-export function hangarPlanes(place) {
-  if (!place?.runway || !place.along) return [];
+// An airport that's already built: its own space (u along the road, v away from it), worked
+// out from where its terminal and runway are. pos(u, v) is the world; uv(x, z) the other way.
+export function airportFrame(place) {
+  if (!place?.runway || !place.along) return null;
   const [ux, uz] = place.along, [r0x, r0z] = place.runway;
   // (The terminal's spot is at (20, 11.5) in the airport's own space; the runway starts at (4, 36.5).)
   const vx = (r0x - place.x + 16 * ux) / 25, vz = (r0z - place.z + 16 * uz) / 25;
-  const pos = (u, v) => [place.x + (u - 20) * ux + (v - 11.5) * vx, place.z + (u - 20) * uz + (v - 11.5) * vz];
-  const h = Math.atan2(-vx, -vz);
+  return {
+    pos: (u, v) => [place.x + (u - 20) * ux + (v - 11.5) * vx, place.z + (u - 20) * uz + (v - 11.5) * vz],
+    uv: (x, z) => [20 + (x - place.x) * ux + (z - place.z) * uz, 11.5 + (x - place.x) * vx + (z - place.z) * vz],
+    h: Math.atan2(-vx, -vz), // (nose toward the runway)
+  };
+}
+
+// The hangar planes for an airport that's already built, for worlds from before they were added.
+export function hangarPlanes(place) {
+  const f = airportFrame(place);
+  if (!f) return [];
   return HANGAR_PLANES.map(p => {
-    const [x, z] = pos(p.u, p.v);
-    return { kind: p.kind, x, y: 0, z, h, color: p.color };
+    const [x, z] = f.pos(p.u, p.v);
+    return { kind: p.kind, x, y: 0, z, h: f.h, color: p.color };
   });
 }
+
+// Airplanes parked on the apron in front of a hangar's doors (in worlds from before v0.56.1):
+// where they should park instead (out of the way). [{ home, x, z }]
+export function planesOutOfTheWay(place, homes) {
+  const f = airportFrame(place);
+  if (!f) return [];
+  const moves = [];
+  const free = PARKED.filter(u => !homes.some(h => {
+    const [hu, hv] = f.uv(h.x, h.z);
+    return Math.abs(hu - (u + 0.5)) < 3 && hv > APRON[0] - 1 && hv < APRON[1] + 1;
+  }));
+  for (const home of homes) {
+    if (!VEHICLE_PLANES.includes(home.kind)) continue;
+    const [u, v] = f.uv(home.x, home.z);
+    const blocking = v > APRON[0] - 1 && v < APRON[1] + 1 && HANGARS.some(([h0, h1]) => u > h0 - 4 && u < h1 + 4) && OLD_PARKED.some(o => Math.abs(u - (o + 0.5)) < 3);
+    if (!blocking || !free.length) continue;
+    const [x, z] = f.pos(free.shift() + 0.5, (APRON[0] + APRON[1]) / 2 + 0.5);
+    moves.push({ home, x, z });
+  }
+  return moves;
+}
+const VEHICLE_PLANES = ['plane', 'cub', 'jet'];
 
 // Finds a spot and builds it (or null if there's nowhere big enough). near: where we'd like it.
 export function buildAirport({ get, set, canUse, near = [RING + 30, 330] }) {

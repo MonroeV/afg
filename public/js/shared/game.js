@@ -13,7 +13,7 @@ import { buildGasStations, usesFuel, getsDirty, TANK_RANGE, GAS_PUMP, GAS_CAN, G
 import { MAX_TUNNELS, isTunnelY, tunnelKey, openBelow } from './underground.js';
 import { buildShops, buildOuterShops } from './shops.js';
 import { buildChurch, meetingOn, MEETING_COINS, MEETING_STAY } from './church.js';
-import { buildAirport, hangarPlanes } from './airport.js';
+import { buildAirport, hangarPlanes, planesOutOfTheWay } from './airport.js';
 import { buildPark } from './park.js';
 import { buildTrainLine, fixPlatforms } from './train.js';
 import { buildFunLand } from './funland.js';
@@ -34,7 +34,7 @@ import { Structures } from '../structures.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
-export const SAVE_VERSION = 30;
+export const SAVE_VERSION = 31;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -298,6 +298,7 @@ export class GameRoom {
       this.upgradeTo28();
       this.upgradeTo29();
       this.upgradeTo30();
+      this.upgradeTo31();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -403,6 +404,7 @@ export class GameRoom {
     if (data.version < 28) this.upgradeTo28();
     if (data.version < 29) this.upgradeTo29();
     if (data.version < 30) this.upgradeTo30();
+    if (data.version < 31) this.upgradeTo31();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -973,6 +975,23 @@ export class GameRoom {
     const planes = have ? [] : hangarPlanes(this.places?.airport);
     for (const c of planes) this.spawn(this.addHome(c));
     this.log(`Parked a Sky Cub and a jet in the airport's hangars (${planes.length})`);
+    this.onDirty();
+  }
+
+  // Worlds saved before version 31: two of the airplanes on the apron were parked right in front
+  // of the hangars' doors (so the Sky Cub and the jet couldn't get out). Their spots move along
+  // the apron, out of the way, and the planes with them (if they're sitting there, parked).
+  upgradeTo31() {
+    const moves = planesOutOfTheWay(this.places?.airport, [...this.homes.values()]);
+    for (const { home, x, z } of moves) {
+      const [ox, oz] = [home.x, home.z];
+      Object.assign(home, { x, z });
+      for (const v of this.vehicles.values()) {
+        if (v.home !== home.id || v.driver || Math.hypot(v.x - ox, v.z - oz) > 4) continue;
+        Object.assign(v, { x, z, y: home.y, h: home.h });
+      }
+    }
+    this.log(`Moved the airplanes parked in front of the hangars out of the way (${moves.length})`);
     this.onDirty();
   }
 
