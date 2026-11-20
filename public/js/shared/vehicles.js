@@ -84,6 +84,13 @@ export const VEHICLES = {
     name: 'BMX Bike', mass: 90, length: 1.7, width: 0.55, ride: 0.3, bodyH: 0.1, cabinH: 0, wheelR: 0.3, height: 1.8, maxSpeed: 12, accel: 7, gears: 3, respawn: 20,
     seats: [[0, 1.2, 0.15]], stand: true, skate: true, bouncy: true, noDamage: true,
   },
+  // An ambulance (at the hospital): a big white van with red stripes and crosses. G: lights and
+  // siren. Two up front, and room in the back for patients (a hurt friend riding in it gets
+  // better when it stops in the hospital's ambulance bay).
+  ambulance: {
+    name: 'Ambulance', mass: 3200, length: 5.2, width: 2.2, ride: 0.4, bodyH: 1.9, cabinH: 0, wheelR: 0.42, maxSpeed: 20, accel: 8, gears: 3, respawn: 30,
+    seats: [[-0.45, 0.95, -1.75], [0.45, 0.95, -1.75], [-0.4, 0.95, 0.9], [0.4, 0.95, 0.9]], special: 'siren', engine: 'big', pitch: 1.0,
+  },
   // A tractor (at the farm): slow and steady, big wheels at the back and little ones in front, an
   // open seat under a sunshade roof. It climbs up one block, like a monster truck.
   tractor: {

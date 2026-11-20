@@ -93,6 +93,15 @@ customize your character, drive cars, build anything and play with friends.
       claimed one (only you can drive it, it stays where you park it), and a new car rolls into
       its spot once you've driven yours away. The town keeps just a few cars of its own now (the
       rest went to the dealership; nobody's own cars were touched). The Loop Express stops there
+    - **BuildZone Hospital** 🏥 (since v0.65, by the Outer Loop, with its own Loop Express stop):
+      a big white hospital with red crosses on the front, an ambulance bay under a canopy, a
+      lobby with Dr. Hart at the reception desk, a waiting room, an emergency room, a row of
+      patient rooms with beds, and a helipad on the roof. **Ouch!** A big fall or a hard crash
+      and you're hurt (🤕 shows top left, and you walk a little slower). Come to the hospital
+      and **lie down in one of its beds** to feel better (a brave-patient sticker: +2 🪙). Or a
+      friend can drive you there in an **ambulance** 🚑 (two wait in the bay; **G** for the
+      lights and siren): ride in it, and when it stops in the ambulance bay you're all better
+      (and the driver gets 3 🪙). Dr. Hart runs the **Paramedics** club
     - **Ramp City Skate Park** 🛹 (since v0.64, by the Outer Loop, sharing the Church's Loop
       Express stop): a big smooth concrete plaza with kicker ramps, a fun box, a half-pipe,
       quarter pipes along the back (with neon on top), rails and benches, and a rack of
@@ -681,6 +690,7 @@ customize your character, drive cars, build anything and play with friends.
   | ⚽ Soccer Stars (v0.62) | Referee Rita, at the stadium | kick the giant ball 20 times, score 3 goals | 20 🪙, power kick (you kick the ball farther) |
   | ⛳ Golf Pros (v0.63) | Caddie Cal, at Putt Putt Paradise | play all nine holes, finish 2 rounds, get a hole in one | 20 🪙, a bigger daily bonus (+3 🪙 a day) |
   | 🛹 Skaters (v0.64) | Skater Zed, at the skate park | land 10 tricks, land a 360, land a flip | 20 🪙, big air (you jump higher off ramps) |
+  | 🚑 Paramedics (v0.65) | Dr. Hart, at the hospital | turn on an ambulance's siren, get better in a hospital bed, drive a hurt friend to the hospital | 20 🪙, first aid (you get better by yourself) |
 
   Each step pops up by the badge counter ("🔧 2/3"), and a new badge gets a big celebration with
   fireworks. The **daily bonus** grows every day in a row you play (+2 a day, up to +10)
@@ -1167,6 +1177,7 @@ public/
       stadium.js       The stadium: field, goals, stands, floodlights; the giant ball's physics (stepBall)
       minigolf.js      Putt Putt Paradise: the nine holes (lanes, par, windmill, pond, bumpers, loop, castle)
       skatepark.js     Ramp City Skate Park: kickers, fun box, half-pipe, quarter pipes, rails, boards and bikes
+      hospital.js      BuildZone Hospital: the building, beds, the ambulance bay and its ambulances
       firestation.js   The fire station: its building, the fire trucks' bays, and how often fires break out
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/

@@ -199,6 +199,13 @@ const NPCS = [
     tips: ['🛹🌀🙃', 'Hop on a board or a bike (E), then ride up a ramp FAST! 🛹', 'In the air: A and D spin you round! 🌀', 'Space in the air does a flip! 🙃', 'Land facing the way you\'re going, or backwards for a Fakie! 🤙'],
   },
   {
+    // The hospital: Dr. Hart at the reception desk (she runs the Paramedics club).
+    id: -79, place: 'hospital_desk', name: 'Dr. Hart', title: 'Dr. Hart 🩺', roam: 2, club: 'medic',
+    look: { face: 'smile', hair: 'buns', hat: 'none', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#e0ac69', hairColor: '#3b2314', hatColor: '#000000', shirtColor: '#ffffff', shirtColor2: '#90caf9', pantsColor: '#1e88e5', shoesColor: '#ffffff' },
+    hello: n => [`Hello ${n}! How are you feeling? 🩺`, `Hi ${n}! Ouchie? Lie down in a bed! 🛏️`],
+    tips: ['🩺🛏️💖', 'Hurt 🤕? Lie down in one of our beds and you\'ll feel better!', 'The ambulances are out front: G for the siren! 🚑', 'Bring a hurt friend in the ambulance, stop in the bay out front! 🚑', 'Eat well and be careful up high! 🍎'],
+  },
+  {
     // BuildZone Motors: Dealer Dana, at the sales desk in the showroom.
     id: -71, place: 'dealer_desk', name: 'Dealer Dana', title: 'Dealer Dana 🚗', roam: 1,
     look: { face: 'smile', hair: 'ponytail', hat: 'none', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#e0ac69', hairColor: '#6d3b16', hatColor: '#000000', shirtColor: '#1a237e', shirtColor2: '#ffffff', pantsColor: '#263238', shoesColor: '#111111' },

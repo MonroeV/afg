@@ -259,6 +259,7 @@ let showers = null, weatherMast = null; // it's raining tacos (or ice cream, or 
 let weatherPicker = null; // Stormy's menu: what shall it rain?
 let lunchbox = null; // your lunchbox 🍱 (L): food to eat
 let funRides = null; // Fun Land's roller coaster and Ferris wheel
+let hurt = 0, hurtNag = 0, hospitalPlace = null; // (ouch: a big fall or a crash 🤕; the hospital makes you better)
 let zooAnimals = null, farmAnimals = null, kartUI = null, rocketUI = null, spaceGate = null, stadiumUI = null, golfUI = null; // the zoo's animals, the farm's, and the go-kart track's lights and lap times
 let zooAim = null; // (the one under the crosshair)
 let fireHose = null; // fires in town, and the fire trucks' hoses
@@ -322,6 +323,7 @@ async function load() {
   player.hungerMul = hungerSpeed(hunger);
   player.bouncePower = trampolineBounce;
   player.onBoost = () => sounds.zoom();
+  player.onHardLanding = () => ouch();
   player.onLanded = () => {
     net.send({ t: 'flight', what: 'chute' });
     sounds.land();
@@ -745,6 +747,7 @@ function startGame(welcome, resume = false) {
   rocketUI.setPlace(welcome.space, welcome.rocket);
   stadiumUI.setPlace(welcome.stadium, welcome.sball);
   golfUI.setPlace(welcome.golf, welcome.golfBoard);
+  hospitalPlace = welcome.hospital || null;
   spaceGate = welcome.space?.gate || null;
   fireHose.setFires(welcome.fires);
   airportLights.setPlace(welcome.airport);
@@ -2685,6 +2688,43 @@ function getOut() {
   else if (myRide) leaveRide(true);
 }
 
+// Ouch! A big fall or a hard crash: you're hurt (🤕: a bit slower) till you get better at the
+// hospital (lie in one of its beds, or a friend drives you there in an ambulance).
+function ouch() {
+  if (!inGame) return;
+  hurt = Math.min(3, hurt + 1);
+  hurtNag = 0;
+  sounds.tone(500, 250, 0.25, 0.2, 'triangle');
+  hud.toast('🤕 Ouch! ➡ 🏥🛏️');
+  net.send({ t: 'hurt' });
+  updateHurt();
+}
+
+function updateHurt() {
+  let chip = document.getElementById('hurt-chip');
+  if (!chip) {
+    chip = document.createElement('div');
+    chip.id = 'hurt-chip';
+    Object.assign(chip.style, { position: 'fixed', top: '96px', left: '12px', padding: '2px 10px', borderRadius: '12px', background: 'rgba(211, 47, 47, 0.85)', color: '#fff', font: 'bold 18px system-ui, sans-serif', pointerEvents: 'none', zIndex: 5 });
+    document.body.appendChild(chip);
+  }
+  chip.textContent = `🤕${hurt > 1 ? ` ×${hurt}` : ''} ➡ 🏥`;
+  chip.style.display = hurt ? 'block' : 'none';
+  if (player) player.hurtMul = hurt ? 0.85 : 1;
+}
+
+net.on('healed', ({ coins }) => {
+  hurt = 0;
+  updateHurt();
+  sounds.magic();
+  effects.heartsAt(player.pos.x, player.pos.y + 1.6, player.pos.z, 10);
+  hud.toast(`💖 All better! 🩹 +${coins} 🪙`);
+});
+net.on('rescued', ({ name, coins }) => {
+  sounds.magic();
+  hud.toast(`🚑 ${name} 💖 +${coins} 🪙`);
+});
+
 // Gets out of the vehicle. `tell` sends the news to the server.
 function leaveCar(tell = false) {
   const car = myCar;
@@ -2804,7 +2844,10 @@ function vehicleEvent(ev, car) {
   else if (ev.type === 'land') sounds.land();
   else if (ev.type === 'bounce') sounds.bounce();
   else if (ev.type === 'boost') sounds.zoom();
-  else if (ev.type === 'damage') reportDamage(ev.other || car, ev.amount, ev.impact);
+  else if (ev.type === 'damage') {
+    reportDamage(ev.other || car, ev.amount, ev.impact);
+    if (car === myCar && !ev.other && ev.amount > 18 && !car.spec.noDamage) ouch(); // (a hard crash)
+  }
   else if (ev.type === 'impulse') net.send({ t: 'car_impulse', id: ev.other.id, vx: ev.dv.x, vz: ev.dv.z, spin: ev.spin });
   else if (ev.type === 'push') net.send({ t: 'push', id: ev.id, vx: ev.dv.x, vy: ev.dv.y, vz: ev.dv.z });
   // Skateboards and bikes: up off a ramp, a trick landed, or a bail.
@@ -3186,6 +3229,14 @@ function goToBed(bed) {
     player.pitch = -0.75;
   } });
   myBody.lying = true;
+  // (A hospital bed: lie down to get better. It's not your home bed.)
+  const b = hospitalPlace?.building, inHospital = b && bed.x >= b[0] && bed.x <= b[2] && bed.z >= b[1] && bed.z <= b[3];
+  if (inHospital) {
+    net.send({ t: 'sleep', on: true });
+    if (hurt) net.send({ t: 'hospital_bed' });
+    else hud.toast('🛏️ 😊');
+    return;
+  }
   settings.bed = { x: bed.x, y: bed.y, z: bed.z };
   saveSettings();
   net.send({ t: 'sleep', on: true });
@@ -6546,7 +6597,7 @@ function frame(timestamp) {
   // Loudest nearby siren, fire and helicopter.
   let siren = 0, rotor = 0, rotorSpin = 0, rotorEffort = 0.5;
   for (const car of cars.list.values()) {
-    if (car.siren && (car.kind === 'police' || car.kind === 'firetruck') && car.driver) siren = Math.max(siren, loudness(car.pos.x, car.pos.y, car.pos.z, 70)); // (G on other vehicles isn't a siren)
+    if (car.siren && (car.kind === 'police' || car.kind === 'firetruck' || car.kind === 'ambulance') && car.driver) siren = Math.max(siren, loudness(car.pos.x, car.pos.y, car.pos.z, 70)); // (G on other vehicles isn't a siren)
     if (car.hp < FIRE_HP) fire = Math.max(fire, loudness(car.pos.x, car.pos.y, car.pos.z, 35));
     if (car.spec.flying && !car.spec.plane && car.rotorSpin > 0.02) {
       const level = car === riding() ? 1 : loudness(car.pos.x, car.pos.y, car.pos.z, 120);
@@ -6593,6 +6644,18 @@ function frame(timestamp) {
     rocketUI.update(dt, camera.position);
     stadiumUI.update(dt, time, player, camera.position, !riding() && !rocketUI.riding && !player.flying);
     golfUI.update(dt, gameTime(worldDay, sky.time), player);
+    // Hurt: a reminder now and then (or, with the Paramedics' first aid, better by yourself).
+    if (hurt) {
+      hurtNag += dt;
+      if (perks.has('medic') && hurtNag > 40) {
+        hurt = 0;
+        updateHurt();
+        hud.toast('🩹 💖');
+      } else if (hurtNag > 90) {
+        hurtNag = 30;
+        hud.toast('🤕 ➡ 🏥🛏️');
+      }
+    }
     airportLights.update(performance.now() / 1000, camera.position, 1 - sky.dayK);
     updateChurch(dt, time);
   }
@@ -6667,6 +6730,8 @@ window.buildzone = {
   get rocketUI() { return rocketUI; },
   get stadiumUI() { return stadiumUI; },
   get golfUI() { return golfUI; },
+  get hospitalPlace() { return hospitalPlace; },
+  get hurt() { return hurt; },
   get airportLights() { return airportLights; },
   get fireHose() { return fireHose; },
   requestEnter: car => requestEnter(car),

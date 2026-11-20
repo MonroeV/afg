@@ -24,6 +24,7 @@ import { buildSpaceCenter, BOARDING, COUNTDOWN, FLIGHT, SEATS } from './space.js
 import { buildStadium, stepBall, kickBall, BALL_R, SOCCER_COINS } from './stadium.js';
 import { buildMiniGolf, HOLES, ROUND_COINS, BEST_COINS, GOLF_BOARD } from './minigolf.js';
 import { buildSkatePark, TRICK_COINS } from './skatepark.js';
+import { buildHospital, HEAL_COINS, RESCUE_COINS } from './hospital.js';
 import { buildDealership, newCarFor, LOT_KINDS, SHOW_KINDS, townCarsToKeep } from './dealership.js';
 import { buildFireStation, FIRE_CALL, FIRE_GAP, FIRE_OUT, FIRE_LIFE, DOUSE, FIRE_REWARD, HOSE_RANGE } from './firestation.js';
 import { findHomes } from './residents.js';
@@ -42,7 +43,7 @@ import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
 const PLANE_HOME_AFTER = 300; // seconds a town airplane sits idle away from the airport before it's taken back
-export const SAVE_VERSION = 41;
+export const SAVE_VERSION = 42;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -325,6 +326,7 @@ export class GameRoom {
       this.upgradeTo39();
       this.upgradeTo40();
       this.upgradeTo41();
+      this.upgradeTo42();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -444,6 +446,7 @@ export class GameRoom {
     if (data.version < 39) this.upgradeTo39();
     if (data.version < 40) this.upgradeTo40();
     if (data.version < 41) this.upgradeTo41();
+    if (data.version < 42) this.upgradeTo42();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -1210,6 +1213,60 @@ export class GameRoom {
     this.onDirty();
   }
 
+  // Worlds saved before version 42: BuildZone Hospital (its ambulances, a train stop).
+  upgradeTo42() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const hospital = buildHospital({ get, set, canUse: this.freeLand() });
+    if (hospital) {
+      this.claims.push(hospital.claim);
+      for (const [x, y, z, text] of hospital.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+      this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...hospital.places };
+      for (const c of hospital.cars) this.spawn(this.addHome(c));
+      this.addTrainStops();
+    }
+    this.log(`Added the hospital (${hospital ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
+  // ---------- Ouch: the hospital ----------
+  // Somebody's better: no more 🤕 (in a hospital bed, or brought in by ambulance).
+  heal(c, how) {
+    if (!c.hurt) return;
+    c.hurt = 0;
+    const w = this.wallet(c);
+    w.coins += HEAL_COINS;
+    this.sendWallet(c);
+    this.progress(c, 'medic', 'better', 1, true);
+    c.send({ t: 'healed', how, coins: HEAL_COINS });
+    this.log(`${c.name} got better at the hospital (${how})`);
+  }
+
+  // Every second: an ambulance stopped in the hospital's ambulance bay, with a hurt friend in the
+  // back? They're all better, and the driver gets a thank-you.
+  updateAmbulances() {
+    const bay = this.places?.hospital?.bay;
+    if (!bay) return;
+    const [x0, z0, x1, z1] = bay;
+    for (const v of this.vehicles.values()) {
+      if (v.kind !== 'ambulance' || !v.driver || Math.abs(v.speed || 0) > 1.5 || v.x < x0 - 2 || v.x > x1 + 3 || v.z < z0 - 2 || v.z > z1 + 3) continue;
+      const driver = this.clients.get(v.driver);
+      for (const id of v.passengers) {
+        const c = this.clients.get(id);
+        if (!c?.hurt) continue;
+        this.heal(c, 'ambulance');
+        if (driver) {
+          this.wallet(driver).coins += RESCUE_COINS;
+          this.sendWallet(driver);
+          this.progress(driver, 'medic', 'rescue', 1, true);
+          driver.send({ t: 'rescued', name: c.name, coins: RESCUE_COINS });
+        }
+      }
+    }
+  }
+
   // ---------- The stadium's giant soccer ball ----------
   // It rolls and bounces (stepBall in stadium.js), 30 times a second; everyone hears where it is
   // ten times a second while it's moving (and every couple of seconds when it's still). A goal:
@@ -1971,6 +2028,7 @@ export class GameRoom {
       stadium: this.places?.stadium || null, // the stadium: the field, the goals, the fans (see stadiumui.js)
       sball: this.ballState(),
       golf: this.places?.golf || null, // the mini golf course (see golfui.js)
+      hospital: this.places?.hospital || null, // the hospital (its beds make you better)
       golfBoard: this.golfBoard.map(r => [r.name, r.total]),
       airport: this.places?.airport || null, // the airport (its lights: see airportlights.js)
       fires: this.fires.map(({ id, x, z, hp }) => ({ id, x, z, hp: Math.round(hp) })), // fires burning in town (see firehose.js)
@@ -2557,6 +2615,7 @@ export class GameRoom {
       v.steer = num(msg.steer);
       v.siren = v.kind === 'firetruck' && msg.siren === 2 ? 2 : msg.siren ? 1 : 0; // (a fire truck: 1 lights, 2 lights and the hose)
       if (v.kind === 'firetruck' && v.siren) this.progress(client, 'fire', 'siren', 1, true);
+      if (v.kind === 'ambulance' && v.siren) this.progress(client, 'medic', 'siren', 1, true);
       v.pitch = num(msg.p);
       v.roll = num(msg.r);
       v.rotor = num(msg.rs);
@@ -2982,6 +3041,21 @@ export class GameRoom {
       }
       client.send({ t: 'golf_round', total, coins, best, record });
       this.onDirty();
+    },
+
+    // Ouch: a big fall or a hard crash (the player's game noticed). 🤕
+    hurt(client) {
+      if (!this.allow(client, 'hurt', 0.5, 2)) return;
+      client.hurt = Math.min(3, (client.hurt || 0) + 1);
+    },
+
+    // Lying down in one of the hospital's beds: all better.
+    hospital_bed(client) {
+      const b = this.places?.hospital?.building;
+      if (!b || !client.hurt) return;
+      const [x, , z] = client.pos;
+      if (x < b[0] - 1 || x > b[2] + 2 || z < b[1] - 1 || z > b[3] + 2) return;
+      this.heal(client, 'bed');
     },
 
     // A trick landed on a skateboard or a BMX bike (see driveSkate in cars.js): the Skaters club,
@@ -3773,6 +3847,10 @@ export class GameRoom {
       this.updateExplorers();
     }
     if (this.places?.stadium) this.updateBall(Math.min(dt, 0.1));
+    if (!(t.ambulance > 0)) {
+      t.ambulance = 1;
+      this.updateAmbulances();
+    }
     if (!(t.rocket > 0)) {
       t.rocket = 0.5;
       this.updateRocket();

@@ -104,7 +104,7 @@ export class Player {
     } else if (this.skiOn(wish, keys, dt)) {
       // (Skiing: see skiOn.)
     } else {
-      const speed = (this.crouching ? CROUCH_SPEED : this.sprinting ? SPRINT_SPEED : WALK_SPEED) * (this.sneakers ? SNEAKER_SPEED : 1) * (this.hungerMul ?? 1) * (this.explorerBoots ? 1.1 : 1); // (hungry: a bit slower; explorer's boots: a bit faster)
+      const speed = (this.crouching ? CROUCH_SPEED : this.sprinting ? SPRINT_SPEED : WALK_SPEED) * (this.sneakers ? SNEAKER_SPEED : 1) * (this.hungerMul ?? 1) * (this.hurtMul ?? 1) * (this.explorerBoots ? 1.1 : 1); // (hungry: a bit slower; explorer's boots: a bit faster)
       // Less control in the air, and almost none while flying out of a cannon (a jetpack
       // steers better).
       // (Ice is slippery: you slide about on it.)
@@ -352,6 +352,8 @@ export class Player {
           this.springed = true;
           return;
         }
+    // A big fall: ouch! (Not with a parachute, a balloon or the jetpack, of course.)
+    if (impact < -23 && !this.parachute && !this.balloon && !this.flying) this.onHardLanding?.(impact);
   }
 
   overlapsSomething() {

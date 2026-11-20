@@ -177,6 +177,15 @@ export const CLUBS = [
     ],
     reward: { coins: 20, perk: '🚀', perkName: 'Big air: you jump higher off the ramps' },
   },
+  {
+    id: 'medic', name: 'Paramedics', icon: '🚑', color: '#d32f2f', leader: 'Dr. Hart', where: 'at the hospital',
+    tasks: [
+      { id: 'siren', icon: '🚨', goal: 1, what: 'Turn on an ambulance\'s siren (G)' },
+      { id: 'better', icon: '🛏️', goal: 1, what: 'Get better at the hospital (lie in one of its beds when you\'re hurt 🤕)' },
+      { id: 'rescue', icon: '🚑', goal: 1, what: 'Drive a hurt friend to the hospital in an ambulance' },
+    ],
+    reward: { coins: 20, perk: '🩹', perkName: 'First aid: you get better by yourself' },
+  },
 ];
 
 export const clubById = id => CLUBS.find(c => c.id === id);
