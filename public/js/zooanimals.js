@@ -107,6 +107,87 @@ function model(kind) {
     box(0.15, 0.1, 0.05, black, 0, -0.15, -0.31, head);
     g.add(head);
     height = 1.8;
+  } else if (kind === 'cow') {
+    // A black-and-white cow: patches, a pink nose, little horns, an udder, a swishy tail.
+    const white = mat(0xf5f5f5), black = mat(0x222222), pink = mat(0xf4a6b4);
+    box(1.0, 0.95, 1.9, white, 0, 1.25, 0);
+    for (const [x, y, z, w, h, d] of [[0.505, 1.35, 0.3, 0.02, 0.5, 0.6], [-0.505, 1.2, -0.4, 0.02, 0.45, 0.5], [0, 1.73, 0.5, 0.5, 0.02, 0.5], [0.2, 1.73, -0.4, 0.4, 0.02, 0.35]]) box(w, h, d, black, x, y, z);
+    four(0.24, 0.8, white, 0.33, 0.75, 0.8);
+    box(0.4, 0.15, 0.4, pink, 0, 0.72, 0.35); // (the udder)
+    head = new THREE.Group();
+    head.position.set(0, 1.55, -1.05);
+    box(0.55, 0.55, 0.6, white, 0, 0, 0, head);
+    box(0.5, 0.25, 0.15, pink, 0, -0.15, -0.35, head);
+    for (const s of [-1, 1]) {
+      box(0.08, 0.15, 0.08, mat(0xfff3d6), s * 0.2, 0.32, 0.05, head); // (horns)
+      box(0.2, 0.1, 0.06, black, s * 0.36, 0.1, 0.1, head); // (ears)
+    }
+    g.add(head);
+    const tail = box(0.06, 0.7, 0.06, white, 0, 1.25, 0.98);
+    tail.rotation.x = 0.2;
+    height = 2.0;
+    radius = 1.0;
+  } else if (kind === 'horse') {
+    // A horse: tall and brown, a long neck and a dark mane and tail.
+    const brown = mat(0x8d5524), dark = mat(0x3e2723);
+    box(0.8, 0.85, 2.0, brown, 0, 1.6, 0);
+    four(0.22, 1.2, brown, 0.28, 0.8, 1.2);
+    head = new THREE.Group();
+    head.position.set(0, 1.85, -0.9);
+    const neck = box(0.35, 1.0, 0.45, brown, 0, 0.35, -0.15, head);
+    neck.rotation.x = 0.5;
+    box(0.36, 0.35, 0.75, brown, 0, 0.85, -0.55, head);
+    box(0.1, 0.9, 0.2, dark, 0, 0.5, 0.05, head).rotation.x = 0.5; // (the mane)
+    for (const s of [-1, 1]) box(0.08, 0.18, 0.08, brown, s * 0.12, 1.1, -0.3, head);
+    g.add(head);
+    const tail = box(0.12, 0.8, 0.12, dark, 0, 1.45, 1.05);
+    tail.rotation.x = 0.35;
+    height = 2.7;
+    radius = 1.1;
+  } else if (kind === 'sheep') {
+    // A fluffy sheep: a big woolly body, a black face and black legs.
+    const wool = mat(0xfafafa), black = mat(0x2b2b2b);
+    box(1.0, 0.85, 1.3, wool, 0, 0.95, 0);
+    box(0.9, 0.2, 1.1, wool, 0, 1.45, 0);
+    four(0.16, 0.55, black, 0.3, 0.45, 0.55);
+    head = new THREE.Group();
+    head.position.set(0, 1.15, -0.75);
+    box(0.4, 0.45, 0.45, black, 0, 0, -0.05, head);
+    box(0.5, 0.2, 0.35, wool, 0, 0.25, 0.05, head);
+    for (const s of [-1, 1]) box(0.2, 0.08, 0.1, black, s * 0.28, 0.05, 0, head);
+    g.add(head);
+    height = 1.6;
+    radius = 0.8;
+  } else if (kind === 'pig') {
+    // A pink pig: round and low, a snout, floppy ears, a curly tail.
+    const pink = mat(0xf7a8b8), dark = mat(0xe07a8f);
+    box(0.85, 0.7, 1.3, pink, 0, 0.62, 0);
+    four(0.2, 0.35, pink, 0.27, 0.45, 0.3);
+    head = new THREE.Group();
+    head.position.set(0, 0.75, -0.75);
+    box(0.55, 0.5, 0.4, pink, 0, 0, 0, head);
+    box(0.28, 0.2, 0.08, dark, 0, -0.06, -0.23, head);
+    for (const s of [-1, 1]) box(0.16, 0.14, 0.06, dark, s * 0.2, 0.26, 0.05, head);
+    g.add(head);
+    const tail = box(0.06, 0.06, 0.25, dark, 0, 0.85, 0.72);
+    tail.rotation.z = 0.8;
+    height = 1.1;
+    radius = 0.75;
+  } else if (kind === 'chicken') {
+    // A hen: small and white, a red comb, a yellow beak and two yellow legs.
+    const white = mat(0xffffff), yellow = mat(0xffb300), red = mat(0xe53935);
+    box(0.36, 0.34, 0.48, white, 0, 0.45, 0);
+    box(0.3, 0.3, 0.12, white, 0, 0.58, 0.26).rotation.x = -0.5; // (the tail feathers)
+    for (const s of [-1, 1]) leg(0.05, 0.28, yellow, s * 0.09, 0.3, 0);
+    head = new THREE.Group();
+    head.position.set(0, 0.72, -0.2);
+    box(0.22, 0.24, 0.22, white, 0, 0, 0, head);
+    box(0.08, 0.06, 0.12, yellow, 0, -0.02, -0.15, head);
+    box(0.05, 0.1, 0.14, red, 0, 0.16, 0, head);
+    box(0.05, 0.08, 0.05, red, 0, -0.12, -0.08, head);
+    g.add(head);
+    height = 0.9;
+    radius = 0.35;
   } else {
     // A monkey: small and brown, long arms, a curly tail.
     const brown = mat(0x7b4a2b), face = mat(0xe8c39e);
@@ -126,9 +207,13 @@ function model(kind) {
   return { group: g, legs, head, height, radius };
 }
 
+const SPEEDS = { elephant: 1.2, giraffe: 1.4, lion: 1.6, zebra: 2, penguin: 0.9, panda: 0.8, monkey: 2.2, cow: 0.8, horse: 1.8, sheep: 1.0, pig: 1.1, chicken: 1.4 };
+
+// (The farm's animals use this too: see farmanimals.js. table: what's in each pen; floor: how
+// high the ground they walk on is.)
 export class ZooAnimals {
-  constructor({ scene, effects, sounds }) {
-    Object.assign(this, { scene, effects, sounds });
+  constructor({ scene, effects, sounds, table = ANIMALS, floor = FLOOR }) {
+    Object.assign(this, { scene, effects, sounds, table, floor });
     this.animals = [];
   }
 
@@ -137,11 +222,12 @@ export class ZooAnimals {
     this.animals = [];
     if (!place?.pens) return;
     place.pens.forEach((pen, p) => {
-      const def = ANIMALS[pen.kind];
+      const def = this.table[pen.kind];
+      if (!def) return;
       for (let i = 0; i < def.count; i++) {
         const m = model(pen.kind);
         // (Pairs of grown-ups, and smaller ones too.)
-        const scale = i > 1 && pen.kind !== 'penguin' ? 0.7 : 1;
+        const scale = i > 1 && pen.kind !== 'penguin' && pen.kind !== 'chicken' ? 0.7 : 1;
         m.group.scale.setScalar(scale);
         this.scene.add(m.group);
         this.animals.push({ ...m, kind: pen.kind, i, pen, seed: p * 10 + i + 1, scale, fedUntil: 0 });
@@ -164,7 +250,7 @@ export class ZooAnimals {
       if (far) continue;
       const tt = t + a.seed * 3.3, n = Math.floor(tt / SLOT), into = tt - n * SLOT;
       const from = this.target(a, n - 1), to = this.target(a, n);
-      const speed = { elephant: 1.2, giraffe: 1.4, lion: 1.6, zebra: 2, penguin: 0.9, panda: 0.8, monkey: 2.2 }[a.kind];
+      const speed = SPEEDS[a.kind] || 1, FLOOR = this.floor;
       const d = Math.hypot(to[0] - from[0], to[1] - from[1]), dur = Math.max(0.5, d / speed);
       const eating = t < a.fedUntil;
       const k = Math.min(1, into / dur), e = k * k * (3 - 2 * k);
@@ -181,7 +267,9 @@ export class ZooAnimals {
       });
       if (a.kind === 'penguin') a.group.rotation.z = moving ? Math.sin(t * 8 + a.seed) * 0.12 : 0;
       if (a.kind === 'monkey') a.group.position.y = FLOOR + (moving ? Math.abs(Math.sin(t * 7 + a.seed)) * 0.4 : 0);
-      if (a.head) a.head.rotation.x = eating ? -0.4 + Math.sin(t * 12) * 0.15 : Math.sin(t * 1.5 + a.seed) * 0.05;
+      // (Hens peck at the ground when they stop; the grazers nibble the grass.)
+      const peck = !moving && (a.kind === 'chicken' ? Math.max(0, Math.sin(t * 3 + a.seed)) * 0.9 : ['cow', 'sheep', 'horse'].includes(a.kind) ? Math.max(0, Math.sin(t * 0.4 + a.seed)) * 0.7 : 0);
+      if (a.head) a.head.rotation.x = eating ? -0.4 + Math.sin(t * 12) * 0.15 : -peck + Math.sin(t * 1.5 + a.seed) * 0.05;
       if (eating && Math.random() < dt * 3) this.effects.heartsAt(a.group.position.x, FLOOR + a.height * a.scale + 0.3, a.group.position.z, a.liked ? 3 : 1);
     }
   }
@@ -192,7 +280,7 @@ export class ZooAnimals {
     let best = null, bestT = reach;
     for (const a of this.animals) {
       if (!a.group.visible) continue;
-      const c = a.group.position.clone().setY(FLOOR + (a.height * a.scale) / 2), r = a.radius * a.scale + 0.3;
+      const c = a.group.position.clone().setY(this.floor + (a.height * a.scale) / 2), r = a.radius * a.scale + 0.3;
       const oc = c.clone().sub(o), along = oc.dot(dir);
       if (along < 0 || along > bestT) continue;
       if (oc.lengthSq() - along * along < r * r) [best, bestT] = [a, along];
@@ -207,6 +295,6 @@ export class ZooAnimals {
     a.frozen = [a.group.position.x, a.group.position.z];
     a.fedUntil = t + 4;
     a.liked = liked;
-    this.effects.heartsAt(a.group.position.x, FLOOR + a.height * a.scale + 0.3, a.group.position.z, liked ? 8 : 4);
+    this.effects.heartsAt(a.group.position.x, this.floor + a.height * a.scale + 0.3, a.group.position.z, liked ? 8 : 4);
   }
 }

@@ -150,6 +150,20 @@ const NPCS = [
     tips: ['🐘🍌 🦒🍎 🦁🥪 🦓🥕 🐧🧀 🐼🍪 🐒🍌', 'Right-click an animal to feed it! 🍱', 'The penguins love their pool! 🐧'],
   },
   {
+    // Sunny Acres Farm: Farmer Wren in the yard (she runs the Farmhands club), and Grandma June at
+    // the farm stand (fresh eggs, honey toast and apple pie).
+    id: -72, place: 'farm', name: 'Farmer Wren', title: 'Farmer Wren 🌾', roam: 4, club: 'farm',
+    look: { face: 'grin', hair: 'braids', hat: 'straw', shirt: 'striped', pants: 'jeans', extra: 'none', skin: '#f1c27d', hairColor: '#a0632b', hatColor: '#e8c872', shirtColor: '#c62828', shirtColor2: '#ffffff', pantsColor: '#1e3a8a', shoesColor: '#5d4037' },
+    hello: n => [`Howdy, ${n}! Welcome to the farm! 🐄🌻`, `Hi ${n}! The animals love a pat! 🐑`],
+    tips: ['🐄🥛 🐔🥚', 'Right-click an animal to pet it! 🐴', 'Pick the crops in the fields! They grow back 🥕🍓🎃', 'Hop on a tractor and take it for a spin! 🚜', 'The hayloft is up the ladder in the barn! 🌾'],
+  },
+  {
+    id: -73, place: 'farm_stand', name: 'Grandma June', title: 'Grandma June 🥧', roam: 1.5, store: 'farm',
+    look: { face: 'smile', hair: 'buns', hat: 'none', shirt: 'dress', pants: 'skirt', extra: 'none', skin: '#ffe0c4', hairColor: '#e8e8e8', hatColor: '#000000', shirtColor: '#7cb342', shirtColor2: '#ffffff', pantsColor: '#7cb342', shoesColor: '#5d4037' },
+    hello: n => [`Hello, dear ${n}! Fresh pie today! 🥧`, `Hi ${n}! Hungry? 🥚🍯`],
+    tips: ['🥚🍯🥧', 'Baked it this morning! 🥧'],
+  },
+  {
     // BuildZone Motors: Dealer Dana, at the sales desk in the showroom.
     id: -71, place: 'dealer_desk', name: 'Dealer Dana', title: 'Dealer Dana 🚗', roam: 1,
     look: { face: 'smile', hair: 'ponytail', hat: 'none', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#e0ac69', hairColor: '#6d3b16', hatColor: '#000000', shirtColor: '#1a237e', shirtColor2: '#ffffff', pantsColor: '#263238', shoesColor: '#111111' },

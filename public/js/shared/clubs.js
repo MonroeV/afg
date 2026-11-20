@@ -132,6 +132,16 @@ export const CLUBS = [
     ],
     reward: { coins: 25, perk: '⛑️', perkName: 'A firefighter\'s helmet, and your hose sprays farther' },
   },
+  {
+    id: 'farm', name: 'Farmhands', icon: '🌾', color: '#8d6e63', leader: 'Farmer Wren', where: 'at Sunny Acres Farm',
+    tasks: [
+      { id: 'pet', icon: '🐄', goal: 5, what: 'Pet the farm animals (right-click them)' },
+      { id: 'pick', icon: '🥕', goal: 5, what: 'Pick crops in the farm\'s fields' },
+      { id: 'fresh', icon: '🥛', goal: 2, what: 'Get milk from a cow or an egg from a hen' },
+      { id: 'tractor', icon: '🚜', goal: 1, what: 'Drive a tractor' },
+    ],
+    reward: { coins: 20, perk: '🌾', perkName: 'Farm fresh: twice the milk, eggs and crops at the farm' },
+  },
 ];
 
 export const clubById = id => CLUBS.find(c => c.id === id);

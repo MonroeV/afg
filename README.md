@@ -93,6 +93,19 @@ customize your character, drive cars, build anything and play with friends.
       claimed one (only you can drive it, it stays where you park it), and a new car rolls into
       its spot once you've driven yours away. The town keeps just a few cars of its own now (the
       rest went to the dealership; nobody's own cars were touched). The Loop Express stops there
+    - **Sunny Acres Farm** 🐄 (since v0.59, on the west side of the Outer Loop, with its own Loop
+      Express stop): through the log gateway, four fenced **fields** of carrots 🥕,
+      strawberries 🍓, sunflowers 🌻 and pumpkins 🎃 (each with a scarecrow). They're
+      everyone's: right-click a ripe crop to pick it (it goes in your lunchbox) and it grows
+      back by itself. A big red **barn** with stalls, hay bales and a **hayloft** up the ladder;
+      a tall silo; a **windmill** whose sails turn in the breeze; a white farmhouse with a porch
+      and rocking chairs. Out back, fenced pastures with **cows, horses, sheep, pigs and hens**:
+      right-click one to pet it (hearts! and if you've got its favorite food in your lunchbox,
+      it gets a snack). Every so often a cow gives you **milk** 🥛 and a hen an **egg** 🥚.
+      Grandma June's **farm stand** sells boiled eggs, honey toast and apple pie, and two
+      **tractors** 🚜 wait in the yard: slow and steady, with great big back wheels, and they
+      can climb up a block. Farmer Wren runs the **Farmhands** club. (Also new: a straw hat in
+      🎨 Customize.)
     - **The Fire Station** 🚒 (since v0.54, on the south side of the Outer Loop): red brick, with
       two open bays (a **fire truck** waiting in each) and the firefighters' room next door (bunk
       beds, a table, a couch). In a fire truck (the controls show at the bottom when you get in;
@@ -614,6 +627,7 @@ customize your character, drive cars, build anything and play with friends.
   | 🤝 Best Friends (v0.50) | Miss Joy, at Friendship Park | make a best friend, hang out together for 5 minutes, go down a slide 3 times | 20 🪙, your best friend brings you snacks |
   | 🦜 Zookeepers (v0.53) | Zookeeper Zara, at the zoo | see all 7 kinds of animals, feed animals 5 times, feed 3 different kinds | 20 🪙, a parrot friend rides on your shoulder |
   | 🚒 Firefighters (v0.54) | Fire Chief Flint, at the fire station | turn on a fire truck's lights, put out 3 fires in town, save a burning vehicle | 25 🪙, a firefighter's helmet (and your hose sprays farther) |
+  | 🌾 Farmhands (v0.59) | Farmer Wren, at Sunny Acres Farm | pet 5 farm animals, pick 5 crops in the fields, get milk or eggs twice, drive a tractor | 20 🪙, farm fresh: twice the milk, eggs and crops at the farm |
 
   Each step pops up by the badge counter ("🔧 2/3"), and a new badge gets a big celebration with
   fireworks. The **daily bonus** grows every day in a row you play (+2 a day, up to +10)
@@ -1037,6 +1051,7 @@ public/
     trainui.js         The Loop Express: the tracks and trains you see, their doors, walking on and off, riding
     funrides.js        Fun Land's roller coaster and Ferris wheel: drawing and riding them
     zooanimals.js      The zoo's animals: their block models, wandering about their pens, feeding them
+    farmanimals.js     The farm's animals (cows, horses, sheep, pigs, hens) and the windmill's sails
     firehose.js        Fires in town (flames, smoke, the 🔥 arrow) and the fire trucks' hoses
     guardcatch.js      Bodyguards keeping you off their land: caught and walked off, blown away, flushed out
     guardui.js         Someone asking your bodyguards to let them in: your answer
@@ -1089,6 +1104,7 @@ public/
       train.js         The Loop Express: its two tracks, the timetable, where the trains are, the stations and pillars
       funland.js       Fun Land: its layout, the bumper car arena, and the coaster's and wheel's shapes
       zoo.js           The zoo: its paths, the seven pens (and what's in them), Zara's hut, the animals' favorite foods
+      farm.js          Sunny Acres Farm: fields, barn, silo, windmill, farmhouse, pastures, farm stand, tractors
       firestation.js   The fire station: its building, the fire trucks' bays, and how often fires break out
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/

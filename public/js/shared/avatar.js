@@ -3,7 +3,7 @@
 export const LOOK_OPTIONS = {
   face: ['smile', 'grin', 'cool', 'wink', 'surprised', 'silly', 'sleepy', 'cat', 'robot', 'starry'],
   hair: ['none', 'short', 'spiky', 'long', 'ponytail', 'mohawk', 'afro', 'buns', 'curly', 'pigtails', 'braids', 'topbun', 'flattop', 'fauxhawk', 'princess', 'rainbow', 'galaxy'],
-  hat: ['none', 'cap', 'beanie', 'tophat', 'crown', 'cowboy', 'party', 'wizard', 'viking'],
+  hat: ['none', 'cap', 'beanie', 'tophat', 'crown', 'cowboy', 'party', 'wizard', 'viking', 'straw'],
   shirt: ['tshirt', 'striped', 'hoodie', 'jacket', 'tank', 'jersey', 'dress'],
   pants: ['jeans', 'shorts', 'skirt', 'sweatpants'],
   extra: ['none', 'backpack', 'cape', 'wings'],
@@ -21,7 +21,7 @@ export const OPTION_LABELS = {
   curly: 'Curly', pigtails: 'Pigtails', braids: 'Braids', topbun: 'Top Bun', flattop: 'Flat Top', fauxhawk: 'Faux-hawk',
   princess: 'Princess Waves', rainbow: 'Rainbow Spikes', galaxy: 'Galaxy Hair',
   cap: 'Cap', beanie: 'Beanie', tophat: 'Top Hat', crown: 'Crown', cowboy: 'Cowboy',
-  party: 'Party Hat', wizard: 'Wizard', viking: 'Viking',
+  party: 'Party Hat', wizard: 'Wizard', viking: 'Viking', straw: 'Straw Hat',
   tshirt: 'T-Shirt', striped: 'Stripes', hoodie: 'Hoodie', jacket: 'Jacket', tank: 'Tank Top',
   jersey: 'Sports Jersey', dress: 'Dress',
   jeans: 'Jeans', shorts: 'Shorts', skirt: 'Skirt', sweatpants: 'Sweatpants',

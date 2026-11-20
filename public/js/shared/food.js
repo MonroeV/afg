@@ -32,6 +32,10 @@ export const FOODS = {
   icecream: { icon: '🍦', name: 'Ice Cream Cone', fill: 15, price: 2, store: 'funland' },
   corndog: { icon: '🌭', name: 'Corn Dog', fill: 25, price: 3, store: 'funland' },
   lemonade: { icon: '🍋', name: 'Lemonade', fill: 10, price: 1, store: 'funland' },
+  // At Sunny Acres Farm's farm stand (and the eggs from the hens).
+  egg: { icon: '🥚', name: 'Boiled Egg', fill: 15, price: 1, store: 'farm' },
+  honey: { icon: '🍯', name: 'Honey Toast', fill: 20, price: 2, store: 'farm' },
+  pie: { icon: '🥧', name: 'Apple Pie', fill: 35, price: 3, store: 'farm' },
   // From the garden (picked crops go in your lunchbox too).
   carrot: { icon: '🥕', name: 'Carrot', fill: 12 },
   strawberry: { icon: '🍓', name: 'Strawberries', fill: 12 },

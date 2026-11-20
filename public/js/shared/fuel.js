@@ -13,7 +13,7 @@ export const WASH_BRUSH = 115;
 
 // How far each kind can go on a full tank (blocks driven; a helicopter counts climbing too).
 // Boats don't need gas (there's nowhere to fill them up out on the lake).
-export const TANK_RANGE = { car: 4000, police: 4000, sports: 3500, monster: 3000, pickup: 3600, camper: 3400, dump: 2800, rv: 2800, heli: 4500, plane: 9000, cub: 9000, jet: 12000 };
+export const TANK_RANGE = { car: 4000, police: 4000, sports: 3500, monster: 3000, pickup: 3600, camper: 3400, dump: 2800, rv: 2800, tractor: 3000, heli: 4500, plane: 9000, cub: 9000, jet: 12000 };
 export const usesFuel = kind => !!TANK_RANGE[kind];
 export const getsDirty = kind => usesFuel(kind) && !['heli', 'plane', 'cub', 'jet'].includes(kind);
 export const FULL_TANK_PRICE = 8; // coins for a whole tank (less if it isn't empty)

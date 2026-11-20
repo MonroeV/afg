@@ -489,6 +489,25 @@ function addHat(head, look) {
       add(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.26, 16), m)).position.y = top + 0.14;
       add(new THREE.Mesh(new THREE.CylinderGeometry(0.255, 0.255, 0.06, 16), material(shadeHex(color, 0.6)))).position.y = top + 0.05;
       break;
+    case 'straw': {
+      // A floppy straw sun hat: a wide brim, a low crown and a ribbon round it.
+      const straw = canvas(32, 32, (ctx, w, h) => {
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = shadeHex(color, 0.8);
+        for (let i = 0; i < w; i += 4) {
+          ctx.beginPath();
+          ctx.moveTo(i, 0);
+          ctx.lineTo(i + 8, h);
+          ctx.stroke();
+        }
+      });
+      const sm = material(straw);
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.58, 0.04, 24), sm)).position.y = top;
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.27, 0.2, 16), sm)).position.y = top + 0.11;
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.275, 0.275, 0.06, 16), material('#e53935'))).position.y = top + 0.05;
+      break;
+    }
     case 'party': {
       const stripes = canvas(32, 32, (ctx, w, h) => {
         ctx.fillStyle = color;

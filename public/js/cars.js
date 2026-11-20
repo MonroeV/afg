@@ -192,6 +192,7 @@ export function buildCarModel(kind, color) {
   else if (kind === 'pickup') pickupBody(add, B, s);
   else if (kind === 'dump') extra.bed = dumpBody(add, B, s, g, mats);
   else if (kind === 'firetruck') fireTruckBody(add, B, s);
+  else if (kind === 'tractor') tractorBody(add, B, s);
   else {
     add(B(W, bodyH, L), 'paint', 0, bodyY, 0);
     // Cabin: glass all round with a painted roof and pillars.
@@ -208,11 +209,12 @@ export function buildCarModel(kind, color) {
     add(B(0.34, 0.14, 0.04), 'head', x * (W / 2 - 0.3), bodyY + 0.08, -L / 2 - 0.01);
     add(B(0.36, 0.16, 0.04), 'tail', x * (W / 2 - 0.3), bodyY + 0.08, L / 2 + 0.01);
     add(B(0.14, 0.08, 0.04), 'reverse', x * (W / 2 - 0.55), bodyY + 0.08, L / 2 + 0.01);
+    if (kind === 'tractor') continue; // (no mirrors)
     const mirrorZ = kind === 'camper' || kind === 'firetruck' ? -L / 2 + 0.45 : kind === 'dump' ? -L / 2 + 0.35 : kind === 'rv' ? -L / 2 + 0.3 : kind === 'pickup' ? -1.2 : -0.55;
     add(B(0.08, kind === 'rv' ? 0.3 : 0.06, 0.16), kind === 'rv' ? 'dark' : 'paint', x * (W / 2 + (kind === 'rv' ? 0.12 : 0.04)), kind === 'rv' ? ride + 1.5 : ride + bodyH + 0.02, mirrorZ);
   }
   // A third brake light along the top of the back window.
-  if (!extra.roof && !extra.bed && !extra.awning && kind !== 'pickup' && kind !== 'sports' && kind !== 'firetruck') add(B(cabinW * 0.4, 0.05, 0.03), 'brake', 0, ride + bodyH + cabinH - 0.09, 0.15 + cabinL / 2 + 0.03);
+  if (!extra.roof && !extra.bed && !extra.awning && kind !== 'pickup' && kind !== 'sports' && kind !== 'firetruck' && kind !== 'tractor') add(B(cabinW * 0.4, 0.05, 0.03), 'brake', 0, ride + bodyH + cabinH - 0.09, 0.15 + cabinL / 2 + 0.03);
   const wz = L / 2 - wheelR - (kind === 'monster' ? 0.05 : 0.3);
   if (kind === 'monster') {
     for (const z of [-1, 1]) add(B(W - 0.2, 0.12, 0.12), 'chrome', 0, wheelR, z * wz);
@@ -251,13 +253,27 @@ export function buildCarModel(kind, color) {
   const wheelGeo = new THREE.CylinderGeometry(wheelR, wheelR, kind === 'monster' ? 0.6 : 0.3, 18).rotateZ(Math.PI / 2);
   const hubGeo = new THREE.CylinderGeometry(wheelR * 0.55, wheelR * 0.55, kind === 'monster' ? 0.62 : 0.32, 6).rotateZ(Math.PI / 2);
   const wheels = [], steerers = [];
+  // (A tractor: great big wheels at the back, with chunky treads, and yellow hubs.)
+  const big = kind === 'tractor' ? TRACTOR_WHEELS : null;
+  const bigGeo = big && new THREE.CylinderGeometry(big.rear, big.rear, 0.5, 20).rotateZ(Math.PI / 2);
+  const bigHub = big && new THREE.CylinderGeometry(big.rear * 0.5, big.rear * 0.5, 0.52, 8).rotateZ(Math.PI / 2);
+  const hubMat = big ? new THREE.MeshStandardMaterial({ color: 0xfdd835, roughness: 0.5 }) : mats.chrome;
   for (const x of [-1, 1])
     for (const z of [-1, 1]) {
       const pivot = new THREE.Group();
-      pivot.position.set(x * (W / 2 - (kind === 'monster' ? -0.05 : 0.12)), wheelR, z * wz);
-      const wheel = new THREE.Mesh(wheelGeo, mats.dark);
+      const rear = big && z > 0, r = rear ? big.rear : wheelR;
+      pivot.position.set(x * (W / 2 - (kind === 'monster' ? -0.05 : rear ? -0.05 : 0.12)), r, big ? (rear ? big.rearZ : big.frontZ) : z * wz);
+      const wheel = new THREE.Mesh(rear ? bigGeo : wheelGeo, mats.dark);
       wheel.castShadow = true;
-      wheel.add(new THREE.Mesh(hubGeo, mats.chrome));
+      wheel.add(new THREE.Mesh(rear ? bigHub : hubGeo, hubMat));
+      if (rear) wheel.userData.turns = wheelR / r; // (big wheels turn slower)
+      if (rear) for (let i = 0; i < 10; i++) {
+        const tread = new THREE.Mesh(B(0.5, 0.12, 0.16), mats.dark);
+        const a = (i / 10) * Math.PI * 2;
+        tread.position.set(0, Math.cos(a) * r, Math.sin(a) * r);
+        tread.rotation.x = -a;
+        wheel.add(tread);
+      }
       pivot.add(wheel);
       g.add(pivot);
       wheels.push(wheel);
@@ -518,6 +534,35 @@ function fireTruckBody(add, B, { length: L, width: W, ride, bodyH }) {
   // The water cannon (turret and nozzle, pointing forward over the cab).
   add(B(0.36, 0.3, 0.36), 'chrome', 0, ride + bodyH + 0.2, -L / 2 + cabL + 0.45);
   add(B(0.14, 0.14, 0.9), 'chrome', 0, ride + bodyH + 0.42, -L / 2 + cabL + 0.05);
+}
+
+// A tractor: a long narrow hood out front (with a grille and a chimney), the seat behind it under a
+// sunshade roof on four posts, fenders over the big back wheels, and a tow bar.
+const TRACTOR_WHEELS = { rear: 0.85, rearZ: 0.85, frontZ: -1.15 };
+function tractorBody(add, B, { length: L, width: W, ride, bodyH, cabinH }) {
+  const hoodL = L * 0.55, hoodZ = -L / 2 + hoodL / 2;
+  add(B(W * 0.4, 0.3, L - 0.3), 'dark', 0, ride + 0.05, 0); // the chassis
+  add(B(W * 0.5, bodyH, hoodL), 'paint', 0, ride + bodyH / 2 + 0.1, hoodZ);
+  add(B(W * 0.44, bodyH * 0.7, 0.04), 'dark', 0, ride + bodyH / 2 + 0.1, -L / 2 - 0.01); // the grille
+  for (let i = 0; i < 4; i++) add(B(0.03, bodyH - 0.12, 0.3), 'dark', W * 0.25 + 0.01, ride + bodyH / 2 + 0.1, hoodZ - 0.6 + i * 0.4); // (vents)
+  for (let i = 0; i < 4; i++) add(B(0.03, bodyH - 0.12, 0.3), 'dark', -W * 0.25 - 0.01, ride + bodyH / 2 + 0.1, hoodZ - 0.6 + i * 0.4);
+  add(new THREE.CylinderGeometry(0.07, 0.07, 1.0, 8), 'chrome', W * 0.12, ride + bodyH + 0.55, hoodZ - 0.3); // the chimney
+  add(B(W * 0.7, bodyH * 0.8, L * 0.45), 'paint', 0, ride + bodyH * 0.4 + 0.1, L / 2 - L * 0.225); // under the seat
+  for (const x of [-1, 1]) {
+    add(B(0.55, 0.08, 1.9), 'paint', x * (W / 2 + 0.05), TRACTOR_WHEELS.rear * 2 + 0.06, TRACTOR_WHEELS.rearZ); // fenders
+    add(B(0.08, 0.5, 0.08), 'dark', x * (W / 2 - 0.25), TRACTOR_WHEELS.rear * 2 - 0.2, TRACTOR_WHEELS.rearZ);
+  }
+  // The seat, the steering wheel.
+  const seatY = ride + bodyH + 0.05;
+  add(B(0.6, 0.14, 0.5), 'dark', 0, seatY, 0.5);
+  add(B(0.6, 0.5, 0.1), 'dark', 0, seatY + 0.3, 0.78);
+  add(new THREE.CylinderGeometry(0.03, 0.03, 0.6, 6).rotateX(0.6), 'dark', 0, seatY + 0.3, 0.0);
+  add(new THREE.TorusGeometry(0.2, 0.03, 6, 16).rotateX(Math.PI / 2 - 0.6), 'dark', 0, seatY + 0.58, -0.12);
+  // The sunshade roof, on four posts.
+  const roofY = ride + bodyH + cabinH + 0.2;
+  for (const x of [-1, 1]) for (const z of [0.0, 1.15]) add(B(0.06, roofY - seatY, 0.06), 'dark', x * 0.62, (roofY + seatY) / 2, z);
+  add(B(1.45, 0.08, 1.5), 'white', 0, roofY, 0.58);
+  add(B(0.6, 0.08, 0.12), 'dark', 0, ride + 0.05, L / 2 + 0.05); // the tow bar
 }
 
 // Boxes with the same material are merged into one mesh, so each vehicle only costs a few draw calls.
@@ -2048,7 +2093,7 @@ export class Cars {
         continue;
       }
       car.spin -= (car.speed * dt) / s.wheelR;
-      for (const w of car.model.wheels) w.rotation.x = car.spin;
+      for (const w of car.model.wheels) w.rotation.x = car.spin * (w.userData.turns ?? 1);
       for (const p of car.model.steerers) p.rotation.y = p.userData.stern ? -car.steer : car.steer;
       // Headlights glow at night or while someone is driving.
       const lit = car.driver ? 0.5 + nightK * 1.5 : 0.15;

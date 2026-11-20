@@ -17,9 +17,11 @@ import { PalAsk } from './palui.js';
 import { LoopExpress } from './trainui.js';
 import { FunRides } from './funrides.js';
 import { ZooAnimals } from './zooanimals.js';
+import { FarmAnimals } from './farmanimals.js';
 import { FireHose, steam } from './firehose.js';
 import { AirportLights } from './airportlights.js';
 import { ANIMALS } from './shared/zoo.js';
+import { FARM_ANIMALS } from './shared/farm.js';
 import { GATE_BLOCK } from './shared/funland.js';
 import { gameTime, STOP_BLOCK } from './shared/train.js';
 import { meetingAt, meetingOn, isSunday, MEETING_COINS, GIFT_COINS } from './shared/church.js';
@@ -253,7 +255,7 @@ let showers = null, weatherMast = null; // it's raining tacos (or ice cream, or 
 let weatherPicker = null; // Stormy's menu: what shall it rain?
 let lunchbox = null; // your lunchbox 🍱 (L): food to eat
 let funRides = null; // Fun Land's roller coaster and Ferris wheel
-let zooAnimals = null; // the zoo's animals
+let zooAnimals = null, farmAnimals = null; // the zoo's animals, and the farm's
 let zooAim = null; // (the one under the crosshair)
 let fireHose = null; // fires in town, and the fire trucks' hoses
 let airportLights = null; // the airport's runway, taxiway and approach lights
@@ -734,6 +736,7 @@ function startGame(welcome, resume = false) {
   loopExpress.setStations(welcome.train);
   funRides.setPlace(welcome.funland);
   zooAnimals.setPlace(welcome.zoo);
+  farmAnimals.setPlace(welcome.farm);
   fireHose.setFires(welcome.fires);
   airportLights.setPlace(welcome.airport);
   weather.set(welcome.rain || 0, welcome.snow);
@@ -1010,6 +1013,7 @@ net.on('ate', ({ food }) => {
 loopExpress = new LoopExpress({ scene, sounds, hud: { toast: text => hud.toast(text) } });
 funRides = new FunRides({ scene, sounds, hud: { toast: text => hud.toast(text) } });
 zooAnimals = new ZooAnimals({ scene, effects, sounds });
+farmAnimals = new FarmAnimals({ scene, effects, sounds });
 fireHose = new FireHose({ effects, sounds, net, hud: { toast: text => hud.toast(text) }, touch: IS_TOUCH });
 airportLights = new AirportLights(scene);
 net.on('fires', ({ list }) => fireHose.setFires(list));
@@ -1142,6 +1146,11 @@ net.on('fx', ({ kind, x, y, z, color, seed, dir, id, animal, i, liked }) => {
   } else if (kind === 'zoofed') {
     zooAnimals.fed(animal, i, liked, gameTime(worldDay, sky.time));
     sounds.tone(500, 900, 0.15, 0.12, 'sine');
+  } else if (kind === 'farmpet') {
+    // (Petted at the farm: hearts, and a happy little noise.)
+    farmAnimals.fed(animal, i, liked, gameTime(worldDay, sky.time));
+    const voice = { cow: [180, 120, 0.6], horse: [700, 400, 0.4], sheep: [420, 380, 0.45], pig: [300, 500, 0.25], chicken: [900, 1200, 0.12] }[animal] || [500, 900, 0.15];
+    sounds.tone(voice[0], voice[1], voice[2], 0.12, animal === 'cow' || animal === 'sheep' ? 'sawtooth' : 'triangle');
   }
   else if (kind === 'bubbles') effects.blowBubbles(x, y, z, dir || [0, 0.3, 0], 4);
   else if (kind === 'balloon') letBalloonGo(x, y, z, color);
@@ -1170,7 +1179,7 @@ net.on('harvested', ({ x, y, z, mine, icon, coins }) => {
   if (!mine) return hud.toast('🙅🌱');
   effects.sparkle(x + 0.5, y + 0.5, z + 0.5, 24);
   sounds.coin();
-  hud.toast(`${icon} +${coins} 🪙`);
+  hud.toast(coins ? `${icon} +${coins} 🪙` : `${icon} ➡ 🍱`);
 });
 net.on('car', ({ car }) => {
   cars.add(car);
@@ -4467,6 +4476,9 @@ function interact() {
   // A zoo animal: feed it (something from your lunchbox).
   const animal = !riding() && zooAnimals.aimed(camera);
   if (animal) return net.send({ t: 'zoo_feed', kind: animal.kind, i: animal.i });
+  // A farm animal: pet it (and feed it, if you've got what it likes).
+  const farmAnimal = !riding() && farmAnimals.aimed(camera);
+  if (farmAnimal) return net.send({ t: 'farm_pet', kind: farmAnimal.kind, i: farmAnimal.i });
   // Pointing at a rocket, a volcano, a merry-go-round… (their models, not just their blocks).
   const toy = contraptions.pick(camera.position, lookDir, hit && !hit.ground ? camera.position.distanceTo(new THREE.Vector3(hit.block[0] + 0.5, hit.block[1] + 0.5, hit.block[2] + 0.5)) + 0.5 : 7);
   if (toy) return playWith(toy);
@@ -6223,6 +6235,9 @@ function frame(timestamp) {
     } else if (!target && !riding() && (zooAim = zooAnimals.aimed(camera))) {
       const like = ANIMALS[zooAim.kind];
       hint = `${like.icon} Right-click to feed · ❤️ ${FOODS[like.likes]?.icon || ''}`;
+    } else if (!target && !riding() && (zooAim = farmAnimals.aimed(camera))) {
+      const like = FARM_ANIMALS[zooAim.kind];
+      hint = `${like.icon} Right-click to pet · ❤️ ${FOODS[like.likes]?.icon || ''}${like.gives ? ` · ${FOODS[like.gives].icon}` : ''}`;
     } else if (target?.npc) {
       hint = target.npc.id === -1 ? '🛍️ Right-click to shop at the Luxe Store' : `💬 Right-click to talk to ${target.npc.name.replace(/ \S+$/, '')}`;
     } else if (hitState.key) {
@@ -6528,6 +6543,7 @@ function frame(timestamp) {
     loopExpress.update(dt, gameTime(worldDay, sky.time), camera.position);
     funRides.update(dt, gameTime(worldDay, sky.time), camera.position);
     zooAnimals.update(dt, gameTime(worldDay, sky.time), camera.position);
+    farmAnimals.update(dt, gameTime(worldDay, sky.time), camera.position);
     airportLights.update(performance.now() / 1000, camera.position, 1 - sky.dayK);
     updateChurch(dt, time);
   }
@@ -6597,6 +6613,7 @@ window.buildzone = {
   get loopExpress() { return loopExpress; },
   get funRides() { return funRides; },
   get zooAnimals() { return zooAnimals; },
+  get farmAnimals() { return farmAnimals; },
   get airportLights() { return airportLights; },
   get fireHose() { return fireHose; },
   requestEnter: car => requestEnter(car),

@@ -322,6 +322,7 @@ export const STORES = {
   fiesta: { name: 'Casa Fiesta', icon: '🌮', color: '#ff7043', keeper: 'Luis' },
   funland: { name: "Pete's Snacks", icon: '🍿', color: '#e53935', keeper: 'Pete' },
   salon: { name: 'Snip & Style', icon: '💇', color: '#ec407a', keeper: 'Stella' },
+  farm: { name: 'Sunny Acres Farm Stand', icon: '🥚', color: '#8d6e63', keeper: 'June' },
 };
 export const storeOf = item => (typeof item === 'number' ? BLOCKS[item]?.store : SHOP_TOOLS[item]?.store) || 'luxe';
 // What's for sale, cheapest first: [item, price].

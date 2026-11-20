@@ -18,6 +18,7 @@ import { buildPark } from './park.js';
 import { buildTrainLine, fixPlatforms } from './train.js';
 import { buildFunLand, rideSigns } from './funland.js';
 import { buildZoo, ANIMALS } from './zoo.js';
+import { buildFarm, FARM_ANIMALS, GIVE_EVERY, inFarmField } from './farm.js';
 import { buildDealership, newCarFor, LOT_KINDS, SHOW_KINDS, townCarsToKeep } from './dealership.js';
 import { buildFireStation, FIRE_CALL, FIRE_GAP, FIRE_OUT, FIRE_LIFE, DOUSE, FIRE_REWARD, HOSE_RANGE } from './firestation.js';
 import { findHomes } from './residents.js';
@@ -36,7 +37,7 @@ import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
 const PLANE_HOME_AFTER = 300; // seconds a town airplane sits idle away from the airport before it's taken back
-export const SAVE_VERSION = 35;
+export const SAVE_VERSION = 36;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -204,6 +205,7 @@ export class GameRoom {
 
   // People at work, and coins lying about.
   populate() {
+    this.registerFarmCrops();
     this.npcs.setup(this.places);
     this.coins.clear();
     for (let i = 0; i < COIN_COUNT; i++) this.dropCoin();
@@ -310,6 +312,7 @@ export class GameRoom {
       this.upgradeTo33();
       this.upgradeTo34();
       this.upgradeTo35();
+      this.upgradeTo36();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -421,6 +424,7 @@ export class GameRoom {
     if (data.version < 33) this.upgradeTo33();
     if (data.version < 34) this.upgradeTo34();
     if (data.version < 35) this.upgradeTo35();
+    if (data.version < 36) this.upgradeTo36();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -1082,6 +1086,40 @@ export class GameRoom {
     this.onDirty();
   }
 
+  // Worlds saved before version 36: Sunny Acres Farm (its tractors, and a train stop by it).
+  upgradeTo36() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const farm = buildFarm({ get, set, canUse: this.freeLand() });
+    if (farm) {
+      this.claims.push(farm.claim);
+      for (const [x, y, z, text] of farm.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+      this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...farm.places };
+      for (const c of farm.cars) this.spawn(this.addHome(c));
+      this.addTrainStops();
+    }
+    this.log(`Added Sunny Acres Farm (${farm ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
+  // The farm's fields: every crop growing in them is on the list (they're anyone's to pick, and
+  // grow back by themselves).
+  registerFarmCrops() {
+    const farm = this.places?.farm;
+    if (!farm?.fields) return;
+    const have = new Set(this.crops.map(c => `${c.x},${c.y},${c.z}`));
+    for (const [x0, z0, x1, z1] of farm.fields)
+      for (let x = x0; x <= x1; x++)
+        for (let z = z0; z <= z1; z++) {
+          if (!isCrop(this.get(x, 0, z))) continue;
+          const old = this.crops.find(c => c.x === x && c.y === 0 && c.z === z);
+          if (old) old.by = 'farm';
+          else if (!have.has(`${x},0,${z}`)) this.crops.push({ x, y: 0, z, by: 'farm', at: 0 });
+        }
+  }
+
   // Worlds saved before version 35: signs by Fun Land's two ride gates (how to ride), where
   // there's room.
   upgradeTo35() {
@@ -1696,6 +1734,7 @@ export class GameRoom {
       train: this.places?.train?.stations || [], // the Loop Express's stations (see train.js)
       funland: this.places?.funland || null, // where Fun Land's rides are (see funrides.js)
       zoo: this.places?.zoo || null, // the zoo's pens (see zooanimals.js)
+      farm: this.places?.farm || null, // the farm's pastures, fields and windmill (see farmanimals.js)
       airport: this.places?.airport || null, // the airport (its lights: see airportlights.js)
       fires: this.fires.map(({ id, x, z, hp }) => ({ id, x, z, hp: Math.round(hp) })), // fires burning in town (see firehose.js)
       landmarks: Object.entries(this.places || {}).filter(([, p]) => p && Number.isFinite(p.x) && Number.isFinite(p.z)).map(([k, p]) => [k, p.x, p.z]),
@@ -1945,7 +1984,7 @@ export class GameRoom {
       // by growing (or being dug up with the hammer).
       const planting = isCrop(b) && !isCrop(old);
       if (planting || (isCrop(old) && b !== 0)) {
-        if (!planting || old || blockMeta(b) || !this.soilUnder(x, y, z) || this.crops.length >= MAX_CROPS || this.crops.filter(c => c.by === nameKey(client.name)).length >= MAX_CROPS_EACH) {
+        if (!planting || old || blockMeta(b) || !this.soilUnder(x, y, z) || this.crops.filter(c => c.by !== 'farm').length >= MAX_CROPS || this.crops.filter(c => c.by === nameKey(client.name)).length >= MAX_CROPS_EACH) {
           client.send({ t: 'set', x, y, z, b: old });
           return;
         }
@@ -2259,6 +2298,7 @@ export class GameRoom {
         v.driver = client.id;
       } else if (v.passengers.length < seatCount(VEHICLES[v.kind]) - 1) v.passengers.push(client.id);
       else return;
+      if (v.kind === 'tractor' && v.driver === client.id) this.progress(client, 'farm', 'tractor', 1, true);
       client.car = id;
       this.broadcast({ t: 'car_driver', ...publicVehicle(v) });
     },
@@ -2642,6 +2682,40 @@ export class GameRoom {
       this.onDirty();
     },
 
+    // Petting an animal at the farm (and feeding it, if there's something in your lunchbox it
+    // likes). Every so often the cows give you milk and the hens an egg (into your lunchbox).
+    farm_pet(client, { kind, i }) {
+      const pen = this.places?.farm?.pens?.find(p => p.kind === kind), a = FARM_ANIMALS[kind];
+      if (!pen || !a || !this.allow(client, 'farmPet', 1, 3)) return;
+      const [x0, z0, x1, z1] = pen.rect, [x, , z] = client.pos;
+      if (x < x0 - 5 || x > x1 + 5 || z < z0 - 5 || z > z1 + 5) return;
+      const w = this.wallet(client), pantry = w.pantry || {};
+      const fed = pantry[a.likes] > 0 ? a.likes : null;
+      if (fed) {
+        pantry[fed]--;
+        if (!pantry[fed]) delete pantry[fed];
+      }
+      // (Milk and eggs: one every GIVE_EVERY seconds, for each of you; two with the Farmhands' perk.)
+      let got = null, n = 0;
+      if (a.gives) {
+        this.farmGive ??= new Map();
+        const key = `${nameKey(client.name)}:${kind}`, now = Date.now();
+        if (now - (this.farmGive.get(key) || 0) >= GIVE_EVERY * 1000) {
+          if (this.farmGive.size > 500) this.farmGive.clear();
+          this.farmGive.set(key, now);
+          got = a.gives;
+          n = this.perk(client, 'farm') ? 2 : 1;
+          w.pantry = { ...pantry, [got]: Math.min(MAX_PANTRY, (pantry[got] || 0) + n) };
+          this.progress(client, 'farm', 'fresh');
+        }
+      }
+      this.sendWallet(client);
+      this.progress(client, 'farm', 'pet');
+      if (got) client.send({ t: 'food_got', food: got, n: w.pantry[got] });
+      this.broadcast({ t: 'fx', kind: 'farmpet', animal: kind, i: Math.max(0, Math.min(9, num(i))), food: fed, liked: !!fed });
+      this.onDirty();
+    },
+
     // Found one of Youth Night's hidden gifts (first come, first served: then it's gone for
     // everyone).
     church_gift(client, { i }) {
@@ -2878,19 +2952,23 @@ export class GameRoom {
       if (!this.allow(client, 'harvest', 8, 20)) return;
       const crop = this.cropAt(x, y, z), v = this.get(x, y, z);
       if (!crop || !this.nearCrop(client, crop) || cropStage(v) < CROP_RIPE) return;
-      const mine = crop.by === nameKey(client.name) || (claimAt(this.claims, x, z) && canBuild(this.claims, client.name, x, z));
+      // (The farm's fields are everyone's: pick away! No coins there, but the food's yours.)
+      const farm = crop.by === 'farm' && inFarmField(this.places?.farm, x, z);
+      const mine = farm || crop.by === nameKey(client.name) || (claimAt(this.claims, x, z) && canBuild(this.claims, client.name, x, z));
       if (!mine) return client.send({ t: 'harvested', x, y, z, mine: false });
-      const def = BLOCKS[blockId(v)].crop;
+      const def = BLOCKS[blockId(v)].crop, coins = farm ? 0 : def.coins;
       const w = this.wallet(client);
-      w.coins += def.coins;
+      w.coins += coins;
       w.harvest = (w.harvest || 0) + 1;
-      const food = CROP_FOOD[blockId(v)]; // (and it goes in your lunchbox, to eat)
-      if (food) w.pantry = { ...(w.pantry || {}), [food]: Math.min(MAX_PANTRY, (w.pantry?.[food] || 0) + 1) };
+      const food = CROP_FOOD[blockId(v)], n = farm && this.perk(client, 'farm') ? 2 : 1; // (and it goes in your lunchbox, to eat)
+      if (food) w.pantry = { ...(w.pantry || {}), [food]: Math.min(MAX_PANTRY, (w.pantry?.[food] || 0) + n) };
       this.sendWallet(client);
       crop.at = 0;
       this.serverSet(x, y, z, makeBlock(blockId(v), 0)); // (seeds again: water them and it grows back)
+      if (farm) this.waterCrop(crop, makeBlock(blockId(v), 0)); // (the farm's grow back by themselves)
       this.progress(client, 'nature', 'harvest');
-      client.send({ t: 'harvested', x, y, z, mine: true, icon: def.icon, coins: def.coins, total: w.harvest });
+      if (farm) this.progress(client, 'farm', 'pick');
+      client.send({ t: 'harvested', x, y, z, mine: true, icon: def.icon, coins, total: w.harvest });
       this.broadcast({ t: 'fx', kind: 'harvest', x, y, z, icon: def.icon, id: client.id }, client);
       this.onDirty();
     },
@@ -3121,7 +3199,7 @@ export class GameRoom {
       if (c.at && now >= c.at) {
         c.at = 0;
         this.serverSet(c.x, c.y, c.z, makeBlock(blockId(v), Math.min(CROP_RIPE, stage + 1)));
-      } else if (!c.at && raining && stage < CROP_RIPE && this.underSky(c.x, c.y, c.z)) {
+      } else if (!c.at && stage < CROP_RIPE && (c.by === 'farm' || (raining && this.underSky(c.x, c.y, c.z)))) {
         this.waterCrop(c, v);
       }
     }
