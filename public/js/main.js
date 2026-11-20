@@ -1058,6 +1058,17 @@ function openLunchbox() {
   updateOverlays();
 }
 $('hunger-chip').addEventListener('click', () => inGame && openLunchbox());
+// Starving, with food in your lunchbox? A little note, now and then, saying how to eat it.
+let lunchNudged = 0;
+function lunchboxNudge() {
+  const food = Object.values(lunchbox.pantry || {}).some(n => n > 0);
+  if (!inGame || hunger > 0 || !food || lunchbox.open || performance.now() - lunchNudged < 45000) return;
+  lunchNudged = performance.now();
+  hud.toast(touch?.enabled ? '🍱 Tap the 🍱 bar (top left) to open your lunchbox and eat!' : '🍱 Press L to open your lunchbox and eat!');
+  $('hunger-chip').classList.add('bump');
+  setTimeout(() => $('hunger-chip').classList.remove('bump'), 300);
+}
+setInterval(lunchboxNudge, 1000);
 net.on('coin_gone', ({ id }) => {
   const c = coinMap.get(id);
   if (c) effects.sparkle(c.x, c.y + 0.4, c.z, 16);

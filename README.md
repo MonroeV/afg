@@ -457,7 +457,8 @@ customize your character, drive cars, build anything and play with friends.
   Food comes from **FreshMart Grocery** (🍎 🍌 🍪 1 coin, 🥛 🍞 🧀 2, 🥪 3, 🍉 4; up to 30 of each):
   buy something while you're hungry and you eat it right there (since v0.55.2; the bar fills
   up), or if you're full it goes in your lunchbox for later. (The same at Casa Fiesta and Pete's
-  snack stand.) And
+  snack stand.) Starving with food in your lunchbox? A note pops up now and then: press L (or
+  tap the 🍱 bar) to open it and eat. And
   the crops you pick in your garden go in your lunchbox too. Catching food when it rains tacos,
   ice cream, pizza or donuts gives you a little bite, and delivering a pizza fills you up a bit.
   Your hunger and lunchbox are saved
