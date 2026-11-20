@@ -541,7 +541,8 @@ export function generateWorld(seed = 2024) {
   }
   const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null, pizza: pizza?.place || null, lodge: frontier.places.lodge, ...far.places, ...(base?.places || {}), ...gas.places, ...shops.places, ...outerShops.places, church: church?.place || null, park: friendPark?.place || null, ...(funLand?.places || {}), ...(zoo?.places || {}), ...(fireStation?.places || {}), airport: airport?.place || null, skytowers: outerTowers.towers.length ? { x: outerTowers.towers[0].x, z: outerTowers.towers[0].z, towers: outerTowers.towers } : null, weather: weather?.place || null, buildpark: buildPark?.place || null, ...Object.fromEntries(homes.map((h, i) => [`home${i + 1}`, h])), agent: AGENT_SPOT };
   // The Loop Express: pillars for its track, and ticket machines at the stops (by the places).
-  places.train = { stops: buildTrainLine({ get: getB, set: put, canUse: free, places }) };
+  const trainLine = buildTrainLine({ get: getB, set: put, canUse: free, places });
+  places.train = { stations: trainLine.stations };
   // The three TOP SECRET files (find them all for Top Secret clearance).
   places.files = hideSecretFiles({ get: getB, set: put, canUse: () => true, places });
 
@@ -598,7 +599,7 @@ export function generateWorld(seed = 2024) {
     const [x, y, z] = k.split(',').map(Number);
     blocks.push([x, y, z, v]);
   }
-  return { blocks, cars: placed, places, claims: [store?.claim, pizza?.claim, ...gas.claims, ...shops.claims, ...outerShops.claims, church?.claim, friendPark?.claim, funLand?.claim, zoo?.claim, fireStation?.claim, airport?.claim, ...frontier.claims, ...far.claims, base?.claim, weather?.claim].filter(Boolean), signs: [...posts.signs, ...fishing.signs, ...far.signs, ...(base?.signs || []), ...gas.signs, ...shops.signs, ...(weather?.signs || []), ...(buildPark?.signs || []), ...outer.signs, ...outerShops.signs, ...(church?.signs || []), ...(airport?.signs || []), ...(friendPark?.signs || []), ...(funLand?.signs || []), ...(zoo?.signs || []), ...(fireStation?.signs || [])] };
+  return { blocks, cars: placed, places, claims: [store?.claim, pizza?.claim, ...gas.claims, ...shops.claims, ...outerShops.claims, church?.claim, friendPark?.claim, funLand?.claim, zoo?.claim, fireStation?.claim, airport?.claim, ...frontier.claims, ...far.claims, base?.claim, weather?.claim].filter(Boolean), signs: [...posts.signs, ...fishing.signs, ...far.signs, ...(base?.signs || []), ...gas.signs, ...shops.signs, ...(weather?.signs || []), ...(buildPark?.signs || []), ...outer.signs, ...outerShops.signs, ...(church?.signs || []), ...(airport?.signs || []), ...(friendPark?.signs || []), ...(funLand?.signs || []), ...(zoo?.signs || []), ...(fireStation?.signs || []), ...trainLine.signs] };
 }
 
 // Saved worlds from before the new lamps: put proper lamp heads on the town's street lamps

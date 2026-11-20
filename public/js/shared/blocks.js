@@ -228,6 +228,9 @@ export const BLOCKS = {
   // A ride's gate at Fun Land (see funland.js): right-click it to ride.
   148: { name: 'Ride Gate', shape: 'model', model: 'rideGate', facing: true, hidden: true, worldOnly: true, box: [0.1, 0, 0.35, 0.9, 1.3, 0.65] },
   146: { name: 'Slide', shape: 'model', model: 'slide', facing: true, slide: true, box: [0, 0, 0, 1, 0.12, 1] },
+  // Stairs: four little steps up a block, rising away from the way they face (walk straight up
+  // them). The Loop Express stations have them, and you can build them too.
+  149: { name: 'Stairs', shape: 'model', model: 'stairs', facing: true, box: [0, 0, 0, 1, 1, 1], boxes: [[0, 0, 0, 1, 0.25, 1], [0, 0.25, 0, 1, 0.5, 0.75], [0, 0.5, 0, 1, 0.75, 0.5], [0, 0.75, 0, 1, 1, 0.25]] },
 };
 // Crops: how grown (0 seeds .. 3 ripe) and whether they've just been watered.
 export const CROP_RIPE = 3, CROP_WET = 4;

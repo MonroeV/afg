@@ -321,7 +321,7 @@ async function load() {
   };
   cars = new Cars(scene, world, effects);
   cars.reflections = reflections;
-  player.extraBoxes = () => cars.boxes(myCar?.id);
+  player.extraBoxes = () => [...cars.boxes(myCar?.id), ...(loopExpress?.boxes(player.pos) || [])]; // (cars, and trains stopped at stations)
   player.onPushCar = pushCar;
   cars.people = () => [...avatars.list.values()].filter(a => !a.seat && !a.lying).map(a => ({ id: a.id, pos: a.pos }));
   ball = new Ball(scene);
@@ -729,7 +729,7 @@ function startGame(welcome, resume = false) {
   landmarks = welcome.landmarks || [];
   worldDay = welcome.day || 0;
   churchPlace = welcome.church || null;
-  loopExpress.setStops(welcome.train);
+  loopExpress.setStations(welcome.train);
   funRides.setPlace(welcome.funland);
   zooAnimals.setPlace(welcome.zoo);
   fireHose.setFires(welcome.fires);
@@ -996,28 +996,18 @@ net.on('ate', ({ food }) => {
   effects.heartsAt(p.x, p.y + 1.6, p.z, 3);
   hud.toast(`${FOODS[food]?.icon || '🍽️'} 😋`);
 });
-// The Loop Express: the trains, and catching one (right-click a ticket machine 🚉).
-loopExpress = new LoopExpress({
-  scene, sounds,
-  hud: { toast: text => hud.toast(text) },
-  onPick: () => {
-    lock();
-    updateOverlays();
-  },
-});
+// The Loop Express: the trains on their two tracks (walk on and off at the stations).
+loopExpress = new LoopExpress({ scene, sounds, hud: { toast: text => hud.toast(text) } });
 funRides = new FunRides({ scene, sounds, hud: { toast: text => hud.toast(text) } });
 zooAnimals = new ZooAnimals({ scene, effects, sounds });
 fireHose = new FireHose({ effects, sounds, net, hud: { toast: text => hud.toast(text) } });
 net.on('fires', ({ list }) => fireHose.setFires(list));
 net.on('fire_hp', ({ id, hp }) => fireHose.fireHp(id, hp));
 net.on('fire_alarm', () => fireHose.alarm());
-function openTrainPicker([x, , z]) {
-  const st = loopExpress.stopAt(x + 0.5, z + 0.5);
-  if (!st) return;
-  keys.clear();
-  unlock();
-  loopExpress.openPicker(st);
-  updateOverlays();
+// A Loop Express ticket machine (the old ones): when the next trains come to the station by it.
+function trainTimes([x, , z]) {
+  const st = loopExpress.stationNear(x + 0.5, z + 0.5, 80);
+  hud.toast(st ? `🚉 ${st.icon} ${st.name} · ${loopExpress.times(st, gameTime(worldDay, sky.time))}` : '🚉 ❓');
 }
 
 // Friendship Park: a kid asking to be your best friend.
@@ -1565,7 +1555,7 @@ function goFullscreen() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!cards?.open || !!gameUI?.pickerOpen || !!weatherPicker?.open || !!lunchbox?.open || !!hopper?.open || !!palAsk?.open || !!loopExpress?.pickerOpen || !!guardAsk?.open || !!conn);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!cards?.open || !!gameUI?.pickerOpen || !!weatherPicker?.open || !!lunchbox?.open || !!hopper?.open || !!palAsk?.open || !!guardAsk?.open || !!conn);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -1599,7 +1589,7 @@ $('exit-menu').addEventListener('click', () => {
     location.reload();
   }, 150); // a moment for "I got out of the car" to reach the server
 });
-canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !petMenu?.open && !cards?.open && !gameUI?.pickerOpen && !weatherPicker?.open && !lunchbox?.open && !hopper?.open && !palAsk?.open && !loopExpress?.pickerOpen && !guardAsk?.open && !familyEdit && lock());
+canvas.addEventListener('click', () => inGame && !conn && !locked && !inventoryOpen && !editorOpen && !galleryOpen && !shopOpen && !signOpen && !askOpen && !elevators?.panel && !guestPanel && !petMenu?.open && !cards?.open && !gameUI?.pickerOpen && !weatherPicker?.open && !lunchbox?.open && !hopper?.open && !palAsk?.open && !guardAsk?.open && !familyEdit && lock());
 $('sensitivity').addEventListener('input', e => {
   settings.sensitivity = Number(e.target.value);
   saveSettings();
@@ -1916,10 +1906,6 @@ window.addEventListener('keydown', e => {
     if (e.code === 'Escape') palAsk.close();
     return;
   }
-  if (loopExpress?.pickerOpen) {
-    if (e.code === 'Escape') loopExpress.closePicker();
-    return;
-  }
   if (guardAsk?.open) return; // (answer it with the buttons)
   if (elevators.panel) {
     elevators.panelKey(e);
@@ -1961,7 +1947,6 @@ window.addEventListener('keydown', e => {
       return;
     }
   }
-  if (e.code === 'KeyE' && loopExpress.riding) return loopExpress.getOff(); // (off at the next stop)
   if (e.code === 'KeyE') {
     if (rv.inside) leaveRV();
     else if (riding()) getOut();
@@ -3425,7 +3410,7 @@ function sendState() {
   const rot = myCar ? [r(myCar.h), 0] : inBed() ? [r(sleeping.yaw), 0] : [r(player.yaw), r(player.pitch)];
   const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
   const balloon = hud.item === BALLOON && !riding() && !sleeping;
-  const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || sliding || loopExpress?.riding || funRides?.riding || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
+  const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || sliding || funRides?.riding || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
     (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) | (sledding && !balloon ? FLAG.sled : 0) | (player.parachute && !balloon ? FLAG.parachute : 0) | (perks.has('zoo') && !balloon ? FLAG.parrot : 0) | (perks.has('fire') && !balloon ? FLAG.helmet : 0) |
     (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
   net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item, drone: agency.droneState(player.yaw) });
@@ -4475,7 +4460,7 @@ function interact() {
       return;
     }
     if (BLOCKS[blockId(hit.value)]?.slide) return startSlide(...hit.block);
-    if (blockId(hit.value) === STOP_BLOCK) return openTrainPicker(hit.block);
+    if (blockId(hit.value) === STOP_BLOCK) return trainTimes(hit.block);
     if (blockId(hit.value) === GATE_BLOCK) return funRides.board(hit.block[0] + 0.5, hit.block[2] + 0.5, player, gameTime(worldDay, sky.time));
     const s = structures.at(...hit.block);
     if (s?.type === 'bed') return goToBed(s);
@@ -5952,7 +5937,7 @@ let menuSpin = 0, lastFrame = 0, frameCount = 0, crouchK = 0;
 // menu (nothing much is moving then).
 function frameRateNow() {
   if (!inGame) return 30;
-  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel || petMenu?.open || cards?.open || gameUI?.pickerOpen || weatherPicker?.open || lunchbox?.open || hopper?.open || palAsk?.open || loopExpress?.pickerOpen || guardAsk?.open) return 12;
+  if (!locked || inventoryOpen || editorOpen || galleryOpen || shopOpen || signOpen || askOpen || elevators?.panel || guestPanel || petMenu?.open || cards?.open || gameUI?.pickerOpen || weatherPicker?.open || lunchbox?.open || hopper?.open || palAsk?.open || guardAsk?.open) return 12;
   return settings.fps || 1000;
 }
 
@@ -6055,7 +6040,9 @@ function frame(timestamp) {
       player.sneakers = hud.wearing(SNEAKERS);
       player.explorerBoots = perks.has('explorer'); // (the Explorer Club's boots: a bit faster)
       if (sliding) updateSlide(dt); // (whee: down a slide)
-      else if (loopExpress.updateRide(dt, gameTime(worldDay, sky.time), player)) player.flying = false; // (on the train)
+      else if (loopExpress.step(dt, gameTime(worldDay, sky.time), player, active && !guardCatch?.frozen ? held : noKeys)) {
+        // (Riding a train: you walk about in your car as it goes.)
+      }
       else if (funRides.updateRide(dt, gameTime(worldDay, sky.time), player)) player.flying = false; // (on a ride at Fun Land)
       else player.update(dt, active && !guardCatch?.frozen ? held : noKeys); // (not while the bodyguards have hold of you)
       if (sledding && player.onGround && !player.surface()) sled(false); // (off the snow: off the sled)
@@ -6133,11 +6120,13 @@ function frame(timestamp) {
     }
 
     // A hint under the crosshair about what you can do.
-    let hint = '';
+    let hint = '', trainHint = '';
     if (agency.active) {
       hint = agency.hint();
     } else if (elevators.riding) {
       hint = elevators.hint();
+    } else if ((trainHint = loopExpress.hint(player, gameTime(worldDay, sky.time)))) {
+      hint = trainHint;
     } else if (rv.inside) {
       hint = rv.bed >= 0 ? '😴 Zzz… (move to get up)' : rv.sit ? '🛋️ Move to get up' : rvSpot?.hint || '🚐 Walk around (WASD) · Right-click things · E: go outside';
     } else if (rodOut) {
@@ -6220,7 +6209,7 @@ function frame(timestamp) {
       else if (s?.type === 'zipline') hint = '🧗 Right-click to zip down the line!';
       else if (s?.type === 'balloon') hint = '🎈 Right-click to fly the balloon!';
       else if (s?.type === 'hoop') hint = '🏀 Throw the Pet Ball through the hoop!';
-      else if (hit && blockId(hit.value) === STOP_BLOCK && !tool) hint = '🚉 Right-click to catch the train!';
+      else if (hit && blockId(hit.value) === STOP_BLOCK && !tool) hint = '🚉 Right-click: when do the trains come?';
       else if (hit && blockId(hit.value) === GATE_BLOCK && !tool) hint = '🎟️ Right-click to ride!';
       else if (s?.type === 'tv') hint = tvs.onGame(s) ? '🎮 Right-click to play Block Hopper!' : '📺 Right-click to change the channel';
       else if (item === CLAIM) hint = `🚩 Click a corner to start claiming land (max ${CLAIM_MAX}×${CLAIM_MAX}), or a vehicle to make it yours` + (myVehicles().length ? ` · 🔑 ${whereMyVehicles()}` : '');
@@ -6325,7 +6314,7 @@ function frame(timestamp) {
     myBody.targetPitch = inBed() ? 0 : player.pitch;
     myBody.flying = player.flying;
     myBody.swing = view.swingT;
-    myBody.sitting = !!seated || !!sliding || loopExpress.riding || funRides.riding || !!liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel';
+    myBody.sitting = !!seated || !!sliding || funRides.riding || !!liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel';
     myBody.hotair = contraptions.riding === 'balloon';
     myBody.sledding = sledding;
     myBody.parachute = !!player.parachute && !riding();
@@ -6530,7 +6519,7 @@ load();
 
 // Handy for poking at the game from the browser console.
 window.buildzone = {
-  tvs, news, newsCam, keys, getOut, playHopper, startSlide, slideChain, openTrainPicker,
+  tvs, news, newsCam, keys, getOut, playHopper, startSlide, slideChain, trainTimes,
   get loopExpress() { return loopExpress; },
   get funRides() { return funRides; },
   get zooAnimals() { return zooAnimals; },

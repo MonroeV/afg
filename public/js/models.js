@@ -665,6 +665,14 @@ MODELS.trainStop = {
   colors: { body: 0x1565c0, glow: 0xbbe6ff, accent: 0xe53935, trim: 0x9e9e9e, metal: 0.3 },
 };
 
+// Stairs: four steps rising toward -z (the low step at the front, +z), with a yellow edge on
+// each step so you can see them.
+MODELS.stairs = {
+  body: [0, 1, 2, 3].map(i => box(1, 0.25, 1 - i * 0.25, 0.5, i * 0.25 + 0.125, (1 - i * 0.25) / 2)),
+  accent: [0, 1, 2, 3].map(i => box(1, 0.02, 0.06, 0.5, (i + 1) * 0.25 + 0.005, 1 - i * 0.25 - 0.03)),
+  colors: { body: 0xb0b4b8, accent: 0xfdd835, metal: 0 },
+};
+
 // ---------- The slide ----------
 // A shiny chute sloping down toward +z (from the top of its block at the back to the bottom at
 // the front), with low sides. Lined up in a staircase, they make one long slide.

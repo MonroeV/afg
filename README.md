@@ -52,7 +52,7 @@ customize your character, drive cars, build anything and play with friends.
         into a gondola at the bottom and ride it all the way round, 21 blocks up
       - **bumper cars** in a fenced arena: they bounce off each other (BOING) and never get hurt
       - a merry-go-round (the Build Book's), and Pete's snack stand (🍿 🍭 🍦 🌭 🍋)
-      The Loop Express stops right by it
+      The Loop Express has a station right by it
     - **The BuildZone Zoo** 🦁🐘 (since v0.53, on the north side of the Outer Loop): seven pens
       of animals made of blocks, each wandering about its pen (everyone sees them in the same
       places): elephants 🐘, giraffes 🦒, lions 🦁, zebras 🦓, penguins 🐧 (with a pool), pandas
@@ -68,13 +68,19 @@ customize your character, drive cars, build anything and play with friends.
       burns): the alarm rings, a 🔥 arrow at the top of the screen points the way, and whoever puts
       it out gets 3 🪙. The hose also saves burning vehicles, and puts out crashed airplanes. Fire
       Chief Flint is out front
-    - **The Loop Express** 🚆 (since v0.51): a train all the way round the Outer Loop, on a track
-      high over the outside of the road, held up by concrete pillars. Three trains go round and
-      round. At each stop (by the new places, and where the roads from town come out) there's a
-      blue ticket machine 🚉: right-click it and pick where you're going (big pictures), wait
-      for the next train (a countdown), and you're lifted up into a car. Sit back and enjoy the
-      view: it sets you down at your stop. Press E on the train to get off at the next stop
-      instead. Everyone sees the same trains
+    - **The Loop Express** 🚆 (since v0.51; two tracks and real stations since v0.55): an
+      elevated railway all the way round the Outer Loop, high over the outside of the road on
+      concrete pillars. There are **two tracks**: on the inner one the trains go round clockwise,
+      on the outer one the other way, with **four trains on each track** running to a timetable.
+      At every **station** (by the new places, and where the roads from town come out) a train
+      slows in, stops, opens its doors (ding-dong!), waits about ten seconds, beeps, shuts them
+      and pulls away. The stations are island platforms between the two tracks, with a roof,
+      lamps, benches and the station's name, and **stairs** down to the ground. No tickets: climb
+      the stairs, wait on the platform (the hint at the bottom says how many seconds till the next
+      train each way), **walk in** through the open doors, ride (walk about the car if you like,
+      and watch the world go by), and **walk out** at any station you want. The hint on the train
+      says where it stops next. Everyone sees the same trains. (The old blue ticket machines still
+      stand by the stations: right-click one to see when the trains come.)
     - **Friendship Park** 🤝 (since v0.50, on the north side of the Outer Loop): paths and flower
       beds, trees, picnic tables, a fountain, a swing set and two big **slides**. Six kids hang
       out here (Sunny, Milo, Rosie, Ollie, Kiko and Nova), and each would love a **best friend**:
@@ -450,6 +456,8 @@ customize your character, drive cars, build anything and play with friends.
   the crops you pick in your garden go in your lunchbox too. Catching food when it rains tacos,
   ice cream, pizza or donuts gives you a little bite, and delivering a pizza fills you up a bit.
   Your hunger and lunchbox are saved
+- **Stairs** (since v0.55, in the 🏠 Home tab, next to the Ladder): four little steps up a
+  block. Put them in a line, each one a block higher, and just walk up (no jumping)
 - **Slides** 🎢 (since v0.50): Slide blocks (in the 🎉 Fun tab) in a line going down, each one a
   step lower, make a slide (a new one placed below and beside another lines up with it); put a
   Ladder up to the top. Climb up and right-click the slide: you zoom down it, faster and faster,
@@ -971,7 +979,7 @@ public/
     churchui.js        Sunday's meeting at the church: the members, the talks, the organ and the hymn
     tvgame.js          Block Hopper, the video game on the TV's Game channel
     palui.js           A kid at Friendship Park asking to be your best friend
-    trainui.js         The Loop Express: the track and trains you see, picking a stop, riding
+    trainui.js         The Loop Express: the tracks and trains you see, their doors, walking on and off, riding
     funrides.js        Fun Land's roller coaster and Ferris wheel: drawing and riding them
     zooanimals.js      The zoo's animals: their block models, wandering about their pens, feeding them
     firehose.js        Fires in town (flames, smoke, the 🔥 arrow) and the fire trucks' hoses
@@ -1023,7 +1031,7 @@ public/
       church.js        The church: building it, and Sunday's meeting (when, who, what's said)
       airport.js       The airport: finding room for it, the runway, terminal, tower and hangars
       park.js          Friendship Park: the paths, flowers, trees, swings and slides
-      train.js         The Loop Express: its track, where the trains are, the stops, pillars and ticket machines
+      train.js         The Loop Express: its two tracks, the timetable, where the trains are, the stations and pillars
       funland.js       Fun Land: its layout, the bumper car arena, and the coaster's and wheel's shapes
       zoo.js           The zoo: its paths, the seven pens (and what's in them), Zara's hut, the animals' favorite foods
       firestation.js   The fire station: its building, the fire trucks' bays, and how often fires break out

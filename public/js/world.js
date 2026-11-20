@@ -412,8 +412,11 @@ export class World {
       out.push([x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
     } else if (shape === 'model') {
       const def = BLOCKS[blockId(v)];
-      const b = def.box && (def.facing ? turnCellBox(def.box, blockMeta(v) & 3) : def.box);
-      if (b) out.push([x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
+      // (Some have a few boxes, like the steps of stairs; most have one.)
+      for (const box of def.boxes || [def.box]) {
+        const b = box && (def.facing ? turnCellBox(box, blockMeta(v) & 3) : box);
+        if (b) out.push([x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
+      }
     } else if (shape === 'rail' || shape === 'flat') {
       for (const b of railBoxes(flatRails(v))) out.push([x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]]);
     }

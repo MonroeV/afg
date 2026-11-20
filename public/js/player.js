@@ -14,6 +14,7 @@ const FLY_SPEED = 14;
 const GRAVITY = 28;
 const JUMP_SPEED = 9;
 const BOUNCE_SPEED = 19;
+const STEP_UP = 0.3; // walking into something this low (a step of some stairs), you step up onto it
 const CROUCH_SPEED = 2.4;
 const BOOST_SPEED = 22; // speed pads
 const PARACHUTE_FALL = 3.2; // how fast you float down under a parachute
@@ -138,7 +139,7 @@ export class Player {
     const guard = this.crouching && wasOnGround && falling;
     for (const axis of ['x', 'z']) {
       const before = this.pos[axis];
-      this.moveAxis(axis, this.vel[axis] * dt);
+      this.moveAxis(axis, this.vel[axis] * dt, wasOnGround && falling);
       if (guard && !this.supported()) {
         this.pos[axis] = before;
         this.vel[axis] = 0;
@@ -286,7 +287,7 @@ export class Player {
   }
 
   // Moves along one axis as far as possible without entering anything solid.
-  moveAxis(axis, d) {
+  moveAxis(axis, d, canStep = false) {
     if (d === 0) return;
     const a = AXES[axis];
     const p = this.box();
@@ -308,6 +309,15 @@ export class Player {
       }
     }
     this.pos[axis] += allowed;
+    // A little step in the way (stairs): up onto it, if there's room.
+    if (allowed !== d && canStep && stopper && !stopper.car && stopper[4] > this.pos.y + 1e-4 && stopper[4] - this.pos.y <= STEP_UP + 1e-4) {
+      const y0 = this.pos.y, a0 = this.pos[axis];
+      this.pos.y = stopper[4] + 1e-4;
+      this.pos[axis] += d - allowed;
+      if (!this.overlapsSomething()) return;
+      this.pos.y = y0;
+      this.pos[axis] = a0;
+    }
     if (allowed !== d) {
       // Walking into a car pushes on it (and it pushes back: we stop).
       if (stopper?.car && axis !== 'y') this.onPushCar?.(stopper.car, axis, this.vel[axis]);

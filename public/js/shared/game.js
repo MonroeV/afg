@@ -34,7 +34,7 @@ import { Structures } from '../structures.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
-export const SAVE_VERSION = 27;
+export const SAVE_VERSION = 28;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -295,6 +295,7 @@ export class GameRoom {
       this.upgradeTo25();
       this.upgradeTo26();
       this.upgradeTo27();
+      this.upgradeTo28();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -397,6 +398,7 @@ export class GameRoom {
     if (data.version < 25) this.upgradeTo25();
     if (data.version < 26) this.upgradeTo26();
     if (data.version < 27) this.upgradeTo27();
+    if (data.version < 28) this.upgradeTo28();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -850,7 +852,7 @@ export class GameRoom {
   // upgrades call addTrainStops again, so new places get stops too.)
   upgradeTo24() {
     this.addTrainStops();
-    this.log(`Added the Loop Express (${this.places?.train?.stops?.length || 0} stops)`);
+    this.log(`Added the Loop Express (${this.places?.train?.stations?.length || 0} stations)`);
     this.onDirty();
   }
 
@@ -928,13 +930,25 @@ export class GameRoom {
     this.broadcast({ t: 'fires', list: this.fires.map(({ id, x, z, hp }) => ({ id, x, z, hp: Math.round(hp) })) });
   }
 
+  // Worlds saved before version 28: the Loop Express's second track (the trains go both ways
+  // now) and its stations (platforms and stairs, instead of ticket machines).
+  upgradeTo28() {
+    this.addTrainStops();
+    this.log(`Added the Loop Express's second track and stations (${this.places?.train?.stations?.length || 0})`);
+    this.onDirty();
+  }
+
+  // The Loop Express's pillars and stations (only on empty land nobody owns; stations already
+  // built stay, and new places get one too).
   addTrainStops() {
     const get = (x, y, z) => this.get(x, y, z);
     const set = (x, y, z, v) => {
       if (inBounds(x, y, z) && v && !this.world.has(blockKey(x, y, z))) this.world.set(blockKey(x, y, z), v);
     };
     const places = this.places || { plaza: { x: 0, z: 0 } };
-    this.places = { ...places, train: { stops: buildTrainLine({ get, set, canUse: this.freeLand(), places }) } };
+    const { stations, signs } = buildTrainLine({ get, set, canUse: this.freeLand(), places, old: places.train?.stations });
+    for (const [x, y, z, text] of signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+    this.places = { ...places, train: { stations } };
   }
 
   // Their best friend from Friendship Park (the NPC), if they have one.
@@ -1520,7 +1534,7 @@ export class GameRoom {
       shower: this.showerLeft() > 0 ? { kind: this.shower.kind, left: this.showerLeft() } : null, // (raining tacos, or ice cream…? for how much longer)
       mast: this.places?.weather?.mast || null, // the weather station's mast (its cups spin)
       church: this.places?.church || null, // (where everyone sits for Sunday's meeting: see churchui.js)
-      train: this.places?.train?.stops || [], // the Loop Express's stops (see train.js)
+      train: this.places?.train?.stations || [], // the Loop Express's stations (see train.js)
       funland: this.places?.funland || null, // where Fun Land's rides are (see funrides.js)
       zoo: this.places?.zoo || null, // the zoo's pens (see zooanimals.js)
       fires: this.fires.map(({ id, x, z, hp }) => ({ id, x, z, hp: Math.round(hp) })), // fires burning in town (see firehose.js)
