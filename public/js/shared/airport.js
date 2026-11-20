@@ -22,6 +22,24 @@ const TALL = 12; // (how high it has to be empty)
 const RUNWAY = [32, 40], APRON = [19, 27];
 const PARKED = [22, 36, 54, 78]; // (where the airplanes park along the apron, u)
 const PLANE_COLORS = ['#e53935', '#fdd835', '#1e88e5', '#f5f5f5'];
+// (Since v0.56, a plane in each hangar, nose out: the Sky Cub, a slow one for sightseeing, and a
+// fast jet.)
+const HANGAR_PLANES = [{ kind: 'cub', u: 54.5, v: 12.5, color: '#ffb300' }, { kind: 'jet', u: 78.5, v: 12.5, color: '#546e7a' }];
+
+// The hangar planes for an airport that's already built (worked out from where its terminal
+// and runway are), for worlds from before they were added.
+export function hangarPlanes(place) {
+  if (!place?.runway || !place.along) return [];
+  const [ux, uz] = place.along, [r0x, r0z] = place.runway;
+  // (The terminal's spot is at (20, 11.5) in the airport's own space; the runway starts at (4, 36.5).)
+  const vx = (r0x - place.x + 16 * ux) / 25, vz = (r0z - place.z + 16 * uz) / 25;
+  const pos = (u, v) => [place.x + (u - 20) * ux + (v - 11.5) * vx, place.z + (u - 20) * uz + (v - 11.5) * vz];
+  const h = Math.atan2(-vx, -vz);
+  return HANGAR_PLANES.map(p => {
+    const [x, z] = pos(p.u, p.v);
+    return { kind: p.kind, x, y: 0, z, h, color: p.color };
+  });
+}
 
 // Finds a spot and builds it (or null if there's nowhere big enough). near: where we'd like it.
 export function buildAirport({ get, set, canUse, near = [RING + 30, 330] }) {
@@ -177,6 +195,11 @@ function airportAt(site, set) {
     const [x, z] = site.pos(u + 0.5, (APRON[0] + APRON[1]) / 2 + 0.5);
     return { kind: 'plane', x, y: 0, z, h, color: PLANE_COLORS[i] };
   });
+  // And in the hangars: the slow Sky Cub and the fast jet.
+  for (const p of HANGAR_PLANES) {
+    const [x, z] = site.pos(p.u, p.v);
+    cars.push({ kind: p.kind, x, y: 0, z, h, color: p.color });
+  }
 
   const [rx0, rz0] = site.at(0, 0), [rx1, rz1] = site.at(L - 1, D - 1);
   const rect = [Math.min(rx0, rx1), Math.min(rz0, rz1), Math.max(rx0, rx1), Math.max(rz0, rz1)];

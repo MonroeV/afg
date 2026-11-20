@@ -13,6 +13,23 @@ export const VEHICLES = {
     name: 'Airplane', mass: 1100, length: 7.2, width: 8.4, height: 2.8, flying: true, plane: true, respawn: 120,
     seats: [[-0.32, 0.92, -1.0], [0.32, 0.92, -1.0]], engine: 'big', pitch: 0.62,
   },
+  // The Sky Cub: a little slow plane with big wings, for sightseeing. It takes off in no time,
+  // floats along gently (it can fly really slowly without stalling) and lands almost anywhere.
+  cub: {
+    name: 'Sky Cub', mass: 650, length: 6.6, width: 10.2, height: 2.8, flying: true, plane: true, respawn: 120,
+    seats: [[0, 0.92, -1.1], [0, 1.0, 0.1]], engine: 'normal', pitch: 0.9,
+    // (How it flies: see flyPlane in cars.js. Slow top speed, and slow enough to land gently.)
+    flight: { thrust: 3.2, dragK: 0.0058, liftSpeed: 10, stall: 6.5, rotate: 7.5, maxTurn: 1.3, crash: 13, hardLanding: 6 },
+    frame: { nose: -3.6, tail: 3.2, bodyY: 1.2, finTop: 2.6, wingY: 2.1, half: 5.0, wingZ: [-1.3, 0.3], mainZ: -0.6, wheel: 'tail' },
+  },
+  // A jet: fast and sleek, with swept-back wings and a jet engine (no propeller). It needs a good
+  // long run down the runway to take off, and a long, careful approach to land.
+  jet: {
+    name: 'Jet', mass: 1400, length: 9.4, width: 6.8, height: 2.7, flying: true, plane: true, respawn: 120,
+    seats: [[0, 0.82, -2.3], [0, 0.95, -1.15]], engine: 'sport', pitch: 1.5,
+    flight: { thrust: 17, dragK: 0.0034, liftSpeed: 32, stall: 23, rotate: 25, maxTurn: 1.0, turnBoost: 2.2, crash: 16, hardLanding: 7 },
+    frame: { nose: -5.0, tail: 4.2, bodyY: 1.1, finTop: 2.6, wingY: 0.95, half: 3.3, wingZ: [-0.6, 1.8], mainZ: 0.6, wheel: 'nose' },
+  },
   // A camper van: four seats (two up front, two in the back), and G pops the roof up.
   camper: {
     name: 'Camper Van', mass: 2200, length: 4.6, width: 2.0, ride: 0.32, bodyH: 0.95, cabinH: 0.8, wheelR: 0.38, maxSpeed: 14, accel: 6.5, gears: 3, respawn: 30,
@@ -76,7 +93,7 @@ export const FIRE_HP = 25; // below this it's on fire and will burn up
 // Points around the outside of a vehicle (and, for the helicopter, its tail and rotor tips),
 // in the vehicle's own space: [x, y, z]. Forward is -z.
 export function outlinePoints(spec) {
-  if (spec.plane) return planePoints();
+  if (spec.plane) return planePoints(spec);
   const pts = [];
   const hw = spec.width / 2 - 0.1, hl = spec.length / 2 - 0.1;
   const heights = spec.flying ? [0.02, 1.2, 2.0] : spec.climb ? [0.3, 1.4, spec.height - 0.1] : [0.25, spec.height - 0.1];
@@ -93,7 +110,17 @@ export function outlinePoints(spec) {
 }
 
 // The airplane isn't a box: its body, the wings up top, the tail, and the wheels underneath.
-function planePoints() {
+function planePoints(spec) {
+  if (spec.frame) {
+    // (The Sky Cub and the jet: from their measurements.)
+    const f = spec.frame, out = [[0, f.bodyY, f.nose], [0, f.finTop, f.tail], [-1.1, 0.02, f.mainZ], [1.1, 0.02, f.mainZ]];
+    out.push(f.wheel === 'tail' ? [0, 0.02, f.tail - 0.4] : [0, 0.02, f.nose + 1.6]);
+    for (const y of [f.bodyY - 0.45, f.bodyY, f.bodyY + 0.45])
+      for (const x of [-0.6, 0.6])
+        for (let z = f.nose + 0.6; z <= f.tail - 0.3; z += (f.tail - f.nose - 0.9) / 4) out.push([x, y, z]);
+    for (let x = 1.3; x <= f.half; x += (f.half - 1.3) / 3) for (const z of f.wingZ) for (const sx of [-1, 1]) out.push([sx * x, f.wingY, z]);
+    return out;
+  }
   const pts = [[0, 1.2, -3.6], [0, 0.02, -2.6], [-1.1, 0.02, 0], [1.1, 0.02, 0], [0, 2.7, 3.4], [-1.5, 1.5, 3.3], [1.5, 1.5, 3.3]];
   for (const y of [0.7, 1.4, 1.9]) for (const x of [-0.7, 0.7]) for (const z of [-3.4, -1.7, 0, 1.7, 3.4]) pts.push([x, y, z]);
   for (const x of [-4.1, -3.3, -2.4, -1.4, 1.4, 2.4, 3.3, 4.1]) for (const z of [-1.0, 0.1]) pts.push([x, 2.05, z]);

@@ -27,7 +27,7 @@ import { World, createBlockMaterials, blockMaterial, RAILING, WIND, rayBox } fro
 import { Player, EYE_HEIGHT, CROUCH_DROP } from './player.js';
 import { Network } from './network.js';
 import { Avatar, Avatars, FLAG } from './avatars.js';
-import { Cars, SEAT_SCALE } from './cars.js';
+import { Cars, SEAT_SCALE, planeFlight } from './cars.js';
 import { MAX_HP, FIRE_HP, SMOKE_HP, PERSON_MASS, seatCount, toWorld } from './shared/vehicles.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_MAX, possessive } from './shared/claims.js';
 import { Structures } from './structures.js';
@@ -1058,6 +1058,35 @@ function openLunchbox() {
   updateOverlays();
 }
 $('hunger-chip').addEventListener('click', () => inGame && openLunchbox());
+// Flying an airplane: a big note in the middle of the screen when it's fast enough down the
+// runway to take off (push Space!), and when it's going too slow in the air and is about to stall
+// and drop out of the sky (nose down to speed up!). (Each kind of airplane has its own speeds.)
+const flightNote = document.createElement('div');
+flightNote.id = 'flight-alert';
+Object.assign(flightNote.style, { position: 'fixed', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', padding: '8px 20px', borderRadius: '14px', font: 'bold 30px system-ui, sans-serif', color: '#fff', textShadow: '0 2px 4px rgba(0,0,0,0.5)', pointerEvents: 'none', zIndex: 6, display: 'none' });
+document.body.appendChild(flightNote);
+function flightAlert(car) {
+  let text = '', kind = '';
+  if (car) {
+    const P = planeFlight(car.spec), v = car.vel.length(), up = car.pos.y - groundBelow(car.pos.x, car.pos.y, car.pos.z);
+    // (How fast it's losing speed, smoothed: so it warns a couple of seconds before a stall, even
+    // when it's slowing down fast, climbing steeply.)
+    const now = performance.now() / 1000;
+    if (car.alertT !== undefined && now > car.alertT) car.alertRate = (car.alertRate ?? 0) * 0.85 + ((v - car.alertV) / (now - car.alertT)) * 0.15;
+    [car.alertV, car.alertT] = [v, now];
+    const soon = v + Math.min(0, car.alertRate ?? 0) * 2.5 < P.stall;
+    // (Or the nose is up too high for the way it's going: the wings stall, and it drops.)
+    const path = v > 1 ? Math.asin(Math.max(-1, Math.min(1, car.vel.y / v))) : 0, mushing = car.pitch - path > 0.28 && car.vel.y < -2;
+    if (car.onGround && v > P.rotate && car.pitch < 0.05) [text, kind] = [touch?.enabled ? '🛫 Push ⬆!' : '🛫 Push SPACE!', 'go'];
+    else if (!car.onGround && up > 2 && (v < P.stall * 1.25 || soon || mushing)) [text, kind] = [touch?.enabled ? '⚠️ Stalling! Nose down ⬇!' : '⚠️ Stalling! Nose down (Shift)!', 'stall'];
+  }
+  if (flightNote.textContent !== text) flightNote.textContent = text;
+  flightNote.style.display = text ? 'block' : 'none';
+  if (!text) return;
+  flightNote.style.background = kind === 'go' ? 'rgba(46, 160, 67, 0.85)' : 'rgba(211, 47, 47, 0.9)';
+  flightNote.style.opacity = kind === 'stall' ? (Math.sin(performance.now() / 120) > -0.3 ? '1' : '0.35') : '1'; // (the stall warning blinks)
+}
+
 // Starving, with food in your lunchbox? A little note, now and then, saying how to eat it.
 let lunchNudged = 0;
 function lunchboxNudge() {
@@ -2554,7 +2583,7 @@ function enterCar(car) {
   carCam.yaw = 0;
   carCam.pitch = car.spec.flying ? -0.25 : -0.15;
   danceView = 0;
-  hud.setCarHelp(car.kind);
+  hud.setCarHelp(car.spec.plane ? 'plane' : car.kind);
   sounds.setEngineVoice(car.id, car.kind);
   if (!car.spec.flying || car.spec.plane) sounds.engine(0.15, 0);
   sounds.spawnCar();
@@ -6373,7 +6402,7 @@ function frame(timestamp) {
         const gas = usesFuel(myCar.kind) ? ` · ⛽ ${'▮'.repeat(Math.ceil(myCar.fuel * 5))}${'▯'.repeat(5 - Math.ceil(myCar.fuel * 5))} ${pct}%${pct <= 0 ? ' OUT OF GAS' : pct <= 10 ? ' LOW!' : ''}` : '';
         const mud = myCar.dirt >= 0.5 ? ' · 🟫 Muddy' : '';
         hud.setVehicleInfo(myCar.spec.plane
-          ? `✈️ ⬆️ ${Math.max(0, Math.round(myCar.pos.y - ground))} m · ${kmh} km/h · 🔥 ${Math.round((myCar.throttle || 0) * 100)}%${!myCar.onGround && myCar.speed < 16 ? ' · ⚠️ STALL! Nose down!' : myCar.onGround && myCar.speed > 16 ? ' · 🛫 Space!' : ''} · ${health}${gas}`
+          ? `✈️ ⬆️ ${Math.max(0, Math.round(myCar.pos.y - ground))} m · ${kmh} km/h · 🔥 ${Math.round((myCar.throttle || 0) * 100)}% · ${health}${gas}`
           : myCar.spec.flying
           ? `⬆️ ${Math.max(0, Math.round(myCar.pos.y - ground))} m · ${kmh} km/h · Tilt: ${tilt} · Rotor ${Math.round(myCar.rotorSpin * 100)}% · ${health}${gas}`
           : myCar.spec.boat ? `🚤 ${kmh} km/h · ${health}`
@@ -6383,6 +6412,8 @@ function frame(timestamp) {
         hud.setVehicleInfo(`🧍 Passenger${driver ? ` · ${driver.name} is driving` : ' · Waiting for a driver'} · ${Math.round(Math.abs(myRide.speed) * 3.6)} km/h`);
       }
     }
+
+    flightAlert(myCar?.spec.plane ? myCar : null);
 
     fpsFrames++;
     fpsTime += dt;

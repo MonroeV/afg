@@ -472,17 +472,26 @@ customize your character, drive cars, build anything and play with friends.
   and shoot off the end. It's in the Build Book too
 - **Airplanes** ✈️ (since v0.48, at the airport): little propeller planes that fly like real
   ones (more or less!). **W** opens the throttle (**S** closes it, and brakes on the ground).
-  Roll down the runway, and once you're going fast enough (the flight display says 🛫 Space!)
+  Roll down the runway, and once you're going fast enough a big green **🛫 Push SPACE!** pops up:
   hold **Space** to lift the nose and take off. In the air it turns toward where you look,
   leaning right over into the turn (A/D or ←/→ turn it harder; a U-turn takes about 3 seconds); Space climbs, Shift dives, and let go of both and it
   flies level. Climbing slows you down and diving speeds you up. Too slow and it **stalls**:
-  the wings stop lifting and the nose drops (⚠️ on the flight display), so keep your speed up.
+  the wings stop lifting and the nose drops, so keep your speed up. A blinking red **⚠️
+  Stalling!** warns you a few seconds before (too slow, or nose up too high and sinking): nose
+  down (Shift) to get your speed back.
   Throttle back and let go and it glides down gently. **Land** slowly and level, on the wheels;
   hitting the ground (or anything) hard is a crash, and it blows up. **Jump out** (E) up in the
   air and your **parachute** opens 🪂: you float gently down and can steer with WASD. The plane
   flies on without you… and crashes to the ground in a ball of fire (the wreck burns for a
   while). Everyone sees it. A new plane is back on the apron 2 minutes later. Planes use gas,
   like everything else that drives
+- **Three kinds of airplanes** (since v0.56): the four on the apron are the ordinary propeller
+  planes (top speed about 155 km/h). In the first hangar is the **Sky Cub** 🐢: a little yellow
+  plane with big wings, fat tires and big windows, for **sightseeing**. It takes off after a
+  short run, tops out at about 85 km/h and cruises slower still (it can fly at 30 km/h without
+  stalling), so landing is easy. In the second hangar is the **Jet** 🚀: sleek and grey, swept
+  wings and a glowing jet engine, top speed about 255 km/h. It needs a good run down the
+  runway, and a long, careful approach to land
 - **Coins and the Luxe Store**: coins lie about all over town (walk, or drive, into them to
   collect them). What they're made of says what they're worth: **bronze** 🥉 1, **silver** 🥈 2,
   **gold** 🥇 3, and now and then a sparkly **diamond** 💎 worth 5. You also get

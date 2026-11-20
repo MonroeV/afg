@@ -26,7 +26,10 @@ const PLANE = {
   maxTurn: 1.1, // the fastest it turns (radians a second)
   hardLanding: 6, // coming down faster than this hurts it
   crash: 14, // hitting the ground (or anything) faster than this: a crash
+  dragK: 0.004, // air drag (with the thrust, it sets the top speed)
 };
+// (The Sky Cub and the jet have their own: see `flight` in shared/vehicles.js.)
+export const planeFlight = spec => (spec.flight ? { ...PLANE, ...spec.flight } : PLANE);
 export const SEAT_SCALE = 0.85;
 const GOLD = '#d9a21b'; // the color of gold car paint
 const LAMP_COLOR = new THREE.Color(0xffe0a8);
@@ -137,6 +140,8 @@ function ownerTag(text) {
 export function buildCarModel(kind, color) {
   if (kind === 'heli') return buildHeliModel(color);
   if (kind === 'plane') return buildPlaneModel(color);
+  if (kind === 'cub') return buildCubModel(color);
+  if (kind === 'jet') return buildJetModel(color);
   if (kind === 'bumper') return buildBumperModel(color);
   if (kind === 'boat') return buildBoatModel(color);
   const s = CAR_SPECS[kind];
@@ -674,6 +679,112 @@ function buildPlaneModel(color) {
   return {
     group: g, wheels: [], steerers: [], rotor: prop, tailRotor: null, blur, paint: mats.paint, paintMesh: meshes.paint,
     baseColor: new THREE.Color(color), headMat: mats.head, tailMat: mats.red, siren: null, plane: true,
+  };
+}
+
+// The parts every airplane model is made of (merged by material), and the bits they share.
+function planeKit(color) {
+  const mats = {
+    paint: new THREE.MeshPhysicalMaterial({ color, metalness: 0.15, roughness: 0.5, clearcoat: 0.5, clearcoatRoughness: 0.2 }),
+    white: new THREE.MeshPhysicalMaterial({ color: 0xe8e8e8, metalness: 0.1, roughness: 0.55, clearcoat: 0.4, clearcoatRoughness: 0.25 }),
+    dark: new THREE.MeshStandardMaterial({ color: 0x24272d, roughness: 0.6 }),
+    metal: new THREE.MeshStandardMaterial({ color: 0x9aa3ad, metalness: 0.8, roughness: 0.3 }),
+    glass: new THREE.MeshStandardMaterial({ color: 0x223344, metalness: 0.6, roughness: 0.08, transparent: true, opacity: 0.55 }),
+    red: new THREE.MeshStandardMaterial({ color: 0xaa1111, emissive: 0xff2020, emissiveIntensity: 0.8 }),
+    green: new THREE.MeshStandardMaterial({ color: 0x0a6a14, emissive: 0x20ff50, emissiveIntensity: 0.8 }),
+    head: new THREE.MeshStandardMaterial({ color: 0xfff6d8, emissive: 0xfff2c0, emissiveIntensity: 0.3 }),
+  };
+  const parts = {};
+  const add = (geo, mat, x, y, z) => (parts[mat] ??= []).push(geo.translate(x, y, z));
+  const B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+  const along = (rTop, rBottom, len, seg = 12) => new THREE.CylinderGeometry(rTop, rBottom, len, seg).rotateX(Math.PI / 2); // (top end toward +z)
+  const strut = (a, b, r = 0.04) => {
+    const va = new THREE.Vector3(...a), vb = new THREE.Vector3(...b), len = va.distanceTo(vb);
+    const geo = new THREE.CylinderGeometry(r, r, len, 6);
+    geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), vb.clone().sub(va).normalize()));
+    const mid = va.add(vb).multiplyScalar(0.5);
+    add(geo, 'dark', mid.x, mid.y, mid.z);
+  };
+  const wheel = (r, x, y, z) => add(new THREE.CylinderGeometry(r, r, r * 0.65, 14).rotateZ(Math.PI / 2), 'dark', x, y, z);
+  return { mats, parts, add, B, along, strut, wheel };
+}
+
+// The Sky Cub: a little slow plane for sightseeing. A short, round body with big windows, a big
+// long wing on top (painted, with white tips), a tail wheel instead of a nose wheel and fat tires
+// (it lands on grass), a black stripe down its side, and a propeller.
+function buildCubModel(color) {
+  const g = new THREE.Group(), { mats, parts, add, B, along, strut, wheel } = planeKit(color);
+  add(along(0.72, 0.72, 3.0), 'paint', 0, 1.2, -1.0); // the cabin
+  add(along(0.72, 0.4, 0.7), 'paint', 0, 1.2, -2.85); // the nose
+  add(along(0.2, 0.72, 3.4), 'paint', 0, 1.35, 2.2); // the tail
+  for (const x of [-1, 1]) add(B(0.04, 0.16, 6.0), 'dark', x * 0.69, 1.05, 0.3); // (a black stripe)
+  add(B(1.25, 0.55, 0.9), 'glass', 0, 1.7, -1.9); // the windshield
+  for (const x of [-1, 1]) add(B(0.06, 0.6, 2.0), 'glass', x * 0.7, 1.45, -0.9); // big side windows (to see the view)
+  add(B(8.2, 0.12, 1.6), 'paint', 0, 2.1, -0.5); // the wing
+  for (const x of [-1, 1]) add(B(1.0, 0.13, 1.6), 'white', x * 4.6, 2.1, -0.5); // (white tips)
+  add(B(3.4, 0.08, 0.9), 'paint', 0, 1.42, 3.4); // the tailplane
+  add(B(0.08, 1.3, 1.0), 'white', 0, 2.0, 3.45); // the tail fin
+  for (const x of [-1, 1]) {
+    strut([x * 0.62, 0.85, -0.5], [x * 2.6, 2.04, -0.5]);
+    strut([x * 0.5, 0.75, -0.7], [x * 1.1, 0.42, -0.65], 0.05);
+    wheel(0.42, x * 1.1, 0.42, -0.65); // (fat tires)
+  }
+  strut([0, 0.85, 3.4], [0, 0.17, 3.55], 0.04);
+  wheel(0.16, 0, 0.17, 3.55); // (the tail wheel)
+  add(along(0.17, 0.02, 0.4, 10), 'dark', 0, 1.2, -3.4); // the spinner
+  add(B(0.12, 0.08, 0.12), 'red', -5.12, 2.1, -0.5);
+  add(B(0.12, 0.08, 0.12), 'green', 5.12, 2.1, -0.5);
+  add(B(0.5, 0.06, 0.06), 'head', -1.6, 2.04, -1.32);
+  const meshes = mergeParts(g, parts, mats);
+  const prop = new THREE.Group();
+  prop.position.set(0, 1.2, -3.35);
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.15, 2.0, 0.05), mats.dark);
+  blade.castShadow = true;
+  prop.add(blade);
+  const blur = new THREE.Mesh(new THREE.CircleGeometry(1.0, 28), new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+  prop.add(blur);
+  g.add(prop);
+  return {
+    group: g, wheels: [], steerers: [], rotor: prop, tailRotor: null, blur, paint: mats.paint, paintMesh: meshes.paint,
+    baseColor: new THREE.Color(color), headMat: mats.head, tailMat: mats.red, siren: null, plane: true,
+  };
+}
+
+// A jet: a long sleek body with a pointed nose and a bubble canopy (two seats, one behind the
+// other), swept-back wings low down, a tall swept fin, and a jet engine at the back whose
+// exhaust glows orange when it's going hard.
+function buildJetModel(color) {
+  const g = new THREE.Group(), { mats, parts, add, B, along, strut, wheel } = planeKit(color);
+  add(along(0.62, 0.62, 6.0), 'paint', 0, 1.1, 0); // the body
+  add(along(0.62, 0.04, 2.0), 'paint', 0, 1.1, -4.0); // the pointed nose
+  add(along(0.42, 0.62, 1.2), 'metal', 0, 1.1, 3.6); // the engine at the back
+  add(B(0.9, 0.2, 5.6), 'white', 0, 0.55, 0); // (a white belly)
+  add(new THREE.SphereGeometry(0.5, 14, 10).scale(1, 0.8, 2.8), 'glass', 0, 1.62, -1.7); // the canopy
+  // Swept wings (low down), the tailplanes, and the fin.
+  for (const x of [-1, 1]) {
+    add(B(3.0, 0.12, 1.5).rotateY(x * -0.45), 'paint', x * 1.95, 0.95, 0.75);
+    add(B(1.4, 0.08, 0.7).rotateY(x * -0.5), 'paint', x * 0.95, 1.15, 3.55);
+    add(B(0.12, 0.06, 0.12), x < 0 ? 'red' : 'green', x * 3.3, 0.95, 1.55);
+  }
+  add(B(0.1, 1.3, 1.3).rotateX(0.45), 'paint', 0, 1.95, 3.35);
+  // Landing gear: a nose wheel and the main wheels.
+  strut([0, 0.7, -3.4], [0, 0.2, -3.4], 0.05);
+  wheel(0.2, 0, 0.2, -3.4);
+  for (const x of [-1, 1]) {
+    strut([x * 0.9, 0.85, 0.6], [x * 1.1, 0.26, 0.6], 0.05);
+    wheel(0.26, x * 1.1, 0.26, 0.6);
+  }
+  add(B(0.4, 0.06, 0.06), 'head', 0, 0.62, -3.6);
+  const meshes = mergeParts(g, parts, mats);
+  // (The "rotor" is the turbine inside: nothing to see. The exhaust glows instead of a blur.)
+  const rotor = new THREE.Group();
+  g.add(rotor);
+  const blur = new THREE.Mesh(new THREE.CircleGeometry(0.4, 20), new THREE.MeshBasicMaterial({ color: 0xff8a3c, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+  blur.position.set(0, 1.1, 4.22);
+  g.add(blur);
+  return {
+    group: g, wheels: [], steerers: [], rotor, tailRotor: null, blur, paint: mats.paint, paintMesh: meshes.paint,
+    baseColor: new THREE.Color(color), headMat: mats.head, tailMat: mats.red, siren: null, plane: true, jet: true,
   };
 }
 
@@ -1715,7 +1826,7 @@ export class Cars {
   //  - Land gently: come down slowly, on the wheels. Hitting the ground (or anything) hard is a
   //    crash, and it blows up!
   flyPlane(car, dt, keys, aimYaw = car.h) {
-    const P = PLANE, events = [];
+    const P = planeFlight(car.spec), events = [];
     const health = 0.6 + 0.4 * (car.hp / MAX_HP);
     const empty = this.empty(car);
     car.throttle ??= 0;
@@ -1773,7 +1884,7 @@ export class Cars {
 
     // The forces: the propeller, air drag, the wings' lift, and gravity.
     car.vel.addScaledVector(fwd, P.thrust * (this.jetEngine ? 1.2 : 1) * car.throttle * health * dt); // (Sky Pilots: a jet engine)
-    const drag = 0.004 * v * v + (grounded ? 0.5 + (car.throttle < 0.02 && keys.has('KeyS') ? 6 : 0) : 0);
+    const drag = P.dragK * v * v + (grounded ? 0.5 + (car.throttle < 0.02 && keys.has('KeyS') ? 6 : 0) : 0);
     if (v > 0.01) car.vel.multiplyScalar(Math.max(0, 1 - (drag * dt) / v));
     const aoa = car.pitch - path; // (the angle the wings meet the air at)
     let cl = 0.3 + aoa * 3.2;
@@ -1916,7 +2027,7 @@ export class Cars {
         // The propeller (and its blur when it's going fast); lights on the wingtips.
         car.rotorAngle += car.rotorSpin * 40 * dt;
         car.model.rotor.rotation.z = car.rotorAngle;
-        car.model.blur.material.opacity = Math.max(0, car.rotorSpin - 0.4) * 0.45;
+        car.model.blur.material.opacity = car.model.jet ? Math.max(0, car.rotorSpin - 0.3) * 1.4 : Math.max(0, car.rotorSpin - 0.4) * 0.45;
         car.model.headMat.emissiveIntensity = car.driver ? 0.6 + nightK * 2 : 0.2;
         continue;
       }
