@@ -144,6 +144,7 @@ export function buildCarModel(kind, color) {
   if (kind === 'cub') return buildCubModel(color);
   if (kind === 'jet') return buildJetModel(color);
   if (kind === 'bumper') return buildBumperModel(color);
+  if (kind === 'kart') return buildKartModel(color);
   if (kind === 'boat') return buildBoatModel(color);
   const s = CAR_SPECS[kind];
   const g = new THREE.Group();
@@ -660,6 +661,62 @@ function buildBumperModel(color) {
   const meshes = mergeParts(g, parts, mats);
   return {
     group: g, wheels: [], steerers: [], paint: mats.paint, paintMesh: meshes.paint, baseColor: new THREE.Color(color),
+    headMat: mats.head, tailMat: mats.tail, brakeMat: mats.tail, reverseMat: mats.head, siren: null,
+  };
+}
+
+// A go-kart: a low flat tray of a chassis, a pointy nose with a number board, side pods, a bucket
+// seat, a steering wheel, a roll hoop behind the seat, an engine on the side, and four fat
+// little wheels (the front ones steer).
+function buildKartModel(color) {
+  const s = VEHICLES.kart, g = new THREE.Group();
+  const mats = {
+    paint: new THREE.MeshPhysicalMaterial({ color, metalness: 0.3, roughness: 0.35, clearcoat: 1, clearcoatRoughness: 0.08 }),
+    dark: new THREE.MeshStandardMaterial({ color: 0x1d1f24, roughness: 0.8 }),
+    chrome: new THREE.MeshStandardMaterial({ color: 0xd0d4d8, metalness: 0.9, roughness: 0.2 }),
+    seat: new THREE.MeshStandardMaterial({ color: 0x263238, roughness: 0.7 }),
+    white: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 }),
+    head: new THREE.MeshStandardMaterial({ color: 0xfff6d8, emissive: 0xfff2c0, emissiveIntensity: 0.3 }),
+    tail: new THREE.MeshStandardMaterial({ color: 0x8a0a0a, emissive: 0xff0000, emissiveIntensity: 0.3 }),
+  };
+  const parts = {};
+  const add = (geo, mat, x, y, z) => (parts[mat] ??= []).push(geo.translate(x, y, z));
+  const B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+  const hl = s.length / 2, base = s.ride + 0.1;
+  add(B(0.9, 0.05, s.length - 0.2), 'chrome', 0, base, 0); // the chassis tray
+  add(B(0.7, 0.16, 0.6), 'paint', 0, base + 0.1, -hl + 0.4); // the nose
+  add(B(0.5, 0.2, 0.04), 'white', 0, base + 0.16, -hl + 0.09); // (the number board)
+  add(B(1.2, 0.1, 0.18), 'dark', 0, base + 0.02, -hl + 0.02); // the front bumper
+  for (const x of [-1, 1]) add(B(0.22, 0.18, 0.75), 'paint', x * 0.52, base + 0.1, 0.05); // side pods
+  add(B(1.25, 0.14, 0.14), 'dark', 0, base + 0.05, hl - 0.05); // the rear bumper
+  add(B(0.5, 0.08, 0.5), 'seat', 0, base + 0.1, 0.25); // the seat
+  add(B(0.5, 0.45, 0.08), 'seat', 0, base + 0.32, 0.5);
+  add(new THREE.CylinderGeometry(0.025, 0.025, 0.4, 6).rotateX(-0.9), 'dark', 0, base + 0.2, -0.3); // the steering column
+  add(new THREE.TorusGeometry(0.13, 0.02, 6, 14).rotateX(-0.6), 'dark', 0, base + 0.34, -0.17);
+  add(new THREE.TorusGeometry(0.33, 0.03, 6, 16, Math.PI), 'chrome', 0, base + 0.42, 0.6); // the roll hoop
+  add(B(0.28, 0.28, 0.32), 'dark', 0.4, base + 0.2, 0.6); // the engine
+  add(new THREE.CylinderGeometry(0.04, 0.04, 0.35, 6).rotateX(Math.PI / 2), 'chrome', 0.4, base + 0.25, 0.92); // (the exhaust)
+  add(B(0.12, 0.05, 0.03), 'head', 0, base + 0.14, -hl + 0.1 - 0.03);
+  for (const x of [-1, 1]) add(B(0.12, 0.06, 0.03), 'tail', x * 0.4, base + 0.1, hl + 0.03);
+  const meshes = mergeParts(g, parts, mats);
+  // Wheels: wide and squat, the front pair steers.
+  const wheelGeo = new THREE.CylinderGeometry(s.wheelR, s.wheelR, 0.2, 14).rotateZ(Math.PI / 2);
+  const hubGeo = new THREE.CylinderGeometry(s.wheelR * 0.5, s.wheelR * 0.5, 0.21, 6).rotateZ(Math.PI / 2);
+  const wheels = [], steerers = [];
+  for (const x of [-1, 1])
+    for (const z of [-1, 1]) {
+      const pivot = new THREE.Group();
+      pivot.position.set(x * (s.width / 2 - 0.08), s.wheelR, z * (hl - 0.32));
+      const wheel = new THREE.Mesh(z > 0 ? wheelGeo.clone().scale(1.3, 1, 1) : wheelGeo, mats.dark);
+      wheel.castShadow = true;
+      wheel.add(new THREE.Mesh(hubGeo, mats.chrome));
+      pivot.add(wheel);
+      g.add(pivot);
+      wheels.push(wheel);
+      if (z < 0) steerers.push(pivot);
+    }
+  return {
+    group: g, wheels, steerers, paint: mats.paint, paintMesh: meshes.paint, baseColor: new THREE.Color(color),
     headMat: mats.head, tailMat: mats.tail, brakeMat: mats.tail, reverseMat: mats.head, siren: null,
   };
 }

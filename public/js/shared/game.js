@@ -19,6 +19,7 @@ import { buildTrainLine, fixPlatforms } from './train.js';
 import { buildFunLand, rideSigns } from './funland.js';
 import { buildZoo, ANIMALS } from './zoo.js';
 import { buildFarm, FARM_ANIMALS, GIVE_EVERY, inFarmField } from './farm.js';
+import { buildRaceway, minLap, KART_COINS, RECORD_COINS, BOARD_SIZE } from './karts.js';
 import { buildDealership, newCarFor, LOT_KINDS, SHOW_KINDS, townCarsToKeep } from './dealership.js';
 import { buildFireStation, FIRE_CALL, FIRE_GAP, FIRE_OUT, FIRE_LIFE, DOUSE, FIRE_REWARD, HOSE_RANGE } from './firestation.js';
 import { findHomes } from './residents.js';
@@ -37,7 +38,7 @@ import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
 const PLANE_HOME_AFTER = 300; // seconds a town airplane sits idle away from the airport before it's taken back
-export const SAVE_VERSION = 36;
+export const SAVE_VERSION = 37;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -118,6 +119,7 @@ export class GameRoom {
     this.saplings = []; // logs growing into trees
     this.crops = []; // the garden: { x, y, z, by (who planted it), at (when it grows next: 0 = needs water) }
     this.races = {}; // finish line "x,y,z" -> best times [{ name, key, time }]
+    this.laps = []; // Thunder Raceway's Best Laps board: [{ name, key, ms }], best first
     this.places = null; // where the store, the tower lobby and the town square are (for the NPCs)
     this.wallets = {}; // name key -> { coins, owned: [items], day }
     this.holes = new Map(); // "x,z" -> when the ground there was dug out (it grows back)
@@ -313,6 +315,7 @@ export class GameRoom {
       this.upgradeTo34();
       this.upgradeTo35();
       this.upgradeTo36();
+      this.upgradeTo37();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -333,6 +336,7 @@ export class GameRoom {
     this.saplings = data.saplings || [];
     this.crops = (Array.isArray(data.crops) ? data.crops : []).filter(c => c && [c.x, c.y, c.z].every(Number.isInteger) && isCrop(this.get(c.x, c.y, c.z)))
       .map(c => ({ x: c.x, y: c.y, z: c.z, by: String(c.by || ''), at: Number(c.at) || 0 }));
+    this.laps = (Array.isArray(data.laps) ? data.laps : []).filter(r => r && typeof r.name === 'string' && typeof r.key === 'string' && Number.isFinite(r.ms)).slice(0, BOARD_SIZE);
     this.races = {};
     for (const [k, list] of Object.entries(data.races && typeof data.races === 'object' ? data.races : {})) {
       if (Array.isArray(list)) this.races[k] = list.filter(r => r && typeof r.name === 'string' && Number.isFinite(r.time)).slice(0, 5);
@@ -425,6 +429,7 @@ export class GameRoom {
     if (data.version < 34) this.upgradeTo34();
     if (data.version < 35) this.upgradeTo35();
     if (data.version < 36) this.upgradeTo36();
+    if (data.version < 37) this.upgradeTo37();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -1104,6 +1109,67 @@ export class GameRoom {
     this.onDirty();
   }
 
+  // Worlds saved before version 37: Thunder Raceway, the go-kart track (its karts, a train stop).
+  upgradeTo37() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const track = buildRaceway({ get, set, canUse: this.freeLand() });
+    if (track) {
+      this.claims.push(track.claim);
+      for (const [x, y, z, text] of track.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+      this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...track.places };
+      for (const c of track.cars) this.spawn(this.addHome(c));
+      this.addTrainStops();
+    }
+    this.log(`Added Thunder Raceway (${track ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
+  // A go-kart going round Thunder Raceway (from its driver's updates): past each checkpoint in
+  // turn, and back over the line, is a lap. The server times it (from the line to the line), and
+  // the Best Laps board keeps the ten best (each driver's best).
+  kartStep(client, v) {
+    const track = this.places?.raceway;
+    if (!track?.cps?.length) return;
+    const k = (client.kart ??= { next: 0, start: 0, car: v.id });
+    if (k.car !== v.id) Object.assign(k, { next: 0, start: 0, car: v.id });
+    const cp = track.cps[k.next], R = (track.half || 3.5) + 2.5;
+    if (Math.hypot(v.x - cp[0], v.z - cp[1]) > R) return;
+    const now = Date.now();
+    if (k.next === 0) {
+      // Over the line: a lap done (if it's been all the way round), and the next one starts.
+      if (k.start && k.done) this.kartLap(client, now - k.start);
+      k.start = now;
+      k.done = false;
+      client.send({ t: 'kart_go', lap: true });
+    }
+    k.next = (k.next + 1) % track.cps.length;
+    if (k.next === 0) k.done = true; // (every checkpoint passed: next time over the line counts)
+    else client.send({ t: 'kart_cp', i: k.next, of: track.cps.length });
+  }
+
+  kartLap(client, ms) {
+    const track = this.places.raceway;
+    if (ms < minLap(track.length || 200)) return; // (impossibly quick: not a real lap)
+    ms = Math.round(ms);
+    const key = nameKey(client.name), mine = this.laps.find(r => r.key === key);
+    const record = !this.laps.length || ms < this.laps[0].ms;
+    const best = !mine || ms < mine.ms;
+    let coins = 0;
+    if (best) {
+      this.laps = this.laps.filter(r => r.key !== key).concat({ name: client.name, key, ms }).sort((a, b) => a.ms - b.ms).slice(0, BOARD_SIZE);
+      coins = KART_COINS + (record ? RECORD_COINS : 0);
+      this.wallet(client).coins += coins;
+      this.sendWallet(client);
+      this.broadcast({ t: 'kart_board', board: this.laps.map(r => [r.name, r.ms]) });
+      if (record) this.broadcast({ t: 'chat', system: true, text: `🏆 ${client.name} set a new lap record at Thunder Raceway: ${(ms / 1000).toFixed(2)}s! 🏎️` });
+      this.onDirty();
+    }
+    client.send({ t: 'kart_lap', ms, best: best ? ms : mine.ms, coins, record });
+  }
+
   // The farm's fields: every crop growing in them is on the list (they're anyone's to pick, and
   // grow back by themselves).
   registerFarmCrops() {
@@ -1289,6 +1355,7 @@ export class GameRoom {
       paints: [...this.paints],
       // Best race times, for finish lines that are still there.
       races: Object.fromEntries(Object.entries(this.races).filter(([k]) => this.isFinish(k))),
+      laps: this.laps,
       places: this.places,
       wallets: this.wallets,
       holes: [...this.holes].map(([k, t]) => [...k.split(',').map(Number), t]),
@@ -1735,6 +1802,8 @@ export class GameRoom {
       funland: this.places?.funland || null, // where Fun Land's rides are (see funrides.js)
       zoo: this.places?.zoo || null, // the zoo's pens (see zooanimals.js)
       farm: this.places?.farm || null, // the farm's pastures, fields and windmill (see farmanimals.js)
+      raceway: this.places?.raceway || null, // the go-kart track: its lights, checkpoints and board (see kartui.js)
+      laps: this.laps.map(r => [r.name, r.ms]),
       airport: this.places?.airport || null, // the airport (its lights: see airportlights.js)
       fires: this.fires.map(({ id, x, z, hp }) => ({ id, x, z, hp: Math.round(hp) })), // fires burning in town (see firehose.js)
       landmarks: Object.entries(this.places || {}).filter(([, p]) => p && Number.isFinite(p.x) && Number.isFinite(p.z)).map(([k, p]) => [k, p.x, p.z]),
@@ -1765,6 +1834,7 @@ export class GameRoom {
   leaveVehicle(client, bail = null) {
     const v = this.vehicles.get(client.car);
     client.car = 0;
+    client.kart = null; // (a lap at the raceway: off)
     if (!v) return;
     // Your own vehicle: wherever you leave it is where it lives now.
     const home = this.homes.get(v.home);
@@ -2327,6 +2397,7 @@ export class GameRoom {
       v.loaded = !!(v.flags & 4);
       v.ts = Number.isFinite(msg.ts) ? msg.ts : null;
       v.fresh = true;
+      if (v.kind === 'kart') this.kartStep(client, v);
       // (How fast it's going, for an airplane someone jumps out of.)
       const now = Date.now(), gap = (now - (v.stateAt || 0)) / 1000;
       if (gap > 0.02 && gap < 1) v.vel = [(v.x - was[0]) / gap, (v.y - was[1]) / gap, (v.z - was[2]) / gap];

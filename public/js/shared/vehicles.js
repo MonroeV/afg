@@ -67,6 +67,12 @@ export const VEHICLES = {
     name: 'Fire Truck', mass: 9000, length: 7.0, width: 2.5, ride: 0.5, bodyH: 1.6, cabinH: 0.3, wheelR: 0.55, maxSpeed: 18, accel: 7, gears: 3, respawn: 30,
     seats: [[-0.55, 1.1, -2.3], [0.55, 1.1, -2.3], [-0.55, 1.1, -1.3], [0.55, 1.1, -1.3]], special: 'hose', engine: 'diesel', pitch: 0.95,
   },
+  // A go-kart (at Thunder Raceway): tiny, low and quick, and it corners like it's on rails. Like
+  // the bumper cars, bumps don't hurt it (it bounces off).
+  kart: {
+    name: 'Go-Kart', mass: 180, length: 1.9, width: 1.3, ride: 0.06, bodyH: 0.22, cabinH: 0.3, wheelR: 0.16, maxSpeed: 15, accel: 11, gears: 3, respawn: 20,
+    seats: [[0, 0.2, 0.2]], bouncy: true, noDamage: true, engine: 'sport', pitch: 1.6,
+  },
   // A tractor (at the farm): slow and steady, big wheels at the back and little ones in front, an
   // open seat under a sunshade roof. It climbs up one block, like a monster truck.
   tractor: {

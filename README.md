@@ -93,6 +93,16 @@ customize your character, drive cars, build anything and play with friends.
       claimed one (only you can drive it, it stays where you park it), and a new car rolls into
       its spot once you've driven yours away. The town keeps just a few cars of its own now (the
       rest went to the dealership; nobody's own cars were touched). The Loop Express stops there
+    - **Thunder Raceway** 🏎️ (since v0.60, on the north side of the Outer Loop, with its own
+      Loop Express stop): a long twisty **go-kart track** with red-and-white curbs and black
+      tire walls, a **grandstand** of seats along the main straight, and a **gantry** over the
+      start/finish line with five start lights (red, red, red, red, red… GREEN! 🚦, over and
+      over). Six **go-karts** wait in the pit lane by the pit garage (Racer Rio has tips): tiny,
+      quick and bouncy (bumps don't hurt them). Drive out onto the track and over the line, and
+      your **lap time** shows at the top of the screen; go all the way round (past every
+      checkpoint: no shortcuts!) and back over the line for a lap. The big **Best Laps** board
+      by the grandstand shows the top ten. Beat your own best lap: +3 🪙; set a new track
+      record: +10 more (and everyone hears about it) 🏆
     - **Sunny Acres Farm** 🐄 (since v0.59, on the west side of the Outer Loop, with its own Loop
       Express stop): through the log gateway, four fenced **fields** of carrots 🥕,
       strawberries 🍓, sunflowers 🌻 and pumpkins 🎃 (each with a scarecrow). They're
@@ -1052,6 +1062,7 @@ public/
     funrides.js        Fun Land's roller coaster and Ferris wheel: drawing and riding them
     zooanimals.js      The zoo's animals: their block models, wandering about their pens, feeding them
     farmanimals.js     The farm's animals (cows, horses, sheep, pigs, hens) and the windmill's sails
+    kartui.js          Thunder Raceway's start lights, the Best Laps board and your lap time
     firehose.js        Fires in town (flames, smoke, the 🔥 arrow) and the fire trucks' hoses
     guardcatch.js      Bodyguards keeping you off their land: caught and walked off, blown away, flushed out
     guardui.js         Someone asking your bodyguards to let them in: your answer
@@ -1105,6 +1116,7 @@ public/
       funland.js       Fun Land: its layout, the bumper car arena, and the coaster's and wheel's shapes
       zoo.js           The zoo: its paths, the seven pens (and what's in them), Zara's hut, the animals' favorite foods
       farm.js          Sunny Acres Farm: fields, barn, silo, windmill, farmhouse, pastures, farm stand, tractors
+      karts.js         Thunder Raceway: the track (a smooth curve), curbs, tire walls, pits, grandstand, karts
       firestation.js   The fire station: its building, the fire trucks' bays, and how often fires break out
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/

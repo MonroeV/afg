@@ -164,6 +164,13 @@ const NPCS = [
     tips: ['🥚🍯🥧', 'Baked it this morning! 🥧'],
   },
   {
+    // Thunder Raceway: Racer Rio in the pit garage.
+    id: -74, place: 'raceway_pit', name: 'Racer Rio', title: 'Racer Rio 🏎️', roam: 3,
+    look: { face: 'cool', hair: 'short', hat: 'cap', shirt: 'jersey', pants: 'jeans', extra: 'none', skin: '#c68642', hairColor: '#1b1209', hatColor: '#e53935', shirtColor: '#e53935', shirtColor2: '#ffffff', pantsColor: '#212121', shoesColor: '#ffffff' },
+    hello: n => [`Ready to race, ${n}? 🏁`, `Hey ${n}! Grab a kart! 🏎️`],
+    tips: ['🏎️💨 🏁', 'Hop in a kart (E) and drive out onto the track! 🏎️', 'Go all the way round, past the start line: your lap time shows at the top! ⏱️', 'Wait for the lights: red, red, red… GREEN! 🚦', 'Beat your best lap for coins! A new track record: 10 more! 🏆', 'Brake a little before the corners! 🛑'],
+  },
+  {
     // BuildZone Motors: Dealer Dana, at the sales desk in the showroom.
     id: -71, place: 'dealer_desk', name: 'Dealer Dana', title: 'Dealer Dana 🚗', roam: 1,
     look: { face: 'smile', hair: 'ponytail', hat: 'none', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#e0ac69', hairColor: '#6d3b16', hatColor: '#000000', shirtColor: '#1a237e', shirtColor2: '#ffffff', pantsColor: '#263238', shoesColor: '#111111' },

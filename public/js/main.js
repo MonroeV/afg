@@ -18,6 +18,7 @@ import { LoopExpress } from './trainui.js';
 import { FunRides } from './funrides.js';
 import { ZooAnimals } from './zooanimals.js';
 import { FarmAnimals } from './farmanimals.js';
+import { KartUI } from './kartui.js';
 import { FireHose, steam } from './firehose.js';
 import { AirportLights } from './airportlights.js';
 import { ANIMALS } from './shared/zoo.js';
@@ -255,7 +256,7 @@ let showers = null, weatherMast = null; // it's raining tacos (or ice cream, or 
 let weatherPicker = null; // Stormy's menu: what shall it rain?
 let lunchbox = null; // your lunchbox 🍱 (L): food to eat
 let funRides = null; // Fun Land's roller coaster and Ferris wheel
-let zooAnimals = null, farmAnimals = null; // the zoo's animals, and the farm's
+let zooAnimals = null, farmAnimals = null, kartUI = null; // the zoo's animals, the farm's, and the go-kart track's lights and lap times
 let zooAim = null; // (the one under the crosshair)
 let fireHose = null; // fires in town, and the fire trucks' hoses
 let airportLights = null; // the airport's runway, taxiway and approach lights
@@ -737,6 +738,7 @@ function startGame(welcome, resume = false) {
   funRides.setPlace(welcome.funland);
   zooAnimals.setPlace(welcome.zoo);
   farmAnimals.setPlace(welcome.farm);
+  kartUI.setPlace(welcome.raceway, welcome.laps);
   fireHose.setFires(welcome.fires);
   airportLights.setPlace(welcome.airport);
   weather.set(welcome.rain || 0, welcome.snow);
@@ -1014,6 +1016,11 @@ loopExpress = new LoopExpress({ scene, sounds, hud: { toast: text => hud.toast(t
 funRides = new FunRides({ scene, sounds, hud: { toast: text => hud.toast(text) } });
 zooAnimals = new ZooAnimals({ scene, effects, sounds });
 farmAnimals = new FarmAnimals({ scene, effects, sounds });
+kartUI = new KartUI({ scene, sounds, hud });
+net.on('kart_board', ({ board }) => kartUI.setBoard(board));
+net.on('kart_go', () => kartUI.go());
+net.on('kart_cp', ({ i, of }) => kartUI.checkpoint(i, of));
+net.on('kart_lap', msg => kartUI.lap(msg));
 fireHose = new FireHose({ effects, sounds, net, hud: { toast: text => hud.toast(text) }, touch: IS_TOUCH });
 airportLights = new AirportLights(scene);
 net.on('fires', ({ list }) => fireHose.setFires(list));
@@ -2613,6 +2620,7 @@ function enterCar(car) {
   carCam.pitch = car.spec.flying ? -0.25 : -0.15;
   danceView = 0;
   hud.setCarHelp(car.spec.plane ? 'plane' : car.kind);
+  if (car.kind === 'kart') hud.toast('🏎️ ➡ 🏁 · ⏱️ 🏆');
   if (car.kind === 'firetruck') hud.toast(touch ? '🚒 ⭐ 🚨 lights · again: 💦 hose' : '🚒 G: 🚨 lights & siren · G again: 💦 water hose');
   sounds.setEngineVoice(car.id, car.kind);
   if (!car.spec.flying || car.spec.plane) sounds.engine(0.15, 0);
@@ -2667,6 +2675,7 @@ function leaveCar(tell = false) {
     net.send(bail ? { t: 'car_exit', id: car.id, vel: [car.vel.x, car.vel.y, car.vel.z].map(v => Math.round(v * 100) / 100) } : { t: 'car_exit', id: car.id });
   }
   myCar = null;
+  kartUI?.reset();
   car.driver = 0;
   car.speed = car.steer = 0;
   if (car.kind !== 'police') car.siren = 0; // (the police lights stay on: just the siren stops)
@@ -6544,6 +6553,7 @@ function frame(timestamp) {
     funRides.update(dt, gameTime(worldDay, sky.time), camera.position);
     zooAnimals.update(dt, gameTime(worldDay, sky.time), camera.position);
     farmAnimals.update(dt, gameTime(worldDay, sky.time), camera.position);
+    kartUI.update(gameTime(worldDay, sky.time), myCar, camera.position);
     airportLights.update(performance.now() / 1000, camera.position, 1 - sky.dayK);
     updateChurch(dt, time);
   }
@@ -6614,6 +6624,7 @@ window.buildzone = {
   get funRides() { return funRides; },
   get zooAnimals() { return zooAnimals; },
   get farmAnimals() { return farmAnimals; },
+  get kartUI() { return kartUI; },
   get airportLights() { return airportLights; },
   get fireHose() { return fireHose; },
   requestEnter: car => requestEnter(car),
