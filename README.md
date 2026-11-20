@@ -93,6 +93,15 @@ customize your character, drive cars, build anything and play with friends.
       claimed one (only you can drive it, it stays where you park it), and a new car rolls into
       its spot once you've driven yours away. The town keeps just a few cars of its own now (the
       rest went to the dealership; nobody's own cars were touched). The Loop Express stops there
+    - **Putt Putt Paradise** ⛳ (since v0.63, by the Outer Loop, with its own Loop Express stop):
+      a **mini golf** course of nine holes with log walls: a straight one, an L, a **windmill**
+      (its sails sweep through the gap: time your putt!), a pond (splash: +1 stroke), bumpers,
+      a U-turn, a zigzag, a **loop-the-loop** (putt it hard to go round!) and a little castle.
+      Stand on a hole's tee and press **G** (on a phone: 💃) to put your ball down; **G** starts
+      the power meter swinging, and **G** again putts it the way you're looking. Each hole tells
+      you how you did (hole in one! birdie! par!), and your scorecard shows at the top. Finish
+      all nine for 3 🪙 (+5 for a new best of your own), and the best rounds go up on the
+      **Best Rounds** board by the clubhouse. Caddie Cal runs the **Golf Pros** club
     - **BuildZone Stadium** ⚽ (since v0.62, by the Outer Loop, with its own Loop Express stop):
       a soccer field with white lines and a goal at each end (🔴 red crossbar, 🔵 blue crossbar),
       stands down both sides full of cheering fans, floodlights on tall towers and a big
@@ -660,6 +669,7 @@ customize your character, drive cars, build anything and play with friends.
   | 🌾 Farmhands (v0.59) | Farmer Wren, at Sunny Acres Farm | pet 5 farm animals, pick 5 crops in the fields, get milk or eggs twice, drive a tractor | 20 🪙, farm fresh: twice the milk, eggs and crops at the farm |
   | 🚀 Space Cadets (v0.61) | Commander Nova, in Mission Control | visit the Space Museum, watch a rocket launch from nearby, fly to space | 25 🪙, moon boots (you jump higher) |
   | ⚽ Soccer Stars (v0.62) | Referee Rita, at the stadium | kick the giant ball 20 times, score 3 goals | 20 🪙, power kick (you kick the ball farther) |
+  | ⛳ Golf Pros (v0.63) | Caddie Cal, at Putt Putt Paradise | play all nine holes, finish 2 rounds, get a hole in one | 20 🪙, a bigger daily bonus (+3 🪙 a day) |
 
   Each step pops up by the badge counter ("🔧 2/3"), and a new badge gets a big celebration with
   fireworks. The **daily bonus** grows every day in a row you play (+2 a day, up to +10)
@@ -1087,6 +1097,7 @@ public/
     kartui.js          Thunder Raceway's start lights, the Best Laps board and your lap time
     rocketui.js        The Space Center's rocket: countdown, liftoff, the ride to space, parachutes; museum planets
     stadiumui.js       The stadium's giant ball (and kicking it), the scoreboard and the cheering crowd
+    golfui.js          Mini golf: your ball and putting it (the power meter), cups, flags, windmill, loop, scorecard
     firehose.js        Fires in town (flames, smoke, the 🔥 arrow) and the fire trucks' hoses
     guardcatch.js      Bodyguards keeping you off their land: caught and walked off, blown away, flushed out
     guardui.js         Someone asking your bodyguards to let them in: your answer
@@ -1143,6 +1154,7 @@ public/
       karts.js         Thunder Raceway: the track (a smooth curve), curbs, tire walls, pits, grandstand, karts
       space.js         The Space Center: launch pad, tower, Mission Control, museum, landing zone; the flight's timing
       stadium.js       The stadium: field, goals, stands, floodlights; the giant ball's physics (stepBall)
+      minigolf.js      Putt Putt Paradise: the nine holes (lanes, par, windmill, pond, bumpers, loop, castle)
       firestation.js   The fire station: its building, the fire trucks' bays, and how often fires break out
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/

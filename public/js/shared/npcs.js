@@ -185,6 +185,13 @@ const NPCS = [
     tips: ['⚽🥅🎉', 'Run into the ball to kick it! ⚽', 'Sprint (Shift) for a BIG kick! 💥', 'Look up a little to chip it into the air! ⬆️', '🔴 Red scores in the blue goal, 🔵 Blue in the red one!'],
   },
   {
+    // Putt Putt Paradise: Caddie Cal by the clubhouse (he runs the Golf Pros club).
+    id: -77, place: 'golf_hut', name: 'Caddie Cal', title: 'Caddie Cal ⛳', roam: 3, club: 'golf',
+    look: { face: 'grin', hair: 'short', hat: 'cap', shirt: 'tshirt', pants: 'shorts', extra: 'none', skin: '#f1c27d', hairColor: '#a0632b', hatColor: '#ffffff', shirtColor: '#43a047', shirtColor2: '#ffffff', pantsColor: '#f5f5dc', shoesColor: '#ffffff' },
+    hello: n => [`Fore! Welcome, ${n}! ⛳`, `Hi ${n}! Nine holes of fun! 🏌️`],
+    tips: ['⛳🏌️🎯', 'Stand on a tee and press G to put your ball down! (On a phone: 💃)', 'G starts the power meter, G again putts! 💪', 'Time the windmill: wait for the gap! 🌬️', 'The loop needs a BIG putt! 🔁', 'Splash! The pond costs you a stroke 💦'],
+  },
+  {
     // BuildZone Motors: Dealer Dana, at the sales desk in the showroom.
     id: -71, place: 'dealer_desk', name: 'Dealer Dana', title: 'Dealer Dana 🚗', roam: 1,
     look: { face: 'smile', hair: 'ponytail', hat: 'none', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#e0ac69', hairColor: '#6d3b16', hatColor: '#000000', shirtColor: '#1a237e', shirtColor2: '#ffffff', pantsColor: '#263238', shoesColor: '#111111' },

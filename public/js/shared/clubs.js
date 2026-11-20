@@ -159,6 +159,15 @@ export const CLUBS = [
     ],
     reward: { coins: 20, perk: '💥', perkName: 'Power kick: you kick the ball farther' },
   },
+  {
+    id: 'golf', name: 'Golf Pros', icon: '⛳', color: '#1b5e20', leader: 'Caddie Cal', where: 'at Putt Putt Paradise',
+    tasks: [
+      { id: 'holes', icon: '⛳', goal: 9, what: 'Play all nine holes of mini golf' },
+      { id: 'rounds', icon: '📋', goal: 2, what: 'Finish a whole round (all nine holes)' },
+      { id: 'ace', icon: '🎯', goal: 1, what: 'Get a hole in one!' },
+    ],
+    reward: { coins: 20, perk: '🏌️', perkName: 'A bigger daily bonus (+3 🪙 every day)' },
+  },
 ];
 
 export const clubById = id => CLUBS.find(c => c.id === id);

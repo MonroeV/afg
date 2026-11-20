@@ -22,6 +22,7 @@ import { buildFarm, FARM_ANIMALS, GIVE_EVERY, inFarmField } from './farm.js';
 import { buildRaceway, minLap, KART_COINS, RECORD_COINS, BOARD_SIZE } from './karts.js';
 import { buildSpaceCenter, BOARDING, COUNTDOWN, FLIGHT, SEATS } from './space.js';
 import { buildStadium, stepBall, kickBall, BALL_R, SOCCER_COINS } from './stadium.js';
+import { buildMiniGolf, HOLES, ROUND_COINS, BEST_COINS, GOLF_BOARD } from './minigolf.js';
 import { buildDealership, newCarFor, LOT_KINDS, SHOW_KINDS, townCarsToKeep } from './dealership.js';
 import { buildFireStation, FIRE_CALL, FIRE_GAP, FIRE_OUT, FIRE_LIFE, DOUSE, FIRE_REWARD, HOSE_RANGE } from './firestation.js';
 import { findHomes } from './residents.js';
@@ -40,7 +41,7 @@ import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
 const PLANE_HOME_AFTER = 300; // seconds a town airplane sits idle away from the airport before it's taken back
-export const SAVE_VERSION = 39;
+export const SAVE_VERSION = 40;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -122,6 +123,7 @@ export class GameRoom {
     this.crops = []; // the garden: { x, y, z, by (who planted it), at (when it grows next: 0 = needs water) }
     this.races = {}; // finish line "x,y,z" -> best times [{ name, key, time }]
     this.laps = []; // Thunder Raceway's Best Laps board: [{ name, key, ms }], best first
+    this.golfBoard = []; // Putt Putt Paradise's Best Rounds: [{ name, key, total }], best (fewest) first
     this.places = null; // where the store, the tower lobby and the town square are (for the NPCs)
     this.wallets = {}; // name key -> { coins, owned: [items], day }
     this.holes = new Map(); // "x,z" -> when the ground there was dug out (it grows back)
@@ -320,6 +322,7 @@ export class GameRoom {
       this.upgradeTo37();
       this.upgradeTo38();
       this.upgradeTo39();
+      this.upgradeTo40();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -340,6 +343,7 @@ export class GameRoom {
     this.saplings = data.saplings || [];
     this.crops = (Array.isArray(data.crops) ? data.crops : []).filter(c => c && [c.x, c.y, c.z].every(Number.isInteger) && isCrop(this.get(c.x, c.y, c.z)))
       .map(c => ({ x: c.x, y: c.y, z: c.z, by: String(c.by || ''), at: Number(c.at) || 0 }));
+    this.golfBoard = (Array.isArray(data.golf) ? data.golf : []).filter(r => r && typeof r.name === 'string' && typeof r.key === 'string' && Number.isInteger(r.total)).slice(0, GOLF_BOARD);
     this.laps = (Array.isArray(data.laps) ? data.laps : []).filter(r => r && typeof r.name === 'string' && typeof r.key === 'string' && Number.isFinite(r.ms)).slice(0, BOARD_SIZE);
     this.races = {};
     for (const [k, list] of Object.entries(data.races && typeof data.races === 'object' ? data.races : {})) {
@@ -436,6 +440,7 @@ export class GameRoom {
     if (data.version < 37) this.upgradeTo37();
     if (data.version < 38) this.upgradeTo38();
     if (data.version < 39) this.upgradeTo39();
+    if (data.version < 40) this.upgradeTo40();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -1167,6 +1172,23 @@ export class GameRoom {
     this.onDirty();
   }
 
+  // Worlds saved before version 40: Putt Putt Paradise, the mini golf course (and a train stop).
+  upgradeTo40() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const golf = buildMiniGolf({ get, set, canUse: this.freeLand() });
+    if (golf) {
+      this.claims.push(golf.claim);
+      for (const [x, y, z, text] of golf.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+      this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...golf.places };
+      this.addTrainStops();
+    }
+    this.log(`Added the mini golf course (${golf ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
   // ---------- The stadium's giant soccer ball ----------
   // It rolls and bounces (stepBall in stadium.js), 30 times a second; everyone hears where it is
   // ten times a second while it's moving (and every couple of seconds when it's still). A goal:
@@ -1474,6 +1496,7 @@ export class GameRoom {
       // Best race times, for finish lines that are still there.
       races: Object.fromEntries(Object.entries(this.races).filter(([k]) => this.isFinish(k))),
       laps: this.laps,
+      golf: this.golfBoard,
       places: this.places,
       wallets: this.wallets,
       holes: [...this.holes].map(([k, t]) => [...k.split(',').map(Number), t]),
@@ -1926,6 +1949,8 @@ export class GameRoom {
       rocket: this.rocketState(),
       stadium: this.places?.stadium || null, // the stadium: the field, the goals, the fans (see stadiumui.js)
       sball: this.ballState(),
+      golf: this.places?.golf || null, // the mini golf course (see golfui.js)
+      golfBoard: this.golfBoard.map(r => [r.name, r.total]),
       airport: this.places?.airport || null, // the airport (its lights: see airportlights.js)
       fires: this.fires.map(({ id, x, z, hp }) => ({ id, x, z, hp: Math.round(hp) })), // fires burning in town (see firehose.js)
       landmarks: Object.entries(this.places || {}).filter(([, p]) => p && Number.isFinite(p.x) && Number.isFinite(p.z)).map(([k, p]) => [k, p.x, p.z]),
@@ -1938,7 +1963,7 @@ export class GameRoom {
       const yesterday = new Date(Date.now() - DAY_MS).toISOString().slice(0, 10);
       wallet.streak = wallet.day === yesterday ? wallet.streak + 1 : 1;
       wallet.day = today;
-      const bonus = DAILY_BONUS + Math.min(STREAK_MAX, (wallet.streak - 1) * 2) + (this.perk(client, 'gold') ? 5 : 0);
+      const bonus = DAILY_BONUS + Math.min(STREAK_MAX, (wallet.streak - 1) * 2) + (this.perk(client, 'gold') ? 5 : 0) + (this.perk(client, 'golf') ? 3 : 0);
       wallet.coins += bonus;
       client.send({ t: 'daily', coins: bonus, streak: wallet.streak });
       this.onDirty();
@@ -2906,6 +2931,35 @@ export class GameRoom {
       this.progress(client, 'farm', 'pet');
       if (got) client.send({ t: 'food_got', food: got, n: w.pantry[got] });
       this.broadcast({ t: 'fx', kind: 'farmpet', animal: kind, i: Math.max(0, Math.min(9, num(i))), food: fed, liked: !!fed });
+      this.onDirty();
+    },
+
+    // A hole done at mini golf (each player plays their own ball: see golfui.js). All nine (in any
+    // order): a round, on the Best Rounds board if it's good enough.
+    golf_hole(client, { hole, strokes }) {
+      const place = this.places?.golf;
+      if (!place || !this.allow(client, 'golf', 1, 3) || !Number.isInteger(hole) || hole < 0 || hole >= HOLES.length || !Number.isInteger(strokes) || strokes < 1 || strokes > 30) return;
+      const [x, , z] = client.pos, [x0, z0, x1, z1] = place.rect;
+      if (x < x0 - 4 || x > x1 + 5 || z < z0 - 4 || z > z1 + 5) return;
+      const round = (client.golf ??= {});
+      round[hole] = strokes;
+      this.progress(client, 'golf', 'holes', Object.keys(round).length, true);
+      if (strokes === 1) this.progress(client, 'golf', 'ace', 1, true);
+      if (Object.keys(round).length < HOLES.length) return;
+      const total = Object.values(round).reduce((a, b) => a + b, 0);
+      client.golf = {};
+      const key = nameKey(client.name), mine = this.golfBoard.find(r => r.key === key);
+      const best = !mine || total < mine.total, record = !this.golfBoard.length || total < this.golfBoard[0].total;
+      const coins = ROUND_COINS + (best ? BEST_COINS : 0);
+      this.wallet(client).coins += coins;
+      this.sendWallet(client);
+      this.progress(client, 'golf', 'rounds');
+      if (best) {
+        this.golfBoard = this.golfBoard.filter(r => r.key !== key).concat({ name: client.name, key, total }).sort((a, b) => a.total - b.total).slice(0, GOLF_BOARD);
+        this.broadcast({ t: 'golf_board', board: this.golfBoard.map(r => [r.name, r.total]) });
+        if (record) this.broadcast({ t: 'chat', system: true, text: `⛳ ${client.name} played the best round ever at Putt Putt Paradise: ${total}! 🏆` });
+      }
+      client.send({ t: 'golf_round', total, coins, best, record });
       this.onDirty();
     },
 
