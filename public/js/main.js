@@ -18,6 +18,7 @@ import { LoopExpress } from './trainui.js';
 import { FunRides } from './funrides.js';
 import { ZooAnimals } from './zooanimals.js';
 import { FireHose, steam } from './firehose.js';
+import { AirportLights } from './airportlights.js';
 import { ANIMALS } from './shared/zoo.js';
 import { GATE_BLOCK } from './shared/funland.js';
 import { gameTime, STOP_BLOCK } from './shared/train.js';
@@ -255,6 +256,7 @@ let funRides = null; // Fun Land's roller coaster and Ferris wheel
 let zooAnimals = null; // the zoo's animals
 let zooAim = null; // (the one under the crosshair)
 let fireHose = null; // fires in town, and the fire trucks' hoses
+let airportLights = null; // the airport's runway, taxiway and approach lights
 let loopExpress = null; // the Loop Express (the train round the Outer Loop)
 let palAsk = null; // a kid at Friendship Park asking to be your best friend
 let flightLog = { air: 0, was: true }; // (for the Sky Pilots: how long we've been up, and were we on the ground)
@@ -733,6 +735,7 @@ function startGame(welcome, resume = false) {
   funRides.setPlace(welcome.funland);
   zooAnimals.setPlace(welcome.zoo);
   fireHose.setFires(welcome.fires);
+  airportLights.setPlace(welcome.airport);
   weather.set(welcome.rain || 0, welcome.snow);
   agency.setGuards(welcome.guards);
   if (guardCatch) guardCatch.cooldown = 1.5; // (not until the server knows where we are)
@@ -1001,6 +1004,7 @@ loopExpress = new LoopExpress({ scene, sounds, hud: { toast: text => hud.toast(t
 funRides = new FunRides({ scene, sounds, hud: { toast: text => hud.toast(text) } });
 zooAnimals = new ZooAnimals({ scene, effects, sounds });
 fireHose = new FireHose({ effects, sounds, net, hud: { toast: text => hud.toast(text) } });
+airportLights = new AirportLights(scene);
 net.on('fires', ({ list }) => fireHose.setFires(list));
 net.on('fire_hp', ({ id, hp }) => fireHose.fireHp(id, hp));
 net.on('fire_alarm', () => fireHose.alarm());
@@ -6507,6 +6511,7 @@ function frame(timestamp) {
     loopExpress.update(dt, gameTime(worldDay, sky.time), camera.position);
     funRides.update(dt, gameTime(worldDay, sky.time), camera.position);
     zooAnimals.update(dt, gameTime(worldDay, sky.time), camera.position);
+    airportLights.update(performance.now() / 1000, camera.position, 1 - sky.dayK);
     updateChurch(dt, time);
   }
   cars.setView(camera.position, scene.fog.far);
@@ -6575,6 +6580,7 @@ window.buildzone = {
   get loopExpress() { return loopExpress; },
   get funRides() { return funRides; },
   get zooAnimals() { return zooAnimals; },
+  get airportLights() { return airportLights; },
   get fireHose() { return fireHose; },
   requestEnter: car => requestEnter(car),
   gameNow: () => gameTime(worldDay, sky.time),

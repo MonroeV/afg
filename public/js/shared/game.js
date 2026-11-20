@@ -34,6 +34,7 @@ import { Structures } from '../structures.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
+const PLANE_HOME_AFTER = 300; // seconds a town airplane sits idle away from the airport before it's taken back
 export const SAVE_VERSION = 33;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
@@ -141,7 +142,7 @@ export class GameRoom {
     this.nextHomeId = 1;
     this.time = DAY_LENGTH * 0.08; // start in the morning
     this.day = 0; // how many days have gone by (for the seasons: see seasons.js)
-    this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0, holes: 5, crops: 2, guardThings: 1, hunger: 5, church: 1, fire: 2 };
+    this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0, holes: 5, crops: 2, guardThings: 1, hunger: 5, church: 1, fire: 2, homes: 5 };
     this.isSolid = (x, y, z) =>
       y < 0 || x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max ||
       blocksVehicles(this.world.get(blockKey(x, y, z)) || 0);
@@ -1635,6 +1636,7 @@ export class GameRoom {
       train: this.places?.train?.stations || [], // the Loop Express's stations (see train.js)
       funland: this.places?.funland || null, // where Fun Land's rides are (see funrides.js)
       zoo: this.places?.zoo || null, // the zoo's pens (see zooanimals.js)
+      airport: this.places?.airport || null, // the airport (its lights: see airportlights.js)
       fires: this.fires.map(({ id, x, z, hp }) => ({ id, x, z, hp: Math.round(hp) })), // fires burning in town (see firehose.js)
       landmarks: Object.entries(this.places || {}).filter(([, p]) => p && Number.isFinite(p.x) && Number.isFinite(p.z)).map(([k, p]) => [k, p.x, p.z]),
     });
@@ -1734,6 +1736,39 @@ export class GameRoom {
       this.broadcast({ t: 'fx', kind: 'crash', x: v.x, y: v.y, z: v.z });
       this.log(`An airplane crashed (nobody was flying it)`);
       this.destroyVehicle(v);
+    }
+  }
+
+  // Every vehicle's home should have its vehicle, out in the world or on its way back. (A
+  // vehicle destroyed just before the server stopped, or one there was no room for when it was
+  // added, used to be gone for good: like the jet.) Any home without either gets it back.
+  refillHomes() {
+    const out = new Set([...this.vehicles.values()].map(v => v.home)), coming = new Set(this.respawns.map(r => r.home));
+    let n = 0;
+    for (const home of this.homes.values()) {
+      if (out.has(home.id) || coming.has(home.id)) continue;
+      this.respawns.push({ home: home.id, at: Date.now() + 3000 });
+      n++;
+    }
+    return n;
+  }
+
+  // The airport's airplanes (not anyone's own) left somewhere else, with nobody about, for a
+  // while: back to their hangar or spot on the apron, ready for the next pilot.
+  planesHome(now) {
+    const players = [...this.clients.values()].filter(c => c.joined && c.pos);
+    for (const v of [...this.vehicles.values()]) {
+      const home = this.homes.get(v.home);
+      if (!home || home.key || v.key || v.driver || v.passengers.length || !VEHICLES[v.kind].plane) continue;
+      if (now - (v.idleAt || now) < PLANE_HOME_AFTER * 1000 || Math.hypot(v.x - home.x, v.z - home.z) < 10) continue;
+      if (players.some(c => Math.hypot(c.pos[0] - v.x, c.pos[2] - v.z) < 40)) continue;
+      this.vehicles.delete(v.id);
+      this.broadcast({ t: 'car_gone', id: v.id });
+      const back = this.spawn(home);
+      if (back) this.broadcast({ t: 'car', car: publicVehicle(back) });
+      else this.respawns.push({ home: home.id, at: now + 10000 });
+      this.log(`A ${VEHICLES[v.kind].name} went back to the airport`);
+      this.onDirty();
     }
   }
 
@@ -3191,6 +3226,13 @@ export class GameRoom {
         // (The alarm rings for the fire crews.)
         if (f) for (const v of crews) this.clients.get(v.driver)?.send({ t: 'fire_alarm', x: f.x, z: f.z });
       }
+    }
+
+    if (t.homes <= 0) {
+      t.homes = 30;
+      const n = this.refillHomes();
+      if (n) this.log(`${n} missing vehicle(s) on their way back`);
+      this.planesHome(now);
     }
 
     // Burning vehicles lose health until they blow up.

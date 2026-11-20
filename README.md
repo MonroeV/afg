@@ -43,7 +43,13 @@ customize your character, drive cars, build anything and play with friends.
       the middle and lights along its edges, with short paved links across the grass from each
       parking spot and hangar, and links out to the runway at both ends and the middle. On the
       ground, let go of W and the engine eases back to idle, so you can taxi slowly (tap W to roll,
-      S to brake) and follow the yellow lines out to the runway. Also a glass-fronted terminal (check-in desk, rows of seats looking out at
+      S to brake) and follow the yellow lines out to the runway. And **lights**, like a real
+      airfield's (since v0.56.4; they glow brightly at night): green down the middle of the
+      taxiway and down every link (leading you out to the runway: green and yellow where you
+      cross onto it), blue along the taxiway's edges, white along the runway's, a green row
+      across each end, **approach lights** reaching out from each end with a strobe racing in
+      toward the runway, and **glide-slope lights** beside each end: two white and two red means
+      you're coming in to land just right (all red: too low! all white: too high). Also a glass-fronted terminal (check-in desk, rows of seats looking out at
       the planes), two hangars, and a control tower (climb the ladder inside to the glass cab at
       the top). Captain Sky in the terminal has tips
     - **Sky Tower and Cloud Tower** 🏙️ (since v0.49, on the east side of the Outer Loop): the two
@@ -490,7 +496,8 @@ customize your character, drive cars, build anything and play with friends.
   hitting the ground (or anything) hard is a crash, and it blows up. **Jump out** (E) up in the
   air and your **parachute** opens 🪂: you float gently down and can steer with WASD. The plane
   flies on without you… and crashes to the ground in a ball of fire (the wreck burns for a
-  while). Everyone sees it. A new plane is back on the apron 2 minutes later. Planes use gas,
+  while). Everyone sees it. A new plane is back on the apron 2 minutes later. (And a plane
+  left parked somewhere else, with nobody about, goes back to the airport after 5 minutes.) Planes use gas,
   like everything else that drives
 - **Three kinds of airplanes** (since v0.56): the four on the apron are the ordinary propeller
   planes (top speed about 155 km/h), parked out of the way of the hangar doors (since v0.56.1). In the first hangar is the **Sky Cub** 🐢: a little yellow

@@ -329,3 +329,49 @@ export function addTaxiway(place, { get, set, del, canUse }) {
     rect: [Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz)],
   };
 }
+
+// The airport's lights (drawn by each player's game: see airportlights.js), like a real
+// airfield's: green lights down the taxiway's middle and down every link (leading you from the
+// apron to the taxiway and out to the runway), blue ones along the taxiway's edges, white ones
+// along the runway's edges, a green row across each end of it, approach lights reaching out from
+// each end (with a strobe racing in toward the runway), and the glide-slope lights beside each
+// end (white over red: you're coming in just right). Only for the airport with a taxiway (since
+// v0.56.3). [{ x, z, kind, i, n, end }]
+export function airportLightSpots(place) {
+  if (!place?.away) return [];
+  const f = airportFrame(place), out = [];
+  const add = (u, v, kind, extra = {}) => {
+    const [x, z] = f.pos(u, v);
+    out.push({ x, z, kind, ...extra });
+  };
+  // Down the taxiway's middle (on its yellow line), and down every link (their lead-in lines).
+  for (let u = 5; u <= L - 5; u += 3) add(u + 0.5, TAXI_MID + 0.5, 'green');
+  for (const [a, b] of APRON_LINKS) {
+    const lead = (a === 4 || a === L - 11 ? a + 3 : Math.round((a + b) / 2)) + 0.5;
+    for (let v = APRON[0] + 1; v < TAXIWAY[0]; v += 2) add(lead, v + 0.5, 'green');
+  }
+  for (const [a] of RUNWAY_LINKS) for (let v = TAXIWAY[1] + 1, i = 0; v < RUNWAY[0]; v += 1.5, i++) add(a + 3.5, v + 0.5, i % 2 ? 'yellow' : 'green');
+  // Blue along the taxiway's edges (not across the links).
+  for (let u = 6; u <= L - 6; u += 4) {
+    if (!inLink(APRON_LINKS, u)) add(u + 0.5, TAXIWAY[0] + 0.05, 'blue');
+    if (!inLink(RUNWAY_LINKS, u)) add(u + 0.5, TAXIWAY[1] + 0.95, 'blue');
+  }
+  // White along the runway's edges; green across both ends.
+  for (let u = 3; u <= L - 3; u += 4) for (const v of [RUNWAY[0] + 0.1, RUNWAY[1] + 0.9]) add(u + 0.5, v, 'white');
+  for (let v = RUNWAY[0]; v <= RUNWAY[1]; v++) for (const u of [2.2, L - 2.2]) add(u, v + 0.5, 'green');
+  // The approach lights: out from each end along the center line, a bar every 3 blocks (and the
+  // strobe "rabbit" running in toward the runway along them).
+  const n = 9;
+  for (const end of [-1, 1]) {
+    const u0 = end < 0 ? 2 : L - 2;
+    for (let i = 1; i <= n; i++) {
+      const u = u0 + end * i * 3;
+      for (let k = -2; k <= 2; k++) add(u, RUNWAY_MID + 0.5 + k * 0.8, 'approach', { i, n, end });
+    }
+    // The glide-slope lights (PAPI): four in a row, beside the runway near each end (on the side
+    // away from the taxiway), where you'd touch down.
+    const uP = end < 0 ? 14 : L - 14;
+    for (let k = 0; k < 4; k++) add(uP, RUNWAY[1] + 2 + k * 0.9, 'papi', { i: k, end });
+  }
+  return out;
+}
