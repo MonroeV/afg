@@ -22,7 +22,7 @@ import { AirportLights } from './airportlights.js';
 import { ANIMALS } from './shared/zoo.js';
 import { GATE_BLOCK } from './shared/funland.js';
 import { gameTime, STOP_BLOCK } from './shared/train.js';
-import { meetingAt, isSunday, MEETING_COINS } from './shared/church.js';
+import { meetingAt, meetingOn, isSunday, MEETING_COINS, GIFT_COINS } from './shared/church.js';
 import { generateTextures } from './textures.js';
 import { World, createBlockMaterials, blockMaterial, RAILING, WIND, rayBox } from './world.js';
 import { Player, EYE_HEIGHT, CROUCH_DROP } from './player.js';
@@ -263,7 +263,7 @@ let flightLog = { air: 0, was: true }; // (for the Sky Pilots: how long we've be
 let hopper = null, hopperTV = null; // playing Block Hopper on a TV (and which TV)
 let hunger = HUNGER_FULL; // how full you are (out of 100: the server counts it down as you play)
 let tacoTuesday = { day: -1, n: 0 }; // free tacos had (on which Tuesday)
-let churchPlace = null, churchMeeting = null, churchHello = -1; // the church, Sunday's meeting there, and the last Sunday we said hello
+let churchPlace = null, churchMeeting = null, churchHello = ''; // the church, its meetings, and the last meeting we said hello at
 let fiestaBand = null, tacoToldDay = -1; // Mateo's band at Casa Fiesta; the last Taco Tuesday we said so
 let seasonLook = null, worldDay = 0; // the seasons (the server counts the days)
 let autoJoin = false; // joining by itself (back after a lost connection, or an update)
@@ -986,6 +986,13 @@ net.on('church_thanks', ({ coins }) => {
   sounds.magic();
   effects.heartsAt(player.pos.x, player.pos.y + 1.6, player.pos.z, 6);
   hud.toast(`⛪ 😊 Thanks for coming! +${coins} 🪙`);
+});
+// Somebody found one of Youth Night's gifts (maybe you!).
+net.on('church_gift', ({ day, i, id, coins }) => {
+  churchMeeting?.giftFound(day, i);
+  if (id !== myId || !coins) return;
+  sounds.magic();
+  hud.toast(`🎁 +${coins} 🪙`);
 });
 net.on('food_got', ({ food, n }) => {
   sounds.pop();
@@ -5817,12 +5824,13 @@ function updateFiesta(dt) {
 
 // Sunday at the church: the meeting (everyone sees the same one), and a hello as you come in.
 function updateChurch(dt, time) {
-  churchMeeting ??= new ChurchMeeting({ scene, sounds, effects });
-  churchMeeting.update(dt, time, { place: churchPlace, day: worldDay, now: sky.time, camera: camera.position });
-  const c = churchPlace?.chapel, p = player.pos;
-  if (c && churchHello !== worldDay && meetingAt(worldDay, sky.time) && p.x >= c[0] && p.x <= c[2] + 1 && p.z >= c[1] && p.z <= c[3] + 1 && p.y < 6) {
-    churchHello = worldDay;
-    hud.toast(`⛪ 😊 🤝 ⏳ 🪙 ${MEETING_COINS}`);
+  churchMeeting ??= new ChurchMeeting({ scene, sounds, effects, onGift: i => net.send({ t: 'church_gift', i }) });
+  churchMeeting.update(dt, time, { place: churchPlace, day: worldDay, now: sky.time, camera: camera.position, player: player.pos });
+  const c = churchPlace?.chapel, p = player.pos, m = c && meetingAt(worldDay, sky.time);
+  const key = m ? `${worldDay}:${m.meeting.key}` : '';
+  if (m && churchHello !== key && p.x >= c[0] && p.x <= c[2] + 1 && p.z >= c[1] && p.z <= c[3] + 1 && p.y < 6) {
+    churchHello = key;
+    hud.toast(`${m.meeting.icon} 😊 🤝 ⏳ 🪙 ${MEETING_COINS}${m.meeting.key === 'youth' ? ` · 🎁 🔎 +${GIFT_COINS} 🪙` : ''}`);
   }
 }
 
@@ -6438,7 +6446,7 @@ function frame(timestamp) {
       hudTimer = 0.5;
       fps = Math.round(fpsFrames / Math.max(fpsTime, 1e-3));
       fpsFrames = fpsTime = 0;
-      hud.updateInfo({ online: online || (reconnecting ? 'reconnecting' : false), fps, pos: player.pos, flying: player.flying, clock: `${seasonLook.season.icon} ${WEEKDAYS[weekday(worldDay)]}${isTacoTuesday(worldDay) ? ' 🌮' : isSunday(worldDay) ? ' ⛪' : ''} ${sky.clockText()}` });
+      hud.updateInfo({ online: online || (reconnecting ? 'reconnecting' : false), fps, pos: player.pos, flying: player.flying, clock: `${seasonLook.season.icon} ${WEEKDAYS[weekday(worldDay)]}${isTacoTuesday(worldDay) ? ' 🌮' : isSunday(worldDay) || meetingOn(worldDay, sky.time) ? ` ${meetingOn(worldDay, sky.time)?.icon || '⛪'}` : ''} ${sky.clockText()}` });
       hud.updatePlayers([{ name: settings.name + ' (you)', color: settings.look.shirtColor }, ...[...avatars.list.values()].map(a => ({ name: a.name, color: a.color }))]);
     }
     hud.update(dt);
@@ -6631,6 +6639,8 @@ window.buildzone = {
   get weatherPicker() { return weatherPicker; },
   get churchPlace() { return churchPlace; },
   get churchMeeting() { return churchMeeting; },
+  get worldDay() { return worldDay; },
+  set worldDay(d) { worldDay = d; },
   get lunchbox() { return lunchbox; },
   get hunger() { return hunger; },
   get guardCatch() { return guardCatch; },

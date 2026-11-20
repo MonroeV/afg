@@ -4,11 +4,12 @@
 // stand with the pulpit, chairs for the speakers, the organ, and the sacrament table.
 //
 // On Sundays (the game's week: see seasons.js) there's a meeting in the morning: an opening hymn
-// on the organ, a prayer, two short talks, a closing hymn and a prayer. Everybody's game works it
+// on the organ, a prayer, two short talks, a closing hymn and a prayer. Wednesday evening is
+// Youth Night (a hidden-gift game, a thought, a song), and Sunday evening a fireside. Everybody's game works it
 // out from the day and the time (so all agree, and the server has nothing to run: see
-// churchui.js), and the server pays a little thank-you for coming (MEETING_COINS, once a Sunday:
+// churchui.js), and the server pays a little thank-you for coming (MEETING_COINS, once each meeting:
 // see game.js). Sister Grace in the foyer welcomes visitors any day.
-import { DOOR_TOP, makeBlock, stack, SIGN } from './blocks.js';
+import { DOOR_TOP, makeBlock, stack, SIGN, DAY_LENGTH, DAY_FRACTION } from './blocks.js';
 import { makeSite, siteFree } from './worldgen.js';
 import { ringRoads, RING } from './outerlands.js';
 import { weekday, SUNDAY } from './seasons.js';
@@ -23,21 +24,28 @@ const X0 = 1, X1 = 20, FRONT = 4, BACK = 29, FOYER_END = 10, H = 7; // walls y 0
 const PEWS = [13, 15, 17, 19, 21]; // pew rows (v)
 const PEW_U = [3, 4, 5, 6, 7, 8, 13, 14, 15, 16, 17, 18];
 
-// ---------- The meeting ----------
+// ---------- The meetings ----------
 
-// Sunday's meeting, in game time (a day is 600: 0 is 6 AM, 90 is about 9 AM).
-export const MEETING_START = 90, MEETING_END = 270;
+// Three meetings a week, in game time (a day is 600: 0 is 6 AM, 90 about 9 AM, 343 6 PM and 372
+// 7 PM, sunset: the clock runs faster at night, see clockText in daynight.js): Sunday morning's
+// meeting, Youth Activity Night on Wednesday evening (a game, a thought, a song, a prayer), and a
+// fireside on Sunday evening (one gentle talk, a hymn, a prayer).
+export const MEETING_START = 90, MEETING_END = 270; // (Sunday morning's)
 export const MEETING_COINS = 10, MEETING_STAY = 60; // (seconds there to get the coins)
+export const WEDNESDAY = 3;
 export const isSunday = day => weekday(day) === SUNDAY;
-export const meetingOn = (day, time) => isSunday(day) && time >= MEETING_START - 25 && time < MEETING_END;
+const PRELUDE = 25; // (seconds of soft organ music while people arrive)
 
-// Who's who at the meeting (the bishop conducts, two members give talks, a sister plays the
-// organ), and what happens, second by second from MEETING_START.
+// Who's who (the bishop conducts on Sundays, members give talks, a sister plays the organ; two
+// youth leaders run Youth Night; a guest speaker for the fireside).
 export const LEADERS = {
   bishop: { name: 'Bishop Allen', look: { face: 'smile', hair: 'short', shirt: 'jacket', pants: 'jeans', skin: '#e8b088', hairColor: '#9e9e9e', shirtColor: '#263238', shirtColor2: '#ffffff', pantsColor: '#263238', shoesColor: '#111111' } },
   sister: { name: 'Sister Taylor', look: { face: 'smile', hair: 'long', shirt: 'dress', pants: 'skirt', skin: '#f5c9a0', hairColor: '#a0632b', shirtColor: '#5c6bc0', shirtColor2: '#ffffff', pantsColor: '#5c6bc0', shoesColor: '#3b2314' } },
   brother: { name: 'Brother Jensen', look: { face: 'grin', hair: 'short', shirt: 'jacket', pants: 'jeans', skin: '#d39a6a', hairColor: '#3b2314', shirtColor: '#37474f', shirtColor2: '#ffffff', pantsColor: '#37474f', shoesColor: '#111111' } },
   organist: { name: 'Sister Moss', look: { face: 'smile', hair: 'buns', shirt: 'dress', pants: 'skirt', skin: '#ffe0c4', hairColor: '#e8e8e8', shirtColor: '#8e24aa', shirtColor2: '#ffffff', pantsColor: '#8e24aa', shoesColor: '#111111' } },
+  lopez: { name: 'Sister Lopez', look: { face: 'grin', hair: 'ponytail', shirt: 'tshirt', pants: 'jeans', skin: '#c68642', hairColor: '#1b1209', shirtColor: '#ff7043', shirtColor2: '#ffffff', pantsColor: '#3949ab', shoesColor: '#ffffff' } },
+  kim: { name: 'Brother Kim', look: { face: 'smile', hair: 'short', shirt: 'tshirt', pants: 'jeans', skin: '#f1c27d', hairColor: '#1b1209', shirtColor: '#26a69a', shirtColor2: '#ffffff', pantsColor: '#263238', shoesColor: '#ffffff' } },
+  hale: { name: 'Brother Hale', look: { face: 'smile', hair: 'short', shirt: 'jacket', pants: 'jeans', skin: '#8d5524', hairColor: '#e8e8e8', shirtColor: '#4e342e', shirtColor2: '#ffffff', pantsColor: '#4e342e', shoesColor: '#111111' } },
 };
 // [from (seconds into the meeting), what, who speaks (at the pulpit), what they say]
 export const PROGRAM = [
@@ -58,15 +66,83 @@ export const PROGRAM = [
   [164, 'prayer', 'sister', '🙏'],
   [172, 'end', 'bishop', 'Thanks for coming! Have a wonderful Sunday! 👋'],
 ];
-// What's happening at this moment of a Sunday (null: no meeting now).
+// Youth Night: hellos, the game (hidden gifts all over the chapel: find them!), a thought, a song,
+// a prayer.
+export const GIFTS = 8, GIFT_COINS = 2;
+export const YOUTH = [
+  [0, 'welcome', 'lopez', 'Hi everyone! Welcome to Youth Night! 🎉'],
+  [6, 'welcome', 'kim', 'Tonight\'s game: find the hidden gifts! 🎁'],
+  [12, 'welcome', 'kim', 'They\'re all over the chapel. Ready... go! 🏃'],
+  [18, 'game', 'lopez', 'Look on the pews and up front! 👀'],
+  [42, 'game', 'kim', 'Keep looking! 🎁'],
+  [66, 'thought', 'lopez', 'Great job, everyone! Here\'s a thought for tonight. 💭'],
+  [73, 'thought', 'lopez', 'Each of you is a child of God, and He loves you. 💛'],
+  [81, 'thought', 'lopez', 'Like those gifts, His blessings are all around us. 🎁'],
+  [89, 'thought', 'lopez', 'Look for them this week, and say thank you! 🙏'],
+  [97, 'welcome', 'kim', 'Let\'s sing together! 🎵'],
+  [102, 'hymn'],
+  [138, 'prayer', 'kim', '🙏'],
+  [146, 'end', 'lopez', 'Thanks for coming! See you next Wednesday! 👋'],
+];
+// The fireside: one longer, gentle talk, then a hymn and a prayer.
+export const FIRESIDE = [
+  [0, 'welcome', 'bishop', 'Good evening! Welcome to our fireside. 🔥'],
+  [7, 'welcome', 'bishop', 'Brother Hale will share a few thoughts with us. 😊'],
+  [13, 'talk', 'hale', 'Tonight, let\'s talk about gratitude: saying thank you. 🙏'],
+  [21, 'talk', 'hale', 'Every day is full of gifts: sunshine, friends, family. ☀️'],
+  [29, 'talk', 'hale', 'When we notice them, our hearts feel happy and full. 💛'],
+  [37, 'talk', 'hale', 'Being thankful makes us want to help others too. 🤝'],
+  [45, 'talk', 'hale', 'Jesus served everyone: He helped, taught and loved them. ❤️'],
+  [53, 'talk', 'hale', 'We can serve too: help at home, cheer up a friend. 🏡'],
+  [61, 'talk', 'hale', 'Even small acts of service make a big difference. 🌟'],
+  [69, 'talk', 'hale', 'This week, say thank you every day, and help someone! 😊'],
+  [77, 'welcome', 'bishop', 'Thank you, Brother Hale! Let\'s sing together. 🎵'],
+  [82, 'hymn'],
+  [118, 'prayer', 'sister', '🙏'],
+  [126, 'end', 'bishop', 'Thank you for coming! Good night! 🌙'],
+];
+const meeting = (key, name, icon, day, start, program, leaders, tune) => ({ key, name, icon, day, start, end: start + program.at(-1)[0] + 8, program, leaders, tune });
+// (leaders: who sits on the stand, in order; tune: which hymn the organ plays: see churchui.js)
+export const MEETINGS = [
+  meeting('sunday', 'Sunday meeting', '⛪', SUNDAY, MEETING_START, PROGRAM, ['bishop', 'sister', 'brother'], 'old100'),
+  meeting('youth', 'Youth Night', '🎉', WEDNESDAY, 343, YOUTH, ['lopez', 'kim'], 'grace'),
+  meeting('fireside', 'Fireside', '🔥', SUNDAY, 372, FIRESIDE, ['bishop', 'hale', 'sister'], 'grace'),
+];
+// The meeting on now (people arriving for it counts), or null.
+export const meetingOn = (day, time) => MEETINGS.find(m => weekday(day) === m.day && time >= m.start - PRELUDE && time < m.end) || null;
+// What's happening at this moment (null: no meeting now).
 export function meetingAt(day, time) {
-  if (!meetingOn(day, time)) return null;
-  const t = time - MEETING_START;
-  if (t < 0) return { part: 'prelude', t, i: -1 }; // (people arriving, the organ playing softly)
+  const meet = meetingOn(day, time);
+  if (!meet) return null;
+  const t = time - meet.start, { program } = meet;
+  if (t < 0) return { part: 'prelude', t, i: -1, meeting: meet }; // (people arriving, the organ playing softly)
   let i = 0;
-  while (i + 1 < PROGRAM.length && PROGRAM[i + 1][0] <= t) i++;
-  const [from, part, who, line] = PROGRAM[i];
-  return { part, who, line, t, i, since: t - from };
+  while (i + 1 < program.length && program[i + 1][0] <= t) i++;
+  const [from, part, who, line] = program[i];
+  return { part, who, line, t, i, since: t - from, meeting: meet };
+}
+// The next meeting from now (or the one on now): { meeting, days } (days from today).
+export function nextMeeting(day, time) {
+  for (let d = 0; d < 8; d++)
+    for (const m of [...MEETINGS].sort((a, b) => a.start - b.start)) if (weekday(day + d) === m.day && (d > 0 || time < m.end)) return { meeting: m, days: d };
+  return null;
+}
+// "6 PM" for a time of day (game time: the same clock as clockText in daynight.js).
+export const clockAt = time => {
+  const p = (((time % DAY_LENGTH) + DAY_LENGTH) % DAY_LENGTH) / DAY_LENGTH;
+  const h = Math.round(p < DAY_FRACTION ? 6 + (13 * p) / DAY_FRACTION : (19 + (11 * (p - DAY_FRACTION)) / (1 - DAY_FRACTION)) % 24) % 24;
+  return `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
+};
+// Where Youth Night's gifts are hidden (the same for everyone: picked from the pews and the
+// stand's chairs, different each week). [x, z] in the world.
+export function giftSpots(place, day) {
+  const spots = [...(place?.pews || []), ...(place?.seats || [])];
+  if (!spots.length) return [];
+  let s = (day * 2654435761 + 97) >>> 0;
+  const rand = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const pool = spots.map(p => [p[0], p[1]]), out = [];
+  while (out.length < GIFTS && pool.length) out.push(pool.splice(Math.floor(rand() * pool.length), 1)[0]);
+  return out;
 }
 
 // ---------- Building it ----------

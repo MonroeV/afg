@@ -35,8 +35,19 @@ customize your character, drive cars, build anything and play with friends.
       hymn (the tune of "Praise God, From Whom All Blessings Flow"), there's a prayer, Sister
       Taylor and Brother Jensen give short talks (about Jesus Christ, kindness, prayer, families
       and helping others), then another hymn and a closing prayer. Come and sit in for a minute
-      and you get 10 coins as a thank-you (once each Sunday). Everyone sees the same meeting at
-      the same time
+      and you get 10 coins as a thank-you (once each meeting). Everyone sees the same meeting at
+      the same time. Since v0.58 there are **three meetings a week** (Sister Grace tells you
+      when the next one is, and the clock shows its icon while it's on):
+      - ⛪ **Sunday morning** (about 9 AM): the meeting above
+      - 🎉 **Youth Night**, Wednesday about 6 PM: Sister Lopez and Brother Kim welcome everyone,
+        then it's the **gift hunt**: 8 gift boxes 🎁 appear round the chapel (on the pews and
+        the stand) and the kids all get up to look. Walk up to one to find it: +2 coins, and
+        it's gone for everyone else, so be quick! Then a short thought (everyone is a child of
+        God, and His blessings are all around us), a song on the organ ("Amazing Grace") and
+        a prayer
+      - 🔥 **Fireside**, Sunday about 7 PM: Bishop Allen welcomes everyone and Brother Hale gives
+        one longer, gentle talk (about gratitude and serving others), then everyone sings
+        "Amazing Grace" and there's a closing prayer
     - **BuildZone Airport** ✈️ (since v0.48, beside the Outer Loop): a long runway with a dashed
       center line, stripes at the ends and edge lights, an apron where four **airplanes**
       park, and (since v0.56.3) a proper **taxiway** between them: a lane with a yellow line down
@@ -1020,7 +1031,7 @@ public/
     weatherui.js       Stormy's menu: what shall it rain?
     lunchbox.js        Your lunchbox: how full you are, and food to eat
     fiesta.js          Mateo's band at Casa Fiesta (the whole band on Taco Tuesday)
-    churchui.js        Sunday's meeting at the church: the members, the talks, the organ and the hymn
+    churchui.js        The church's meetings: the members, the talks, the gift hunt, the organ and the hymns
     tvgame.js          Block Hopper, the video game on the TV's Game channel
     palui.js           A kid at Friendship Park asking to be your best friend
     trainui.js         The Loop Express: the tracks and trains you see, their doors, walking on and off, riding
@@ -1072,7 +1083,7 @@ public/
       buildpark.js     The Build Park: one of each of the newest Build Book things, with signs
       outerlands.js    The outer lands: the Outer Loop and the roads out to it, the far beach, trees and meadows
       food.js          Food and hunger: what there is to eat, how much it fills you, how hunger slows you
-      church.js        The church: building it, and Sunday's meeting (when, who, what's said)
+      church.js        The church: building it, and its meetings (when, who, what's said, the gifts)
       airport.js       The airport: finding room for it, the runway, terminal, tower and hangars
       park.js          Friendship Park: the paths, flowers, trees, swings and slides
       train.js         The Loop Express: its two tracks, the timetable, where the trains are, the stations and pillars

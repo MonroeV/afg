@@ -4,8 +4,8 @@
 // come near, pet your pet, love your cool stuff, and react to fireworks, explosions,
 // dancing and water balloons.
 import { sanitizeLook } from './avatar.js';
-import { isTacoTuesday } from './seasons.js';
-import { isSunday } from './church.js';
+import { isTacoTuesday, WEEKDAYS, weekday } from './seasons.js';
+import { meetingOn, nextMeeting, clockAt } from './church.js';
 import { BLOCKS, isSolidBlock, blockId, itemOf, shapeOf, blockMeta, blockKey, toggleDoorValue, isNightTime, DOOR_OPEN, DOOR_TOP, SHOP_TOOLS } from './blocks.js';
 import { claimAt } from './claims.js';
 import { liftColumn, liftStops } from './elevator.js';
@@ -126,8 +126,14 @@ const NPCS = [
     // meeting in the chapel (see church.js and churchui.js).
     id: -28, place: 'church', name: 'Sister Grace', title: 'Sister Grace ⛪', roam: 2,
     look: { face: 'smile', hair: 'buns', hat: 'none', shirt: 'dress', pants: 'skirt', extra: 'none', skin: '#8d5a34', hairColor: '#1b1209', shirtColor: '#26a69a', shirtColor2: '#ffffff', pantsColor: '#26a69a', shoesColor: '#111111' },
-    hello: (n, room) => (isSunday(room?.day) ? [`Welcome, ${n}! We're so glad you came! 😊`, `Hi ${n}! The meeting is in the chapel. Come on in! ⛪`] : [`Hello ${n}! Welcome! 😊`, `Hi ${n}! Come visit us on Sunday morning! ⛪`]),
-    tips: ['⛪ Sunday ☀️ 9:00', 'Everyone is welcome here! 🤝', 'Jesus Christ loves everyone! ❤️'],
+    hello: (n, room) => {
+      const now = meetingOn(room?.day, room?.time);
+      if (now) return [`Welcome, ${n}! We're so glad you came! 😊`, `Hi ${n}! ${now.icon} ${now.name} is in the chapel. Come on in!`];
+      const next = nextMeeting(room?.day || 0, room?.time || 0), m = next?.meeting;
+      const when = !next ? '' : next.days === 0 ? `today at ${clockAt(m.start)}` : `${WEEKDAYS[weekday((room?.day || 0) + next.days)]} at ${clockAt(m.start)}`;
+      return [`Hello ${n}! Welcome! 😊`, m ? `Hi ${n}! ${m.icon} ${m.name}: ${when}! Come join us!` : `Hi ${n}! ⛪`];
+    },
+    tips: ['⛪ Sun 9 AM · 🔥 Sun 7 PM', '🎉 Youth Night: Wed 6 PM! 🎁', 'Everyone is welcome here! 🤝', 'Jesus Christ loves everyone! ❤️'],
   },
   {
     // Fun Land: Pete at his snack stand (popcorn, cotton candy, ice cream, corn dogs, lemonade).

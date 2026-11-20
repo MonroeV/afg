@@ -12,7 +12,7 @@ import { VEHICLES, MAX_HP, FIRE_HP, findVehicleSpot, seatCount } from './vehicle
 import { buildGasStations, usesFuel, getsDirty, TANK_RANGE, GAS_PUMP, GAS_CAN, GAS_CAN_PRICE, FULL_TANK_PRICE, PUMP_REACH, DIRT_RANGE, WASH_TIME, fillPrice, paved, isWash } from './fuel.js';
 import { MAX_TUNNELS, isTunnelY, tunnelKey, openBelow } from './underground.js';
 import { buildShops, buildOuterShops } from './shops.js';
-import { buildChurch, meetingOn, MEETING_COINS, MEETING_STAY } from './church.js';
+import { buildChurch, meetingOn, meetingAt, giftSpots, MEETING_COINS, MEETING_STAY, GIFT_COINS } from './church.js';
 import { buildAirport, hangarPlanes, planesOutOfTheWay, airportCurb, addTaxiway } from './airport.js';
 import { buildPark } from './park.js';
 import { buildTrainLine, fixPlatforms } from './train.js';
@@ -352,6 +352,7 @@ export class GameRoom {
         // Taco Tuesday: which Tuesday (the day count), and how many free tacos they've had.
         tacoDay: Number.isInteger(w.tacoDay) ? w.tacoDay : -1,
         churchDay: Number.isInteger(w.churchDay) ? w.churchDay : -1, // (the last Sunday they came to church)
+        churchMeet: typeof w.churchMeet === 'string' ? w.churchMeet.slice(0, 40) : '', // (the last meeting they came to: `${day}:${key}`)
         pal: Number.isInteger(w.pal) ? w.pal : null, // their best friend (a kid from Friendship Park)
         ate: Array.isArray(w.ate) ? w.ate.filter(f => FOODS[f]) : [], // the kinds of food they've eaten
         zooSeen: Array.isArray(w.zooSeen) ? w.zooSeen.filter(k => ANIMALS[k]) : [], // the animals they've been to see
@@ -1148,28 +1149,29 @@ export class GameRoom {
     }
   }
 
-  // Sunday's meeting at the church: everyone there for a minute of it gets a thank-you (once each
-  // Sunday). Every second.
+  // The church's meetings: everyone there for a minute of one gets a thank-you (once each
+  // meeting). Every second.
   updateChurch(secs) {
-    const chapel = this.places?.church?.chapel;
-    if (!chapel || !meetingOn(this.day, this.time)) {
-      this.churchTime?.clear();
-      return;
-    }
+    const chapel = this.places?.church?.chapel, meet = chapel && meetingOn(this.day, this.time);
+    const key = meet ? `${this.day}:${meet.key}` : null;
+    if (!meet || this.churchKey !== key) this.churchTime?.clear();
+    this.churchKey = key;
+    if (!meet) return;
     this.churchTime ??= new Map();
     const [x0, z0, x1, z1] = chapel;
     for (const c of this.clients.values()) {
       if (!c.joined) continue;
       const [x, y, z] = c.pos, w = this.wallet(c);
-      if (w.churchDay === this.day || x < x0 || x > x1 + 1 || z < z0 || z > z1 + 1 || y > 6) continue;
+      if (w.churchMeet === key || (meet.key === 'sunday' && w.churchDay === this.day) || x < x0 || x > x1 + 1 || z < z0 || z > z1 + 1 || y > 6) continue;
       const t = (this.churchTime.get(c.id) || 0) + secs;
       this.churchTime.set(c.id, t);
       if (t < MEETING_STAY) continue;
-      w.churchDay = this.day;
+      w.churchMeet = key;
+      if (meet.key === 'sunday') w.churchDay = this.day;
       w.coins += MEETING_COINS;
       this.sendWallet(c);
-      c.send({ t: 'church_thanks', coins: MEETING_COINS });
-      this.log(`${c.name} came to church (+${MEETING_COINS} coins)`);
+      c.send({ t: 'church_thanks', coins: MEETING_COINS, meeting: meet.key });
+      this.log(`${c.name} came to ${meet.name} (+${MEETING_COINS} coins)`);
       this.onDirty();
     }
   }
@@ -2637,6 +2639,30 @@ export class GameRoom {
       this.progress(client, 'zoo', 'feed');
       this.progress(client, 'zoo', 'kinds', w.zooFed.length, true);
       this.broadcast({ t: 'fx', kind: 'zoofed', animal: kind, i: Math.max(0, Math.min(9, num(i))), food, liked: food === a.likes });
+      this.onDirty();
+    },
+
+    // Found one of Youth Night's hidden gifts (first come, first served: then it's gone for
+    // everyone).
+    church_gift(client, { i }) {
+      if (!this.allow(client, 'churchGift', 0.3, 4)) return;
+      const place = this.places?.church, m = place && meetingAt(this.day, this.time + 1); // (a moment's slack either way)
+      const m2 = place && meetingAt(this.day, this.time - 3);
+      if (!place || ![m, m2].some(o => o?.part === 'game')) return;
+      const spot = giftSpots(place, this.day)[i];
+      if (!spot || !Number.isInteger(i)) return;
+      this.churchGifts ??= new Map();
+      const key = `${this.day}:${i}`;
+      if (this.churchGifts.has(key)) return client.send({ t: 'church_gift', day: this.day, i, name: this.churchGifts.get(key) });
+      const [x, y, z] = client.pos;
+      if (Math.hypot(x - spot[0], z - spot[1]) > 2.5 || y > 4) return;
+      if (this.churchGifts.size > 200) this.churchGifts.clear();
+      this.churchGifts.set(key, client.name);
+      const w = this.wallet(client);
+      w.coins += GIFT_COINS;
+      this.sendWallet(client);
+      this.broadcast({ t: 'church_gift', day: this.day, i, name: client.name, id: client.id, coins: GIFT_COINS });
+      this.log(`${client.name} found a gift at Youth Night (+${GIFT_COINS} coins)`);
       this.onDirty();
     },
 
