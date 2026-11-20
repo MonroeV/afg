@@ -739,6 +739,22 @@ export class GameRoom {
 
   // ---------- Hunger ----------
 
+  // Eating something from your lunchbox: it fills you up (twice as much with the Foodie Club's
+  // badge), and counts for the Foodie Club.
+  eatFood(client, food) {
+    const w = this.wallet(client);
+    w.pantry[food]--;
+    if (!w.pantry[food]) delete w.pantry[food];
+    this.feed(client, FOODS[food].fill * (this.perk(client, 'foodie') ? 2 : 1)); // (the Foodie Club's badge: twice as filling)
+    if (!w.ate.includes(food)) w.ate.push(food);
+    this.progress(client, 'foodie', 'eat');
+    this.progress(client, 'foodie', 'kinds', w.ate.length, true);
+    this.sendWallet(client);
+    client.send({ t: 'ate', food });
+    this.broadcast({ t: 'fx', kind: 'eat', id: client.id, food }, client);
+    this.onDirty();
+  }
+
   // Fill them up a bit (and tell them how full they are).
   feed(client, amount) {
     const w = this.wallet(client);
@@ -1956,6 +1972,9 @@ export class GameRoom {
           this.progress(client, 'foodie', 'taco');
         } else w.coins -= price;
         w.pantry[food] = (w.pantry[food] || 0) + 1;
+        // Hungry? Then you eat it right away (the bar fills up). Full up: it goes in your
+        // lunchbox for later.
+        if ((w.hunger ?? HUNGER_FULL) < HUNGER_FULL - 1) return this.eatFood(client, food);
         this.sendWallet(client);
         client.send({ t: 'food_got', food, n: w.pantry[food] });
         this.onDirty();
@@ -2333,18 +2352,8 @@ export class GameRoom {
 
     // Eating something from your lunchbox.
     eat(client, { food }) {
-      const w = this.wallet(client);
-      if (!FOODS[food] || !(w.pantry?.[food] > 0) || !this.allow(client, 'eat', 2, 3)) return;
-      w.pantry[food]--;
-      if (!w.pantry[food]) delete w.pantry[food];
-      this.feed(client, FOODS[food].fill * (this.perk(client, 'foodie') ? 2 : 1)); // (the Foodie Club's badge: twice as filling)
-      if (!w.ate.includes(food)) w.ate.push(food);
-      this.progress(client, 'foodie', 'eat');
-      this.progress(client, 'foodie', 'kinds', w.ate.length, true);
-      this.sendWallet(client);
-      client.send({ t: 'ate', food });
-      this.broadcast({ t: 'fx', kind: 'eat', id: client.id, food }, client);
-      this.onDirty();
+      if (!FOODS[food] || !(this.wallet(client).pantry?.[food] > 0) || !this.allow(client, 'eat', 2, 3)) return;
+      this.eatFood(client, food);
     },
 
     // Be best friends with a kid from Friendship Park (yes), or say bye for now (no, to yours).

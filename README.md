@@ -11,7 +11,8 @@ customize your character, drive cars, build anything and play with friends.
     north through the snowy woods), trees and wildflower meadows, and the bay at Sunny Shores
     carrying on south to a far beach. New places go along the Outer Loop:
     - **FreshMart Grocery** 🛒 (since v0.45, on the Outer Loop, by the road out east): fruit
-      stands and shelves of food. Talk to Gus to buy something to eat (it goes in your lunchbox 🍱)
+      stands and shelves of food. Talk to Gus to buy something to eat (hungry? you eat it right away; full up, it goes in
+      your lunchbox 🍱 for later)
     - **Casa Fiesta** 🌮 (since v0.46, on the Outer Loop, by the road out west): a Mexican
       restaurant with tables and chairs, cacti, a piñata and papel picado. Luis sells tacos 🌮,
       burritos 🌯, chips & guacamole 🥑, elote 🌽 and agua fresca 🥤, and Mateo plays his guitar
@@ -453,7 +454,10 @@ customize your character, drive cars, build anything and play with friends.
   half you slow down a little, but never below three-quarters speed, so nobody gets stuck. A 🍽️
   hint pops up when you're getting hungry, and the bar wiggles when you're really hungry. **Eat**:
   press **L** (or tap the bar) to open your **lunchbox** 🍱 and tap something to eat it (nom nom).
-  Food comes from **FreshMart Grocery** (🍎 🍌 🍪 1 coin, 🥛 🍞 🧀 2, 🥪 3, 🍉 4; up to 30 of each), and
+  Food comes from **FreshMart Grocery** (🍎 🍌 🍪 1 coin, 🥛 🍞 🧀 2, 🥪 3, 🍉 4; up to 30 of each):
+  buy something while you're hungry and you eat it right there (since v0.55.2; the bar fills
+  up), or if you're full it goes in your lunchbox for later. (The same at Casa Fiesta and Pete's
+  snack stand.) And
   the crops you pick in your garden go in your lunchbox too. Catching food when it rains tacos,
   ice cream, pizza or donuts gives you a little bite, and delivering a pizza fills you up a bit.
   Your hunger and lunchbox are saved
