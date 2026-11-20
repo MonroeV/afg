@@ -527,7 +527,7 @@ export class Avatar {
     this.lieK = (this.lieK ?? 0) + ((this.lying ? 1 : 0) - (this.lieK ?? 0)) * Math.min(1, dt * 3.2);
     this.sitK = (this.sitK ?? 0) + ((this.sitting || this.sledding ? 1 : 0) - (this.sitK ?? 0)) * Math.min(1, dt * 7);
     this.root.rotation.x = this.lieK * Math.PI / 2; // asleep in bed, on our back
-    this.root.scale.setScalar(this.seat ? SEAT_SCALE : 1);
+    this.root.scale.setScalar(this.seat && !this.seat.stand ? SEAT_SCALE : 1); // (standing on a skateboard or a bike: full size)
     if (this.tag) {
       this.tag.visible = this.lieK < 0.5;
       this.tag.position.y = this.crouching ? 2.05 : 2.35;
@@ -545,15 +545,15 @@ export class Avatar {
       this.bubble.material.opacity = Math.min(1, this.bubbleT * 2);
       if (this.bubbleT <= 0) this.unsay();
     }
-    const sitting = !!this.seat || this.sitting || this.sledding;
+    const sitting = (!!this.seat && !this.seat.stand) || this.sitting || this.sledding;
     // Climbing into bed (or out) your knees bend as you sit on the edge, then straighten as you
     // lie back (or stand up).
     // (Asleep in a camper van: lying in its bed, not sitting.)
-    const sit = this.seat && !this.lying ? 1 : Math.max(this.sitK, Math.sin(Math.PI * Math.min(1, this.lieK)) * 0.9);
+    const sit = this.seat && !this.lying ? (this.seat.stand ? 0 : 1) : Math.max(this.sitK, Math.sin(Math.PI * Math.min(1, this.lieK)) * 0.9);
     animateCharacter(this.character, {
       walk: this.walk, speed: sitting || this.lying ? 0 : this.speed, pitch: this.lieK > 0.5 ? 0 : this.pitch, time,
       dance: this.dance, wave: this.wave, swing: this.swing, sit,
-      flying: this.flying, crouch: this.crouching && !sitting,
+      flying: this.flying, crouch: (this.crouching && !sitting) || !!this.seat?.stand, // (knees bent, riding a board)
     });
     if (this.holdMic) this.updateMic();
     if (this.reading || this.book) this.updateBook();

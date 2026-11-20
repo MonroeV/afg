@@ -935,6 +935,7 @@ net.on('wallet', ({ coins, owned, vacation, found = [], agent, can, clubs, badge
   // Club badges, and what they give you: a turbo in everything you drive, a coin magnet.
   perks = new Set(badges || []);
   cars.turbo = perks.has('speed') ? TURBO : 1;
+  cars.bigAir = perks.has('skate'); // (the Skaters' big air)
   cars.jetEngine = perks.has('pilot'); // (the Sky Pilots' badge: faster airplanes)
   world.digger = perks.has('tunnel'); // (Tunnel Diggers can dig down into the earth)
   book.set({ clubs, badges, agent });
@@ -2641,9 +2642,10 @@ function enterCar(car) {
   danceView = 0;
   hud.setCarHelp(car.spec.plane ? 'plane' : car.kind);
   if (car.kind === 'kart') hud.toast('🏎️ ➡ 🏁 · ⏱️ 🏆');
+  if (car.spec.skate) hud.toast(touch ? '🛹 Ramp ➡ 🕹️ spin · ⬆ flip!' : '🛹 Up a ramp! In the air: A/D spin · Space flip');
   if (car.kind === 'firetruck') hud.toast(touch ? '🚒 ⭐ 🚨 lights · again: 💦 hose' : '🚒 G: 🚨 lights & siren · G again: 💦 water hose');
   sounds.setEngineVoice(car.id, car.kind);
-  if (!car.spec.flying || car.spec.plane) sounds.engine(0.15, 0);
+  if ((!car.spec.flying || car.spec.plane) && !car.spec.skate) sounds.engine(0.15, 0);
   sounds.spawnCar();
   if (car.spec.plane && settings.planeTip !== 1) {
     hud.addChat({ system: true, text: touch
@@ -2805,6 +2807,17 @@ function vehicleEvent(ev, car) {
   else if (ev.type === 'damage') reportDamage(ev.other || car, ev.amount, ev.impact);
   else if (ev.type === 'impulse') net.send({ t: 'car_impulse', id: ev.other.id, vx: ev.dv.x, vz: ev.dv.z, spin: ev.spin });
   else if (ev.type === 'push') net.send({ t: 'push', id: ev.id, vx: ev.dv.x, vy: ev.dv.y, vz: ev.dv.z });
+  // Skateboards and bikes: up off a ramp, a trick landed, or a bail.
+  else if (ev.type === 'launch') sounds.whoosh();
+  else if (ev.type === 'trick' && car === myCar) {
+    sounds.magic();
+    effects.sparkle(car.pos.x, car.pos.y + 1, car.pos.z, ev.spin >= 360 || ev.flips ? 30 : 12);
+    hud.toast(`🛹 ${ev.name}! +${ev.points}`);
+    net.send({ t: 'skate_trick', spin: ev.spin, flips: ev.flips });
+  } else if (ev.type === 'bail' && car === myCar) {
+    sounds.crash(0.3);
+    hud.toast('🛹💥 Oops!');
+  }
 }
 
 // Walking into a parked car pushes it. People are much lighter than cars, so it moves
@@ -5965,8 +5978,8 @@ function updateCamera(dt) {
     const s = car.spec;
     if (carView === 0) {
       const seat = cars.seat(car, mySeat());
-      camera.position.copy(seat.position).y += EYE_HEIGHT * SEAT_SCALE;
-      camera.rotation.set(carCam.pitch * 0.6 + car.pitch, car.h + carCam.yaw, 0);
+      camera.position.copy(seat.position).y += EYE_HEIGHT * (seat.stand ? 0.85 : SEAT_SCALE);
+      camera.rotation.set(carCam.pitch * 0.6 + (s.skate ? 0 : car.pitch), car.h + carCam.yaw, 0);
     } else {
       if (Math.abs(car.speed) > 2 && !(car === myCar && s.flying)) carCam.yaw *= Math.exp(-1.5 * dt);
       const yaw = car.h + carCam.yaw + (carView === 2 ? Math.PI : 0);
@@ -6105,7 +6118,7 @@ function frame(timestamp) {
         hud.toast(myCar.spec.plane ? '⛽ Out of gas! Glide down gently and land on something flat.' : myCar.spec.flying ? "⛽ Out of gas! You can't fly up without any: float down and land." : `⛽ Out of gas! Get out (E) and fetch a gas can from a gas station${nearestGas() ? ` (${nearestGas().trim()})` : ''}.`);
       }
       if (myCar.spec.plane) sounds.engine(cars.empty(myCar) ? null : 0.2 + 0.75 * myCar.rotorSpin, myCar.throttle || 0); // (the propeller's engine)
-      else if (myCar.spec.flying || cars.empty(myCar)) sounds.engine(null);
+      else if (myCar.spec.flying || myCar.spec.skate || cars.empty(myCar)) sounds.engine(null); // (no engine on a skateboard!)
       else {
         // The engine note follows the revs smoothly (so you hear each gear change).
         myCar.rpmShown = (myCar.rpmShown ?? myCar.rpm) + (myCar.rpm - (myCar.rpmShown ?? myCar.rpm)) * Math.min(1, dt * 9);

@@ -73,6 +73,17 @@ export const VEHICLES = {
     name: 'Go-Kart', mass: 180, length: 1.9, width: 1.3, ride: 0.06, bodyH: 0.22, cabinH: 0.3, wheelR: 0.16, maxSpeed: 15, accel: 11, gears: 3, respawn: 20,
     seats: [[0, 0.2, 0.2]], bouncy: true, noDamage: true, engine: 'sport', pitch: 1.6,
   },
+  // A skateboard and a BMX bike (at the skate park): you stand on them. Light and quick; ride up a
+  // ramp (the Stairs block) and you fly off the top. In the air, A and D spin you round and Space
+  // does a flip: land it straight for a trick! Bumps don't hurt them.
+  skateboard: {
+    name: 'Skateboard', mass: 70, length: 1.0, width: 0.4, ride: 0.07, bodyH: 0.06, cabinH: 0, wheelR: 0.06, height: 1.6, maxSpeed: 11, accel: 8, gears: 3, respawn: 20,
+    seats: [[0, 0.84, 0]], stand: true, skate: true, bouncy: true, noDamage: true,
+  },
+  bmx: {
+    name: 'BMX Bike', mass: 90, length: 1.7, width: 0.55, ride: 0.3, bodyH: 0.1, cabinH: 0, wheelR: 0.3, height: 1.8, maxSpeed: 12, accel: 7, gears: 3, respawn: 20,
+    seats: [[0, 1.2, 0.15]], stand: true, skate: true, bouncy: true, noDamage: true,
+  },
   // A tractor (at the farm): slow and steady, big wheels at the back and little ones in front, an
   // open seat under a sunshade roof. It climbs up one block, like a monster truck.
   tractor: {

@@ -176,7 +176,7 @@ export function nextTrain(table, stationId, t) {
 const STOP_PLACES = [
   ['shop_grocery', '🛒', 'FreshMart'], ['shop_fiesta', '🌮', 'Casa Fiesta'], ['shop_salon', '💇', 'Snip & Style'],
   ['church', '⛪', 'Church'], ['airport', '✈️', 'Airport'], ['skytowers', '🏙️', 'Sky Tower'], ['park', '🤝', 'Friendship Park'],
-  ['funland', '🎢', 'Fun Land'], ['zoo', '🦁', 'Zoo'], ['firestation', '🚒', 'Fire Station'], ['dealer', '🚗', 'BuildZone Motors'], ['farm', '🐄', 'Sunny Acres Farm'], ['raceway', '🏎️', 'Thunder Raceway'], ['space', '🚀', 'Space Center'], ['stadium', '⚽', 'Stadium'], ['golf', '⛳', 'Mini Golf'],
+  ['funland', '🎢', 'Fun Land'], ['zoo', '🦁', 'Zoo'], ['firestation', '🚒', 'Fire Station'], ['dealer', '🚗', 'BuildZone Motors'], ['farm', '🐄', 'Sunny Acres Farm'], ['raceway', '🏎️', 'Thunder Raceway'], ['space', '🚀', 'Space Center'], ['stadium', '⚽', 'Stadium'], ['golf', '⛳', 'Mini Golf'], ['skatepark', '🛹', 'Skate Park'],
 ];
 const ROAD_STOPS = [[-RING, FAR_ROADS.west, '🏘️', 'West Road'], [RING, -60, '🏘️', 'East Road'], [-100, -RING, '🏘️', 'North Road']];
 const MERGE = 60;
@@ -235,7 +235,9 @@ export function buildTrainLine({ get, set, canUse, places, old = [] }) {
     const st = findStation(stop, stations, empty);
     if (!st) continue;
     buildStation(st, set, signs, `🚉 ${stop.icon} ${stop.name}`);
-    stations.push({ ...st, id: nextId++, icon: stop.icon, name: stop.name });
+    const made = { ...st, id: nextId++, icon: stop.icon, name: stop.name };
+    stations.push(made);
+    renamed.add(made); // (named this time round: another stop sharing it adds its name)
   }
   return { stations: stations.sort((a, b) => a.sc - b.sc), signs };
 }

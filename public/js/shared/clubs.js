@@ -168,6 +168,15 @@ export const CLUBS = [
     ],
     reward: { coins: 20, perk: '🏌️', perkName: 'A bigger daily bonus (+3 🪙 every day)' },
   },
+  {
+    id: 'skate', name: 'Skaters', icon: '🛹', color: '#6a1b9a', leader: 'Skater Zed', where: 'at the skate park',
+    tasks: [
+      { id: 'tricks', icon: '🛹', goal: 10, what: 'Land tricks off the ramps (skateboard or BMX)' },
+      { id: 'spin', icon: '🌀', goal: 1, what: 'Land a 360 (spin with A/D in the air)' },
+      { id: 'flip', icon: '🙃', goal: 1, what: 'Land a flip (Space in the air)' },
+    ],
+    reward: { coins: 20, perk: '🚀', perkName: 'Big air: you jump higher off the ramps' },
+  },
 ];
 
 export const clubById = id => CLUBS.find(c => c.id === id);

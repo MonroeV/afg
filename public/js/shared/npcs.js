@@ -192,6 +192,13 @@ const NPCS = [
     tips: ['⛳🏌️🎯', 'Stand on a tee and press G to put your ball down! (On a phone: 💃)', 'G starts the power meter, G again putts! 💪', 'Time the windmill: wait for the gap! 🌬️', 'The loop needs a BIG putt! 🔁', 'Splash! The pond costs you a stroke 💦'],
   },
   {
+    // Ramp City Skate Park: Skater Zed by the way in (he runs the Skaters club).
+    id: -78, place: 'skatepark_host', name: 'Skater Zed', title: 'Skater Zed 🛹', roam: 4, club: 'skate',
+    look: { face: 'cool', hair: 'long', hat: 'beanie', shirt: 'hoodie', pants: 'jeans', extra: 'none', skin: '#c68642', hairColor: '#f3d98b', hatColor: '#e53935', shirtColor: '#6a1b9a', shirtColor2: '#ffffff', pantsColor: '#37474f', shoesColor: '#212121' },
+    hello: n => [`Yo ${n}! Grab a board! 🛹`, `Hey ${n}! Hit the ramps! 🤙`],
+    tips: ['🛹🌀🙃', 'Hop on a board or a bike (E), then ride up a ramp FAST! 🛹', 'In the air: A and D spin you round! 🌀', 'Space in the air does a flip! 🙃', 'Land facing the way you\'re going, or backwards for a Fakie! 🤙'],
+  },
+  {
     // BuildZone Motors: Dealer Dana, at the sales desk in the showroom.
     id: -71, place: 'dealer_desk', name: 'Dealer Dana', title: 'Dealer Dana 🚗', roam: 1,
     look: { face: 'smile', hair: 'ponytail', hat: 'none', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#e0ac69', hairColor: '#6d3b16', hatColor: '#000000', shirtColor: '#1a237e', shirtColor2: '#ffffff', pantsColor: '#263238', shoesColor: '#111111' },

@@ -145,6 +145,8 @@ export function buildCarModel(kind, color) {
   if (kind === 'jet') return buildJetModel(color);
   if (kind === 'bumper') return buildBumperModel(color);
   if (kind === 'kart') return buildKartModel(color);
+  if (kind === 'skateboard') return buildSkateModel(color);
+  if (kind === 'bmx') return buildBmxModel(color);
   if (kind === 'boat') return buildBoatModel(color);
   const s = CAR_SPECS[kind];
   const g = new THREE.Group();
@@ -721,6 +723,89 @@ function buildKartModel(color) {
   };
 }
 
+// A skateboard: a deck with its tail and nose kicked up, two trucks and four little wheels.
+function buildSkateModel(color) {
+  const g = new THREE.Group();
+  const mats = {
+    paint: new THREE.MeshStandardMaterial({ color, roughness: 0.5 }),
+    dark: new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 }),
+    chrome: new THREE.MeshStandardMaterial({ color: 0xc0c4c8, metalness: 0.8, roughness: 0.3 }),
+    wheel: new THREE.MeshStandardMaterial({ color: 0xfff176, roughness: 0.6 }),
+    head: new THREE.MeshStandardMaterial({ color: 0xffffff }), tail: new THREE.MeshStandardMaterial({ color: 0xffffff }),
+  };
+  const parts = {};
+  const add = (geo, mat, x, y, z) => (parts[mat] ??= []).push(geo.translate(x, y, z));
+  add(new THREE.BoxGeometry(0.34, 0.03, 0.7), 'paint', 0, 0.14, 0);
+  add(new THREE.BoxGeometry(0.34, 0.035, 0.7), 'dark', 0, 0.165, 0); // (grip tape on top)
+  for (const z of [-1, 1]) {
+    add(new THREE.BoxGeometry(0.32, 0.03, 0.16).rotateX(z * 0.45), 'paint', 0, 0.165, z * 0.42); // (the kicked-up nose and tail)
+    add(new THREE.BoxGeometry(0.22, 0.04, 0.05), 'chrome', 0, 0.1, z * 0.28); // (the trucks)
+  }
+  const meshes = mergeParts(g, parts, mats);
+  const wheels = [];
+  for (const x of [-1, 1])
+    for (const z of [-1, 1]) {
+      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.05, 10).rotateZ(Math.PI / 2), mats.wheel);
+      w.position.set(x * 0.13, 0.05, z * 0.28);
+      g.add(w);
+      wheels.push(w);
+    }
+  return { group: g, wheels, steerers: [], paint: mats.paint, paintMesh: meshes.paint, baseColor: new THREE.Color(color), headMat: mats.head, tailMat: mats.tail, brakeMat: mats.tail, reverseMat: mats.head, siren: null };
+}
+
+// A BMX bike: a little painted frame, two knobbly wheels with spokes, high handlebars, a seat
+// and pedals. The front wheel and the bars turn as you steer.
+function buildBmxModel(color) {
+  const g = new THREE.Group();
+  const mats = {
+    paint: new THREE.MeshStandardMaterial({ color, metalness: 0.4, roughness: 0.35 }),
+    dark: new THREE.MeshStandardMaterial({ color: 0x1d1f24, roughness: 0.8 }),
+    chrome: new THREE.MeshStandardMaterial({ color: 0xd0d4d8, metalness: 0.9, roughness: 0.2 }),
+    head: new THREE.MeshStandardMaterial({ color: 0xffffff }), tail: new THREE.MeshStandardMaterial({ color: 0xff3333 }),
+  };
+  const parts = {};
+  const add = (geo, mat, x, y, z) => (parts[mat] ??= []).push(geo.translate(x, y, z));
+  // A tube from a to b.
+  const tube = (a, b, r, mat) => {
+    const va = new THREE.Vector3(...a), vb = new THREE.Vector3(...b), len = va.distanceTo(vb);
+    const geo = new THREE.CylinderGeometry(r, r, len, 6);
+    geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), vb.clone().sub(va).normalize()));
+    const mid = va.add(vb).multiplyScalar(0.5);
+    add(geo, mat, mid.x, mid.y, mid.z);
+  };
+  const R = 0.3, rear = [0, R, 0.55], front = [0, R, -0.6], crank = [0, 0.3, 0.05], seat = [0, 0.75, 0.3], head = [0, 0.8, -0.45];
+  tube(rear, crank, 0.03, 'paint');
+  tube(rear, seat, 0.03, 'paint');
+  tube(crank, seat, 0.035, 'paint');
+  tube(crank, head, 0.035, 'paint');
+  tube(seat, head, 0.035, 'paint');
+  tube(head, front, 0.03, 'chrome'); // (the forks)
+  tube(head, [0, 1.05, -0.4], 0.025, 'chrome');
+  tube([-0.3, 1.05, -0.4], [0.3, 1.05, -0.4], 0.02, 'chrome'); // (the handlebars)
+  for (const x of [-0.3, 0.3]) add(new THREE.CylinderGeometry(0.03, 0.03, 0.12, 8).rotateZ(Math.PI / 2), 'dark', x, 1.05, -0.4);
+  add(new THREE.BoxGeometry(0.14, 0.05, 0.26), 'dark', 0, 0.79, 0.32); // (the seat)
+  for (const x of [-1, 1]) add(new THREE.BoxGeometry(0.1, 0.03, 0.06), 'dark', x * 0.16, 0.3, 0.05 + x * 0.12); // (pedals)
+  add(new THREE.BoxGeometry(0.06, 0.04, 0.02), 'tail', 0, 0.62, 0.6);
+  const meshes = mergeParts(g, parts, mats);
+  // The wheels (spokes and all).
+  const wheels = [], steerers = [];
+  for (const z of [rear[2], front[2]]) {
+    const pivot = new THREE.Group();
+    pivot.position.set(0, R, z);
+    const wheel = new THREE.Mesh(new THREE.TorusGeometry(R - 0.04, 0.045, 8, 20).rotateY(Math.PI / 2), mats.dark);
+    for (let k = 0; k < 6; k++) {
+      const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.01, (R - 0.05) * 2, 0.01), mats.chrome);
+      spoke.rotation.x = (k / 6) * Math.PI;
+      wheel.add(spoke);
+    }
+    pivot.add(wheel);
+    g.add(pivot);
+    wheels.push(wheel);
+    if (z < 0) steerers.push(pivot);
+  }
+  return { group: g, wheels, steerers, paint: mats.paint, paintMesh: meshes.paint, baseColor: new THREE.Color(color), headMat: mats.head, tailMat: mats.tail, brakeMat: mats.tail, reverseMat: mats.head, siren: null };
+}
+
 // A little propeller plane: a round body with a pointed nose and a long tail, wings up on top
 // (held up by struts), a tail fin and tailplane, three wheels, a big propeller on the nose, and
 // red and green lights on the wingtips. Forward is -z; the wheels stand on y = 0.
@@ -954,6 +1039,9 @@ function buildBoatModel(color) {
 
 // Is the point (x, y, z) inside something solid?
 const solidAt = (world, x, y, z) => world.isSolid(Math.floor(x), Math.floor(y), Math.floor(z));
+// Ramps for skateboards and bikes: the Stairs block, and which way it goes up for each facing.
+const STAIRS = 149;
+const STAIR_RISE = [[0, -1], [-1, 0], [0, 1], [1, 0]];
 const UP = new THREE.Vector3(0, 1, 0);
 
 // Do two vehicles' rectangles (seen from above) overlap? Checks along each car's
@@ -1203,8 +1291,9 @@ export class Cars {
     const s = car.spec;
     if (s.seats) {
       const [sx, sy, sz, turn = 0] = s.seats[index] || s.seats[0];
-      const local = new THREE.Vector3(sx, sy - 0.72 * SEAT_SCALE, sz).applyEuler(new THREE.Euler(car.pitch, car.h, car.roll, 'YXZ'));
-      return { position: local.add(car.pos), yaw: car.h + turn };
+      // (On a skateboard or a bike you stand, and stay upright while it flips under you.)
+      const local = new THREE.Vector3(sx, sy - 0.72 * SEAT_SCALE, sz).applyEuler(new THREE.Euler(s.skate ? 0 : car.pitch, car.h, s.skate ? 0 : car.roll, 'YXZ'));
+      return { position: local.add(car.pos), yaw: car.h + turn, stand: !!s.stand };
     }
     if (s.boat) {
       // The driver sits at the back by the motor; a friend beside them and one up front.
@@ -1494,7 +1583,115 @@ export class Cars {
     this.myCarId = car.id;
     if (car.spec.boat) return this.sail(car, dt, keys);
     if (car.spec.plane) return this.flyPlane(car, dt, keys, aimYaw);
+    if (car.spec.skate) return this.driveSkate(car, dt, keys);
     return car.spec.flying ? this.fly(car, dt, keys, aimYaw) : this.driveCar(car, dt, keys);
+  }
+
+  // Skateboards and BMX bikes: push off (W), brake (S), steer (A/D). Ride up a ramp (the Stairs
+  // block, the way it goes up) fast enough and you fly off the top. In the air A and D spin you
+  // round, and Space does a flip; land facing the way you're going (or backwards!) for a trick,
+  // or wobble off (a bail). Ramps are only ramps to these: they ride over the stairs' steps.
+  driveSkate(car, dt, keys) {
+    const s = car.spec, events = [];
+    const throttle = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0), steerIn = (keys.has('KeyA') ? 1 : 0) - (keys.has('KeyD') ? 1 : 0);
+    const max = s.maxSpeed * (this.turbo || 1);
+    const free = (x, y, z, h) => !this.skateBlocked(s, x, y, z, h, car.id, car.outline);
+    car.gear = 1;
+    car.rpm = Math.min(1, Math.abs(car.speed) / max);
+    car.braking = throttle < 0 && car.speed > 0.2;
+    car.reversing = false;
+    car.load = 0;
+    if (car.air) {
+      // Flying! Spin (A/D) and flip (Space); you keep going the way you took off.
+      const a = car.air;
+      a.t += dt;
+      const turn = steerIn * 7 * dt;
+      car.h += turn;
+      a.spin += turn;
+      if (keys.has('Space') && a.flip === null) a.flip = 0;
+      if (a.flip !== null && a.flip < 1) {
+        a.flip = Math.min(1, a.flip + dt / 0.45);
+        car.roll = a.flip * Math.PI * 2;
+        if (a.flip >= 1) {
+          a.flips++;
+          a.flip = null;
+          car.roll = 0;
+        }
+      }
+      const nx = car.pos.x - Math.sin(a.dirH) * car.speed * dt, nz = car.pos.z - Math.cos(a.dirH) * car.speed * dt;
+      if (free(nx, car.pos.y, nz, car.h)) {
+        car.pos.x = nx;
+        car.pos.z = nz;
+      } else car.speed *= -0.3;
+      this.fall(car, dt, events);
+      if (car.vy === 0 && a.t > 0.1) {
+        // Down! A trick, if you landed it.
+        car.air = null;
+        const off = Math.atan2(Math.sin(car.h - a.dirH), Math.cos(car.h - a.dirH));
+        const half = Math.round(Math.abs(a.spin) / Math.PI), backwards = Math.abs(Math.abs(off) - Math.PI) < 0.75;
+        const clean = (Math.abs(off) < 0.75 || backwards) && a.flip === null;
+        car.roll = 0;
+        car.h = a.dirH;
+        if (!clean) {
+          car.speed *= 0.2;
+          events.push({ type: 'bail' });
+        } else {
+          const spin = half * 180, flips = a.flips;
+          const name = `${spin ? `${spin} ` : ''}${flips ? (flips > 1 ? `Double ${s.name === 'BMX Bike' ? 'Flip' : 'Kickflip'}` : s.name === 'BMX Bike' ? 'Flip' : 'Kickflip') : spin ? 'Spin' : 'Ollie'}${backwards ? ' Fakie' : ''}`;
+          events.push({ type: 'trick', name, spin, flips, points: 50 + spin + flips * 250 });
+        }
+      }
+      return events;
+    }
+    // Rolling along.
+    if (throttle > 0) car.speed = Math.min(max, car.speed + s.accel * dt);
+    else if (throttle < 0) car.speed = car.speed > 0 ? Math.max(0, car.speed - s.accel * 2 * dt) : Math.max(-3, car.speed - s.accel * 0.5 * dt);
+    else car.speed -= car.speed * Math.min(1, 0.6 * dt);
+    if (Math.abs(car.speed) < 0.05 && !throttle) car.speed = 0;
+    car.steer += (steerIn * 0.7 - car.steer) * Math.min(1, 8 * dt);
+    const newH = car.h + (car.speed * Math.tan(car.steer)) / (s.length * 0.9) * dt;
+    const nx = car.pos.x - Math.sin(newH) * car.speed * dt, nz = car.pos.z - Math.cos(newH) * car.speed * dt;
+    if (free(nx, car.pos.y, nz, newH)) {
+      car.pos.x = nx;
+      car.pos.z = nz;
+      car.h = newH;
+    } else {
+      if (this.lastHit) events.push(...this.collide(car, this.lastHit));
+      car.speed = -Math.sign(car.speed) * Math.min(1, Math.abs(car.speed) * 0.2);
+    }
+    // Up a ramp? Then off you fly.
+    const cx = Math.floor(car.pos.x), cy = Math.floor(car.pos.y + 0.1), cz = Math.floor(car.pos.z), v = this.world.get(cx, cy, cz);
+    if (blockId(itemOf(v)) === STAIRS && car.vy === 0 && car.speed > 3) {
+      const rise = STAIR_RISE[blockMeta(itemOf(v)) & 3], along = -Math.sin(car.h) * rise[0] - Math.cos(car.h) * rise[1];
+      if (along > 0.6) {
+        car.pos.y = cy + 1;
+        car.vy = 6 + car.speed * 0.45 * (this.bigAir ? 1.25 : 1);
+        car.air = { t: 0, spin: 0, flip: null, flips: 0, dirH: car.h };
+        events.push({ type: 'launch' });
+        return events;
+      }
+    }
+    this.fall(car, dt, events);
+    if (car.vy < -1 && !car.air) car.air = { t: 0.1, spin: 0, flip: null, flips: 0, dirH: car.h }; // (rolled off an edge: airborne too)
+    this.checkStuck(car, dt, throttle);
+    car.target.copy(car.pos);
+    car.targetH = car.h;
+    return events;
+  }
+
+  // Like blocked(), but a skateboard or a bike rides over ramps (Stairs) rather than into them.
+  skateBlocked(spec, x, y, z, h, ignoreId, points) {
+    this.lastHit = null;
+    const solid = (bx, by, bz) => blockId(itemOf(this.world.get(bx, by, bz))) !== STAIRS && this.isSolid(bx, by, bz);
+    if (vehicleBlocked(solid, spec, x, y, z, h, points || outlinePoints(spec))) return true;
+    for (const other of this.list.values()) {
+      if (other.id === ignoreId || Math.abs(other.pos.y - y) > 2) continue;
+      if (footprintsOverlap(spec, x, z, h, other.spec, other.pos.x, other.pos.z, other.h)) {
+        this.lastHit = other;
+        return true;
+      }
+    }
+    return false;
   }
 
   // Boats: the throttle pushes you along and the water slows you down (there are no brakes,

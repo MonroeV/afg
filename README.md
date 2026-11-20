@@ -93,6 +93,16 @@ customize your character, drive cars, build anything and play with friends.
       claimed one (only you can drive it, it stays where you park it), and a new car rolls into
       its spot once you've driven yours away. The town keeps just a few cars of its own now (the
       rest went to the dealership; nobody's own cars were touched). The Loop Express stops there
+    - **Ramp City Skate Park** 🛹 (since v0.64, by the Outer Loop, sharing the Church's Loop
+      Express stop): a big smooth concrete plaza with kicker ramps, a fun box, a half-pipe,
+      quarter pipes along the back (with neon on top), rails and benches, and a rack of
+      **skateboards** and **BMX bikes** to ride (you stand on them!). Ride up a ramp fast and
+      you fly off the top: in the air, **A/D spin** you round and **Space flips** (on a phone:
+      steer with the stick, ⬆ to flip). Land facing the way you're going (or backwards, for a
+      Fakie!) for a trick: Ollie, 180, 360, Kickflip… with points. Wobble off and it's a bail
+      (no harm done). A big trick (a 360 or a flip) is worth 1 🪙. The ramps are Stairs blocks,
+      so on foot you just walk up them (and you can build your own ramps!). Skater Zed runs the
+      **Skaters** club
     - **Putt Putt Paradise** ⛳ (since v0.63, by the Outer Loop, with its own Loop Express stop):
       a **mini golf** course of nine holes with log walls: a straight one, an L, a **windmill**
       (its sails sweep through the gap: time your putt!), a pond (splash: +1 stroke), bumpers,
@@ -670,6 +680,7 @@ customize your character, drive cars, build anything and play with friends.
   | 🚀 Space Cadets (v0.61) | Commander Nova, in Mission Control | visit the Space Museum, watch a rocket launch from nearby, fly to space | 25 🪙, moon boots (you jump higher) |
   | ⚽ Soccer Stars (v0.62) | Referee Rita, at the stadium | kick the giant ball 20 times, score 3 goals | 20 🪙, power kick (you kick the ball farther) |
   | ⛳ Golf Pros (v0.63) | Caddie Cal, at Putt Putt Paradise | play all nine holes, finish 2 rounds, get a hole in one | 20 🪙, a bigger daily bonus (+3 🪙 a day) |
+  | 🛹 Skaters (v0.64) | Skater Zed, at the skate park | land 10 tricks, land a 360, land a flip | 20 🪙, big air (you jump higher off ramps) |
 
   Each step pops up by the badge counter ("🔧 2/3"), and a new badge gets a big celebration with
   fireworks. The **daily bonus** grows every day in a row you play (+2 a day, up to +10)
@@ -1155,6 +1166,7 @@ public/
       space.js         The Space Center: launch pad, tower, Mission Control, museum, landing zone; the flight's timing
       stadium.js       The stadium: field, goals, stands, floodlights; the giant ball's physics (stepBall)
       minigolf.js      Putt Putt Paradise: the nine holes (lanes, par, windmill, pond, bumpers, loop, castle)
+      skatepark.js     Ramp City Skate Park: kickers, fun box, half-pipe, quarter pipes, rails, boards and bikes
       firestation.js   The fire station: its building, the fire trucks' bays, and how often fires break out
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/
