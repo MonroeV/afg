@@ -9,8 +9,8 @@ import { FIRE_HP } from './shared/vehicles.js';
 const NOZZLE = [0, 2.55, -2.1]; // (where the water comes out, on the truck: see cars.js)
 
 export class FireHose {
-  constructor({ effects, sounds, net, hud }) {
-    Object.assign(this, { effects, sounds, net, hud });
+  constructor({ effects, sounds, net, hud, touch = false }) {
+    Object.assign(this, { effects, sounds, net, hud, touch });
     this.fires = [];
     this.squirt = 0;
     this.chip = document.createElement('div');
@@ -19,7 +19,7 @@ export class FireHose {
       position: 'fixed', top: '112px', left: '50%', transform: 'translateX(-50%)', padding: '4px 12px', borderRadius: '16px',
       background: 'rgba(211, 47, 47, 0.85)', color: '#fff', font: 'bold 18px system-ui, sans-serif', display: 'none', pointerEvents: 'none', zIndex: 5,
     });
-    this.chip.innerHTML = '🔥 <span class="arrow" style="display:inline-block">⬆</span> <span class="dist"></span>';
+    this.chip.innerHTML = '🔥 <span class="arrow" style="display:inline-block">⬆</span> <span class="dist"></span><span class="tip"></span>';
     document.body.appendChild(this.chip);
   }
 
@@ -52,11 +52,16 @@ export class FireHose {
     }
     // The arrow to the nearest fire (for the fire truck's driver: unless you're right there).
     const crew = myCar?.kind === 'firetruck';
-    this.chip.style.display = crew && nearest && nd > 12 ? 'block' : 'none';
-    if (crew && nearest && nd > 12) {
+    // (Close to it with the hose off: a reminder how to turn it on.)
+    const remind = crew && nearest && nd < 45 && myCar.siren !== 2;
+    this.chip.style.display = crew && nearest && (nd > 12 || remind) ? 'block' : 'none';
+    if (crew && nearest) {
       const a = Math.atan2(-(nearest.x - viewer.x), -(nearest.z - viewer.z)) - yaw;
       this.chip.querySelector('.arrow').style.transform = `rotate(${-a}rad)`;
       this.chip.querySelector('.dist').textContent = `${Math.round(nd)}`;
+      const tip = remind ? (this.touch ? ' · 💦 Tap ⭐!' : myCar.siren ? ' · 💦 Press G again!' : ' · 💦 Press G twice!') : '';
+      const t = this.chip.querySelector('.tip');
+      if (t.textContent !== tip) t.textContent = tip;
     }
     // Water from every fire truck with its hose on.
     for (const car of cars) {

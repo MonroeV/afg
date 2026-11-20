@@ -1003,7 +1003,7 @@ net.on('ate', ({ food }) => {
 loopExpress = new LoopExpress({ scene, sounds, hud: { toast: text => hud.toast(text) } });
 funRides = new FunRides({ scene, sounds, hud: { toast: text => hud.toast(text) } });
 zooAnimals = new ZooAnimals({ scene, effects, sounds });
-fireHose = new FireHose({ effects, sounds, net, hud: { toast: text => hud.toast(text) } });
+fireHose = new FireHose({ effects, sounds, net, hud: { toast: text => hud.toast(text) }, touch: IS_TOUCH });
 airportLights = new AirportLights(scene);
 net.on('fires', ({ list }) => fireHose.setFires(list));
 net.on('fire_hp', ({ id, hp }) => fireHose.fireHp(id, hp));
@@ -2597,6 +2597,7 @@ function enterCar(car) {
   carCam.pitch = car.spec.flying ? -0.25 : -0.15;
   danceView = 0;
   hud.setCarHelp(car.spec.plane ? 'plane' : car.kind);
+  if (car.kind === 'firetruck') hud.toast(touch ? '🚒 ⭐ 🚨 lights · again: 💦 hose' : '🚒 G: 🚨 lights & siren · G again: 💦 water hose');
   sounds.setEngineVoice(car.id, car.kind);
   if (!car.spec.flying || car.spec.plane) sounds.engine(0.15, 0);
   sounds.spawnCar();
@@ -6020,7 +6021,7 @@ function frame(timestamp) {
   // Keys held on the keyboard, plus the ones the touch joystick and pads are pressing.
   const held = touch?.enabled ? new Set([...keys, ...touch.keys]) : keys;
   if (touch) {
-    touch.setMode(myCar ? (myCar.spec.flying ? 'heli' : 'car') : myRide ? 'ride' : player?.flying ? 'fly' : 'walk');
+    touch.setMode(myCar ? (myCar.spec.flying ? 'heli' : 'car') : myRide ? 'ride' : player?.flying ? 'fly' : 'walk', myCar?.kind === 'firetruck' ? (myCar.siren === 1 ? '💦' : '🚨') : '⭐');
     touch.update();
     if ((sleeping || seated) && !move && (touch.stick.x || touch.stick.y || touch.keys.has('Space'))) {
       wakeUp();
@@ -6272,7 +6273,7 @@ function frame(timestamp) {
       else if (s?.type === 'balloon') hint = '🎈 Right-click to fly the balloon!';
       else if (s?.type === 'hoop') hint = '🏀 Throw the Pet Ball through the hoop!';
       else if (hit && blockId(hit.value) === STOP_BLOCK && !tool) hint = '🚉 Right-click: when do the trains come?';
-      else if (hit && blockId(hit.value) === GATE_BLOCK && !tool) hint = '🎟️ Right-click to ride!';
+      else if (hit && blockId(hit.value) === GATE_BLOCK) hint = '🎟️ Right-click to ride!';
       else if (s?.type === 'tv') hint = tvs.onGame(s) ? '🎮 Right-click to play Block Hopper!' : '📺 Right-click to change the channel';
       else if (item === CLAIM) hint = `🚩 Click a corner to start claiming land (max ${CLAIM_MAX}×${CLAIM_MAX}), or a vehicle to make it yours` + (myVehicles().length ? ` · 🔑 ${whereMyVehicles()}` : '');
       else if (item === VACATION) hint = myLand(true) ? '🏖️ You have vacation land already' : `🏖️ Click a corner to claim your vacation land (max ${CLAIM_MAX}×${CLAIM_MAX}). It stays put for good!`;

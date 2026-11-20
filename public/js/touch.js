@@ -143,14 +143,15 @@ export class TouchControls {
   }
 
   // What the pads mean right now: walking, flying, driving, flying the helicopter, or riding.
-  setMode(mode) {
-    if (mode === this.mode) return;
+  setMode(mode, special = '⭐') {
+    if (mode === this.mode && special === this.special) return;
     this.mode = mode;
+    this.special = special;
     this.pads.jump.textContent = mode === 'car' ? '🛑' : '⬆';
     this.pads.jump.classList.toggle('hidden', mode === 'ride');
     this.pads.down.classList.toggle('hidden', mode === 'car' || mode === 'ride'); // walking, it's crouch
     this.pads.use.textContent = mode === 'car' || mode === 'heli' || mode === 'ride' ? '🚪' : '✋';
-    this.minis.dance.textContent = mode === 'car' ? '⭐' : '💃'; // (driving: the siren, the camper's roof, the dump bed)
+    this.minis.dance.textContent = mode === 'car' ? special : '💃'; // (driving: the siren, the camper's roof, the dump bed, the fire truck's lights and hose)
     this.stickKeys();
   }
 

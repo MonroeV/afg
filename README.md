@@ -56,7 +56,8 @@ customize your character, drive cars, build anything and play with friends.
       tallest buildings in the world, 100 and 80 blocks high, with an elevator up every floor,
       offices on every floor, and a helipad on top of Sky Tower
     - **Fun Land** 🎢🎡 (since v0.52, on the west side of the Outer Loop): an amusement park.
-      Right-click a ride's gate 🎟️ to ride:
+      Right-click a ride's red gate 🎟️ to ride (signs by the gates say so: since v0.57.1, with
+      whatever you're holding):
       - the **roller coaster**: the chain clanks you up the lift hill, then it's all gravity,
         down the big drop (about 65 km/h!), over the hills and round the curves, and back
       - the **Ferris wheel**: it turns slowly all the time (everyone sees the same turn); step
@@ -83,7 +84,8 @@ customize your character, drive cars, build anything and play with friends.
       rest went to the dealership; nobody's own cars were touched). The Loop Express stops there
     - **The Fire Station** 🚒 (since v0.54, on the south side of the Outer Loop): red brick, with
       two open bays (a **fire truck** waiting in each) and the firefighters' room next door (bunk
-      beds, a table, a couch). In a fire truck, **G** turns on the lights and siren 🚨, and **G**
+      beds, a table, a couch). In a fire truck (the controls show at the bottom when you get in;
+      on a phone, the ⭐ button), **G** turns on the lights and siren 🚨, and **G**
       again the **hose** too 💦: it sprays water ahead of the truck (steer to aim). **Fires** only
       happen while somebody's driving a fire truck (since v0.55.4): a little while after you get
       in, a call comes in, and a fire breaks out on a road in town (just flames and smoke: nothing

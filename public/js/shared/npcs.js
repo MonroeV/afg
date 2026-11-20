@@ -134,7 +134,7 @@ const NPCS = [
     id: -68, place: 'funland_snacks', name: 'Pete', title: 'Pete 🍿', roam: 1.5, store: 'funland',
     look: { face: 'grin', hair: 'short', hat: 'party', shirt: 'striped', pants: 'jeans', extra: 'none', skin: '#f5c9a0', hairColor: '#c23b22', hatColor: '#fdd835', shirtColor: '#e53935', shirtColor2: '#ffffff', pantsColor: '#37474f', shoesColor: '#111111' },
     hello: n => [`Step right up, ${n}! Popcorn! Cotton candy! 🍿🍭`, `Hi ${n}! Ridden the roller coaster yet? 🎢`],
-    tips: ['🍿🍭🍦🌭🍋', 'The Ferris wheel goes REALLY high! 🎡', 'Bumper cars: bump into everybody! 🚗💥'],
+    tips: ['🍿🍭🍦🌭🍋', 'Right-click a ride\'s red gate 🎟️ to ride it!', 'The roller coaster gate is at the end of the middle path! 🎢', 'The Ferris wheel goes REALLY high! Its gate is by the wheel 🎡', 'Bumper cars: hop in one (E) and bump into everybody! 🚗💥', 'Right-click the merry-go-round to ride it! 🎠'],
   },
   {
     // The zoo: Zookeeper Zara (she runs the Zookeepers club).

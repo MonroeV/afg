@@ -16,7 +16,7 @@ import { buildChurch, meetingOn, MEETING_COINS, MEETING_STAY } from './church.js
 import { buildAirport, hangarPlanes, planesOutOfTheWay, airportCurb, addTaxiway } from './airport.js';
 import { buildPark } from './park.js';
 import { buildTrainLine, fixPlatforms } from './train.js';
-import { buildFunLand } from './funland.js';
+import { buildFunLand, rideSigns } from './funland.js';
 import { buildZoo, ANIMALS } from './zoo.js';
 import { buildDealership, newCarFor, LOT_KINDS, SHOW_KINDS, townCarsToKeep } from './dealership.js';
 import { buildFireStation, FIRE_CALL, FIRE_GAP, FIRE_OUT, FIRE_LIFE, DOUSE, FIRE_REWARD, HOSE_RANGE } from './firestation.js';
@@ -36,7 +36,7 @@ import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
 const PLANE_HOME_AFTER = 300; // seconds a town airplane sits idle away from the airport before it's taken back
-export const SAVE_VERSION = 34;
+export const SAVE_VERSION = 35;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -309,6 +309,7 @@ export class GameRoom {
       this.upgradeTo32();
       this.upgradeTo33();
       this.upgradeTo34();
+      this.upgradeTo35();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -418,6 +419,7 @@ export class GameRoom {
     if (data.version < 32) this.upgradeTo32();
     if (data.version < 33) this.upgradeTo33();
     if (data.version < 34) this.upgradeTo34();
+    if (data.version < 35) this.upgradeTo35();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -1076,6 +1078,20 @@ export class GameRoom {
       gone++;
     }
     this.log(`Opened BuildZone Motors (${dealer ? 'yes' : 'no room'}), and ${gone} of the town's cars went to it`);
+    this.onDirty();
+  }
+
+  // Worlds saved before version 35: signs by Fun Land's two ride gates (how to ride), where
+  // there's room.
+  upgradeTo35() {
+    let n = 0;
+    for (const [x, z, facing, text] of rideSigns(this.places?.funland)) {
+      if (this.get(x, 0, z) || !inBounds(x, 0, z)) continue;
+      this.world.set(blockKey(x, 0, z), makeBlock(SIGN, facing));
+      this.signs.set(blockKey(x, 0, z), cleanSignText(text));
+      n++;
+    }
+    this.log(`Put up signs by Fun Land's rides (${n})`);
     this.onDirty();
   }
 

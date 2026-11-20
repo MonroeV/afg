@@ -32,6 +32,17 @@ export const COASTER_CREST = 7; // (the top of the lift hill)
 export const WHEEL = { u: 14, y: 12.5, v: 17, r: 10, gondolas: 8, turn: 48 };
 // The bumper car arena (u0, v0, u1, v1: its floor, inside the fence).
 const ARENA = [3, 29, 19, 41];
+// Signs by the two gates (u, v, what they say).
+const RIDE_SIGNS = [[32, 8, '🎢 ROLLER COASTER! Right-click the red gate 🎟️'], [15, WHEEL.v - 4, '🎡 FERRIS WHEEL! Right-click the red gate 🎟️']];
+
+// The signs, for a Fun Land built before they were added: where they go (if the spot's free).
+export function rideSigns(place) {
+  const f = place?.frame;
+  if (!f) return [];
+  const cell = (u, v) => [Math.floor(f.o[0] + (u + 0.5) * f.U[0] + (v + 0.5) * f.V[0]), Math.floor(f.o[1] + (u + 0.5) * f.U[1] + (v + 0.5) * f.V[1])];
+  const outward = faceDir(-f.V[0], -f.V[1]);
+  return RIDE_SIGNS.map(([u, v, text]) => [...cell(u, v), outward, text]);
+}
 
 // A smooth path through the coaster's points (Catmull-Rom, closed): sample points about every
 // half block, with how far along each is. Each: [u, y, v, s].
@@ -107,6 +118,12 @@ function funLandAt(site, set) {
   // The coaster's station platform (under the track), and its gate at the end of the path.
   for (let u = 25; u <= 36; u++) for (let v = 9; v <= 11; v++) put(u, 0, v, B.planks);
   put(31, 0, 8, makeBlock(B.gate, outward));
+  // (Signs by the gates, so everyone knows how: since v0.57.1.)
+  for (const [u, v, text] of RIDE_SIGNS) {
+    const [x, z] = site.at(u, v);
+    set(x, 0, z, makeBlock(SIGN, outward));
+    signs.push([x, 0, z, text]);
+  }
 
   // The bumper car arena: a smooth floor with a railing all round (a gap to walk in).
   const [a0, b0, a1, b1] = ARENA;
