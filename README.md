@@ -93,6 +93,14 @@ customize your character, drive cars, build anything and play with friends.
       claimed one (only you can drive it, it stays where you park it), and a new car rolls into
       its spot once you've driven yours away. The town keeps just a few cars of its own now (the
       rest went to the dealership; nobody's own cars were touched). The Loop Express stops there
+    - **BuildZone Elementary** 🏫 (since v0.66, by the Outer Loop, with its own Loop Express stop):
+      a red brick school with a flagpole and a bus loop out front, where a big yellow **school
+      bus** 🚌 waits (lots of seats for friends; **G** swings its STOP sign out). Inside, down the
+      hall: three classrooms (rows of desks facing a whiteboard with a fun fact on it), the
+      library (bookshelves to read at, reading tables, a comfy couch), the cafeteria and the gym.
+      Out back: a playground (slides, a sandbox, monkey bars) and a blacktop court. **Talk to
+      Ms. Lee** in her classroom for a **quiz question**: pick the right answer for 2 🪙 (up to
+      10 🪙 a day). Ms. Lee runs the **Honor Roll** club
     - **BuildZone Hospital** 🏥 (since v0.65, by the Outer Loop, with its own Loop Express stop):
       a big white hospital with red crosses on the front, an ambulance bay under a canopy, a
       lobby with Dr. Hart at the reception desk, a waiting room, an emergency room, a row of
@@ -691,6 +699,7 @@ customize your character, drive cars, build anything and play with friends.
   | ⛳ Golf Pros (v0.63) | Caddie Cal, at Putt Putt Paradise | play all nine holes, finish 2 rounds, get a hole in one | 20 🪙, a bigger daily bonus (+3 🪙 a day) |
   | 🛹 Skaters (v0.64) | Skater Zed, at the skate park | land 10 tricks, land a 360, land a flip | 20 🪙, big air (you jump higher off ramps) |
   | 🚑 Paramedics (v0.65) | Dr. Hart, at the hospital | turn on an ambulance's siren, get better in a hospital bed, drive a hurt friend to the hospital | 20 🪙, first aid (you get better by yourself) |
+  | 🎓 Honor Roll (v0.66) | Ms. Lee, at the school | answer 5 quiz questions right, ride the school bus | 20 🪙, a gold star (quiz answers pay double) |
 
   Each step pops up by the badge counter ("🔧 2/3"), and a new badge gets a big celebration with
   fireworks. The **daily bonus** grows every day in a row you play (+2 a day, up to +10)
@@ -1178,6 +1187,7 @@ public/
       minigolf.js      Putt Putt Paradise: the nine holes (lanes, par, windmill, pond, bumpers, loop, castle)
       skatepark.js     Ramp City Skate Park: kickers, fun box, half-pipe, quarter pipes, rails, boards and bikes
       hospital.js      BuildZone Hospital: the building, beds, the ambulance bay and its ambulances
+      school.js        BuildZone Elementary: classrooms, library, cafeteria, gym, playground, bus; the quiz
       firestation.js   The fire station: its building, the fire trucks' bays, and how often fires break out
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/

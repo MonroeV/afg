@@ -25,6 +25,7 @@ import { buildStadium, stepBall, kickBall, BALL_R, SOCCER_COINS } from './stadiu
 import { buildMiniGolf, HOLES, ROUND_COINS, BEST_COINS, GOLF_BOARD } from './minigolf.js';
 import { buildSkatePark, TRICK_COINS } from './skatepark.js';
 import { buildHospital, HEAL_COINS, RESCUE_COINS } from './hospital.js';
+import { buildSchool, QUIZ, QUIZ_COINS, QUIZ_DAILY } from './school.js';
 import { buildDealership, newCarFor, LOT_KINDS, SHOW_KINDS, townCarsToKeep } from './dealership.js';
 import { buildFireStation, FIRE_CALL, FIRE_GAP, FIRE_OUT, FIRE_LIFE, DOUSE, FIRE_REWARD, HOSE_RANGE } from './firestation.js';
 import { findHomes } from './residents.js';
@@ -43,7 +44,7 @@ import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
 const PLANE_HOME_AFTER = 300; // seconds a town airplane sits idle away from the airport before it's taken back
-export const SAVE_VERSION = 42;
+export const SAVE_VERSION = 43;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -327,6 +328,7 @@ export class GameRoom {
       this.upgradeTo40();
       this.upgradeTo41();
       this.upgradeTo42();
+      this.upgradeTo43();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -371,6 +373,8 @@ export class GameRoom {
         // Taco Tuesday: which Tuesday (the day count), and how many free tacos they've had.
         tacoDay: Number.isInteger(w.tacoDay) ? w.tacoDay : -1,
         churchDay: Number.isInteger(w.churchDay) ? w.churchDay : -1, // (the last Sunday they came to church)
+        quizDay: Number.isInteger(w.quizDay) ? w.quizDay : -1, // (Ms. Lee's quiz: which day, and the coins from it that day)
+        quizCoins: Number.isInteger(w.quizCoins) ? w.quizCoins : 0,
         churchMeet: typeof w.churchMeet === 'string' ? w.churchMeet.slice(0, 40) : '', // (the last meeting they came to: `${day}:${key}`)
         pal: Number.isInteger(w.pal) ? w.pal : null, // their best friend (a kid from Friendship Park)
         ate: Array.isArray(w.ate) ? w.ate.filter(f => FOODS[f]) : [], // the kinds of food they've eaten
@@ -447,6 +451,7 @@ export class GameRoom {
     if (data.version < 40) this.upgradeTo40();
     if (data.version < 41) this.upgradeTo41();
     if (data.version < 42) this.upgradeTo42();
+    if (data.version < 43) this.upgradeTo43();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -1229,6 +1234,31 @@ export class GameRoom {
     }
     this.log(`Added the hospital (${hospital ? 'yes' : 'no room'})`);
     this.onDirty();
+  }
+
+  // Worlds saved before version 43: BuildZone Elementary (its school bus, a train stop).
+  upgradeTo43() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const school = buildSchool({ get, set, canUse: this.freeLand() });
+    if (school) {
+      this.claims.push(school.claim);
+      for (const [x, y, z, text] of school.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+      this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...school.places };
+      for (const c of school.cars) this.spawn(this.addHome(c));
+      this.addTrainStops();
+    }
+    this.log(`Added the school (${school ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
+  // Ms. Lee's quiz: a question (two answers, in either order) for this player.
+  quizAsk(c) {
+    const i = Math.floor(Math.random() * QUIZ.length), [q, right, wrong] = QUIZ[i], flip = Math.random() < 0.5;
+    c.quiz = { i, right: flip ? 1 : 0, at: Date.now() };
+    c.send({ t: 'quiz', q, a: flip ? [wrong, right] : [right, wrong] });
   }
 
   // ---------- Ouch: the hospital ----------
@@ -2595,6 +2625,7 @@ export class GameRoom {
       } else if (v.passengers.length < seatCount(VEHICLES[v.kind]) - 1) v.passengers.push(client.id);
       else return;
       if (v.kind === 'tractor' && v.driver === client.id) this.progress(client, 'farm', 'tractor', 1, true);
+      if (v.kind === 'bus') this.progress(client, 'school', 'bus', 1, true);
       client.car = id;
       this.broadcast({ t: 'car_driver', ...publicVehicle(v) });
     },
@@ -3040,6 +3071,28 @@ export class GameRoom {
         if (record) this.broadcast({ t: 'chat', system: true, text: `⛳ ${client.name} played the best round ever at Putt Putt Paradise: ${total}! 🏆` });
       }
       client.send({ t: 'golf_round', total, coins, best, record });
+      this.onDirty();
+    },
+
+    // An answer to Ms. Lee's quiz question: right? Coins (a few times a day), and the club.
+    quiz_answer(client, { pick }) {
+      const q = client.quiz;
+      if (!q || Date.now() - q.at > 120000) return;
+      client.quiz = null;
+      const right = pick === q.right, w = this.wallet(client);
+      let coins = 0;
+      if (right) {
+        if (w.quizDay !== this.day) Object.assign(w, { quizDay: this.day, quizCoins: 0 });
+        const each = QUIZ_COINS * (this.perk(client, 'school') ? 2 : 1);
+        if ((w.quizCoins || 0) < QUIZ_DAILY) {
+          coins = each;
+          w.quizCoins = (w.quizCoins || 0) + coins;
+          w.coins += coins;
+          this.sendWallet(client);
+        }
+        this.progress(client, 'school', 'quiz');
+      }
+      client.send({ t: 'quiz_result', right, answer: QUIZ[q.i][1], coins });
       this.onDirty();
     },
 

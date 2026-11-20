@@ -696,7 +696,7 @@ export class Hud {
         : kind === 'heli'
       ? '<kbd>Mouse</kbd> Steer <kbd>Space</kbd> Up <kbd>Shift</kbd> Down <kbd>W</kbd><kbd>S</kbd> Tilt (stays tilted) <kbd>A</kbd><kbd>D</kbd> Slide <kbd>V</kbd> Camera <kbd>E</kbd> Get out'
       : '<kbd>W</kbd><kbd>S</kbd> Drive <kbd>A</kbd><kbd>D</kbd> Steer <kbd>Space</kbd> Brake ' +
-        '<kbd>Shift</kbd> Boost <kbd>H</kbd> Horn ' + ({ police: '<kbd>G</kbd> Siren ', camper: '<kbd>G</kbd> Pop-up roof ', dump: '<kbd>G</kbd> Tip the dump bed ', rv: '<kbd>G</kbd> Awning ', firetruck: '<kbd>G</kbd> 🚨 Lights · again 💦 Hose ', ambulance: '<kbd>G</kbd> 🚨 Siren ' }[kind] || '') + sleep +
+        '<kbd>Shift</kbd> Boost <kbd>H</kbd> Horn ' + ({ police: '<kbd>G</kbd> Siren ', camper: '<kbd>G</kbd> Pop-up roof ', dump: '<kbd>G</kbd> Tip the dump bed ', rv: '<kbd>G</kbd> Awning ', firetruck: '<kbd>G</kbd> 🚨 Lights · again 💦 Hose ', ambulance: '<kbd>G</kbd> 🚨 Siren ', bus: '<kbd>G</kbd> 🛑 Stop sign ' }[kind] || '') + sleep +
         '<kbd>V</kbd> Camera <kbd>E</kbd> Get out';
   }
 

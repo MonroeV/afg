@@ -154,7 +154,7 @@ export function buildCarModel(kind, color) {
     // Car paint with a glossy clear coat on top, so it reflects the world around it.
     // (Vans and trucks have big flat sides: less shiny, so they show their color, not the sky.)
     // (A fire truck: a deep fire-engine red that doesn't wash out in the sun.)
-    paint: kind === 'firetruck' ? new THREE.MeshPhysicalMaterial({ color, metalness: 0, roughness: 0.6, clearcoat: 0.25, clearcoatRoughness: 0.4, envMapIntensity: 0.35 }) : ['camper', 'pickup', 'dump', 'rv'].includes(kind)
+    paint: kind === 'firetruck' || kind === 'bus' ? new THREE.MeshPhysicalMaterial({ color, metalness: 0, roughness: 0.6, clearcoat: 0.25, clearcoatRoughness: 0.4, envMapIntensity: 0.35 }) : ['camper', 'pickup', 'dump', 'rv'].includes(kind)
       ? new THREE.MeshPhysicalMaterial({ color, metalness: 0.1, roughness: 0.55, clearcoat: 0.4, clearcoatRoughness: 0.3 })
       : new THREE.MeshPhysicalMaterial({ color, metalness: 0.5, roughness: 0.4, clearcoat: 1, clearcoatRoughness: 0.06 }),
     dark: new THREE.MeshStandardMaterial({ color: 0x1d1f24, roughness: 0.7 }),
@@ -197,6 +197,7 @@ export function buildCarModel(kind, color) {
   else if (kind === 'firetruck') fireTruckBody(add, B, s);
   else if (kind === 'tractor') tractorBody(add, B, s);
   else if (kind === 'ambulance') ambulanceBody(add, B, s);
+  else if (kind === 'bus') extra.stopSign = busBody(add, B, s, g);
   else {
     add(B(W, bodyH, L), 'paint', 0, bodyY, 0);
     // Cabin: glass all round with a painted roof and pillars.
@@ -214,11 +215,11 @@ export function buildCarModel(kind, color) {
     add(B(0.36, 0.16, 0.04), 'tail', x * (W / 2 - 0.3), bodyY + 0.08, L / 2 + 0.01);
     add(B(0.14, 0.08, 0.04), 'reverse', x * (W / 2 - 0.55), bodyY + 0.08, L / 2 + 0.01);
     if (kind === 'tractor') continue; // (no mirrors)
-    const mirrorZ = kind === 'camper' || kind === 'firetruck' || kind === 'ambulance' ? -L / 2 + 0.45 : kind === 'dump' ? -L / 2 + 0.35 : kind === 'rv' ? -L / 2 + 0.3 : kind === 'pickup' ? -1.2 : -0.55;
+    const mirrorZ = kind === 'camper' || kind === 'firetruck' || kind === 'ambulance' || kind === 'bus' ? -L / 2 + 0.45 : kind === 'dump' ? -L / 2 + 0.35 : kind === 'rv' ? -L / 2 + 0.3 : kind === 'pickup' ? -1.2 : -0.55;
     add(B(0.08, kind === 'rv' ? 0.3 : 0.06, 0.16), kind === 'rv' ? 'dark' : 'paint', x * (W / 2 + (kind === 'rv' ? 0.12 : 0.04)), kind === 'rv' ? ride + 1.5 : ride + bodyH + 0.02, mirrorZ);
   }
   // A third brake light along the top of the back window.
-  if (!extra.roof && !extra.bed && !extra.awning && kind !== 'pickup' && kind !== 'sports' && kind !== 'firetruck' && kind !== 'tractor' && kind !== 'ambulance') add(B(cabinW * 0.4, 0.05, 0.03), 'brake', 0, ride + bodyH + cabinH - 0.09, 0.15 + cabinL / 2 + 0.03);
+  if (!extra.roof && !extra.bed && !extra.awning && kind !== 'pickup' && kind !== 'sports' && kind !== 'firetruck' && kind !== 'tractor' && kind !== 'ambulance' && kind !== 'bus') add(B(cabinW * 0.4, 0.05, 0.03), 'brake', 0, ride + bodyH + cabinH - 0.09, 0.15 + cabinL / 2 + 0.03);
   const wz = L / 2 - wheelR - (kind === 'monster' ? 0.05 : 0.3);
   if (kind === 'monster') {
     for (const z of [-1, 1]) add(B(W - 0.2, 0.12, 0.12), 'chrome', 0, wheelR, z * wz);
@@ -547,6 +548,31 @@ function fireTruckBody(add, B, { length: L, width: W, ride, bodyH }) {
   // The water cannon (turret and nozzle, pointing forward over the cab).
   add(B(0.36, 0.3, 0.36), 'chrome', 0, ride + bodyH + 0.2, -L / 2 + cabL + 0.45);
   add(B(0.14, 0.14, 0.9), 'chrome', 0, ride + bodyH + 0.42, -L / 2 + cabL + 0.05);
+}
+
+// A school bus: a long yellow box with black stripes, a row of windows down each side, a big
+// windshield, a black bumper, and the red STOP sign on the driver's side (it swings out: G).
+function busBody(add, B, { length: L, width: W, ride, bodyH }, g) {
+  add(B(W * 0.8, 0.3, L - 0.3), 'dark', 0, ride + 0.15, 0); // the chassis
+  add(B(W, bodyH, L - 0.9), 'paint', 0, ride + bodyH / 2 + 0.1, 0.45);
+  add(B(W * 0.94, bodyH * 0.45, 0.9), 'paint', 0, ride + bodyH * 0.225 + 0.1, -L / 2 + 0.45); // (the hood)
+  add(B(W * 0.92, 0.75, 0.05), 'glass', 0, ride + bodyH - 0.45, -L / 2 + 0.88); // the windshield
+  for (const x of [-1, 1]) {
+    for (let i = 0; i < 7; i++) add(B(0.03, 0.6, 0.85), 'glass', x * (W / 2 + 0.005), ride + bodyH - 0.45, -L / 2 + 1.5 + i * 1.0);
+    for (const y of [0.55, 0.9]) add(B(0.02, 0.06, L - 0.95), 'dark', x * (W / 2 + 0.01), ride + y, 0.45); // (the black stripes)
+  }
+  add(B(W * 0.5, 0.3, 0.03), 'dark', 0, ride + 0.6, -L / 2 - 0.02); // the grille
+  // The STOP sign, on an arm on the driver's side (folded flat against the bus; G swings it out).
+  const arm = new THREE.Group();
+  arm.position.set(-W / 2 - 0.03, ride + 1.2, -L / 2 + 1.3);
+  const sign = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.03, 8).rotateZ(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xd32f2f, roughness: 0.5 }));
+  sign.position.set(0, 0, 0.35);
+  const label = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.16), new THREE.MeshBasicMaterial({ map: textTexture('STOP', '#d32f2f', '#ffffff') }));
+  label.position.set(-0.02, 0, 0.35);
+  label.rotation.y = -Math.PI / 2;
+  arm.add(sign, label);
+  g.add(arm);
+  return arm;
 }
 
 // An ambulance: a cab up front (windows all round), a tall box behind it, red stripes along the
@@ -2414,6 +2440,9 @@ export class Cars {
         awning.poles.scale.y = awning.height - 0.26;
       }
       if (car.model.lights) car.model.lights.color.copy(LAMP_COLOR).multiplyScalar(0.35 + 0.65 * nightK);
+      // (the school bus's STOP sign swings out from its side)
+      const stop = car.model.stopSign;
+      if (stop) stop.rotation.y += ((car.siren ? -Math.PI / 2 : 0) - stop.rotation.y) * Math.min(1, dt * 5);
       const bed = car.model.bed;
       if (bed) {
         bed.tip += ((car.siren ? 0.8 : 0) - bed.tip) * Math.min(1, dt * 2);

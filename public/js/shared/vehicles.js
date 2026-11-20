@@ -91,6 +91,12 @@ export const VEHICLES = {
     name: 'Ambulance', mass: 3200, length: 5.2, width: 2.2, ride: 0.4, bodyH: 1.9, cabinH: 0, wheelR: 0.42, maxSpeed: 20, accel: 8, gears: 3, respawn: 30,
     seats: [[-0.45, 0.95, -1.75], [0.45, 0.95, -1.75], [-0.4, 0.95, 0.9], [0.4, 0.95, 0.9]], special: 'siren', engine: 'big', pitch: 1.0,
   },
+  // A yellow school bus (at the school): long, with rows of seats for lots of friends. G swings
+  // its red STOP sign out (and back).
+  bus: {
+    name: 'School Bus', mass: 9000, length: 8.4, width: 2.5, ride: 0.45, bodyH: 2.0, cabinH: 0, wheelR: 0.5, maxSpeed: 15, accel: 5, gears: 3, respawn: 60,
+    seats: [[-0.65, 1.0, -3.3], ...[-2, -1, 0, 1, 2, 3].flatMap(z => [[-0.6, 1.0, z * 0.95], [0.6, 1.0, z * 0.95]])], special: 'stop', engine: 'diesel', pitch: 0.9,
+  },
   // A tractor (at the farm): slow and steady, big wheels at the back and little ones in front, an
   // open seat under a sunshade roof. It climbs up one block, like a monster truck.
   tractor: {

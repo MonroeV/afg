@@ -186,6 +186,14 @@ export const CLUBS = [
     ],
     reward: { coins: 20, perk: '🩹', perkName: 'First aid: you get better by yourself' },
   },
+  {
+    id: 'school', name: 'Honor Roll', icon: '🎓', color: '#f9a825', leader: 'Ms. Lee', where: 'at the school',
+    tasks: [
+      { id: 'quiz', icon: '✏️', goal: 5, what: 'Answer Ms. Lee\'s quiz questions right (talk to her)' },
+      { id: 'bus', icon: '🚌', goal: 1, what: 'Ride the school bus' },
+    ],
+    reward: { coins: 20, perk: '🎓', perkName: 'Gold star: quiz answers pay double' },
+  },
 ];
 
 export const clubById = id => CLUBS.find(c => c.id === id);

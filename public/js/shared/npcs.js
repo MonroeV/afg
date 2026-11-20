@@ -206,6 +206,13 @@ const NPCS = [
     tips: ['🩺🛏️💖', 'Hurt 🤕? Lie down in one of our beds and you\'ll feel better!', 'The ambulances are out front: G for the siren! 🚑', 'Bring a hurt friend in the ambulance, stop in the bay out front! 🚑', 'Eat well and be careful up high! 🍎'],
   },
   {
+    // The school: Ms. Lee in her classroom (she runs the Honor Roll club, and asks quiz questions).
+    id: -80, place: 'school_class', name: 'Ms. Lee', title: 'Ms. Lee 🍎', roam: 2, club: 'school', quiz: true,
+    look: { face: 'smile', hair: 'long', hat: 'none', shirt: 'dress', pants: 'skirt', extra: 'none', skin: '#f1c27d', hairColor: '#1b1209', hatColor: '#000000', shirtColor: '#7e57c2', shirtColor2: '#ffffff', pantsColor: '#7e57c2', shoesColor: '#3b2314' },
+    hello: n => [`Good morning, ${n}! Ready to learn? 🍎`, `Hi ${n}! Want a quiz question? ✏️`],
+    tips: ['🍎✏️📚', 'Talk to me for a quiz question! Get it right for coins 🪙', 'The library is full of books: right-click a bookshelf to read 📚', 'The school bus is out front: lots of seats for friends! 🚌'],
+  },
+  {
     // BuildZone Motors: Dealer Dana, at the sales desk in the showroom.
     id: -71, place: 'dealer_desk', name: 'Dealer Dana', title: 'Dealer Dana 🚗', roam: 1,
     look: { face: 'smile', hair: 'ponytail', hat: 'none', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#e0ac69', hairColor: '#6d3b16', hatColor: '#000000', shirtColor: '#1a237e', shirtColor2: '#ffffff', pantsColor: '#263238', shoesColor: '#111111' },
@@ -1243,6 +1250,10 @@ export class NpcCrew {
     } else if (n.def.challenges) {
       this.say(n, pickOne([`Let's see what you've built, ${c.name}! 🔍`, 'Pick a card and build it! 🃏', 'Build it on your land, then show me! 🏗️']), true);
       this.room.sendChallenges(c);
+    } else if (n.def.quiz) {
+      // Ms. Lee: a quiz question (see quizAsk in game.js).
+      this.say(n, pickOne([`Here's one for you, ${c.name}! ✏️`, 'Think carefully! 🤔', 'Quiz time! 🍎']), true);
+      this.room.quizAsk(c);
     } else if (n.def.club) {
       // A club's leader: shows you what to do (in the badge book: pictures, not lots of words).
       const done = this.room.perk(c, n.def.club);

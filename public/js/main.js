@@ -2258,6 +2258,7 @@ function carSpecial() {
   if (special === 'roof') hud.toast(myCar.siren ? '⛺ Pop! The roof is up.' : '⛺ Roof down. Ready to drive!');
   if (special === 'awning') hud.toast(myCar.siren ? '⛱️ The awning rolls out. Time to relax!' : '⛱️ Awning rolled up. Ready to drive!');
   if (special === 'tip' && myCar.siren) dumpLoad(myCar);
+  if (special === 'stop') hud.toast(myCar.siren ? '🛑 STOP!' : '🚌 ➡');
 }
 
 // The dump truck: drive under the chute at Big Rock Quarry to fill it with dirt, then tip it
@@ -2719,6 +2720,20 @@ net.on('healed', ({ coins }) => {
   sounds.magic();
   effects.heartsAt(player.pos.x, player.pos.y + 1.6, player.pos.z, 10);
   hud.toast(`💖 All better! 🩹 +${coins} 🪙`);
+});
+// Ms. Lee's quiz: a question with two answers (the left button, or the right).
+net.on('quiz', ({ q, a }) => {
+  ask('🍎 Quiz!', q, a[1], a[0], () => net.send({ t: 'quiz_answer', pick: 1 }), () => net.send({ t: 'quiz_answer', pick: 0 }));
+});
+net.on('quiz_result', ({ right, answer, coins }) => {
+  if (right) {
+    sounds.magic();
+    effects.sparkle(player.pos.x, player.pos.y + 1.8, player.pos.z, 24);
+    hud.toast(`✅ ⭐${coins ? ` +${coins} 🪙` : ''}`);
+  } else {
+    sounds.tone(300, 200, 0.2, 0.15, 'triangle');
+    hud.toast(`❌ ➡ ${answer}`);
+  }
 });
 net.on('rescued', ({ name, coins }) => {
   sounds.magic();
