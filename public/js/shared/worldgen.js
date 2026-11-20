@@ -16,6 +16,7 @@ import { buildZoo } from './zoo.js';
 import { buildFarm } from './farm.js';
 import { buildRaceway } from './karts.js';
 import { buildSpaceCenter } from './space.js';
+import { buildStadium } from './stadium.js';
 import { buildFireStation } from './firestation.js';
 import { buildDealership, townCarsToKeep } from './dealership.js';
 import { findHomes } from './residents.js';
@@ -564,7 +565,10 @@ export function generateWorld(seed = 2024) {
   // The Space Center.
   const space = buildSpaceCenter({ get: getB, set: put, canUse: free });
   if (space) markUsed(...space.area);
-  const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null, pizza: pizza?.place || null, lodge: frontier.places.lodge, ...far.places, ...(base?.places || {}), ...gas.places, ...shops.places, ...outerShops.places, church: church?.place || null, park: friendPark?.place || null, ...(funLand?.places || {}), ...(zoo?.places || {}), ...(fireStation?.places || {}), ...(dealer?.places || {}), ...(farm?.places || {}), ...(raceway?.places || {}), ...(space?.places || {}), airport: airport?.place || null, skytowers: outerTowers.towers.length ? { x: outerTowers.towers[0].x, z: outerTowers.towers[0].z, towers: outerTowers.towers } : null, weather: weather?.place || null, buildpark: buildPark?.place || null, ...Object.fromEntries(homes.map((h, i) => [`home${i + 1}`, h])), agent: AGENT_SPOT };
+  // The stadium.
+  const stadium = buildStadium({ get: getB, set: put, canUse: free });
+  if (stadium) markUsed(...stadium.area);
+  const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null, pizza: pizza?.place || null, lodge: frontier.places.lodge, ...far.places, ...(base?.places || {}), ...gas.places, ...shops.places, ...outerShops.places, church: church?.place || null, park: friendPark?.place || null, ...(funLand?.places || {}), ...(zoo?.places || {}), ...(fireStation?.places || {}), ...(dealer?.places || {}), ...(farm?.places || {}), ...(raceway?.places || {}), ...(space?.places || {}), ...(stadium?.places || {}), airport: airport?.place || null, skytowers: outerTowers.towers.length ? { x: outerTowers.towers[0].x, z: outerTowers.towers[0].z, towers: outerTowers.towers } : null, weather: weather?.place || null, buildpark: buildPark?.place || null, ...Object.fromEntries(homes.map((h, i) => [`home${i + 1}`, h])), agent: AGENT_SPOT };
   // The Loop Express: pillars for its track, and ticket machines at the stops (by the places).
   const trainLine = buildTrainLine({ get: getB, set: put, canUse: free, places });
   places.train = { stations: trainLine.stations };
@@ -627,7 +631,7 @@ export function generateWorld(seed = 2024) {
     const [x, y, z] = k.split(',').map(Number);
     blocks.push([x, y, z, v]);
   }
-  return { blocks, cars: placed, places, claims: [store?.claim, pizza?.claim, ...gas.claims, ...shops.claims, ...outerShops.claims, church?.claim, friendPark?.claim, funLand?.claim, zoo?.claim, fireStation?.claim, dealer?.claim, farm?.claim, raceway?.claim, space?.claim, airport?.claim, ...frontier.claims, ...far.claims, base?.claim, weather?.claim].filter(Boolean), signs: [...posts.signs, ...fishing.signs, ...far.signs, ...(base?.signs || []), ...gas.signs, ...shops.signs, ...(weather?.signs || []), ...(buildPark?.signs || []), ...outer.signs, ...outerShops.signs, ...(church?.signs || []), ...(airport?.signs || []), ...(friendPark?.signs || []), ...(funLand?.signs || []), ...(zoo?.signs || []), ...(fireStation?.signs || []), ...(dealer?.signs || []), ...(farm?.signs || []), ...(raceway?.signs || []), ...(space?.signs || []), ...trainLine.signs] };
+  return { blocks, cars: placed, places, claims: [store?.claim, pizza?.claim, ...gas.claims, ...shops.claims, ...outerShops.claims, church?.claim, friendPark?.claim, funLand?.claim, zoo?.claim, fireStation?.claim, dealer?.claim, farm?.claim, raceway?.claim, space?.claim, stadium?.claim, airport?.claim, ...frontier.claims, ...far.claims, base?.claim, weather?.claim].filter(Boolean), signs: [...posts.signs, ...fishing.signs, ...far.signs, ...(base?.signs || []), ...gas.signs, ...shops.signs, ...(weather?.signs || []), ...(buildPark?.signs || []), ...outer.signs, ...outerShops.signs, ...(church?.signs || []), ...(airport?.signs || []), ...(friendPark?.signs || []), ...(funLand?.signs || []), ...(zoo?.signs || []), ...(fireStation?.signs || []), ...(dealer?.signs || []), ...(farm?.signs || []), ...(raceway?.signs || []), ...(space?.signs || []), ...(stadium?.signs || []), ...trainLine.signs] };
 }
 
 // Saved worlds from before the new lamps: put proper lamp heads on the town's street lamps

@@ -21,6 +21,7 @@ import { buildZoo, ANIMALS } from './zoo.js';
 import { buildFarm, FARM_ANIMALS, GIVE_EVERY, inFarmField } from './farm.js';
 import { buildRaceway, minLap, KART_COINS, RECORD_COINS, BOARD_SIZE } from './karts.js';
 import { buildSpaceCenter, BOARDING, COUNTDOWN, FLIGHT, SEATS } from './space.js';
+import { buildStadium, stepBall, kickBall, BALL_R, SOCCER_COINS } from './stadium.js';
 import { buildDealership, newCarFor, LOT_KINDS, SHOW_KINDS, townCarsToKeep } from './dealership.js';
 import { buildFireStation, FIRE_CALL, FIRE_GAP, FIRE_OUT, FIRE_LIFE, DOUSE, FIRE_REWARD, HOSE_RANGE } from './firestation.js';
 import { findHomes } from './residents.js';
@@ -39,7 +40,7 @@ import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
 const PLANE_HOME_AFTER = 300; // seconds a town airplane sits idle away from the airport before it's taken back
-export const SAVE_VERSION = 38;
+export const SAVE_VERSION = 39;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -318,6 +319,7 @@ export class GameRoom {
       this.upgradeTo36();
       this.upgradeTo37();
       this.upgradeTo38();
+      this.upgradeTo39();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -433,6 +435,7 @@ export class GameRoom {
     if (data.version < 36) this.upgradeTo36();
     if (data.version < 37) this.upgradeTo37();
     if (data.version < 38) this.upgradeTo38();
+    if (data.version < 39) this.upgradeTo39();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -1145,6 +1148,63 @@ export class GameRoom {
     }
     this.log(`Added the Space Center (${space ? 'yes' : 'no room'})`);
     this.onDirty();
+  }
+
+  // Worlds saved before version 39: BuildZone Stadium (and a train stop by it).
+  upgradeTo39() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const stadium = buildStadium({ get, set, canUse: this.freeLand() });
+    if (stadium) {
+      this.claims.push(stadium.claim);
+      for (const [x, y, z, text] of stadium.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+      this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...stadium.places };
+      this.addTrainStops();
+    }
+    this.log(`Added the stadium (${stadium ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
+  // ---------- The stadium's giant soccer ball ----------
+  // It rolls and bounces (stepBall in stadium.js), 30 times a second; everyone hears where it is
+  // ten times a second while it's moving (and every couple of seconds when it's still). A goal:
+  // the score, a cheer, and back to the middle.
+  ballState() {
+    const b = this.soccer;
+    return b ? { t: 'sball', x: b.x, y: b.y, z: b.z, vx: b.vx, vy: b.vy, vz: b.vz, score: b.score } : null;
+  }
+
+  updateBall(dt) {
+    const F = this.places?.stadium;
+    if (!F?.field) return;
+    const b = (this.soccer ??= { x: F.center[0], y: 0, z: F.center[1], vx: 0, vy: 0, vz: 0, score: { red: 0, blue: 0 }, send: 0, kicker: null });
+    if (b.resetAt && Date.now() >= b.resetAt) {
+      Object.assign(b, { x: F.center[0], y: 3, z: F.center[1], vx: 0, vy: 0, vz: 0, scored: false, resetAt: 0 });
+      b.send = 0;
+    }
+    const moving = Math.abs(b.vx) + Math.abs(b.vz) + Math.abs(b.vy) > 0.05 || b.y > 0.01;
+    const scored = stepBall(b, dt, F);
+    if (scored) {
+      b.score[scored]++;
+      b.resetAt = Date.now() + 3500;
+      const by = b.kicker && this.clients.get(b.kicker);
+      if (by) {
+        this.wallet(by).coins += SOCCER_COINS;
+        this.sendWallet(by);
+        this.progress(by, 'soccer', 'goals');
+      }
+      this.broadcast({ t: 'goal', team: scored, score: b.score, by: by?.name || '' });
+      this.log(`GOAL for ${scored}${by ? ` (${by.name})` : ''}: ${b.score.red}-${b.score.blue}`);
+    }
+    b.send -= dt;
+    if (b.send <= 0 && (moving || b.send < -2)) {
+      b.send = 0.1;
+      // (Only to the people near enough to see it.)
+      const msg = this.ballState(), [x0, z0, x1, z1] = F.rect;
+      for (const c of this.clients.values()) if (c.joined && c.pos[0] > x0 - 200 && c.pos[0] < x1 + 200 && c.pos[2] > z0 - 200 && c.pos[2] < z1 + 200) c.send(msg);
+    }
   }
 
   // ---------- The Space Center's launches ----------
@@ -1864,6 +1924,8 @@ export class GameRoom {
       laps: this.laps.map(r => [r.name, r.ms]),
       space: this.places?.space || null, // the Space Center: the rocket, the gate, the landing zone (see rocketui.js)
       rocket: this.rocketState(),
+      stadium: this.places?.stadium || null, // the stadium: the field, the goals, the fans (see stadiumui.js)
+      sball: this.ballState(),
       airport: this.places?.airport || null, // the airport (its lights: see airportlights.js)
       fires: this.fires.map(({ id, x, z, hp }) => ({ id, x, z, hp: Math.round(hp) })), // fires burning in town (see firehose.js)
       landmarks: Object.entries(this.places || {}).filter(([, p]) => p && Number.isFinite(p.x) && Number.isFinite(p.z)).map(([k, p]) => [k, p.x, p.z]),
@@ -2847,6 +2909,19 @@ export class GameRoom {
       this.onDirty();
     },
 
+    // Kicking the stadium's giant ball (you ran into it: see stadiumui.js). The server checks
+    // you're right by it, then off it goes.
+    kick(client, { yaw, pitch, power }) {
+      const b = this.soccer, F = this.places?.stadium;
+      if (!b || !F || b.resetAt || !this.allow(client, 'kick', 6, 6)) return;
+      const [x, y, z] = client.pos;
+      if (Math.hypot(x - b.x, z - b.z) > BALL_R + 2.4 || Math.abs(y - b.y) > 3) return;
+      kickBall(b, num(yaw), Math.max(-1, Math.min(1, num(pitch))), Math.max(0, Math.min(1, num(power))), this.perk(client, 'soccer') ? 1.25 : 1);
+      b.kicker = client.id;
+      b.send = 0;
+      this.progress(client, 'soccer', 'kicks');
+    },
+
     // Climbing aboard the rocket at the Space Center (at its gate).
     rocket_board(client) {
       const place = this.places?.space;
@@ -3383,6 +3458,7 @@ export class GameRoom {
 
   // Morning: another day gone by (and maybe a new season: Skye says so).
   newDay() {
+    if (this.soccer) this.soccer.score = { red: 0, blue: 0 }; // (a new day: a new game at the stadium)
     const was = seasonAt(this.day, this.time).i;
     this.day++;
     const now = seasonAt(this.day, this.time).i;
@@ -3605,6 +3681,7 @@ export class GameRoom {
       t.explore = 2;
       this.updateExplorers();
     }
+    if (this.places?.stadium) this.updateBall(Math.min(dt, 0.1));
     if (!(t.rocket > 0)) {
       t.rocket = 0.5;
       this.updateRocket();

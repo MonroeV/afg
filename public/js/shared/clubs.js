@@ -151,6 +151,14 @@ export const CLUBS = [
     ],
     reward: { coins: 25, perk: '🌙', perkName: 'Moon boots: you jump higher' },
   },
+  {
+    id: 'soccer', name: 'Soccer Stars', icon: '⚽', color: '#2e7d32', leader: 'Referee Rita', where: 'at the stadium',
+    tasks: [
+      { id: 'kicks', icon: '🦶', goal: 20, what: 'Kick the giant ball (run into it)' },
+      { id: 'goals', icon: '🥅', goal: 3, what: 'Score a goal' },
+    ],
+    reward: { coins: 20, perk: '💥', perkName: 'Power kick: you kick the ball farther' },
+  },
 ];
 
 export const clubById = id => CLUBS.find(c => c.id === id);

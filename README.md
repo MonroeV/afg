@@ -93,6 +93,15 @@ customize your character, drive cars, build anything and play with friends.
       claimed one (only you can drive it, it stays where you park it), and a new car rolls into
       its spot once you've driven yours away. The town keeps just a few cars of its own now (the
       rest went to the dealership; nobody's own cars were touched). The Loop Express stops there
+    - **BuildZone Stadium** ⚽ (since v0.62, by the Outer Loop, with its own Loop Express stop):
+      a soccer field with white lines and a goal at each end (🔴 red crossbar, 🔵 blue crossbar),
+      stands down both sides full of cheering fans, floodlights on tall towers and a big
+      scoreboard. On the field: a **giant soccer ball**, as big as you! **Run into it to kick
+      it** (sprint for a big kick, look up a bit to chip it into the air). Get it in a goal:
+      🔴 Red scores in the blue goal and 🔵 Blue in the red one (play for either side). The
+      crowd jumps up and cheers, the scoreboard counts it, you get 2 🪙, and the ball goes
+      back to the middle. Everyone plays with the same ball (the server rolls it). The score
+      starts again each day. Referee Rita runs the **Soccer Stars** club
     - **The Space Center** 🚀 (since v0.61, by the Outer Loop, with its own Loop Express stop):
       a tall white **rocket** stands on the launch pad beside its gantry tower. **Right-click
       the gate at the foot of the tower** to climb aboard (four seats: anyone else has 15
@@ -650,6 +659,7 @@ customize your character, drive cars, build anything and play with friends.
   | 🚒 Firefighters (v0.54) | Fire Chief Flint, at the fire station | turn on a fire truck's lights, put out 3 fires in town, save a burning vehicle | 25 🪙, a firefighter's helmet (and your hose sprays farther) |
   | 🌾 Farmhands (v0.59) | Farmer Wren, at Sunny Acres Farm | pet 5 farm animals, pick 5 crops in the fields, get milk or eggs twice, drive a tractor | 20 🪙, farm fresh: twice the milk, eggs and crops at the farm |
   | 🚀 Space Cadets (v0.61) | Commander Nova, in Mission Control | visit the Space Museum, watch a rocket launch from nearby, fly to space | 25 🪙, moon boots (you jump higher) |
+  | ⚽ Soccer Stars (v0.62) | Referee Rita, at the stadium | kick the giant ball 20 times, score 3 goals | 20 🪙, power kick (you kick the ball farther) |
 
   Each step pops up by the badge counter ("🔧 2/3"), and a new badge gets a big celebration with
   fireworks. The **daily bonus** grows every day in a row you play (+2 a day, up to +10)
@@ -1076,6 +1086,7 @@ public/
     farmanimals.js     The farm's animals (cows, horses, sheep, pigs, hens) and the windmill's sails
     kartui.js          Thunder Raceway's start lights, the Best Laps board and your lap time
     rocketui.js        The Space Center's rocket: countdown, liftoff, the ride to space, parachutes; museum planets
+    stadiumui.js       The stadium's giant ball (and kicking it), the scoreboard and the cheering crowd
     firehose.js        Fires in town (flames, smoke, the 🔥 arrow) and the fire trucks' hoses
     guardcatch.js      Bodyguards keeping you off their land: caught and walked off, blown away, flushed out
     guardui.js         Someone asking your bodyguards to let them in: your answer
@@ -1131,6 +1142,7 @@ public/
       farm.js          Sunny Acres Farm: fields, barn, silo, windmill, farmhouse, pastures, farm stand, tractors
       karts.js         Thunder Raceway: the track (a smooth curve), curbs, tire walls, pits, grandstand, karts
       space.js         The Space Center: launch pad, tower, Mission Control, museum, landing zone; the flight's timing
+      stadium.js       The stadium: field, goals, stands, floodlights; the giant ball's physics (stepBall)
       firestation.js   The fire station: its building, the fire trucks' bays, and how often fires break out
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/

@@ -20,6 +20,7 @@ import { ZooAnimals } from './zooanimals.js';
 import { FarmAnimals } from './farmanimals.js';
 import { KartUI } from './kartui.js';
 import { RocketUI } from './rocketui.js';
+import { StadiumUI } from './stadiumui.js';
 import { FireHose, steam } from './firehose.js';
 import { AirportLights } from './airportlights.js';
 import { ANIMALS } from './shared/zoo.js';
@@ -257,7 +258,7 @@ let showers = null, weatherMast = null; // it's raining tacos (or ice cream, or 
 let weatherPicker = null; // Stormy's menu: what shall it rain?
 let lunchbox = null; // your lunchbox 🍱 (L): food to eat
 let funRides = null; // Fun Land's roller coaster and Ferris wheel
-let zooAnimals = null, farmAnimals = null, kartUI = null, rocketUI = null, spaceGate = null; // the zoo's animals, the farm's, and the go-kart track's lights and lap times
+let zooAnimals = null, farmAnimals = null, kartUI = null, rocketUI = null, spaceGate = null, stadiumUI = null; // the zoo's animals, the farm's, and the go-kart track's lights and lap times
 let zooAim = null; // (the one under the crosshair)
 let fireHose = null; // fires in town, and the fire trucks' hoses
 let airportLights = null; // the airport's runway, taxiway and approach lights
@@ -741,6 +742,7 @@ function startGame(welcome, resume = false) {
   farmAnimals.setPlace(welcome.farm);
   kartUI.setPlace(welcome.raceway, welcome.laps);
   rocketUI.setPlace(welcome.space, welcome.rocket);
+  stadiumUI.setPlace(welcome.stadium, welcome.sball);
   spaceGate = welcome.space?.gate || null;
   fireHose.setFires(welcome.fires);
   airportLights.setPlace(welcome.airport);
@@ -1023,6 +1025,9 @@ farmAnimals = new FarmAnimals({ scene, effects, sounds });
 const lateHud = { toast: (...a) => hud?.toast(...a) };
 kartUI = new KartUI({ scene, sounds, hud: lateHud });
 rocketUI = new RocketUI({ scene, sounds, effects, hud: lateHud });
+stadiumUI = new StadiumUI({ scene, sounds, effects, hud: lateHud, net });
+net.on('sball', msg => stadiumUI.serverBall(msg));
+net.on('goal', msg => stadiumUI.goal(msg));
 net.on('rocket', msg => rocketUI.setState(msg));
 net.on('rocket_busy', ({ phase, since }) => hud.toast(`🚀 ⏳ ${phase === 'boarding' ? '👩‍🚀👩‍🚀👩‍🚀👩‍🚀' : `${Math.max(1, Math.ceil(64 - since))}s`}`));
 net.on('kart_board', ({ board }) => kartUI.setBoard(board));
@@ -6566,6 +6571,7 @@ function frame(timestamp) {
     farmAnimals.update(dt, gameTime(worldDay, sky.time), camera.position);
     kartUI.update(gameTime(worldDay, sky.time), myCar, camera.position);
     rocketUI.update(dt, camera.position);
+    stadiumUI.update(dt, time, player, camera.position, !riding() && !rocketUI.riding && !player.flying);
     airportLights.update(performance.now() / 1000, camera.position, 1 - sky.dayK);
     updateChurch(dt, time);
   }
@@ -6638,6 +6644,7 @@ window.buildzone = {
   get farmAnimals() { return farmAnimals; },
   get kartUI() { return kartUI; },
   get rocketUI() { return rocketUI; },
+  get stadiumUI() { return stadiumUI; },
   get airportLights() { return airportLights; },
   get fireHose() { return fireHose; },
   requestEnter: car => requestEnter(car),

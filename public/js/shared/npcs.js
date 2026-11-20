@@ -178,6 +178,13 @@ const NPCS = [
     tips: ['🚀🌍🌙✨', 'Right-click the gate by the tower to fly! 🚀', 'Friends can hop in too: you wait 15 seconds for them 👫', 'The capsule comes down on parachutes! 🪂', 'Visit the Space Museum next door! 🪐'],
   },
   {
+    // The stadium: Referee Rita by the way in (she runs the Soccer Stars club).
+    id: -76, place: 'stadium_gate', name: 'Referee Rita', title: 'Referee Rita ⚽', roam: 3, club: 'soccer',
+    look: { face: 'grin', hair: 'ponytail', hat: 'cap', shirt: 'striped', pants: 'shorts', extra: 'none', skin: '#e0ac69', hairColor: '#6d3b16', hatColor: '#111111', shirtColor: '#111111', shirtColor2: '#ffffff', pantsColor: '#111111', shoesColor: '#ffffff' },
+    hello: n => [`Ready to play, ${n}? ⚽`, `Hi ${n}! The ball's on the field! 🏟️`],
+    tips: ['⚽🥅🎉', 'Run into the ball to kick it! ⚽', 'Sprint (Shift) for a BIG kick! 💥', 'Look up a little to chip it into the air! ⬆️', '🔴 Red scores in the blue goal, 🔵 Blue in the red one!'],
+  },
+  {
     // BuildZone Motors: Dealer Dana, at the sales desk in the showroom.
     id: -71, place: 'dealer_desk', name: 'Dealer Dana', title: 'Dealer Dana 🚗', roam: 1,
     look: { face: 'smile', hair: 'ponytail', hat: 'none', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#e0ac69', hairColor: '#6d3b16', hatColor: '#000000', shirtColor: '#1a237e', shirtColor2: '#ffffff', pantsColor: '#263238', shoesColor: '#111111' },
