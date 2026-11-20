@@ -13,7 +13,7 @@ import { buildGasStations, usesFuel, getsDirty, TANK_RANGE, GAS_PUMP, GAS_CAN, G
 import { MAX_TUNNELS, isTunnelY, tunnelKey, openBelow } from './underground.js';
 import { buildShops, buildOuterShops } from './shops.js';
 import { buildChurch, meetingOn, MEETING_COINS, MEETING_STAY } from './church.js';
-import { buildAirport, hangarPlanes, planesOutOfTheWay, airportCurb } from './airport.js';
+import { buildAirport, hangarPlanes, planesOutOfTheWay, airportCurb, addTaxiway } from './airport.js';
 import { buildPark } from './park.js';
 import { buildTrainLine, fixPlatforms } from './train.js';
 import { buildFunLand } from './funland.js';
@@ -34,7 +34,7 @@ import { Structures } from '../structures.js';
 import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
-export const SAVE_VERSION = 32;
+export const SAVE_VERSION = 33;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -300,6 +300,7 @@ export class GameRoom {
       this.upgradeTo30();
       this.upgradeTo31();
       this.upgradeTo32();
+      this.upgradeTo33();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -407,6 +408,7 @@ export class GameRoom {
     if (data.version < 30) this.upgradeTo30();
     if (data.version < 31) this.upgradeTo31();
     if (data.version < 32) this.upgradeTo32();
+    if (data.version < 33) this.upgradeTo33();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -1010,6 +1012,27 @@ export class GameRoom {
       }
     }
     this.log(`Flattened the airport's edges (${n} blocks)`);
+    this.onDirty();
+  }
+
+  // Worlds saved before version 33: the airport's runway was right next to the apron, with no
+  // taxiway. It moves out a little way (onto the empty land beyond, if it's empty and nobody's),
+  // with a proper taxiway between, links across the grass, and lines and lights. (The airport's
+  // claim grows to cover it.)
+  upgradeTo33() {
+    const ap = this.places?.airport;
+    const done = ap && addTaxiway(ap, {
+      get: (x, y, z) => this.get(x, y, z),
+      set: (x, y, z, v) => inBounds(x, y, z) && this.world.set(blockKey(x, y, z), v),
+      del: (x, y, z) => this.world.delete(blockKey(x, y, z)),
+      canUse: this.freeLand(),
+    });
+    if (done) {
+      this.places = { ...this.places, airport: done.place };
+      const claim = this.claims.find(c => c.key === 'airport');
+      if (claim) Object.assign(claim, { x0: Math.min(claim.x0, done.rect[0]), z0: Math.min(claim.z0, done.rect[1]), x1: Math.max(claim.x1, done.rect[2]), z1: Math.max(claim.z1, done.rect[3]) });
+    }
+    this.log(`Gave the airport a taxiway (${done ? 'yes' : ap?.away ? 'it has one already' : 'no room'})`);
     this.onDirty();
   }
 

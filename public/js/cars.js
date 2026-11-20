@@ -1836,6 +1836,9 @@ export class Cars {
     // (On the ground S is the brakes: the engine straight back to idle, and the wheel brakes on.)
     const braking = car.onGround && keys.has('KeyS') && !keys.has('KeyW');
     if (braking) car.throttle = 0;
+    // (And taxiing: let go of W on the ground and the engine eases back to idle, so a tap of W
+    // gives a gentle roll you can steer, instead of speeding up and up.)
+    else if (car.onGround && !keys.has('KeyW')) car.throttle = Math.max(0, car.throttle - dt * 0.8);
     if (empty) {
       if (car.throttle > 0 && keys.has('KeyW') && !car.noGasT) {
         car.noGasT = 4;

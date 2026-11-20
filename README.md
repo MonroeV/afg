@@ -38,8 +38,12 @@ customize your character, drive cars, build anything and play with friends.
       and you get 10 coins as a thank-you (once each Sunday). Everyone sees the same meeting at
       the same time
     - **BuildZone Airport** ✈️ (since v0.48, beside the Outer Loop): a long runway with a dashed
-      center line, stripes at the ends and edge lights, taxiways, an apron where four
-      **airplanes** park, a glass-fronted terminal (check-in desk, rows of seats looking out at
+      center line, stripes at the ends and edge lights, an apron where four **airplanes**
+      park, and (since v0.56.3) a proper **taxiway** between them: a lane with a yellow line down
+      the middle and lights along its edges, with short paved links across the grass from each
+      parking spot and hangar, and links out to the runway at both ends and the middle. On the
+      ground, let go of W and the engine eases back to idle, so you can taxi slowly (tap W to roll,
+      S to brake) and follow the yellow lines out to the runway. Also a glass-fronted terminal (check-in desk, rows of seats looking out at
       the planes), two hangars, and a control tower (climb the ladder inside to the glass cab at
       the top). Captain Sky in the terminal has tips
     - **Sky Tower and Cloud Tower** 🏙️ (since v0.49, on the east side of the Outer Loop): the two

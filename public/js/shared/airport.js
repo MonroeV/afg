@@ -14,12 +14,17 @@ const B = { road: 22, line: 23, lineX: 55, sidewalk: 24, concrete: 13, white: 12
 const faceDir = (dx, dz) => (dz > 0 ? 0 : dx > 0 ? 1 : dz < 0 ? 2 : 3);
 const onWall = (wx, wz) => faceDir(-wx, -wz);
 // The site: u along the Outer Loop (0 to L-1), v away from it (0 to D-1).
-export const AIRPORT = { L: 130, D: 44 };
+export const AIRPORT = { L: 130, D: 55 };
 const { L, D } = AIRPORT;
 const TALL = 12; // (how high it has to be empty)
-// Rows (v): the terminal 7-17, the hangars 6-18, the apron 19-27, the taxiways 28-31, the runway
-// 32-40 (its center line at 36), the edge lights at 31 and 41.
-const RUNWAY = [32, 40], APRON = [19, 27];
+// Rows (v): the terminal 7-17, the hangars 6-18, the apron 19-27, a grass strip 28-29 (crossed by
+// short links from each parking spot and hangar), the taxiway 30-34 (a yellow line down its
+// middle, at 32), grass 35-41 (crossed by links to the runway at both ends and the middle), the
+// runway 42-50 (its center line at 46), its edge lights at 41 and 51. (Before v0.56.3 the runway
+// was at 32-40, right next to the apron, with no taxiway.)
+const RUNWAY = [42, 50], APRON = [19, 27], TAXIWAY = [30, 34];
+const RUNWAY_MID = 46, TAXI_MID = 32;
+const OLD_RUNWAY = [32, 40];
 const PARKED = [22, 36, 96, 108]; // (where the airplanes park along the apron, u: not in front of the hangars)
 export const HANGARS = [[44, 64], [68, 88]]; // (u0, u1 of each hangar: their doors open onto the apron)
 // (Before v0.56.1 two of them parked at 54 and 78, right in front of the hangar doors.)
@@ -28,14 +33,58 @@ const PLANE_COLORS = ['#e53935', '#fdd835', '#1e88e5', '#f5f5f5'];
 // (Since v0.56, a plane in each hangar, nose out: the Sky Cub, a slow one for sightseeing, and a
 // fast jet.)
 const HANGAR_PLANES = [{ kind: 'cub', u: 54.5, v: 12.5, color: '#ffb300' }, { kind: 'jet', u: 78.5, v: 12.5, color: '#546e7a' }];
+// The links across the grass: from the apron to the taxiway (one from each parking spot, each
+// hangar, and both ends), and from the taxiway to the runway (both ends and the middle).
+const APRON_LINKS = [[4, 10], ...PARKED.map(u => [u - 2, u + 2]), [52, 57], [76, 81], [L - 11, L - 5]];
+const RUNWAY_LINKS = [[4, 10], [61, 67], [L - 11, L - 5]];
+const inLink = (links, u) => links.some(([a, b]) => u >= a && u <= b);
+
+// The airfield: the apron, the links, the taxiway and the runway, with their lines and lights.
+// put(u, y, v, block) in the airport's own space. (New airports, and old ones being redone.)
+function airfield(put, lineAlong, lineAcross) {
+  // The apron, with a lead-in line from each parking spot and each hangar.
+  for (let u = 2; u < L - 2; u++) for (let v = APRON[0]; v <= APRON[1]; v++) put(u, 0, v, B.road);
+  for (const u of [...PARKED, 54, 78]) for (let v = APRON[0] + 1; v <= APRON[1]; v++) put(u, 0, v, lineAcross);
+  // The links to the taxiway (their lead-in lines carry on across them).
+  for (const [a, b] of APRON_LINKS)
+    for (let u = a; u <= b; u++)
+      for (let v = APRON[1] + 1; v < TAXIWAY[0]; v++) put(u, 0, v, u === (a === 4 || a === L - 11 ? a + 3 : Math.round((a + b) / 2)) ? lineAcross : B.road);
+  // The taxiway: all the way along, a yellow line down the middle.
+  for (let u = 4; u <= L - 5; u++) for (let v = TAXIWAY[0]; v <= TAXIWAY[1]; v++) put(u, 0, v, v === TAXI_MID ? lineAlong : B.road);
+  // The links to the runway.
+  for (const [a, b] of RUNWAY_LINKS)
+    for (let u = a; u <= b; u++)
+      for (let v = TAXIWAY[1] + 1; v < RUNWAY[0]; v++) put(u, 0, v, u === a + 3 ? lineAcross : B.road);
+  // The runway: a dashed line down the middle, stripes across both ends.
+  for (let u = 2; u < L - 2; u++)
+    for (let v = RUNWAY[0]; v <= RUNWAY[1]; v++) {
+      const end = u < 8 || u > L - 9;
+      let b = B.road;
+      if (v === RUNWAY_MID && !end && u % 6 < 3) b = lineAlong;
+      if (end && v !== RUNWAY_MID && v % 2 === 0) b = lineAlong; // (the stripes at the ends)
+      put(u, 0, v, b);
+    }
+  // Lights along the runway's edges, and along the taxiway's (not where the links cross).
+  for (let u = 2; u < L - 2; u += 7) {
+    if (u < 12 || u > L - 13) continue;
+    if (!inLink(RUNWAY_LINKS, u)) put(u, 0, RUNWAY[0] - 1, B.gardenLight);
+    put(u, 0, RUNWAY[1] + 1, B.gardenLight);
+  }
+  for (let u = 13; u < L - 12; u += 10) {
+    if (!inLink(APRON_LINKS, u)) put(u, 0, TAXIWAY[0] - 1, B.gardenLight);
+    if (!inLink(RUNWAY_LINKS, u)) put(u, 0, TAXIWAY[1] + 1, B.gardenLight);
+  }
+}
 
 // An airport that's already built: its own space (u along the road, v away from it), worked
 // out from where its terminal and runway are. pos(u, v) is the world; uv(x, z) the other way.
 export function airportFrame(place) {
   if (!place?.runway || !place.along) return null;
   const [ux, uz] = place.along, [r0x, r0z] = place.runway;
-  // (The terminal's spot is at (20, 11.5) in the airport's own space; the runway starts at (4, 36.5).)
-  const vx = (r0x - place.x + 16 * ux) / 25, vz = (r0z - place.z + 16 * uz) / 25;
+  // (Which way is away from the road: kept since v0.56.3; before that, worked out from the
+  // terminal's spot, at (20, 11.5) in the airport's own space, and where the runway started then:
+  // (4, 36.5).)
+  const [vx, vz] = place.away || [(r0x - place.x + 16 * ux) / 25, (r0z - place.z + 16 * uz) / 25];
   return {
     pos: (u, v) => [place.x + (u - 20) * ux + (v - 11.5) * vx, place.z + (u - 20) * uz + (v - 11.5) * vz],
     uv: (x, z) => [20 + (x - place.x) * ux + (z - place.z) * uz, 11.5 + (x - place.x) * vx + (z - place.z) * vz],
@@ -199,27 +248,8 @@ function airportAt(site, set) {
     put(Math.floor((h0 + h1) / 2), 6, 7, B.ceilingLight);
   }
 
-  // The apron (where the planes park) and the taxiways out to the runway.
-  for (let u = 2; u < L - 2; u++) for (let v = APRON[0]; v <= APRON[1]; v++) put(u, 0, v, B.road);
-  for (const [t0, t1] of [[4, 10], [L - 11, L - 5]]) for (let u = t0; u <= t1; u++) for (let v = APRON[1] + 1; v < RUNWAY[0]; v++) put(u, 0, v, u === t0 + 3 ? lineAcross : B.road);
-  // Yellow-ish parking spots: a line across the apron at each plane's place.
-  for (const u of PARKED) for (let v = APRON[0] + 1; v <= APRON[1] - 1; v++) put(u, 0, v, lineAcross);
-
-  // The runway: a dashed line down the middle, stripes across both ends, lights along the edges.
-  for (let u = 2; u < L - 2; u++)
-    for (let v = RUNWAY[0]; v <= RUNWAY[1]; v++) {
-      const end = u < 8 || u > L - 9;
-      let b = B.road;
-      if (v === 36 && !end && u % 6 < 3) b = lineAlong;
-      if (end && v !== 36 && v % 2 === 0) b = lineAlong; // (the stripes at the ends)
-      put(u, 0, v, b);
-    }
-  for (let u = 2; u < L - 2; u += 7) {
-    if (u > 1 && u < 12) continue; // (not on the taxiways)
-    if (u > L - 13) continue;
-    put(u, 0, RUNWAY[1] + 1, B.gardenLight);
-    put(u, 0, RUNWAY[0] - 1, B.gardenLight);
-  }
+  // The apron (where the planes park), the taxiway and the runway (see airfield).
+  airfield(put, lineAlong, lineAcross);
   // (The edges are left as the ground they're on. Before v0.56.2 they were a strip of Grass
   // blocks: a curb a block high at both ends of the runway, that blew up planes running off it.)
 
@@ -239,13 +269,13 @@ function airportAt(site, set) {
   const rect = [Math.min(rx0, rx1), Math.min(rz0, rz1), Math.max(rx0, rx1), Math.max(rz0, rz1)];
   const [gx, gz] = site.pos(20, 11.5);
   const [ax, az] = site.at(5, 8), [bx, bz] = site.at(31, 16);
-  const [r0x, r0z] = site.pos(4, 36.5), [r1x, r1z] = site.pos(L - 4, 36.5);
+  const [r0x, r0z] = site.pos(4, RUNWAY_MID + 0.5), [r1x, r1z] = site.pos(L - 4, RUNWAY_MID + 0.5);
   return {
     signs, cars,
     area: [rect[0] - 1, rect[1] - 1, rect[2] + 1, rect[3] + 1],
     claim: { owner: 'BuildZone Airport', key: 'airport', x0: rect[0], z0: rect[1], x1: rect[2], z1: rect[3], createdAt: 0, permanent: true },
     // The place (Captain Sky in the terminal), and the runway's two ends (for the clubs).
-    place: { x: gx, y: 0, z: gz, face: Math.atan2(fx, fz), area: [Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz)], runway: [r0x, r0z, r1x, r1z], along: [ux, uz] },
+    place: { x: gx, y: 0, z: gz, face: Math.atan2(fx, fz), area: [Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz)], runway: [r0x, r0z, r1x, r1z], along: [ux, uz], away: [fx, fz] },
   };
 }
 
@@ -262,4 +292,40 @@ export function airportCurb(place) {
       out.push([Math.floor(x), Math.floor(z)]);
     }
   return out;
+}
+
+// An airport from before v0.56.3 (the runway right next to the apron): moved out a way, with a
+// proper taxiway between. Only if the land beyond is empty and nobody's: get, set, del (a block
+// at x, y, z), canUse. Returns the new place and claim rectangle, or null if there's no room.
+export function addTaxiway(place, { get, set, del, canUse }) {
+  const f = airportFrame(place);
+  if (!f || place.away) return null; // (already done)
+  const cell = (u, v) => f.pos(u + 0.5, v + 0.5).map(Math.floor);
+  for (let u = 0; u < L; u++)
+    for (let v = 44; v < D; v++) {
+      const [x, z] = cell(u, v);
+      if (!canUse(x, z)) return null;
+      for (let y = 0; y < 14; y++) if (get(x, y, z)) return null;
+    }
+  // Clear the old runway's lines and lights (just those: road, lines, lights) from where the
+  // grass goes now; then lay the new airfield.
+  const ours = new Set([22, 23, 55, 47]);
+  for (let u = 0; u < L; u++)
+    for (let v = OLD_RUNWAY[0] - 1; v <= OLD_RUNWAY[1] + 1; v++) {
+      const [x, z] = cell(u, v);
+      if (ours.has(get(x, 0, z) & 255)) del(x, 0, z);
+    }
+  const axisX = Math.abs(place.along[0]) > 0.5; // (the road the airport's beside runs along x?)
+  const lineAlong = axisX ? B.lineX : B.line, lineAcross = axisX ? B.line : B.lineX;
+  airfield((u, y, v, b) => {
+    const [x, z] = cell(u, v);
+    set(x, y, z, b);
+  }, lineAlong, lineAcross);
+  const vx = f.pos(0, 1)[0] - f.pos(0, 0)[0], vz = f.pos(0, 1)[1] - f.pos(0, 0)[1];
+  const [r0x, r0z] = f.pos(4, RUNWAY_MID + 0.5), [r1x, r1z] = f.pos(L - 4, RUNWAY_MID + 0.5);
+  const [ax, az] = cell(0, 0), [bx, bz] = cell(L - 1, D - 1);
+  return {
+    place: { ...place, runway: [r0x, r0z, r1x, r1z], away: [vx, vz] },
+    rect: [Math.min(ax, bx), Math.min(az, bz), Math.max(ax, bx), Math.max(az, bz)],
+  };
 }
