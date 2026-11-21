@@ -3,7 +3,7 @@
 export const LOOK_OPTIONS = {
   face: ['smile', 'grin', 'cool', 'wink', 'surprised', 'silly', 'sleepy', 'cat', 'robot', 'starry'],
   hair: ['none', 'short', 'spiky', 'long', 'ponytail', 'mohawk', 'afro', 'buns', 'curly', 'pigtails', 'braids', 'topbun', 'flattop', 'fauxhawk', 'princess', 'rainbow', 'galaxy'],
-  hat: ['none', 'cap', 'beanie', 'tophat', 'crown', 'cowboy', 'party', 'wizard', 'viking', 'straw'],
+  hat: ['none', 'cap', 'beanie', 'tophat', 'crown', 'cowboy', 'party', 'wizard', 'viking', 'straw', 'pirate', 'chef', 'bunnyears'],
   shirt: ['tshirt', 'striped', 'hoodie', 'jacket', 'tank', 'jersey', 'dress'],
   pants: ['jeans', 'shorts', 'skirt', 'sweatpants'],
   extra: ['none', 'backpack', 'cape', 'wings'],
@@ -21,7 +21,7 @@ export const OPTION_LABELS = {
   curly: 'Curly', pigtails: 'Pigtails', braids: 'Braids', topbun: 'Top Bun', flattop: 'Flat Top', fauxhawk: 'Faux-hawk',
   princess: 'Princess Waves', rainbow: 'Rainbow Spikes', galaxy: 'Galaxy Hair',
   cap: 'Cap', beanie: 'Beanie', tophat: 'Top Hat', crown: 'Crown', cowboy: 'Cowboy',
-  party: 'Party Hat', wizard: 'Wizard', viking: 'Viking', straw: 'Straw Hat',
+  party: 'Party Hat', wizard: 'Wizard', viking: 'Viking', straw: 'Straw Hat', pirate: 'Pirate Hat', chef: 'Chef\'s Hat', bunnyears: 'Bunny Ears',
   tshirt: 'T-Shirt', striped: 'Stripes', hoodie: 'Hoodie', jacket: 'Jacket', tank: 'Tank Top',
   jersey: 'Sports Jersey', dress: 'Dress',
   jeans: 'Jeans', shorts: 'Shorts', skirt: 'Skirt', sweatpants: 'Sweatpants',
@@ -33,6 +33,9 @@ export const OPTION_LABELS = {
 // them (the server checks: see ownLook in game.js). style: price.
 export const PREMIUM_HAIR = { curly: 8, pigtails: 8, braids: 10, topbun: 10, flattop: 12, fauxhawk: 12, princess: 15, rainbow: 25, galaxy: 30 };
 export const hairItem = style => `hair_${style}`;
+// Costume hats: from Mimi at Costume Corner (in the mall), only for those who've bought them.
+export const PREMIUM_HATS = { pirate: 12, chef: 10, bunnyears: 15 };
+export const costumeItem = style => `costume_${style}`;
 export const HAIR_ICONS = { curly: '🌀', pigtails: '🎈', braids: '🥨', topbun: '🧅', flattop: '🟫', fauxhawk: '🔥', princess: '👸', rainbow: '🌈', galaxy: '🌌' };
 
 export const SKIN_TONES = ['#ffe0c4', '#f5c9a0', '#e8b088', '#d39a6a', '#b07548', '#8d5a34', '#6b4226', '#4a2c18', '#7fd17a', '#8fb8ff'];
@@ -77,7 +80,7 @@ export function randomLook(rand = Math.random) {
   return {
     face: pick(LOOK_OPTIONS.face),
     hair: pick(LOOK_OPTIONS.hair.filter(h => !PREMIUM_HAIR[h])),
-    hat: rand() < 0.4 ? 'none' : pick(LOOK_OPTIONS.hat),
+    hat: rand() < 0.4 ? 'none' : pick(LOOK_OPTIONS.hat.filter(h => !PREMIUM_HATS[h])),
     shirt: pick(LOOK_OPTIONS.shirt),
     pants: pick(LOOK_OPTIONS.pants),
     extra: rand() < 0.5 ? 'none' : pick(LOOK_OPTIONS.extra),

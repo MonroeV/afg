@@ -2,7 +2,7 @@
 // The Node server runs one of these for everybody. When there is no server,
 // the browser runs its own copy so single player works exactly the same way.
 import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, isExclusive, DOOR_OPEN, DOOR_TOP, DAY_LENGTH, WORLD, isNightTime, SHOP_ITEMS, BLOCKS, SHOP_TOOLS, FOUND_GEAR, HOLE_HEAL, SIGN, cleanSignText, cleanWords, isCrop, cropStage, cropWet, CROP_RIPE, CROP_WET, makeBlock, blockMeta, toggleDoorValue } from './blocks.js';
-import { sanitizeLook, cleanName, randomLook, PREMIUM_HAIR, hairItem } from './avatar.js';
+import { sanitizeLook, cleanName, randomLook, PREMIUM_HAIR, PREMIUM_HATS, hairItem, costumeItem } from './avatar.js';
 import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines, buildStore, furnishHouses, furnishTowers, elevatorTowers, buildOuterTowers } from './worldgen.js';
 import { buildSecretBase, hideSecretFiles, AGENCY, AGENT_SPOT, FILES_NEEDED, FILE_HINTS, inZone } from './secretbase.js';
 import { NpcCrew, NPC_ACT } from './npcs.js';
@@ -26,6 +26,7 @@ import { buildMiniGolf, HOLES, ROUND_COINS, BEST_COINS, GOLF_BOARD } from './min
 import { buildSkatePark, TRICK_COINS } from './skatepark.js';
 import { buildHospital, HEAL_COINS, RESCUE_COINS } from './hospital.js';
 import { buildSchool, QUIZ, QUIZ_COINS, QUIZ_DAILY } from './school.js';
+import { buildMall } from './mall.js';
 import { buildDealership, newCarFor, LOT_KINDS, SHOW_KINDS, townCarsToKeep } from './dealership.js';
 import { buildFireStation, FIRE_CALL, FIRE_GAP, FIRE_OUT, FIRE_LIFE, DOUSE, FIRE_REWARD, HOSE_RANGE } from './firestation.js';
 import { findHomes } from './residents.js';
@@ -44,7 +45,7 @@ import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
 const PLANE_HOME_AFTER = 300; // seconds a town airplane sits idle away from the airport before it's taken back
-export const SAVE_VERSION = 43;
+export const SAVE_VERSION = 44;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -329,6 +330,7 @@ export class GameRoom {
       this.upgradeTo41();
       this.upgradeTo42();
       this.upgradeTo43();
+      this.upgradeTo44();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -452,6 +454,7 @@ export class GameRoom {
     if (data.version < 41) this.upgradeTo41();
     if (data.version < 42) this.upgradeTo42();
     if (data.version < 43) this.upgradeTo43();
+    if (data.version < 44) this.upgradeTo44();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -1254,6 +1257,43 @@ export class GameRoom {
     this.onDirty();
   }
 
+  // Your very own skateboard or BMX bike, from Sporty Sam's at the mall: it rolls out beside you,
+  // yours to keep (like a car from BuildZone Motors).
+  buyRide(client, item, price) {
+    const kind = SHOP_TOOLS[item].vehicle, w = this.wallet(client), key = nameKey(client.name);
+    const reply = text => client.send({ t: 'chat', system: true, text });
+    if (this.ownedVehicles(key).length >= MAX_OWNED_VEHICLES) return reply(`🔑 You have ${MAX_OWNED_VEHICLES} vehicles already! Give one back first (click it with the Land Flag).`);
+    if (w.coins < price) return reply(`🪙 ${price}`);
+    const [x, y, z] = client.pos, spec = VEHICLES[kind];
+    const home = this.addHome({ kind, color: ['#e53935', '#1e88e5', '#43a047', '#8e24aa', '#ff7043'][Math.floor(Math.random() * 5)], x: Math.floor(x) + 2, y: Math.max(0, Math.floor(y)), z: Math.floor(z), h: 0, owner: client.name, key });
+    if (!this.spawn(home)) {
+      this.homes.delete(home.id);
+      return reply('🛹 No room here! Step somewhere roomier and try again.');
+    }
+    w.coins -= price;
+    this.sendWallet(client);
+    reply(`${kind === 'bmx' ? '🚲' : '🛹'} It's yours! Hop on (E) and hit the ramps!`);
+    this.log(`${client.name} bought a ${spec.name}`);
+    this.onDirty();
+  }
+
+  // Worlds saved before version 44: BuildZone Mall (and a train stop by it).
+  upgradeTo44() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const mall = buildMall({ get, set, canUse: this.freeLand() });
+    if (mall) {
+      this.claims.push(mall.claim);
+      for (const [x, y, z, text] of mall.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+      this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...mall.places };
+      this.addTrainStops();
+    }
+    this.log(`Added the mall (${mall ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
   // Ms. Lee's quiz: a question (two answers, in either order) for this player.
   quizAsk(c) {
     const i = Math.floor(Math.random() * QUIZ.length), [q, right, wrong] = QUIZ[i], flip = Math.random() < 0.5;
@@ -1869,6 +1909,7 @@ export class GameRoom {
     const owned = this.wallet(client).owned;
     if (look.petHat !== 'none' && !owned.includes(hatItem(look.petHat))) look.petHat = 'none';
     if (PREMIUM_HAIR[look.hair] && !owned.includes(hairItem(look.hair))) look.hair = 'short';
+    if (PREMIUM_HATS[look.hat] && !owned.includes(costumeItem(look.hat))) look.hat = 'none'; // (costume hats: bought at the mall)
     return look;
   }
 
@@ -2059,6 +2100,7 @@ export class GameRoom {
       sball: this.ballState(),
       golf: this.places?.golf || null, // the mini golf course (see golfui.js)
       hospital: this.places?.hospital || null, // the hospital (its beds make you better)
+      mall: this.places?.mall || null, // the mall (its escalators carry you)
       golfBoard: this.golfBoard.map(r => [r.name, r.total]),
       airport: this.places?.airport || null, // the airport (its lights: see airportlights.js)
       fires: this.fires.map(({ id, x, z, hp }) => ({ id, x, z, hp: Math.round(hp) })), // fires burning in town (see firehose.js)
@@ -2512,6 +2554,7 @@ export class GameRoom {
         this.onDirty();
         return;
       }
+      if (SHOP_TOOLS[item]?.vehicle) return this.buyRide(client, item, price);
       if (w.owned.includes(item)) return reply(`🛍️ You already have the ${name}!`);
       if (item === 'mysterybox') return this.openMysteryBox(client, price);
       if (item === VACATION && this.vacationOf(client)) return reply('🏖️ You already have vacation land! Give it up first if you want to buy a flag for somewhere new.');

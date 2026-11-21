@@ -24,7 +24,7 @@
 const warm = 0xffc98a;
 
 import { FOODS, foodItem } from './food.js';
-import { PREMIUM_HAIR, OPTION_LABELS, hairItem } from './avatar.js';
+import { PREMIUM_HAIR, PREMIUM_HATS, OPTION_LABELS, hairItem, costumeItem } from './avatar.js';
 
 export const BLOCKS = {
   1: { name: 'Grass', tex: { top: 'grass_top', side: 'grass_side', bottom: 'dirt' } },
@@ -285,6 +285,10 @@ export const SHOP_TOOLS = {
   pethat_cape: { name: 'Pet Super Cape', price: 12, store: 'pets', petHat: 'cape', about: 'A super cape: your pet is a superhero!', got: 'Your pet is wearing it! (Right-click your pet to change hats.)' },
   pethat_crown: { name: 'Pet Crown', price: 15, store: 'pets', petHat: 'crown', about: 'A golden crown fit for a royal pet!', got: 'Your pet is wearing it! (Right-click your pet to change hats.)' },
   // The grocery store's food: buy as much as you like (it goes in your lunchbox 🍱; see food.js).
+  ...Object.fromEntries(Object.entries(PREMIUM_HATS).map(([style, price]) => [costumeItem(style), { name: OPTION_LABELS[style], price, store: 'costume', hat: style, about: `🎭 A fun costume hat: ${OPTION_LABELS[style]}!`, got: '🎭 On it goes! (Change hats any time: 🎨 Customize.)' }])),
+  // Your very own skateboard or BMX bike (Sporty Sam's, at the mall): it rolls out right beside you.
+  ride_skateboard: { name: 'Your Own Skateboard', price: 25, store: 'sports', vehicle: 'skateboard', again: true, about: '🛹 A skateboard that\'s all yours (only you can ride it). Ramps: A/D spin, Space flip!', got: '' },
+  ride_bmx: { name: 'Your Own BMX Bike', price: 35, store: 'sports', vehicle: 'bmx', again: true, about: '🚲 A BMX bike that\'s all yours (only you can ride it). Hit the ramps!', got: '' },
   ...Object.fromEntries(Object.entries(PREMIUM_HAIR).map(([style, price]) => [hairItem(style), { name: OPTION_LABELS[style], price, store: 'salon', hair: style, about: `✂️ A cool new hairdo: ${OPTION_LABELS[style]}!`, got: '💇 Your new hairdo is on! (Change it any time: 🎨 Customize.)' }])),
   ...Object.fromEntries(Object.entries(FOODS).filter(([, f]) => f.store).map(([id, f]) => [foodItem(id), { name: f.name, price: f.price, store: f.store, again: true, food: id, about: `${f.icon} Fills you up (+${f.fill}). It goes in your lunchbox 🍱 till you eat it.`, got: '' }])),
   mysterybox: { name: 'Mystery Box', price: 12, again: true, about: 'A surprise from one of the stores: something you don\'t have yet!', got: '' },
@@ -323,6 +327,10 @@ export const STORES = {
   funland: { name: "Pete's Snacks", icon: '🍿', color: '#e53935', keeper: 'Pete' },
   salon: { name: 'Snip & Style', icon: '💇', color: '#ec407a', keeper: 'Stella' },
   farm: { name: 'Sunny Acres Farm Stand', icon: '🥚', color: '#8d6e63', keeper: 'June' },
+  foodcourt: { name: 'Mall Food Court', icon: '🍔', color: '#ef6c00', keeper: 'Benny' },
+  candy: { name: 'The Sweet Spot', icon: '🍬', color: '#ec407a', keeper: 'Coco' },
+  costume: { name: 'Costume Corner', icon: '🎭', color: '#7b1fa2', keeper: 'Mimi' },
+  sports: { name: 'Sporty Sam\'s', icon: '🛹', color: '#1e88e5', keeper: 'Sam' },
 };
 export const storeOf = item => (typeof item === 'number' ? BLOCKS[item]?.store : SHOP_TOOLS[item]?.store) || 'luxe';
 // What's for sale, cheapest first: [item, price].

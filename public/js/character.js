@@ -489,6 +489,37 @@ function addHat(head, look) {
       add(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.26, 16), m)).position.y = top + 0.14;
       add(new THREE.Mesh(new THREE.CylinderGeometry(0.255, 0.255, 0.06, 16), material(shadeHex(color, 0.6)))).position.y = top + 0.05;
       break;
+    case 'pirate': {
+      // A black pirate's hat, turned up at the front, with a white skull-and-bones patch.
+      const black = material('#1d1f24');
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.44, 0.05, 3), black)).position.y = top + 0.02;
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.27, 0.24, 12), black)).position.y = top + 0.14;
+      const front = add(new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.22, 0.04), black));
+      front.position.set(0, top + 0.12, -0.27);
+      front.rotation.x = -0.25;
+      add(new THREE.Mesh(new THREE.CircleGeometry(0.06, 12), material('#ffffff'))).position.set(0, top + 0.15, -0.3);
+      break;
+    }
+    case 'chef': {
+      // A tall white chef's hat: a band, and a big puffy top.
+      const white = material('#ffffff');
+      add(new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.22, 16), white)).position.y = top + 0.1;
+      for (const [x, z] of [[0, 0], [0.12, 0.08], [-0.12, 0.08], [0.1, -0.1], [-0.1, -0.1]]) add(new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 8), white)).position.set(x, top + 0.36, z);
+      break;
+    }
+    case 'bunnyears': {
+      // Bunny ears on a headband (pink inside).
+      add(new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.025, 6, 16, Math.PI), m)).position.y = top - 0.08;
+      for (const sx of [-1, 1]) {
+        const ear = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.38, 4, 8), m));
+        ear.position.set(sx * 0.12, top + 0.28, 0);
+        ear.rotation.z = -sx * 0.18;
+        const inner = add(new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 0.3, 4, 8), material('#f48fb1')));
+        inner.position.set(sx * 0.12, top + 0.28, -0.045);
+        inner.rotation.z = -sx * 0.18;
+      }
+      break;
+    }
     case 'straw': {
       // A floppy straw sun hat: a wide brim, a low crown and a ribbon round it.
       const straw = canvas(32, 32, (ctx, w, h) => {

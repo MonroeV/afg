@@ -36,6 +36,16 @@ export const FOODS = {
   egg: { icon: '🥚', name: 'Boiled Egg', fill: 15, price: 1, store: 'farm' },
   honey: { icon: '🍯', name: 'Honey Toast', fill: 20, price: 2, store: 'farm' },
   pie: { icon: '🥧', name: 'Apple Pie', fill: 35, price: 3, store: 'farm' },
+  // At the mall: the Food Court, and the Sweet Spot candy shop.
+  burger: { icon: '🍔', name: 'Burger', fill: 40, price: 3, store: 'foodcourt' },
+  fries: { icon: '🍟', name: 'Fries', fill: 20, price: 2, store: 'foodcourt' },
+  noodles: { icon: '🍜', name: 'Noodle Bowl', fill: 35, price: 3, store: 'foodcourt' },
+  sushi: { icon: '🍣', name: 'Sushi', fill: 30, price: 3, store: 'foodcourt' },
+  bubbletea: { icon: '🧋', name: 'Bubble Tea', fill: 12, price: 2, store: 'foodcourt' },
+  chocolate: { icon: '🍫', name: 'Chocolate Bar', fill: 10, price: 1, store: 'candy' },
+  donut: { icon: '🍩', name: 'Donut', fill: 15, price: 2, store: 'candy' },
+  cupcake: { icon: '🧁', name: 'Cupcake', fill: 15, price: 2, store: 'candy' },
+  candy: { icon: '🍬', name: 'Candy', fill: 6, price: 1, store: 'candy' },
   // From the garden (picked crops go in your lunchbox too).
   carrot: { icon: '🥕', name: 'Carrot', fill: 12 },
   strawberry: { icon: '🍓', name: 'Strawberries', fill: 12 },

@@ -8,7 +8,7 @@ import {
   GOLD_PAINT, GOLD_HEX, ELEVATOR, isCrop, cropStage, cropWet, CROP_RIPE,
 } from './shared/blocks.js';
 import { generateWorld } from './shared/worldgen.js';
-import { randomLook, sanitizeLook, cleanName, PREMIUM_HAIR, hairItem } from './shared/avatar.js';
+import { randomLook, sanitizeLook, cleanName, PREMIUM_HAIR, PREMIUM_HATS, hairItem, costumeItem } from './shared/avatar.js';
 import { WEEKDAYS, weekday, isTacoTuesday } from './shared/seasons.js';
 import { FiestaBand } from './fiesta.js';
 import { ChurchMeeting } from './churchui.js';
@@ -259,6 +259,7 @@ let showers = null, weatherMast = null; // it's raining tacos (or ice cream, or 
 let weatherPicker = null; // Stormy's menu: what shall it rain?
 let lunchbox = null; // your lunchbox 🍱 (L): food to eat
 let funRides = null; // Fun Land's roller coaster and Ferris wheel
+let mallPlace = null; // (the mall: its escalators carry you up and down)
 let hurt = 0, hurtNag = 0, hospitalPlace = null; // (ouch: a big fall or a crash 🤕; the hospital makes you better)
 let zooAnimals = null, farmAnimals = null, kartUI = null, rocketUI = null, spaceGate = null, stadiumUI = null, golfUI = null; // the zoo's animals, the farm's, and the go-kart track's lights and lap times
 let zooAim = null; // (the one under the crosshair)
@@ -748,6 +749,7 @@ function startGame(welcome, resume = false) {
   stadiumUI.setPlace(welcome.stadium, welcome.sball);
   golfUI.setPlace(welcome.golf, welcome.golfBoard);
   hospitalPlace = welcome.hospital || null;
+  mallPlace = welcome.mall || null;
   spaceGate = welcome.space?.gate || null;
   fireHose.setFires(welcome.fires);
   airportLights.setPlace(welcome.airport);
@@ -922,8 +924,10 @@ net.on('wallet', ({ coins, owned, vacation, found = [], agent, can, clubs, badge
   editor.owned = new Set(owned); // (premium hairdos you've bought: unlocked in the editor)
   // Just bought a new hairdo at the salon? On it goes!
   const newHair = wallet.loaded && Object.keys(PREMIUM_HAIR).find(st => owned.includes(hairItem(st)) && !wallet.owned.includes(hairItem(st)));
-  if (newHair) {
-    settings.look = { ...settings.look, hair: newHair };
+  // (Or a costume hat from the mall: on it goes too.)
+  const newCostume = wallet.loaded && Object.keys(PREMIUM_HATS).find(st => owned.includes(costumeItem(st)) && !wallet.owned.includes(costumeItem(st)));
+  if (newHair || newCostume) {
+    settings.look = { ...settings.look, ...(newHair ? { hair: newHair } : {}), ...(newCostume ? { hat: newCostume } : {}) };
     saveSettings();
     myBody.setLook(settings.look);
     net.send({ t: 'look', look: settings.look });
@@ -6234,6 +6238,15 @@ function frame(timestamp) {
       else if (funRides.updateRide(dt, gameTime(worldDay, sky.time), player)) player.flying = false; // (on a ride at Fun Land)
       else player.update(dt, active && !guardCatch?.frozen ? held : noKeys); // (not while the bodyguards have hold of you)
       if (sledding && player.onGround && !player.surface()) sled(false); // (off the snow: off the sled)
+      // The mall's escalators: stand on one and it carries you along (up the steps, or down).
+      if (mallPlace?.escalators && !riding() && !player.flying)
+        for (const e of mallPlace.escalators) {
+          const [x0, z0, x1, z1] = e.rect;
+          if (player.pos.x < x0 || player.pos.x > x1 || player.pos.z < z0 || player.pos.z > z1 || player.pos.y > 7) continue;
+          player.moveAxis('x', e.dir[0] * 2.2 * dt, true);
+          player.moveAxis('z', e.dir[1] * 2.2 * dt, true);
+          break;
+        }
       // (Never inside the ground, even if a hole grew back over us a moment ago.)
       if (player.pos.y < 0 && world.isSolid(Math.floor(player.pos.x), Math.floor(player.pos.y + 0.05), Math.floor(player.pos.z))) {
         let y = Math.floor(player.pos.y + 0.05);
@@ -6746,6 +6759,7 @@ window.buildzone = {
   get stadiumUI() { return stadiumUI; },
   get golfUI() { return golfUI; },
   get hospitalPlace() { return hospitalPlace; },
+  get mallPlace() { return mallPlace; },
   get hurt() { return hurt; },
   get airportLights() { return airportLights; },
   get fireHose() { return fireHose; },

@@ -175,6 +175,15 @@ export function makeIcon(item, textures, paint = 1) {
     return canvas;
   }
 
+  if (SHOP_TOOLS[item]?.hat || SHOP_TOOLS[item]?.vehicle) {
+    // A costume hat, or your own skateboard or bike (Costume Corner, Sporty Sam's: at the mall).
+    const t = SHOP_TOOLS[item];
+    ctx.font = '46px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(t.vehicle ? (t.vehicle === 'bmx' ? '🚲' : '🛹') : { pirate: '🏴‍☠️', chef: '👨‍🍳', bunnyears: '🐰' }[t.hat] || '🎩', 32, 34);
+    return canvas;
+  }
   if (itemFood(item) || SHOP_TOOLS[item]?.hair) {
     // Something to eat (it goes in your lunchbox), or a hairdo (with scissors).
     const hair = SHOP_TOOLS[item]?.hair;

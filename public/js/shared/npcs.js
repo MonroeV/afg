@@ -213,6 +213,31 @@ const NPCS = [
     tips: ['🍎✏️📚', 'Talk to me for a quiz question! Get it right for coins 🪙', 'The library is full of books: right-click a bookshelf to read 📚', 'The school bus is out front: lots of seats for friends! 🚌'],
   },
   {
+    // The mall: a shopkeeper at each of its stores.
+    id: -81, place: 'mall_food', name: 'Benny', title: 'Benny 🍔', roam: 1.5, store: 'foodcourt',
+    look: { face: 'grin', hair: 'short', hat: 'cap', shirt: 'tshirt', pants: 'jeans', extra: 'none', skin: '#d39a6a', hairColor: '#1b1209', hatColor: '#e53935', shirtColor: '#fdd835', shirtColor2: '#ffffff', pantsColor: '#263238', shoesColor: '#111111' },
+    hello: n => [`Hungry, ${n}? 🍔🍟`, `Hi ${n}! Fresh noodles! 🍜`],
+    tips: ['🍔🍟🍜🍣🧋'],
+  },
+  {
+    id: -82, place: 'mall_candy', name: 'Coco', title: 'Coco 🍬', roam: 1.5, store: 'candy',
+    look: { face: 'starry', hair: 'pigtails', hat: 'none', shirt: 'striped', pants: 'skirt', extra: 'none', skin: '#f5c9a0', hairColor: '#ec407a', hatColor: '#000000', shirtColor: '#f48fb1', shirtColor2: '#ffffff', pantsColor: '#ab47bc', shoesColor: '#ffffff' },
+    hello: n => [`Sweet treats, ${n}! 🍬`, `Hi ${n}! Try a cupcake! 🧁`],
+    tips: ['🍫🍩🧁🍬'],
+  },
+  {
+    id: -83, place: 'mall_sports', name: 'Sam', title: 'Sporty Sam 🛹', roam: 1.5, store: 'sports',
+    look: { face: 'cool', hair: 'spiky', hat: 'cap', shirt: 'jersey', pants: 'shorts', extra: 'none', skin: '#8d5524', hairColor: '#1b1209', hatColor: '#1e88e5', shirtColor: '#1e88e5', shirtColor2: '#ffffff', pantsColor: '#263238', shoesColor: '#ffffff' },
+    hello: n => [`Want your own board, ${n}? 🛹`, `Hi ${n}! Bikes and boards! 🚲`],
+    tips: ['🛹🚲', 'Your own skateboard goes wherever you go! Try the skate park 🛹'],
+  },
+  {
+    id: -84, place: 'mall_costume', name: 'Mimi', title: 'Mimi 🎭', roam: 1.5, store: 'costume',
+    look: { face: 'wink', hair: 'curly', hat: 'pirate', shirt: 'dress', pants: 'skirt', extra: 'cape', skin: '#ffe0c4', hairColor: '#c23b22', hatColor: '#1d1f24', shirtColor: '#7b1fa2', shirtColor2: '#ffffff', pantsColor: '#7b1fa2', shoesColor: '#111111', extraColor: '#e53935' },
+    hello: n => [`Ahoy, ${n}! Try on a hat! 🏴‍☠️`, `Hi ${n}! Dress up time! 🎭`],
+    tips: ['🏴‍☠️👨‍🍳🐰'],
+  },
+  {
     // BuildZone Motors: Dealer Dana, at the sales desk in the showroom.
     id: -71, place: 'dealer_desk', name: 'Dealer Dana', title: 'Dealer Dana 🚗', roam: 1,
     look: { face: 'smile', hair: 'ponytail', hat: 'none', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#e0ac69', hairColor: '#6d3b16', hatColor: '#000000', shirtColor: '#1a237e', shirtColor2: '#ffffff', pantsColor: '#263238', shoesColor: '#111111' },

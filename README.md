@@ -93,6 +93,15 @@ customize your character, drive cars, build anything and play with friends.
       claimed one (only you can drive it, it stays where you park it), and a new car rolls into
       its spot once you've driven yours away. The town keeps just a few cars of its own now (the
       rest went to the dealership; nobody's own cars were touched). The Loop Express stops there
+    - **BuildZone Mall** 🛍️ (since v0.67, inside the Outer Loop, sharing the Stadium's Loop Express
+      stop): a big two-floor mall with a glass front and neon along the top, a parking lot, and a
+      bright atrium in the middle (a fountain, plants, benches, a glass roof). **Escalators**
+      carry you up to the second floor and back down (just stand on them). Downstairs: the
+      **Food Court** (Benny: burgers, fries, noodles, sushi, bubble tea), **The Sweet Spot**
+      (Coco: chocolate, donuts, cupcakes, candy) and **Sporty Sam's**, where you can buy **your
+      very own skateboard (25 🪙) or BMX bike (35 🪙)**: it rolls out right beside you and only you
+      can ride it. Upstairs: **Costume Corner** (Mimi: a pirate hat, a chef's hat, bunny ears: on
+      they go, and you can swap them any time in 🎨 Customize) and an arcade
     - **BuildZone Elementary** 🏫 (since v0.66, by the Outer Loop, with its own Loop Express stop):
       a red brick school with a flagpole and a bus loop out front, where a big yellow **school
       bus** 🚌 waits (lots of seats for friends; **G** swings its STOP sign out). Inside, down the
@@ -1188,6 +1197,7 @@ public/
       skatepark.js     Ramp City Skate Park: kickers, fun box, half-pipe, quarter pipes, rails, boards and bikes
       hospital.js      BuildZone Hospital: the building, beds, the ambulance bay and its ambulances
       school.js        BuildZone Elementary: classrooms, library, cafeteria, gym, playground, bus; the quiz
+      mall.js          BuildZone Mall: two floors, the atrium and its escalators, the four stores
       firestation.js   The fire station: its building, the fire trucks' bays, and how often fires break out
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/
