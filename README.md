@@ -93,6 +93,13 @@ customize your character, drive cars, build anything and play with friends.
       claimed one (only you can drive it, it stays where you park it), and a new car rolls into
       its spot once you've driven yours away. The town keeps just a few cars of its own now (the
       rest went to the dealership; nobody's own cars were touched). The Loop Express stops there
+    - **The Starlight Cinema** 🎬 (since v0.68, by the Outer Loop, with its own Loop Express stop):
+      a red-and-gold movie theater with a glowing **marquee** out front (it shows what's playing),
+      a red carpet, a lobby with a snack counter (Usher Ollie: big popcorn, nachos, slushies),
+      and a big dark theater with rows of seats stepping up toward the back, facing a **giant
+      screen**. The shows run all day, the same for everyone: a few previews, the title, then
+      the feature (Blocky Bunny Adventures, Journey to the Stars, Wild Animal Friends), a new
+      one every couple of minutes. Right-click a seat to sit and watch 🍿
     - **BuildZone Mall** 🛍️ (since v0.67, inside the Outer Loop, sharing the Stadium's Loop Express
       stop): a big two-floor mall with a glass front and neon along the top, a parking lot, and a
       bright atrium in the middle (a fountain, plants, benches, a glass roof). **Escalators**
@@ -1136,6 +1143,7 @@ public/
     kartui.js          Thunder Raceway's start lights, the Best Laps board and your lap time
     rocketui.js        The Space Center's rocket: countdown, liftoff, the ride to space, parachutes; museum planets
     stadiumui.js       The stadium's giant ball (and kicking it), the scoreboard and the cheering crowd
+    cinemaui.js        The cinema's giant screen (the TV channels, big) and its marquee
     golfui.js          Mini golf: your ball and putting it (the power meter), cups, flags, windmill, loop, scorecard
     firehose.js        Fires in town (flames, smoke, the 🔥 arrow) and the fire trucks' hoses
     guardcatch.js      Bodyguards keeping you off their land: caught and walked off, blown away, flushed out
@@ -1198,6 +1206,7 @@ public/
       hospital.js      BuildZone Hospital: the building, beds, the ambulance bay and its ambulances
       school.js        BuildZone Elementary: classrooms, library, cafeteria, gym, playground, bus; the quiz
       mall.js          BuildZone Mall: two floors, the atrium and its escalators, the four stores
+      cinema.js        The Starlight Cinema: marquee, lobby, theater, the show schedule (showAt)
       firestation.js   The fire station: its building, the fire trucks' bays, and how often fires break out
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/

@@ -238,6 +238,13 @@ const NPCS = [
     tips: ['🏴‍☠️👨‍🍳🐰'],
   },
   {
+    // The Starlight Cinema: Usher Ollie at the snack counter.
+    id: -85, place: 'cinema_snacks', name: 'Ollie', title: 'Usher Ollie 🎬', roam: 1.5, store: 'cinema',
+    look: { face: 'smile', hair: 'short', hat: 'cap', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#f1c27d', hairColor: '#3b2314', hatColor: '#b71c1c', shirtColor: '#b71c1c', shirtColor2: '#ffd54f', pantsColor: '#111111', shoesColor: '#111111' },
+    hello: n => [`Enjoy the show, ${n}! 🎬`, `Popcorn, ${n}? 🍿`],
+    tips: ['🎬🍿', 'Find a seat in the theater and right-click it to sit! 🪑', 'A new movie starts every couple of minutes! 🎬'],
+  },
+  {
     // BuildZone Motors: Dealer Dana, at the sales desk in the showroom.
     id: -71, place: 'dealer_desk', name: 'Dealer Dana', title: 'Dealer Dana 🚗', roam: 1,
     look: { face: 'smile', hair: 'ponytail', hat: 'none', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#e0ac69', hairColor: '#6d3b16', hatColor: '#000000', shirtColor: '#1a237e', shirtColor2: '#ffffff', pantsColor: '#263238', shoesColor: '#111111' },

@@ -27,6 +27,7 @@ import { buildSkatePark, TRICK_COINS } from './skatepark.js';
 import { buildHospital, HEAL_COINS, RESCUE_COINS } from './hospital.js';
 import { buildSchool, QUIZ, QUIZ_COINS, QUIZ_DAILY } from './school.js';
 import { buildMall } from './mall.js';
+import { buildCinema } from './cinema.js';
 import { buildDealership, newCarFor, LOT_KINDS, SHOW_KINDS, townCarsToKeep } from './dealership.js';
 import { buildFireStation, FIRE_CALL, FIRE_GAP, FIRE_OUT, FIRE_LIFE, DOUSE, FIRE_REWARD, HOSE_RANGE } from './firestation.js';
 import { findHomes } from './residents.js';
@@ -45,7 +46,7 @@ import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
 const PLANE_HOME_AFTER = 300; // seconds a town airplane sits idle away from the airport before it's taken back
-export const SAVE_VERSION = 44;
+export const SAVE_VERSION = 45;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -331,6 +332,7 @@ export class GameRoom {
       this.upgradeTo42();
       this.upgradeTo43();
       this.upgradeTo44();
+      this.upgradeTo45();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -455,6 +457,7 @@ export class GameRoom {
     if (data.version < 42) this.upgradeTo42();
     if (data.version < 43) this.upgradeTo43();
     if (data.version < 44) this.upgradeTo44();
+    if (data.version < 45) this.upgradeTo45();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -1294,6 +1297,23 @@ export class GameRoom {
     this.onDirty();
   }
 
+  // Worlds saved before version 45: the Starlight Cinema (and a train stop by it).
+  upgradeTo45() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const cinema = buildCinema({ get, set, canUse: this.freeLand() });
+    if (cinema) {
+      this.claims.push(cinema.claim);
+      for (const [x, y, z, text] of cinema.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+      this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...cinema.places };
+      this.addTrainStops();
+    }
+    this.log(`Added the cinema (${cinema ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
   // Ms. Lee's quiz: a question (two answers, in either order) for this player.
   quizAsk(c) {
     const i = Math.floor(Math.random() * QUIZ.length), [q, right, wrong] = QUIZ[i], flip = Math.random() < 0.5;
@@ -2101,6 +2121,7 @@ export class GameRoom {
       golf: this.places?.golf || null, // the mini golf course (see golfui.js)
       hospital: this.places?.hospital || null, // the hospital (its beds make you better)
       mall: this.places?.mall || null, // the mall (its escalators carry you)
+      cinema: this.places?.cinema || null, // the cinema: its screen and marquee (see cinemaui.js)
       golfBoard: this.golfBoard.map(r => [r.name, r.total]),
       airport: this.places?.airport || null, // the airport (its lights: see airportlights.js)
       fires: this.fires.map(({ id, x, z, hp }) => ({ id, x, z, hp: Math.round(hp) })), // fires burning in town (see firehose.js)

@@ -46,6 +46,10 @@ export const FOODS = {
   donut: { icon: '🍩', name: 'Donut', fill: 15, price: 2, store: 'candy' },
   cupcake: { icon: '🧁', name: 'Cupcake', fill: 15, price: 2, store: 'candy' },
   candy: { icon: '🍬', name: 'Candy', fill: 6, price: 1, store: 'candy' },
+  // At the Starlight Cinema's snack counter.
+  bigpopcorn: { icon: '🍿', name: 'Big Popcorn', fill: 18, price: 2, store: 'cinema' },
+  nachos: { icon: '🧀', name: 'Nachos', fill: 22, price: 2, store: 'cinema' },
+  slushie: { icon: '🧊', name: 'Slushie', fill: 8, price: 1, store: 'cinema' },
   // From the garden (picked crops go in your lunchbox too).
   carrot: { icon: '🥕', name: 'Carrot', fill: 12 },
   strawberry: { icon: '🍓', name: 'Strawberries', fill: 12 },

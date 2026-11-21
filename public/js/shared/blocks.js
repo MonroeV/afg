@@ -331,6 +331,7 @@ export const STORES = {
   candy: { name: 'The Sweet Spot', icon: '🍬', color: '#ec407a', keeper: 'Coco' },
   costume: { name: 'Costume Corner', icon: '🎭', color: '#7b1fa2', keeper: 'Mimi' },
   sports: { name: 'Sporty Sam\'s', icon: '🛹', color: '#1e88e5', keeper: 'Sam' },
+  cinema: { name: 'Starlight Snacks', icon: '🍿', color: '#b71c1c', keeper: 'Ollie' },
 };
 export const storeOf = item => (typeof item === 'number' ? BLOCKS[item]?.store : SHOP_TOOLS[item]?.store) || 'luxe';
 // What's for sale, cheapest first: [item, price].

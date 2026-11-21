@@ -176,7 +176,7 @@ export function nextTrain(table, stationId, t) {
 const STOP_PLACES = [
   ['shop_grocery', '🛒', 'FreshMart'], ['shop_fiesta', '🌮', 'Casa Fiesta'], ['shop_salon', '💇', 'Snip & Style'],
   ['church', '⛪', 'Church'], ['airport', '✈️', 'Airport'], ['skytowers', '🏙️', 'Sky Tower'], ['park', '🤝', 'Friendship Park'],
-  ['funland', '🎢', 'Fun Land'], ['zoo', '🦁', 'Zoo'], ['firestation', '🚒', 'Fire Station'], ['dealer', '🚗', 'BuildZone Motors'], ['farm', '🐄', 'Sunny Acres Farm'], ['raceway', '🏎️', 'Thunder Raceway'], ['space', '🚀', 'Space Center'], ['stadium', '⚽', 'Stadium'], ['golf', '⛳', 'Mini Golf'], ['skatepark', '🛹', 'Skate Park'], ['hospital', '🏥', 'Hospital'], ['school', '🏫', 'School'], ['mall', '🛍️', 'Mall'],
+  ['funland', '🎢', 'Fun Land'], ['zoo', '🦁', 'Zoo'], ['firestation', '🚒', 'Fire Station'], ['dealer', '🚗', 'BuildZone Motors'], ['farm', '🐄', 'Sunny Acres Farm'], ['raceway', '🏎️', 'Thunder Raceway'], ['space', '🚀', 'Space Center'], ['stadium', '⚽', 'Stadium'], ['golf', '⛳', 'Mini Golf'], ['skatepark', '🛹', 'Skate Park'], ['hospital', '🏥', 'Hospital'], ['school', '🏫', 'School'], ['mall', '🛍️', 'Mall'], ['cinema', '🎬', 'Cinema'],
 ];
 const ROAD_STOPS = [[-RING, FAR_ROADS.west, '🏘️', 'West Road'], [RING, -60, '🏘️', 'East Road'], [-100, -RING, '🏘️', 'North Road']];
 const MERGE = 60;

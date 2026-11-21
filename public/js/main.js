@@ -22,6 +22,7 @@ import { KartUI } from './kartui.js';
 import { RocketUI } from './rocketui.js';
 import { StadiumUI } from './stadiumui.js';
 import { GolfUI } from './golfui.js';
+import { CinemaUI } from './cinemaui.js';
 import { FireHose, steam } from './firehose.js';
 import { AirportLights } from './airportlights.js';
 import { ANIMALS } from './shared/zoo.js';
@@ -259,7 +260,7 @@ let showers = null, weatherMast = null; // it's raining tacos (or ice cream, or 
 let weatherPicker = null; // Stormy's menu: what shall it rain?
 let lunchbox = null; // your lunchbox 🍱 (L): food to eat
 let funRides = null; // Fun Land's roller coaster and Ferris wheel
-let mallPlace = null; // (the mall: its escalators carry you up and down)
+let mallPlace = null, cinemaUI = null; // (the mall: its escalators carry you up and down)
 let hurt = 0, hurtNag = 0, hospitalPlace = null; // (ouch: a big fall or a crash 🤕; the hospital makes you better)
 let zooAnimals = null, farmAnimals = null, kartUI = null, rocketUI = null, spaceGate = null, stadiumUI = null, golfUI = null; // the zoo's animals, the farm's, and the go-kart track's lights and lap times
 let zooAim = null; // (the one under the crosshair)
@@ -750,6 +751,7 @@ function startGame(welcome, resume = false) {
   golfUI.setPlace(welcome.golf, welcome.golfBoard);
   hospitalPlace = welcome.hospital || null;
   mallPlace = welcome.mall || null;
+  cinemaUI.setPlace(welcome.cinema);
   spaceGate = welcome.space?.gate || null;
   fireHose.setFires(welcome.fires);
   airportLights.setPlace(welcome.airport);
@@ -1039,6 +1041,7 @@ stadiumUI = new StadiumUI({ scene, sounds, effects, hud: lateHud, net });
 net.on('sball', msg => stadiumUI.serverBall(msg));
 net.on('goal', msg => stadiumUI.goal(msg));
 golfUI = new GolfUI({ scene, sounds, effects, hud: lateHud, net });
+cinemaUI = new CinemaUI({ scene });
 net.on('golf_board', ({ board }) => golfUI.setBoard(board));
 net.on('golf_round', msg => golfUI.round(msg));
 net.on('rocket', msg => rocketUI.setState(msg));
@@ -6672,6 +6675,7 @@ function frame(timestamp) {
     rocketUI.update(dt, camera.position);
     stadiumUI.update(dt, time, player, camera.position, !riding() && !rocketUI.riding && !player.flying);
     golfUI.update(dt, gameTime(worldDay, sky.time), player);
+    cinemaUI.update(dt, gameTime(worldDay, sky.time), camera.position);
     // Hurt: a reminder now and then (or, with the Paramedics' first aid, better by yourself).
     if (hurt) {
       hurtNag += dt;
@@ -6760,6 +6764,7 @@ window.buildzone = {
   get golfUI() { return golfUI; },
   get hospitalPlace() { return hospitalPlace; },
   get mallPlace() { return mallPlace; },
+  get cinemaUI() { return cinemaUI; },
   get hurt() { return hurt; },
   get airportLights() { return airportLights; },
   get fireHose() { return fireHose; },
