@@ -92,6 +92,20 @@ export function airportFrame(place) {
   };
 }
 
+// The way planes come in to land (and climb out): a strip along the runway's center line,
+// reaching out past both ends. Nothing big gets built in it (since v0.69.1). (x, z) => true if
+// it's in the way.
+export const APPROACH = { out: 250, half: 30 };
+export function inApproach(place) {
+  if (!place?.runway || !place.along) return () => false;
+  const [x0, z0, x1, z1] = place.runway, [ux, uz] = place.along;
+  const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, reach = Math.hypot(x1 - x0, z1 - z0) / 2 + APPROACH.out;
+  return (x, z) => {
+    const dx = x - mx, dz = z - mz;
+    return Math.abs(dx * ux + dz * uz) <= reach && Math.abs(dz * ux - dx * uz) <= APPROACH.half;
+  };
+}
+
 // The hangar planes for an airport that's already built, for worlds from before they were added.
 export function hangarPlanes(place) {
   const f = airportFrame(place);

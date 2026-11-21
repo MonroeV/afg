@@ -173,7 +173,11 @@ customize your character, drive cars, build anything and play with friends.
       around the whole way! Everyone sees the same launch. Next door: **Mission Control** (rows
       of desks and computers facing the big screens: Commander Nova runs the **Space Cadets**
       club) and the **Space Museum**, with the Sun, Earth, Mars, Jupiter and Saturn hanging
-      from the ceiling, a moon rock and fun facts
+      from the ceiling, a moon rock and fun facts. (Since v0.69.1, nothing big is built where
+      the planes come in to land: a strip along the runway reaching 250 blocks out past each
+      end. In worlds where the Space Center had gone up right past the end of the runway, it
+      moved to free land elsewhere by the Outer Loop, with a new station; its old spot is grass
+      again, and the old station there is now **✈️ Runway**.)
     - **Thunder Raceway** 🏎️ (since v0.60, on the north side of the Outer Loop, with its own
       Loop Express stop): a long twisty **go-kart track** with red-and-white curbs and black
       tire walls, a **grandstand** of seats along the main straight, and a **gantry** over the

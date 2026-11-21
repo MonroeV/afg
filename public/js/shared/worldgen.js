@@ -8,7 +8,7 @@ import { buildSecretBase, hideSecretFiles, AGENT_SPOT } from './secretbase.js';
 import { buildGasStations } from './fuel.js';
 import { buildShops, buildOuterShops } from './shops.js';
 import { buildChurch } from './church.js';
-import { buildAirport } from './airport.js';
+import { buildAirport, inApproach } from './airport.js';
 import { buildPark as buildFriendPark } from './park.js';
 import { buildTrainLine } from './train.js';
 import { buildFunLand } from './funland.js';
@@ -551,59 +551,62 @@ export function generateWorld(seed = 2024) {
     markUsed(...airport.area);
     cars.push(...airport.cars);
   }
+  // (Nothing big from here on goes where the planes come in to land.)
+  const approach = inApproach(airport?.place);
+  const landFree = (x, z) => free(x, z) && !approach(x, z);
   // BuildZone Motors, the car dealership (its cars are for sale).
-  const dealer = buildDealership({ get: getB, set: put, canUse: free });
+  const dealer = buildDealership({ get: getB, set: put, canUse: landFree });
   if (dealer) {
     markUsed(...dealer.area);
     cars.push(...dealer.cars);
   }
   // Sunny Acres Farm (and its tractors).
-  const farm = buildFarm({ get: getB, set: put, canUse: free });
+  const farm = buildFarm({ get: getB, set: put, canUse: landFree });
   if (farm) {
     markUsed(...farm.area);
     cars.push(...farm.cars);
   }
   // Thunder Raceway, the go-kart track (and its karts).
-  const raceway = buildRaceway({ get: getB, set: put, canUse: free });
+  const raceway = buildRaceway({ get: getB, set: put, canUse: landFree });
   if (raceway) {
     markUsed(...raceway.area);
     cars.push(...raceway.cars);
   }
   // The Space Center.
-  const space = buildSpaceCenter({ get: getB, set: put, canUse: free });
+  const space = buildSpaceCenter({ get: getB, set: put, canUse: landFree });
   if (space) markUsed(...space.area);
   // The stadium.
-  const stadium = buildStadium({ get: getB, set: put, canUse: free });
+  const stadium = buildStadium({ get: getB, set: put, canUse: landFree });
   if (stadium) markUsed(...stadium.area);
   // Putt Putt Paradise, the mini golf course.
-  const golf = buildMiniGolf({ get: getB, set: put, canUse: free });
+  const golf = buildMiniGolf({ get: getB, set: put, canUse: landFree });
   if (golf) markUsed(...golf.area);
   // Ramp City Skate Park (and its boards and bikes).
-  const skatepark = buildSkatePark({ get: getB, set: put, canUse: free });
+  const skatepark = buildSkatePark({ get: getB, set: put, canUse: landFree });
   if (skatepark) {
     markUsed(...skatepark.area);
     cars.push(...skatepark.cars);
   }
   // The hospital (and its ambulances).
-  const hospital = buildHospital({ get: getB, set: put, canUse: free });
+  const hospital = buildHospital({ get: getB, set: put, canUse: landFree });
   if (hospital) {
     markUsed(...hospital.area);
     cars.push(...hospital.cars);
   }
   // The school (and its school bus).
-  const school = buildSchool({ get: getB, set: put, canUse: free });
+  const school = buildSchool({ get: getB, set: put, canUse: landFree });
   if (school) {
     markUsed(...school.area);
     cars.push(...school.cars);
   }
   // The mall.
-  const mall = buildMall({ get: getB, set: put, canUse: free });
+  const mall = buildMall({ get: getB, set: put, canUse: landFree });
   if (mall) markUsed(...mall.area);
   // The cinema.
-  const cinema = buildCinema({ get: getB, set: put, canUse: free });
+  const cinema = buildCinema({ get: getB, set: put, canUse: landFree });
   if (cinema) markUsed(...cinema.area);
   // Castle Brightstone.
-  const castle = buildCastle({ get: getB, set: put, canUse: free });
+  const castle = buildCastle({ get: getB, set: put, canUse: landFree });
   if (castle) markUsed(...castle.area);
   const places = { plaza: { x: 0, z: 0 }, store: store?.place || null, tower: towers[0]?.lobby || null, pizza: pizza?.place || null, lodge: frontier.places.lodge, ...far.places, ...(base?.places || {}), ...gas.places, ...shops.places, ...outerShops.places, church: church?.place || null, park: friendPark?.place || null, ...(funLand?.places || {}), ...(zoo?.places || {}), ...(fireStation?.places || {}), ...(dealer?.places || {}), ...(farm?.places || {}), ...(raceway?.places || {}), ...(space?.places || {}), ...(stadium?.places || {}), ...(golf?.places || {}), ...(skatepark?.places || {}), ...(hospital?.places || {}), ...(school?.places || {}), ...(mall?.places || {}), ...(cinema?.places || {}), ...(castle?.places || {}), airport: airport?.place || null, skytowers: outerTowers.towers.length ? { x: outerTowers.towers[0].x, z: outerTowers.towers[0].z, towers: outerTowers.towers } : null, weather: weather?.place || null, buildpark: buildPark?.place || null, ...Object.fromEntries(homes.map((h, i) => [`home${i + 1}`, h])), agent: AGENT_SPOT };
   // The Loop Express: pillars for its track, and ticket machines at the stops (by the places).

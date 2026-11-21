@@ -13,7 +13,7 @@ import { buildGasStations, usesFuel, getsDirty, TANK_RANGE, GAS_PUMP, GAS_CAN, G
 import { MAX_TUNNELS, isTunnelY, tunnelKey, openBelow } from './underground.js';
 import { buildShops, buildOuterShops } from './shops.js';
 import { buildChurch, meetingOn, meetingAt, giftSpots, MEETING_COINS, MEETING_STAY, GIFT_COINS } from './church.js';
-import { buildAirport, hangarPlanes, planesOutOfTheWay, airportCurb, addTaxiway } from './airport.js';
+import { buildAirport, hangarPlanes, planesOutOfTheWay, airportCurb, addTaxiway, inApproach } from './airport.js';
 import { buildPark } from './park.js';
 import { buildTrainLine, fixPlatforms } from './train.js';
 import { buildFunLand, rideSigns } from './funland.js';
@@ -47,7 +47,7 @@ import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
 const PLANE_HOME_AFTER = 300; // seconds a town airplane sits idle away from the airport before it's taken back
-export const SAVE_VERSION = 46;
+export const SAVE_VERSION = 47;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -335,6 +335,7 @@ export class GameRoom {
       this.upgradeTo44();
       this.upgradeTo45();
       this.upgradeTo46();
+      this.upgradeTo47();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -462,6 +463,7 @@ export class GameRoom {
     if (data.version < 44) this.upgradeTo44();
     if (data.version < 45) this.upgradeTo45();
     if (data.version < 46) this.upgradeTo46();
+    if (data.version < 47) this.upgradeTo47();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -905,7 +907,7 @@ export class GameRoom {
       this.world.set(k, v);
       ours.add(k);
     };
-    const { towers } = buildOuterTowers({ get, set, canUse: this.freeLand() });
+    const { towers } = buildOuterTowers({ get, set, canUse: this.siteLand() });
     if (towers.length) this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), skytowers: { x: towers[0].x, z: towers[0].z, towers } };
     this.log(`Added the skyscrapers (${towers.map(t => t.name).join(', ') || 'no room'})`);
     this.onDirty();
@@ -917,7 +919,7 @@ export class GameRoom {
     const set = (x, y, z, v) => {
       if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
     };
-    const park = buildPark({ get, set, canUse: this.freeLand() });
+    const park = buildPark({ get, set, canUse: this.siteLand() });
     if (park) {
       this.claims.push(park.claim);
       for (const [x, y, z, text] of park.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
@@ -941,7 +943,7 @@ export class GameRoom {
     const set = (x, y, z, v) => {
       if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
     };
-    const fun = buildFunLand({ get, set, canUse: this.freeLand() });
+    const fun = buildFunLand({ get, set, canUse: this.siteLand() });
     if (fun) {
       this.claims.push(fun.claim);
       for (const [x, y, z, text] of fun.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
@@ -959,7 +961,7 @@ export class GameRoom {
     const set = (x, y, z, v) => {
       if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
     };
-    const zoo = buildZoo({ get, set, canUse: this.freeLand() });
+    const zoo = buildZoo({ get, set, canUse: this.siteLand() });
     if (zoo) {
       this.claims.push(zoo.claim);
       for (const [x, y, z, text] of zoo.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
@@ -976,7 +978,7 @@ export class GameRoom {
     const set = (x, y, z, v) => {
       if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
     };
-    const fs = buildFireStation({ get, set, canUse: this.freeLand() });
+    const fs = buildFireStation({ get, set, canUse: this.siteLand() });
     if (fs) {
       this.claims.push(fs.claim);
       for (const [x, y, z, text] of fs.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
@@ -1097,7 +1099,7 @@ export class GameRoom {
     const set = (x, y, z, v) => {
       if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
     };
-    const dealer = buildDealership({ get, set, canUse: this.freeLand() });
+    const dealer = buildDealership({ get, set, canUse: this.siteLand() });
     if (dealer) {
       this.claims.push(dealer.claim);
       for (const [x, y, z, text] of dealer.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
@@ -1129,7 +1131,7 @@ export class GameRoom {
     const set = (x, y, z, v) => {
       if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
     };
-    const farm = buildFarm({ get, set, canUse: this.freeLand() });
+    const farm = buildFarm({ get, set, canUse: this.siteLand() });
     if (farm) {
       this.claims.push(farm.claim);
       for (const [x, y, z, text] of farm.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
@@ -1147,7 +1149,7 @@ export class GameRoom {
     const set = (x, y, z, v) => {
       if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
     };
-    const track = buildRaceway({ get, set, canUse: this.freeLand() });
+    const track = buildRaceway({ get, set, canUse: this.siteLand() });
     if (track) {
       this.claims.push(track.claim);
       for (const [x, y, z, text] of track.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
@@ -1165,7 +1167,7 @@ export class GameRoom {
     const set = (x, y, z, v) => {
       if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
     };
-    const space = buildSpaceCenter({ get, set, canUse: this.freeLand() });
+    const space = buildSpaceCenter({ get, set, canUse: this.siteLand() });
     if (space) {
       this.claims.push(space.claim);
       for (const [x, y, z, text] of space.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
@@ -1182,7 +1184,7 @@ export class GameRoom {
     const set = (x, y, z, v) => {
       if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
     };
-    const stadium = buildStadium({ get, set, canUse: this.freeLand() });
+    const stadium = buildStadium({ get, set, canUse: this.siteLand() });
     if (stadium) {
       this.claims.push(stadium.claim);
       for (const [x, y, z, text] of stadium.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
@@ -1199,7 +1201,7 @@ export class GameRoom {
     const set = (x, y, z, v) => {
       if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
     };
-    const golf = buildMiniGolf({ get, set, canUse: this.freeLand() });
+    const golf = buildMiniGolf({ get, set, canUse: this.siteLand() });
     if (golf) {
       this.claims.push(golf.claim);
       for (const [x, y, z, text] of golf.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
@@ -1216,7 +1218,7 @@ export class GameRoom {
     const set = (x, y, z, v) => {
       if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
     };
-    const park = buildSkatePark({ get, set, canUse: this.freeLand() });
+    const park = buildSkatePark({ get, set, canUse: this.siteLand() });
     if (park) {
       this.claims.push(park.claim);
       for (const [x, y, z, text] of park.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
@@ -1234,7 +1236,7 @@ export class GameRoom {
     const set = (x, y, z, v) => {
       if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
     };
-    const hospital = buildHospital({ get, set, canUse: this.freeLand() });
+    const hospital = buildHospital({ get, set, canUse: this.siteLand() });
     if (hospital) {
       this.claims.push(hospital.claim);
       for (const [x, y, z, text] of hospital.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
@@ -1252,7 +1254,7 @@ export class GameRoom {
     const set = (x, y, z, v) => {
       if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
     };
-    const school = buildSchool({ get, set, canUse: this.freeLand() });
+    const school = buildSchool({ get, set, canUse: this.siteLand() });
     if (school) {
       this.claims.push(school.claim);
       for (const [x, y, z, text] of school.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
@@ -1290,7 +1292,7 @@ export class GameRoom {
     const set = (x, y, z, v) => {
       if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
     };
-    const mall = buildMall({ get, set, canUse: this.freeLand() });
+    const mall = buildMall({ get, set, canUse: this.siteLand() });
     if (mall) {
       this.claims.push(mall.claim);
       for (const [x, y, z, text] of mall.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
@@ -1307,7 +1309,7 @@ export class GameRoom {
     const set = (x, y, z, v) => {
       if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
     };
-    const cinema = buildCinema({ get, set, canUse: this.freeLand() });
+    const cinema = buildCinema({ get, set, canUse: this.siteLand() });
     if (cinema) {
       this.claims.push(cinema.claim);
       for (const [x, y, z, text] of cinema.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
@@ -1324,7 +1326,7 @@ export class GameRoom {
     const set = (x, y, z, v) => {
       if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
     };
-    const castle = buildCastle({ get, set, canUse: this.freeLand() });
+    const castle = buildCastle({ get, set, canUse: this.siteLand() });
     if (castle) {
       this.claims.push(castle.claim);
       for (const [x, y, z, text] of castle.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
@@ -1332,6 +1334,58 @@ export class GameRoom {
       this.addTrainStops();
     }
     this.log(`Added the castle (${castle ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
+  // Worlds saved before version 47: a Space Center that went up where the planes come in to land
+  // (right past the end of the runway) moves somewhere else. It's the town's own land (nobody
+  // could build on it), so it's simply cleared, back to grass, and built again on free land.
+  // (Anything else, and anyone's land and cars, stays just as it was.)
+  upgradeTo47() {
+    const old = this.claims.find(c => c.key === 'space');
+    const approach = inApproach(this.places?.airport);
+    let inTheWay = false;
+    if (old) for (let x = old.x0; x <= old.x1 && !inTheWay; x++) for (let z = old.z0; z <= old.z1 && !inTheWay; z++) if (approach(x, z)) inTheWay = true;
+    if (!inTheWay) return;
+    const inOld = (x, z) => x >= old.x0 && x <= old.x1 && z >= old.z0 && z <= old.z1;
+    // Clear the old site (everything on the ground and up; the ground itself stays).
+    for (const k of [...this.world.keys()]) {
+      const [x, y, z] = k.split(',').map(Number);
+      if (y < 0 || !inOld(x, z)) continue;
+      this.world.delete(k);
+      this.signs.delete(k);
+      this.paints.delete(k);
+      this.paints.delete(`${k}|f`);
+      this.original?.delete(k);
+      this.damaged?.delete(k);
+    }
+    for (const v of this.vehicles.values()) if (inOld(Math.floor(v.x), Math.floor(v.z)) && v.y > 0) v.y = 0;
+    this.claims = this.claims.filter(c => c !== old);
+    this.movedAway = [old];
+    const places = { ...this.places };
+    for (const key of Object.keys(places)) if (key === 'space' || key.startsWith('space_')) delete places[key];
+    this.places = places;
+    // The old station keeps its platform: it's by the end of the runway (that's why the Space
+    // Center had to move), so that's its name now. (Shared with another place? It keeps theirs.)
+    const oldStation = places.train?.stations?.find(st => st.icon.includes('🚀'));
+    if (oldStation) {
+      const icon = oldStation.icon.replace('🚀', ''), name = oldStation.name.split(' · ').filter(n => n !== 'Space Center').join(' · ');
+      Object.assign(oldStation, icon && name ? { icon, name } : { icon: '✈️', name: 'Runway' });
+      for (const [x, y, z] of oldStation.signs || []) this.signs.set(blockKey(x, y, z), cleanSignText(`🚉 ${oldStation.icon} ${oldStation.name}`));
+    }
+    // And the Space Center again, somewhere free.
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const space = buildSpaceCenter({ get, set, canUse: this.siteLand() });
+    if (space) {
+      this.claims.push(space.claim);
+      for (const [x, y, z, text] of space.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+      this.places = { ...this.places, ...space.places };
+    }
+    this.addTrainStops();
+    this.log(`Moved the Space Center out of the airport's approach (${space ? `to ${Math.round(space.places.space.x)}, ${Math.round(space.places.space.z)}` : 'no room'})`);
     this.onDirty();
   }
 
@@ -1645,6 +1699,12 @@ export class GameRoom {
     return (x, z) => !claimAt(this.claims, x, z) && parked.every(h => Math.hypot(h.x - x, h.z - z) > 5);
   }
 
+  // Free land for a big new place: free, and not where the planes come in to land (since v0.69.1).
+  siteLand() {
+    const free = this.freeLand(), approach = inApproach(this.places?.airport);
+    return (x, z) => free(x, z) && !approach(x, z);
+  }
+
   // Worlds saved before version 6: a lake with a dock and boats, on empty land.
   upgradeTo6() {
     const lake = buildLake({ get: (x, y, z) => this.get(x, y, z), set: (x, y, z, v) => this.world.set(blockKey(x, y, z), v), canUse: this.freeLand() });
@@ -1743,6 +1803,7 @@ export class GameRoom {
     }
     for (const d of Array.isArray(damaged) ? damaged : []) {
       if (!Array.isArray(d) || d.length < 5 || !d.every(Number.isFinite) || !inBounds(d[0], d[1], d[2]) || !d[3] || !isValidBlock(d[3])) continue;
+      if (this.movedAway?.some(r => d[0] >= r.x0 && d[0] <= r.x1 && d[2] >= r.z0 && d[2] <= r.z1)) continue; // (a place that moved away: nothing to mend)
       const k = blockKey(d[0], d[1], d[2]);
       this.original.set(k, d[3]);
       this.damaged.set(k, d[4]);
@@ -1751,6 +1812,7 @@ export class GameRoom {
       const k = blockKey(x, y, z);
       if (this.original.has(k)) this.originalSigns.set(k, cleanSignText(text));
     }
+    this.movedAway = null;
   }
 
   // Someone changed something here (a block, its paint, a sign's words). If it's one of the town's
