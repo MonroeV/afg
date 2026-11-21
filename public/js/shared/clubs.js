@@ -194,6 +194,15 @@ export const CLUBS = [
     ],
     reward: { coins: 20, perk: '🎓', perkName: 'Gold star: quiz answers pay double' },
   },
+  {
+    id: 'castle', name: 'Royal Treasure Hunters', icon: '👑', color: '#6d4c41', leader: 'Queen Elara', where: 'at Castle Brightstone',
+    tasks: [
+      { id: 'treasure', icon: '🏆', goal: 5, what: 'Find the castle\'s 5 hidden golden trophies (right-click one)' },
+      { id: 'throne', icon: '🪑', goal: 1, what: 'Sit on the throne in the great hall' },
+      { id: 'bridge', icon: '🔱', goal: 1, what: 'Pull a lever to raise or lower the drawbridge' },
+    ],
+    reward: { coins: 25, perk: '👑', perkName: 'Royal treasury: +5 🪙 every day' },
+  },
 ];
 
 export const clubById = id => CLUBS.find(c => c.id === id);

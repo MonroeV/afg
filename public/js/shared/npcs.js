@@ -245,6 +245,26 @@ const NPCS = [
     tips: ['🎬🍿', 'Find a seat in the theater and right-click it to sit! 🪑', 'A new movie starts every couple of minutes! 🎬'],
   },
   {
+    // Castle Brightstone: Queen Elara and King Roland by the throne (the queen runs the Royal
+    // Treasure Hunters), and Sir Pip guarding the gate.
+    id: -86, place: 'castle_throne', name: 'Queen Elara', title: 'Queen Elara 👑', roam: 2, club: 'castle',
+    look: { face: 'smile', hair: 'princess', hat: 'crown', shirt: 'dress', pants: 'skirt', extra: 'cape', skin: '#e0ac69', hairColor: '#d9a441', hatColor: '#ffcf3f', shirtColor: '#6a1b9a', shirtColor2: '#ffd54f', pantsColor: '#6a1b9a', shoesColor: '#ffcf3f', extraColor: '#c62828' },
+    hello: n => [`Welcome to my castle, ${n}! 👑`, `Greetings, brave ${n}! Seek the treasure! 🏆`],
+    tips: ['👑🏆🏰', 'Five golden trophies are hidden in my castle! Find them all! 🏆', 'One is down in the dungeon… 🔒', 'Climb the towers: the view is wonderful! 🏰', 'Try sitting on the throne! 🪑'],
+  },
+  {
+    id: -87, place: 'castle_throne', name: 'King Roland', title: 'King Roland 🤴', roam: 2,
+    look: { face: 'grin', hair: 'short', hat: 'crown', shirt: 'jacket', pants: 'jeans', extra: 'cape', skin: '#c68642', hairColor: '#3b2314', hatColor: '#ffcf3f', shirtColor: '#1a237e', shirtColor2: '#ffd54f', pantsColor: '#1a237e', shoesColor: '#3b2314', extraColor: '#c62828' },
+    hello: n => [`Hail, ${n}! 🤴`, `A visitor! Welcome, ${n}! 🏰`],
+    tips: ['🤴🏰', 'Pull the lever by the gate to raise the drawbridge! 🔱', 'The knights keep us safe! 🛡️'],
+  },
+  {
+    id: -88, place: 'castle_gate', name: 'Sir Pip', title: 'Sir Pip 🛡️', roam: 3,
+    look: { face: 'cool', hair: 'none', hat: 'viking', shirt: 'jacket', pants: 'jeans', extra: 'cape', skin: '#f1c27d', hairColor: '#1b1209', hatColor: '#9aa3ad', shirtColor: '#9aa3ad', shirtColor2: '#ffffff', pantsColor: '#607d8b', shoesColor: '#37474f', extraColor: '#1e88e5' },
+    hello: n => [`Halt! Oh, it's you, ${n}! Come in! 🛡️`, `Welcome to Castle Brightstone, ${n}! ⚔️`],
+    tips: ['🛡️⚔️', 'The lever by the gate works the drawbridge! 🔱', 'Walk along the top of the walls: up the steps by the gate! 🏰'],
+  },
+  {
     // BuildZone Motors: Dealer Dana, at the sales desk in the showroom.
     id: -71, place: 'dealer_desk', name: 'Dealer Dana', title: 'Dealer Dana 🚗', roam: 1,
     look: { face: 'smile', hair: 'ponytail', hat: 'none', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#e0ac69', hairColor: '#6d3b16', hatColor: '#000000', shirtColor: '#1a237e', shirtColor2: '#ffffff', pantsColor: '#263238', shoesColor: '#111111' },

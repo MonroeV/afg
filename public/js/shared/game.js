@@ -28,6 +28,7 @@ import { buildHospital, HEAL_COINS, RESCUE_COINS } from './hospital.js';
 import { buildSchool, QUIZ, QUIZ_COINS, QUIZ_DAILY } from './school.js';
 import { buildMall } from './mall.js';
 import { buildCinema } from './cinema.js';
+import { buildCastle, TREASURE_COINS } from './castle.js';
 import { buildDealership, newCarFor, LOT_KINDS, SHOW_KINDS, townCarsToKeep } from './dealership.js';
 import { buildFireStation, FIRE_CALL, FIRE_GAP, FIRE_OUT, FIRE_LIFE, DOUSE, FIRE_REWARD, HOSE_RANGE } from './firestation.js';
 import { findHomes } from './residents.js';
@@ -46,7 +47,7 @@ import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
 const PLANE_HOME_AFTER = 300; // seconds a town airplane sits idle away from the airport before it's taken back
-export const SAVE_VERSION = 45;
+export const SAVE_VERSION = 46;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -333,6 +334,7 @@ export class GameRoom {
       this.upgradeTo43();
       this.upgradeTo44();
       this.upgradeTo45();
+      this.upgradeTo46();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -377,6 +379,7 @@ export class GameRoom {
         // Taco Tuesday: which Tuesday (the day count), and how many free tacos they've had.
         tacoDay: Number.isInteger(w.tacoDay) ? w.tacoDay : -1,
         churchDay: Number.isInteger(w.churchDay) ? w.churchDay : -1, // (the last Sunday they came to church)
+        castleTreasure: Array.isArray(w.castleTreasure) ? w.castleTreasure.filter(i => Number.isInteger(i) && i >= 0 && i < 10) : [], // (the castle's treasures they've found)
         quizDay: Number.isInteger(w.quizDay) ? w.quizDay : -1, // (Ms. Lee's quiz: which day, and the coins from it that day)
         quizCoins: Number.isInteger(w.quizCoins) ? w.quizCoins : 0,
         churchMeet: typeof w.churchMeet === 'string' ? w.churchMeet.slice(0, 40) : '', // (the last meeting they came to: `${day}:${key}`)
@@ -458,6 +461,7 @@ export class GameRoom {
     if (data.version < 43) this.upgradeTo43();
     if (data.version < 44) this.upgradeTo44();
     if (data.version < 45) this.upgradeTo45();
+    if (data.version < 46) this.upgradeTo46();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -1314,6 +1318,23 @@ export class GameRoom {
     this.onDirty();
   }
 
+  // Worlds saved before version 46: Castle Brightstone (and a train stop by it).
+  upgradeTo46() {
+    const get = (x, y, z) => this.get(x, y, z);
+    const set = (x, y, z, v) => {
+      if (inBounds(x, y, z) && v) this.world.set(blockKey(x, y, z), v);
+    };
+    const castle = buildCastle({ get, set, canUse: this.freeLand() });
+    if (castle) {
+      this.claims.push(castle.claim);
+      for (const [x, y, z, text] of castle.signs) this.signs.set(blockKey(x, y, z), cleanSignText(text));
+      this.places = { ...(this.places || { plaza: { x: 0, z: 0 } }), ...castle.places };
+      this.addTrainStops();
+    }
+    this.log(`Added the castle (${castle ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
   // Ms. Lee's quiz: a question (two answers, in either order) for this player.
   quizAsk(c) {
     const i = Math.floor(Math.random() * QUIZ.length), [q, right, wrong] = QUIZ[i], flip = Math.random() < 0.5;
@@ -2122,6 +2143,7 @@ export class GameRoom {
       hospital: this.places?.hospital || null, // the hospital (its beds make you better)
       mall: this.places?.mall || null, // the mall (its escalators carry you)
       cinema: this.places?.cinema || null, // the cinema: its screen and marquee (see cinemaui.js)
+      castle: this.places?.castle || null, // the castle: its levers and treasures
       golfBoard: this.golfBoard.map(r => [r.name, r.total]),
       airport: this.places?.airport || null, // the airport (its lights: see airportlights.js)
       fires: this.fires.map(({ id, x, z, hp }) => ({ id, x, z, hp: Math.round(hp) })), // fires burning in town (see firehose.js)
@@ -2135,7 +2157,7 @@ export class GameRoom {
       const yesterday = new Date(Date.now() - DAY_MS).toISOString().slice(0, 10);
       wallet.streak = wallet.day === yesterday ? wallet.streak + 1 : 1;
       wallet.day = today;
-      const bonus = DAILY_BONUS + Math.min(STREAK_MAX, (wallet.streak - 1) * 2) + (this.perk(client, 'gold') ? 5 : 0) + (this.perk(client, 'golf') ? 3 : 0);
+      const bonus = DAILY_BONUS + Math.min(STREAK_MAX, (wallet.streak - 1) * 2) + (this.perk(client, 'gold') ? 5 : 0) + (this.perk(client, 'golf') ? 3 : 0) + (this.perk(client, 'castle') ? 5 : 0);
       wallet.coins += bonus;
       client.send({ t: 'daily', coins: bonus, streak: wallet.streak });
       this.onDirty();
@@ -3158,6 +3180,41 @@ export class GameRoom {
       }
       client.send({ t: 'quiz_result', right, answer: QUIZ[q.i][1], coins });
       this.onDirty();
+    },
+
+    // The castle's lever: the drawbridge comes up (and the portcullis drops in the gateway), or
+    // goes back down (and the gateway opens).
+    drawbridge(client) {
+      const c = this.places?.castle;
+      if (!c?.levers || !this.allow(client, 'drawbridge', 0.5, 1)) return;
+      const [x, y, z] = client.pos;
+      if (!c.levers.some(([lx, ly, lz]) => Math.hypot(x - lx - 0.5, z - lz - 0.5) < 5 && Math.abs(y - ly) < 4)) return;
+      const down = blockId(this.get(...c.bridge[0])) === 6; // (planks across the moat: it's down)
+      for (const [bx, by, bz] of c.bridge) this.serverSet(bx, by, bz, down ? 36 : 6);
+      for (const [gx, gy, gz] of c.gate) this.serverSet(gx, gy, gz, down ? 11 : 0);
+      this.broadcast({ t: 'fx', kind: 'drawbridge', up: down, x: c.bridge[0][0], y: 1, z: c.bridge[0][2] });
+      this.progress(client, 'castle', 'bridge', 1, true);
+    },
+
+    // Found one of the castle's hidden treasures (a golden trophy).
+    treasure(client, { i }) {
+      const c = this.places?.castle, spot = c?.treasures?.[i];
+      if (!spot || !Number.isInteger(i) || !this.allow(client, 'treasure', 1, 3)) return;
+      const [x, y, z] = client.pos;
+      if (Math.hypot(x - spot[0] - 0.5, z - spot[2] - 0.5) > 6 || Math.abs(y - spot[1]) > 5) return;
+      const w = this.wallet(client), found = (w.castleTreasure ??= []);
+      if (found.includes(i)) return client.send({ t: 'treasure', i, n: found.length, of: c.treasures.length, again: true });
+      found.push(i);
+      w.coins += TREASURE_COINS;
+      this.sendWallet(client);
+      this.progress(client, 'castle', 'treasure', found.length, true);
+      client.send({ t: 'treasure', i, n: found.length, of: c.treasures.length, coins: TREASURE_COINS });
+      this.onDirty();
+    },
+
+    // Sat on the castle's throne. 👑
+    throne(client) {
+      if (this.places?.castle && this.allow(client, 'throne', 0.2, 1)) this.progress(client, 'castle', 'throne', 1, true);
     },
 
     // Ouch: a big fall or a hard crash (the player's game noticed). 🤕

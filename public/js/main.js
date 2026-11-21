@@ -260,7 +260,7 @@ let showers = null, weatherMast = null; // it's raining tacos (or ice cream, or 
 let weatherPicker = null; // Stormy's menu: what shall it rain?
 let lunchbox = null; // your lunchbox 🍱 (L): food to eat
 let funRides = null; // Fun Land's roller coaster and Ferris wheel
-let mallPlace = null, cinemaUI = null; // (the mall: its escalators carry you up and down)
+let mallPlace = null, cinemaUI = null, castlePlace = null; // (the mall: its escalators carry you up and down)
 let hurt = 0, hurtNag = 0, hospitalPlace = null; // (ouch: a big fall or a crash 🤕; the hospital makes you better)
 let zooAnimals = null, farmAnimals = null, kartUI = null, rocketUI = null, spaceGate = null, stadiumUI = null, golfUI = null; // the zoo's animals, the farm's, and the go-kart track's lights and lap times
 let zooAim = null; // (the one under the crosshair)
@@ -752,6 +752,7 @@ function startGame(welcome, resume = false) {
   hospitalPlace = welcome.hospital || null;
   mallPlace = welcome.mall || null;
   cinemaUI.setPlace(welcome.cinema);
+  castlePlace = welcome.castle || null;
   spaceGate = welcome.space?.gate || null;
   fireHose.setFires(welcome.fires);
   airportLights.setPlace(welcome.airport);
@@ -1182,6 +1183,10 @@ net.on('fx', ({ kind, x, y, z, color, seed, dir, id, animal, i, liked }) => {
   } else if (kind === 'zoofed') {
     zooAnimals.fed(animal, i, liked, gameTime(worldDay, sky.time));
     sounds.tone(500, 900, 0.15, 0.12, 'sine');
+  } else if (kind === 'drawbridge') {
+    // The drawbridge going up (or down): the clank of the chains.
+    if (loudness(x, y, z, 60) > 0) for (let i = 0; i < 8; i++) sounds.tone(140 - i * 6, 120 - i * 6, 0.08, 0.15 * loudness(x, y, z, 60), 'square', i * 0.12);
+    effects.smokePuff?.(x, y, z, 0.3);
   } else if (kind === 'farmpet') {
     // (Petted at the farm: hearts, and a happy little noise.)
     farmAnimals.fed(animal, i, liked, gameTime(worldDay, sky.time));
@@ -2741,6 +2746,13 @@ net.on('quiz_result', ({ right, answer, coins }) => {
     sounds.tone(300, 200, 0.2, 0.15, 'triangle');
     hud.toast(`❌ ➡ ${answer}`);
   }
+});
+// Found one of the castle's treasures (or one you'd found before).
+net.on('treasure', ({ n, of, coins, again }) => {
+  if (again) return hud.toast(`🏆 ✓ ${n}/${of}`);
+  sounds.magic();
+  effects.sparkle(player.pos.x, player.pos.y + 1.5, player.pos.z, 40);
+  hud.toast(`🏆 Treasure! ${n}/${of} +${coins} 🪙`);
 });
 net.on('rescued', ({ name, coins }) => {
   sounds.magic();
@@ -4652,6 +4664,13 @@ function interact() {
     }
     if (BLOCKS[blockId(hit.value)]?.slide) return startSlide(...hit.block);
     if (blockId(hit.value) === STOP_BLOCK) return trainTimes(hit.block);
+    // The castle: a lever (the drawbridge), or one of the hidden golden trophies.
+    if (castlePlace && !hit.ground) {
+      const at = ([x, y, z]) => hit.block[0] === x && hit.block[1] === y && hit.block[2] === z;
+      if (castlePlace.levers.some(([x, y, z]) => at([x, y, z]) || at([x, y - 1, z]))) return net.send({ t: 'drawbridge' });
+      const ti = castlePlace.treasures.findIndex(at);
+      if (ti >= 0) return net.send({ t: 'treasure', i: ti });
+    }
     if (blockId(hit.value) === GATE_BLOCK && spaceGate && Math.hypot(hit.block[0] + 0.5 - spaceGate[0], hit.block[2] + 0.5 - spaceGate[1]) < 6) return net.send({ t: 'rocket_board' });
     if (blockId(hit.value) === GATE_BLOCK) return funRides.board(hit.block[0] + 0.5, hit.block[2] + 0.5, player, gameTime(worldDay, sky.time));
     const s = structures.at(...hit.block);
@@ -5063,6 +5082,14 @@ function sitOn(x, y, z, v) {
   const ground = (cx, cz) => !world.isSolid(cx, y, cz) && !world.isSolid(cx, y + 1, cz) && world.isSolid(cx, y - 1, cz) && !isWaterBlock(world.get(cx, y - 1, cz)) && !isWaterBlock(world.get(cx, y, cz));
   const [sx, sz] = [[dx, dz], [-dx, -dz], [dz, -dx], [-dz, dx]].find(([ox, oz]) => ground(x + ox, z + oz)) || [dx, dz];
   seated = { x, y, z, standAt: [x + 0.5 + sx, y, z + 0.5 + sz] };
+  // (The castle's throne: a royal moment.)
+  if (blockId(v) === 83 && castlePlace) {
+    const [x0, z0, x1, z1] = castlePlace.rect;
+    if (x >= x0 && x <= x1 && z >= z0 && z <= z1) {
+      net.send({ t: 'throne' });
+      hud.toast('👑 Your Majesty! 👑');
+    }
+  }
   player.vel.set(0, 0, 0);
   player.flying = false;
   // Turn round and lower yourself onto the seat (hips on the seat).
@@ -6765,6 +6792,7 @@ window.buildzone = {
   get hospitalPlace() { return hospitalPlace; },
   get mallPlace() { return mallPlace; },
   get cinemaUI() { return cinemaUI; },
+  get castlePlace() { return castlePlace; },
   get hurt() { return hurt; },
   get airportLights() { return airportLights; },
   get fireHose() { return fireHose; },

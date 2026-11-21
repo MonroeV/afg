@@ -93,6 +93,15 @@ customize your character, drive cars, build anything and play with friends.
       claimed one (only you can drive it, it stays where you park it), and a new car rolls into
       its spot once you've driven yours away. The town keeps just a few cars of its own now (the
       rest went to the dealership; nobody's own cars were touched). The Loop Express stops there
+    - **Castle Brightstone** 🏰 (since v0.69, by the Outer Loop, with its own Loop Express stop):
+      a big stone castle with a **moat** all round it and a **drawbridge**. Right-click a
+      **lever** (a gold knob on a post, one by the gate inside and one across the moat) to raise
+      the bridge and drop the portcullis 🔱, and again to let everyone back in. High walls with
+      battlements you can walk along (steps up by the gate), four corner towers with **spiral
+      stairs** to the top, the keep with its banner-lined great hall and a **golden throne** (sit
+      on it!), a dungeon 🔒, a well, and knights. Queen Elara 👑 and King Roland 🤴 hold court; Sir
+      Pip 🛡️ guards the gate. **Treasure:** five golden trophies 🏆 are hidden round the castle
+      (right-click one: 3 🪙 each, once each)
     - **The Starlight Cinema** 🎬 (since v0.68, by the Outer Loop, with its own Loop Express stop):
       a red-and-gold movie theater with a glowing **marquee** out front (it shows what's playing),
       a red carpet, a lobby with a snack counter (Usher Ollie: big popcorn, nachos, slushies),
@@ -716,6 +725,7 @@ customize your character, drive cars, build anything and play with friends.
   | 🛹 Skaters (v0.64) | Skater Zed, at the skate park | land 10 tricks, land a 360, land a flip | 20 🪙, big air (you jump higher off ramps) |
   | 🚑 Paramedics (v0.65) | Dr. Hart, at the hospital | turn on an ambulance's siren, get better in a hospital bed, drive a hurt friend to the hospital | 20 🪙, first aid (you get better by yourself) |
   | 🎓 Honor Roll (v0.66) | Ms. Lee, at the school | answer 5 quiz questions right, ride the school bus | 20 🪙, a gold star (quiz answers pay double) |
+  | 👑 Royal Treasure Hunters (v0.69) | Queen Elara, at the castle | find the 5 golden trophies, sit on the throne, pull a drawbridge lever | 25 🪙, the royal treasury (+5 🪙 every day) |
 
   Each step pops up by the badge counter ("🔧 2/3"), and a new badge gets a big celebration with
   fireworks. The **daily bonus** grows every day in a row you play (+2 a day, up to +10)
@@ -1207,6 +1217,7 @@ public/
       school.js        BuildZone Elementary: classrooms, library, cafeteria, gym, playground, bus; the quiz
       mall.js          BuildZone Mall: two floors, the atrium and its escalators, the four stores
       cinema.js        The Starlight Cinema: marquee, lobby, theater, the show schedule (showAt)
+      castle.js        Castle Brightstone: moat, drawbridge and levers, walls, spiral-stair towers, keep, dungeon, treasures
       firestation.js   The fire station: its building, the fire trucks' bays, and how often fires break out
   sounds/              The engine recordings (each kind of engine at five speeds, looped)
 tools/
