@@ -269,7 +269,7 @@ const NPCS = [
     id: -71, place: 'dealer_desk', name: 'Dealer Dana', title: 'Dealer Dana 🚗', roam: 1,
     look: { face: 'smile', hair: 'ponytail', hat: 'none', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#e0ac69', hairColor: '#6d3b16', hatColor: '#000000', shirtColor: '#1a237e', shirtColor2: '#ffffff', pantsColor: '#263238', shoesColor: '#111111' },
     hello: n => [`Welcome to BuildZone Motors, ${n}! 🚗✨`, `${n}! Looking for a new ride? 🔑`],
-    tips: ['Right-click any car to buy it! 💰', '🚗 30 · 🛻 45 · 🚐 60 · 🏎️ 90 · 🚙 120 · 🚌 200 🪙', 'The fanciest ones are in here, in the showroom! ✨', 'Buy one and only you can drive it! 🔑', 'Sold one? A new car rolls onto the lot soon! 🚚'],
+    tips: ['Right-click any car to buy it! 💰', '🚗 30 · 🛻 45 · 🚐 60 · 🏎️ 90 · 🚙 120 · 🚌 200 🪙', 'The fanciest ones are in here, in the showroom! ✨', 'Buy one and only you can drive it! 🔑', 'Sold one? A new car rolls onto the lot soon! 🚚', 'Done with a car you bought? Park it here and click it with the 🚩: I\'ll buy it back for half! 💰'],
   },
   {
     // The fire station: Fire Chief Flint (he runs the Firefighters club).

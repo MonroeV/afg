@@ -1165,6 +1165,7 @@ export class Cars {
     this.list.set(car.id, car);
     if (car.color === 'gold') this.finish(car);
     this.scene.add(model.group);
+    car.paid = data.paid || 0; // (yours, bought: what you paid; it sells back for half)
     this.setOwner(car, data.owner || '', data.price || 0);
     // Shiny paint and windows reflect the world around them.
     model.group.traverse(o => {

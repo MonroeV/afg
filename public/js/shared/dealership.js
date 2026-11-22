@@ -19,6 +19,8 @@ export const DEALERSHIP = { L: 56, D: 36 };
 // What's for sale, and what it costs (coins).
 export const CAR_PRICES = { car: 30, pickup: 45, camper: 60, sports: 90, monster: 120, rv: 200 };
 // The kinds each spot sells: the lot has everyday ones, the showroom the fancy ones.
+// The sign on the lot (since v0.70 it tells you how to sell a car back): [before, now].
+export const SELL_SIGN = ['🔑 Buy it, drive it home! Only you can drive it', '💰 Selling yours? Park it here, click it with the 🚩'];
 export const LOT_KINDS = ['car', 'car', 'pickup', 'sports', 'camper'];
 export const SHOW_KINDS = ['sports', 'monster', 'rv', 'camper'];
 export const CAR_COLORS = ['#e53935', '#1e88e5', '#fdd835', '#43a047', '#f5f5f5', '#212121', '#8e24aa', '#ff7043', '#00acc1', '#c0c0c0'];
@@ -98,7 +100,7 @@ function dealershipAt(site, set) {
   set(Math.floor(ex - fx * 4), SH - 2, Math.floor(ez - fz * 4), makeBlock(SIGN, onWall(fx, fz)));
   signs.push([Math.floor(ex - fx * 4), SH - 2, Math.floor(ez - fz * 4), '🚗 BUILDZONE MOTORS ✨ New cars! Great prices!']);
   sign(9, 2, 2, outward, '💰 Cars for sale! Right-click one to buy it 🚗');
-  sign(46, 2, 2, outward, '🔑 Buy it, drive it home! Only you can drive it');
+  sign(46, 2, 2, outward, SELL_SIGN[1]);
   // Inside: a red carpet from the entrance to the sales desk, the display cars under chandeliers,
   // the desk (Dana's), a waiting area, plants and a trophy or two.
   for (let v = SV0 + 1; v <= 29; v++) for (const u of [27, 28]) put(u, 0, v, B.carpet);

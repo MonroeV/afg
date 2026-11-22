@@ -55,7 +55,7 @@ import {
   HAMMER, FIREWORKS, BALL, CLAIM, VACATION, BRUSH, SCRAPER, WRENCH, SKIS, GOGGLES, GOLDPAINT, SNEAKERS, LADDER, WATER_BALLOON, SNOWBALL, SLED, BUBBLES, BALLOON, FILL, COPY, CAMERA, JETPACK, TRAIL, SHOWTIME, WATERING_CAN, TREATS,
   ALL_ITEMS, ICON_ITEMS, GEAR, DEFAULT_HOTBAR, FAMILIES, itemName, makeIcon, ViewModel,
 } from './items.js';
-import { MAX_MANY, MAX_OWNED_VEHICLES } from './shared/game.js';
+import { MAX_MANY, MAX_OWNED_VEHICLES, sellPrice, atDealer } from './shared/game.js';
 import { CHUTE } from './shared/farcountry.js';
 import { NPC_ACT, NPC_POSE } from './shared/npcs.js';
 import { ShowerRain, WeatherMast } from './tacos.js';
@@ -260,7 +260,7 @@ let showers = null, weatherMast = null; // it's raining tacos (or ice cream, or 
 let weatherPicker = null; // Stormy's menu: what shall it rain?
 let lunchbox = null; // your lunchbox 🍱 (L): food to eat
 let funRides = null; // Fun Land's roller coaster and Ferris wheel
-let mallPlace = null, cinemaUI = null, castlePlace = null; // (the mall: its escalators carry you up and down)
+let mallPlace = null, cinemaUI = null, castlePlace = null, dealerPlace = null; // (the mall: its escalators carry you up and down)
 let hurt = 0, hurtNag = 0, hospitalPlace = null; // (ouch: a big fall or a crash 🤕; the hospital makes you better)
 let zooAnimals = null, farmAnimals = null, kartUI = null, rocketUI = null, spaceGate = null, stadiumUI = null, golfUI = null; // the zoo's animals, the farm's, and the go-kart track's lights and lap times
 let zooAim = null; // (the one under the crosshair)
@@ -753,6 +753,7 @@ function startGame(welcome, resume = false) {
   mallPlace = welcome.mall || null;
   cinemaUI.setPlace(welcome.cinema);
   castlePlace = welcome.castle || null;
+  dealerPlace = welcome.dealer || null;
   spaceGate = welcome.space?.gate || null;
   fireHose.setFires(welcome.fires);
   airportLights.setPlace(welcome.airport);
@@ -2328,7 +2329,15 @@ function claimVehicleClick(car) {
   const name = car.spec.name;
   if (car.owner && nameKey(car.owner) !== nameKey(settings.name)) return hud.toast(`🔑 That's ${possessive(car.owner)} ${name}.`);
   if (car.owner) {
-    ask(`🔑 Give your ${name} back?`, `It goes back to the town, and anyone can drive the town's ones. You can claim another vehicle (up to ${MAX_OWNED_VEHICLES}) whenever you like.`,
+    // (One you bought, parked at BuildZone Motors: sell it back, for half what you paid.)
+    const coins = sellPrice(car.paid);
+    if (coins > 0 && atDealer(dealerPlace, car.pos)) {
+      ask(`💰 Sell your ${name}?`, `BuildZone Motors will give you ${coins} 🪙 for it (half what you paid).`,
+        `💰 Sell it! (+${coins} 🪙)`, 'Keep it', () => net.send({ t: 'car_sell', id: car.id }));
+      return;
+    }
+    const sell = coins > 0 ? ` 🚗 Or drive it to BuildZone Motors and sell it for ${coins} 🪙!` : '';
+    ask(`🔑 Give your ${name} back?`, `It goes back to the town, and anyone can drive the town's ones. You can claim another vehicle (up to ${MAX_OWNED_VEHICLES}) whenever you like.${sell}`,
       '🔑 Give it back', 'Keep it', () => net.send({ t: 'car_unclaim', id: car.id }));
     return;
   }
@@ -2348,9 +2357,10 @@ function whereMyVehicles() {
   }).join(' · ');
 }
 
-net.on('car_owner', ({ id, owner, price }) => {
+net.on('car_owner', ({ id, owner, price, paid }) => {
   const car = cars.list.get(id);
   if (!car) return;
+  car.paid = paid || 0;
   cars.setOwner(car, owner, price ?? car.price);
   if (owner && nameKey(owner) === nameKey(settings.name)) {
     sounds.coin();

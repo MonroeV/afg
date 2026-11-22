@@ -91,7 +91,8 @@ customize your character, drive cars, build anything and play with friends.
       and couches to wait on. **Right-click a car to buy it** (it asks first): Car 30 🪙, Pickup
       Truck 45, Camper Van 60, Sports Car 90, Monster Truck 120, RV 200. It's yours, like a
       claimed one (only you can drive it, it stays where you park it), and a new car rolls into
-      its spot once you've driven yours away. The town keeps just a few cars of its own now (the
+      its spot once you've driven yours away. Done with it? **Park it back on the lot and click it
+      with the 🚩 Land Flag to sell it for half what you paid** (since v0.70). The town keeps just a few cars of its own now (the
       rest went to the dealership; nobody's own cars were touched). The Loop Express stops there
     - **Castle Brightstone** 🏰 (since v0.69, by the Outer Loop, with its own Loop Express stop):
       a big stone castle with a **moat** all round it and a **drawbridge**. Right-click a
@@ -957,12 +958,16 @@ anyone could build there.
 
 **Your own vehicles:** buy one at BuildZone Motors (see above), or hold the Land Flag and click
 one of the town's cars, trucks, camper vans, boats or helicopters to make it yours (it asks first;
-not the dealership's: those you buy). Up to 3 vehicles can be yours. Only you can drive yours (friends can
+not the dealership's: those you buy). Up to 5 vehicles can be yours (3 before v0.70). Only you can drive yours (friends can
 ride along with you), nobody else can bash it with the hammer or paint it, and it stays wherever
 you park it, even when you leave the game. If it ever blows up, it comes back where you last
 parked it. A little sign over it says whose it is, and with the Land Flag in your hand the hint
 tells you where your vehicles are ("Camper Van 85 m north-east"). The town gets a new one of its
-own to replace the one you took. To give yours back, click it with the Land Flag again. Like land,
+own to replace the one you took. To give yours back, click it with the Land Flag again. **Selling
+one** (since v0.70): a vehicle you bought (a car from BuildZone Motors, or a skateboard or BMX from
+the mall) sells back to BuildZone Motors for **half what you paid**: park it on the lot and click it
+with the Land Flag ("💰 Sell your Car? +15 🪙"). Free ones you claimed can only be given back, and so
+can ones bought before v0.70 (the game didn't note what was paid back then). Like land,
 if nobody plays with your name for 30 days, your vehicles go back to the town.
 
 **Vacation land:** the **Vacation Flag** (150 coins at the Luxe Store) claims a second piece of land,
