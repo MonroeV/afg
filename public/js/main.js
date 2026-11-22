@@ -903,7 +903,7 @@ net.on('npcs', ({ list }) => {
   }
   for (const n of list) if (!npcs.has(n.id)) npcs.set(n.id, new Avatar(scene, { id: n.id, name: n.name, look: n.look }));
 });
-net.on('guests_open', ({ guests }) => openGuestList(guests));
+net.on('guests_open', ({ guests, skye }) => openGuestList(guests, skye));
 // A TOP SECRET file (and maybe Top Secret clearance).
 net.on('secret_file', ({ again, found, need, clear, left = [] }) => {
   if (again) return hud.toast(clear ? '🗂️ You\'ve read this one, agent. Your clearance is good!' : `🗂️ You've already found this one (${found} of ${need}). ${need - found} to go!`);
@@ -4750,10 +4750,10 @@ function spyTargets() {
 let guestPanel = null; // { names: Set } while it's open
 const guestClient = new CharacterClient();
 
-async function openGuestList(guests) {
+async function openGuestList(guests, skye = false) {
   keys.clear();
   unlock();
-  guestPanel = { picked: new Set(guests) };
+  guestPanel = { picked: new Set(guests), skye: !!skye };
   const list = $('guest-names');
   list.textContent = 'Loading…';
   $('guest-panel').classList.remove('hidden');
@@ -4769,6 +4769,15 @@ async function openGuestList(guests) {
 function showGuestNames(names) {
   const list = $('guest-names');
   list.textContent = '';
+  // (Skye Summers, the reporter: kept out unless ticked here.)
+  const skye = document.createElement('label');
+  skye.className = 'skye';
+  const skyeBox = document.createElement('input');
+  skyeBox.type = 'checkbox';
+  skyeBox.checked = guestPanel.skye;
+  skyeBox.addEventListener('change', () => (guestPanel.skye = skyeBox.checked));
+  skye.append(skyeBox, '🎤 Skye Summers (BZ News)');
+  list.append(skye);
   if (!names.length) {
     const none = document.createElement('div');
     none.className = 'none';
@@ -4790,9 +4799,9 @@ function showGuestNames(names) {
 function closeGuestList(save) {
   if (!guestPanel) return;
   if (save) {
-    const labels = [...$('guest-names').querySelectorAll('label')];
+    const labels = [...$('guest-names').querySelectorAll('label[data-name]')];
     const names = labels.filter(l => guestPanel.picked.has(nameKey(l.dataset.name))).map(l => l.dataset.name);
-    net.send({ t: 'guests', names });
+    net.send({ t: 'guests', names, skye: guestPanel.skye });
     sounds.click();
   }
   guestPanel = null;
@@ -4806,7 +4815,7 @@ $('guest-add').addEventListener('click', () => {
   const name = $('guest-other').value.replace(/[^\w \-.]/g, '').trim().slice(0, 16);
   if (!name || !guestPanel) return;
   guestPanel.picked.add(nameKey(name));
-  const names = [...$('guest-names').querySelectorAll('label')].map(l => l.dataset.name);
+  const names = [...$('guest-names').querySelectorAll('label[data-name]')].map(l => l.dataset.name);
   if (!names.some(n => nameKey(n) === nameKey(name))) names.push(name);
   showGuestNames(names);
   $('guest-other').value = '';

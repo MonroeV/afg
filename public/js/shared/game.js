@@ -25,7 +25,7 @@ import { buildStadium, stepBall, kickBall, BALL_R, SOCCER_COINS } from './stadiu
 import { buildMiniGolf, HOLES, ROUND_COINS, BEST_COINS, GOLF_BOARD } from './minigolf.js';
 import { buildSkatePark, TRICK_COINS } from './skatepark.js';
 import { buildHospital, HEAL_COINS, RESCUE_COINS } from './hospital.js';
-import { buildSchool, QUIZ, QUIZ_COINS, QUIZ_DAILY } from './school.js';
+import { buildSchool, QUIZ, QUIZ_COINS, QUIZ_DAILY, DESKS_IN_DOORWAYS, schoolFrame } from './school.js';
 import { buildMall } from './mall.js';
 import { buildCinema } from './cinema.js';
 import { buildCastle, TREASURE_COINS } from './castle.js';
@@ -47,7 +47,7 @@ import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
 const PLANE_HOME_AFTER = 300; // seconds a town airplane sits idle away from the airport before it's taken back
-export const SAVE_VERSION = 48;
+export const SAVE_VERSION = 49;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -85,6 +85,7 @@ const WATERING_CAN = 'wateringcan';
 // them again (longer after a "no"), and how long a "just this visit" pass lasts.
 const ASK_ANSWER = 45 * 1000, ASK_AGAIN = 2 * 60 * 1000, ASK_AFTER_NO = 10 * 60 * 1000, VISIT_PASS = 15 * 60 * 1000;
 const INTRUDE_WAYS = ['foot', 'air', 'car', 'tunnel'];
+const SKYE_AWAY = 3; // (how far round guarded land Skye keeps away)
 export const MAX_OWNED_VEHICLES = 5; // vehicles one person can have of their own
 // Selling a vehicle you bought back to BuildZone Motors: half what you paid. Only while it's
 // parked at the dealership (or a few blocks from it).
@@ -349,6 +350,7 @@ export class GameRoom {
       this.upgradeTo46();
       this.upgradeTo47();
       this.upgradeTo48();
+      this.upgradeTo49();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -385,6 +387,7 @@ export class GameRoom {
         // The Secret Agency: which TOP SECRET files they've found, and whether they've got clearance.
         agent: { files: Array.isArray(w.agent?.files) ? w.agent.files.filter(k => typeof k === 'string').slice(0, 8) : [], clear: !!w.agent?.clear },
         guests: Array.isArray(w.guests) ? w.guests.filter(k => typeof k === 'string').map(nameKey).slice(0, 40) : [], // who their bodyguards let in
+        letSkye: w.letSkye === true, // (their bodyguards let Skye Summers, the reporter, in: since v0.70.1 they don't unless ticked)
         can: w.can ? 1 : 0, // carrying a gas can
         harvest: Number.isInteger(w.harvest) && w.harvest > 0 ? w.harvest : 0, // crops picked, ever
         // Hunger (100: full) and the food in your lunchbox ({ apple: 2, … }).
@@ -478,6 +481,7 @@ export class GameRoom {
     if (data.version < 46) this.upgradeTo46();
     if (data.version < 47) this.upgradeTo47();
     if (data.version < 48) this.upgradeTo48();
+    if (data.version < 49) this.upgradeTo49();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -591,17 +595,29 @@ export class GameRoom {
       if (!land) continue;
       // (Guests on the list, and anyone with a pass for this visit.)
       const visitors = [...(this.passes?.get(key) || [])].filter(([, until]) => until > Date.now()).map(([k]) => k);
-      out.push({ owner: land.owner, key, rect: [land.x0, land.z0, land.x1, land.z1], guests: [...new Set([...(w.guests || []), ...visitors])] });
+      out.push({ owner: land.owner, key, rect: [land.x0, land.z0, land.x1, land.z1], guests: [...new Set([...(w.guests || []), ...visitors])], ...(w.letSkye ? { skye: true } : {}) });
+    }
+    return out;
+  }
+
+  // Where Skye Summers (the reporter) may not go: all the land (main and vacation, and a few
+  // blocks round it) of everyone with bodyguards who hasn't ticked her on their guest list.
+  noSkyeLands() {
+    const out = [];
+    for (const [key, w] of Object.entries(this.wallets)) {
+      if (!w.owned?.includes('bodyguards') || w.letSkye) continue;
+      for (const c of this.claims) if (c.key === key && !c.permanent) out.push([c.x0 - SKYE_AWAY, c.z0 - SKYE_AWAY, c.x1 + SKYE_AWAY, c.z1 + SKYE_AWAY]);
     }
     return out;
   }
 
   // (Called whenever someone buys them, changes their guest list, or their land changes.)
   updateGuards() {
-    const lands = this.guardedLands();
-    const sig = JSON.stringify(lands);
+    const lands = this.guardedLands(), noSkye = this.noSkyeLands();
+    const sig = JSON.stringify([lands, noSkye]);
     if (sig === this.guardSig) return;
     this.guardSig = sig;
+    this.npcs.noSkye = noSkye;
     this.npcs.syncGuards(lands);
     this.broadcast({ t: 'guards', lands });
     this.broadcast({ t: 'npcs', list: this.npcs.info() });
@@ -1348,6 +1364,23 @@ export class GameRoom {
       this.addTrainStops();
     }
     this.log(`Added the castle (${castle ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
+  // Worlds saved before version 49: two classrooms at the school had a desk and chair right in
+  // front of their doorway (you couldn't get in). They go (just those: the school's own).
+  upgradeTo49() {
+    const f = schoolFrame(this.places);
+    let moved = 0;
+    if (f) for (const [u, v] of DESKS_IN_DOORWAYS) {
+      const [x, z] = f.at(u, v), k = blockKey(x, 0, z), b = this.world.get(k);
+      if (claimAt(this.claims, x, z)?.key !== 'school' || ![73, 60].includes(blockId(itemOf(b || 0)))) continue;
+      const floor = floorOf(b);
+      if (floor) this.world.set(k, floor);
+      else this.world.delete(k);
+      moved++;
+    }
+    this.log(`School doorways cleared (${moved} desks and chairs moved)`);
     this.onDirty();
   }
 
@@ -3472,11 +3505,12 @@ export class GameRoom {
     },
 
     // Who your bodyguards let onto your land (names from the Character Gallery, or anyone's).
-    guests(client, { names }) {
+    guests(client, { names, skye }) {
       if (!Array.isArray(names) || !this.allow(client, 'guests', 1, 3)) return;
       const w = this.wallet(client);
       if (!w.owned.includes('bodyguards')) return;
       const me = nameKey(client.name), before = w.guests || [];
+      if (typeof skye === 'boolean') w.letSkye = skye;
       w.guests = [...new Set(names.filter(n => typeof n === 'string').map(n => nameKey(cleanName(n))).filter(k => k && k !== me))].slice(0, 40);
       client.send({ t: 'chat', system: true, text: w.guests.length ? `🛡️ Your bodyguards will let in: ${names.filter(n => typeof n === 'string').map(cleanName).filter(n => nameKey(n) !== me).slice(0, 40).join(', ')}.` : '🛡️ Your bodyguards won\'t let anybody in but you.' });
       for (const k of before) if (!w.guests.includes(k)) this.unwelcomed.set(`${k}|${me}`, Date.now()); // (gently walked out, if they're there)

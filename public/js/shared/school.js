@@ -19,6 +19,15 @@ export const SCHOOL = { L: 60, D: 50 };
 export const QUIZ_COINS = 2, QUIZ_DAILY = 10; // (coins for a right answer; at most this many a day)
 const BLD = [3, 56, 12, 36], H = 5; // (the building: u0, u1, v0, v1; walls up to y 4)
 const HALL = [17, 19]; // (the hallway across, v)
+// The doorways in the hall walls (u), and the desks (with their chairs) that used to stand right
+// in front of a classroom's doorway, so you couldn't get in (fixed in v0.70.1): [u, v] of each.
+const DOORWAY = u => u % 9 === 4 || u === 29 || u === 30;
+const CLASSROOMS = [[3, 14], [14, 26], [33, 45]];
+export const DESKS_IN_DOORWAYS = CLASSROOMS.flatMap(([u0, u1]) => {
+  const out = [];
+  for (let u = u0 + 4; u <= u1 - 2; u += 2) if (DOORWAY(u) || DOORWAY(u + 1)) out.push([u, HALL[0] - 2], [u + 1, HALL[0] - 2]);
+  return out;
+});
 
 // Ms. Lee's quiz: [question, right answer, wrong answer].
 export const QUIZ = [
@@ -98,7 +107,7 @@ function schoolAt(site, set) {
   const wall = (u, v0, v1, gap) => {
     for (let v = v0; v <= v1; v++) for (let y = 0; y < H; y++) if (!(v === gap && y < 2)) put(u, y, v, B.white);
   };
-  for (let u = b0 + 1; u < b1; u++) for (let y = 0; y < H; y++) for (const v of [HALL[0] - 1, HALL[1] + 1]) if (!((u % 9 === 4 || u === 29 || u === 30) && y < 2)) put(u, y, v, B.white);
+  for (let u = b0 + 1; u < b1; u++) for (let y = 0; y < H; y++) for (const v of [HALL[0] - 1, HALL[1] + 1]) if (!(DOORWAY(u) && y < 2)) put(u, y, v, B.white);
   // (front, left to right: classrooms 1 and 2, the office in the middle, classroom 3, the library)
   for (const u of [14, 26, 33, 45]) wall(u, bv0 + 1, HALL[0] - 2);
   // (back: the cafeteria, the gym)
@@ -111,11 +120,13 @@ function schoolAt(site, set) {
     sign(u0 + 1, 3, Math.floor((bv0 + HALL[0]) / 2), toHigh, fact);
     on(u0 + 2, bv0 + 2, makeBlock(B.desk, toHigh)); // (the teacher's desk)
     for (let u = u0 + 4; u <= u1 - 2; u += 2) for (const v of [bv0 + 1, bv0 + 3]) {
+      if (v === HALL[0] - 2 && (DOORWAY(u) || DOORWAY(u + 1))) continue; // (the way in from the hall)
       on(u, v, makeBlock(B.desk, toLow));
       on(u + 1, v, makeBlock(B.chair, toLow));
     }
     put(Math.floor((u0 + u1) / 2), H - 1, bv0 + 2, B.light);
   };
+  // (CLASSROOMS, above: the same three)
   classroom(b0, 14, '🦕 Fun fact: some dinosaurs were as small as chickens!');
   classroom(14, 26, '🐙 Fun fact: an octopus has three hearts!');
   classroom(33, 45, '🌕 Fun fact: there are footprints on the Moon that will last for millions of years!');
@@ -171,4 +182,16 @@ function schoolAt(site, set) {
       school_class: { x: tx, y: 0, z: tz, face: Math.atan2(ux, uz), area: [Math.min(qa[0], qb[0]), Math.min(qa[1], qb[1]), Math.max(qa[0], qb[0]), Math.max(qa[1], qb[1])] },
     },
   };
+}
+
+// A school that's already built: where its (u, v) cells are in the world, worked out from its
+// places (the classroom spot and which way it faces, and the school's own spot).
+export function schoolFrame(places) {
+  const t = places?.school_class, p = places?.school;
+  if (!t || !p || !Number.isFinite(t.face)) return null;
+  const U = [Math.round(Math.sin(t.face)), Math.round(Math.cos(t.face))];
+  const V = [Math.round((p.x - t.x - 10.5 * U[0]) / 3.5), Math.round((p.z - t.z - 10.5 * U[1]) / 3.5)];
+  if (Math.abs(U[0]) + Math.abs(U[1]) !== 1 || Math.abs(V[0]) + Math.abs(V[1]) !== 1) return null;
+  const back = V[0] + V[1] < 0 ? V : [0, 0]; // (cells sit one back from exact spots on that side)
+  return { at: (u, v) => [Math.round(t.x + (u - 19) * U[0] + (v - 15) * V[0] + back[0]), Math.round(t.z + (u - 19) * U[1] + (v - 15) * V[1] + back[1])] };
 }

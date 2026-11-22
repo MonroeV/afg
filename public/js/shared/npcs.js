@@ -443,6 +443,7 @@ export class NpcCrew {
   setup(places) {
     this.list = [];
     this.lands = []; // land with bodyguards: nobody but its own guards (and guests) goes in
+    this.noSkye = this.noSkye || []; // [x0, z0, x1, z1]: land whose bodyguards keep Skye (the reporter) out
     this.zone = places?.base?.zone || null; // the Secret Agency's base: clearance only
     this.familySig = null; // (families come back in a moment: see syncFamilies)
     for (const def of NPCS) {
@@ -492,7 +493,8 @@ export class NpcCrew {
   // with bodyguards that aren't theirs.
   mayGo(x, y, z, def = null) {
     if (this.zone && !def?.clearance && inZone(this.zone, x + 0.5, y, z + 0.5)) return false;
-    for (const l of this.lands) if (def?.land !== l.key && def?.home !== l.key && x >= l.rect[0] && x <= l.rect[2] && z >= l.rect[1] && z <= l.rect[3]) return false;
+    if (def?.reporter && this.skyeKeptOut(x, z)) return false;
+    for (const l of this.lands) if (def?.land !== l.key && def?.home !== l.key && !(def?.reporter && l.skye) && x >= l.rect[0] && x <= l.rect[2] && z >= l.rect[1] && z <= l.rect[3]) return false;
     return true;
   }
 
@@ -1271,7 +1273,7 @@ export class NpcCrew {
       const land = this.lands.find(l => l.key === n.def.land);
       if (land && land.key === nameKey(c.name)) {
         this.say(n, pickOne(['Yes, boss! Who gets in? 📋', 'Your guest list, boss! 🕶️']), true);
-        c.send({ t: 'guests_open', guests: land.guests });
+        c.send({ t: 'guests_open', guests: land.guests, skye: !!this.room.wallets?.[land.key]?.letSkye });
       } else if (land && this.room.welcomeOn(land, c)) this.say(n, pickOne([`${c.name}! You're on the list. Come on in! ✅`, `Welcome, ${c.name}! ${land.owner} said you're a guest. 🫡`]), true);
       else if (land && this.room.clientNamed(land.key)) {
         // Not on the list: shall they ask the boss? (See guard_ask in game.js.)
@@ -1770,6 +1772,11 @@ export class NpcCrew {
     this.say(guard, pickOne([`🛑 Locked! You need Top Secret clearance, ${c.name}.`, `🛑 Nice try, ${c.name}! Clearance only. Talk to Agent Shadow on the town square. 🕶️`]), true);
   }
 
+  // Bodyguards keep Skye off this spot (their owner hasn't ticked her on the guest list)?
+  skyeKeptOut(x, z) {
+    return (this.noSkye || []).some(r => x >= r[0] && x <= r[2] + 1 && z >= r[1] && z <= r[3] + 1);
+  }
+
   // ---------- The news ----------
   // Skye does a "segment" in one place, then cuts to the next one (she's off to her next story):
   // the town square, the Luxe Store, the Pizza Palace, the tower, the ski lodge, or wherever
@@ -1778,7 +1785,8 @@ export class NpcCrew {
   report(n, dt, players) {
     n.beatT = (n.beatT ?? 0) - dt;
     n.lineT = (n.lineT ?? 3) - dt;
-    if (n.beatT <= 0) return this.nextBeat(n, players);
+    // (Somewhere the bodyguards won't have her, now: off to her next story.)
+    if (n.beatT <= 0 || this.skyeKeptOut(n.pos[0], n.pos[2])) return this.nextBeat(n, players);
     const story = n.story;
     if (!story) return;
     if (story.guest) {
@@ -1797,10 +1805,10 @@ export class NpcCrew {
     const spots = Object.entries(BEATS).map(([key, beat]) => ({ key, beat, p: key === 'plaza' ? { x: 3.5, y: 0, z: 3.5 } : places[key] })).filter(s => s.p);
     let stand = null, story = null;
     // Sometimes: drop in on someone who's playing (on foot, out in the open).
-    const guests = players.filter(c => c.pos[1] < 40 && !c.sleeping && !inZone(this.zone, ...c.pos));
+    const guests = players.filter(c => c.pos[1] < 40 && !c.sleeping && !inZone(this.zone, ...c.pos) && !this.skyeKeptOut(c.pos[0], c.pos[2]));
     if (guests.length && Math.random() < 0.45 && n.story?.guest === 0) {
       const c = guests[Math.floor(Math.random() * guests.length)];
-      stand = this.besideGuest(c);
+      stand = this.besideGuest(c, n.def);
       if (stand) story = { label: `with ${c.name}`, guest: c.id, lines: GUEST_LINES(c.name), i: 0 };
     }
     if (!stand) {
@@ -1824,7 +1832,7 @@ export class NpcCrew {
 
   // Where Skye stands to interview someone: a few blocks away and off to one side of where
   // they're looking, so she's in view but never in the way of what they're building.
-  besideGuest(c) {
+  besideGuest(c, def = null) {
     const a = c.rot[0], y = Math.floor(c.pos[1] + 0.05);
     const side = Math.random() < 0.5 ? 1 : -1;
     for (const turn of [55, 40, 70, 90, 30]) {
@@ -1833,7 +1841,7 @@ export class NpcCrew {
           const b = a + s * turn * Math.PI / 180;
           const x = c.pos[0] - Math.sin(b) * d, z = c.pos[2] - Math.cos(b) * d;
           const cx = Math.floor(x), cz = Math.floor(z);
-          if (!this.standable(cx, y, cz)) continue;
+          if (!this.standable(cx, y, cz, def)) continue;
           const spot = [cx + 0.5, y, cz + 0.5];
           if (Math.hypot(spot[0] - c.pos[0], spot[2] - c.pos[2]) >= 3.2) return spot;
         }

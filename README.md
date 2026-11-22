@@ -122,7 +122,8 @@ customize your character, drive cars, build anything and play with friends.
     - **BuildZone Elementary** 🏫 (since v0.66, by the Outer Loop, with its own Loop Express stop):
       a red brick school with a flagpole and a bus loop out front, where a big yellow **school
       bus** 🚌 waits (lots of seats for friends; **G** swings its STOP sign out). Inside, down the
-      hall: three classrooms (rows of desks facing a whiteboard with a fun fact on it), the
+      hall: three classrooms (rows of desks facing a whiteboard with a fun fact on it; since
+      v0.70.1 no desk stands in front of a classroom's doorway, so you can get in), the
       library (bookshelves to read at, reading tables, a comfy couch), the cafeteria and the gym.
       Out back: a playground (slides, a sandbox, monkey bars) and a blacktop court. **Talk to
       Ms. Lee** in her classroom for a **quiz question**: pick the right answer for 2 🪙 (up to
@@ -656,7 +657,10 @@ customize your character, drive cars, build anything and play with friends.
   anybody else on it, just like the guards at the secret base. The town's people (and other
   people's pets) can't step onto it, and the guards say so ("🛑 Sorry Bo, you're not on Mia's
   guest list"). Right-click one of your bodyguards for your **guest list**: tick the names saved
-  in the Character Gallery (or type in anyone's) and they're let in.
+  in the Character Gallery (or type in anyone's) and they're let in. **Skye Summers** 🎤 (the BZ
+  News reporter) is kept away too (since v0.70.1): she won't drop in on you anywhere on your land,
+  your Vacation Flag land as well, or a few blocks round it, and if she's there when your guards
+  start, she heads off to her next story. Tick "🎤 Skye Summers" on the guest list to let her in.
   - **Asking to come in** 🔔: right-click someone's bodyguard and they offer to ask the owner (if
     they're playing). The owner gets a little picture box: ✅📋 on the guest list, 🚪⏰ just this
     visit (15 minutes), ❌ no, or 🔕 stop asking me (remembered). The bodyguard tells you the
