@@ -1,7 +1,7 @@
 // The ground: a big grassy plane (snowy up north), with holes where it's been dug out down to
 // the bedrock, and the soft force field around the edge of the world.
 import * as THREE from 'three';
-import { WORLD, SNOW_LINE } from './shared/blocks.js';
+import { WORLD, SNOW_LINE, WATER_DEPTH } from './shared/blocks.js';
 import { TUNNEL_TOP, TUNNEL_BOTTOM, tunnelKey, earthAt } from './shared/underground.js';
 
 // The six sides of an underground cell: the direction to the neighbor, and the face's corners
@@ -16,6 +16,16 @@ const SIDES = [
 ];
 
 const SIZE = WORLD.max - WORLD.min + 1;
+// In the hole map: a hole, and deep water (the grass isn't drawn at either; under deep water,
+// the sandy bottom is).
+const HOLE = 255, WATER = 128;
+// The banks of deep water: [dx, dz, geometry] (from the bottom up to the ground).
+const BANKS = [
+  [0, -1, new THREE.PlaneGeometry(1, WATER_DEPTH).translate(0.5, -WATER_DEPTH / 2, 0)],
+  [0, 1, new THREE.PlaneGeometry(1, WATER_DEPTH).rotateY(Math.PI).translate(0.5, -WATER_DEPTH / 2, 1)],
+  [-1, 0, new THREE.PlaneGeometry(1, WATER_DEPTH).rotateY(Math.PI / 2).translate(0, -WATER_DEPTH / 2, 0.5)],
+  [1, 0, new THREE.PlaneGeometry(1, WATER_DEPTH).rotateY(-Math.PI / 2).translate(1, -WATER_DEPTH / 2, 0.5)],
+];
 // Where a hole's walls go (and which neighbor has to be ground for there to be one):
 // [dx, dz, geometry].
 const WALLS = [
@@ -51,6 +61,12 @@ export class Ground {
       bedrock: new THREE.MeshStandardMaterial({ map: textures.bedrock.map, normalMap: textures.bedrock.normalMap, roughness: 0.9, side: THREE.DoubleSide }),
     };
     this.tunnelMeshes = [];
+    // Deep water (since v0.73): a sandy bottom down below, and sandy banks round the edge.
+    this.water = new Set();
+    this.bankMaterial = new THREE.MeshStandardMaterial({ map: textures.sand.map, normalMap: textures.sand.normalMap, roughness: 0.95, color: 0xb8b0a0 });
+    this.bankMeshes = [];
+    this.bankCapacity = 0;
+    this.buildBottom(textures);
   }
 
   setTunnels(set) {
@@ -140,7 +156,7 @@ export class Ground {
         .replace('#include <common>', '#include <common>\nvarying vec2 vGround;\nuniform sampler2D holeMap;\nuniform vec3 holeRect;\nuniform float snowLine;\nuniform float seasonSnow;\nuniform vec3 seasonTint;')
         .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
           vec2 huv = (vGround - holeRect.xy) / holeRect.z;
-          if (huv.x >= 0.0 && huv.y >= 0.0 && huv.x < 1.0 && huv.y < 1.0 && texture2D(holeMap, huv).r > 0.5) discard;`)
+          if (huv.x >= 0.0 && huv.y >= 0.0 && huv.x < 1.0 && huv.y < 1.0 && texture2D(holeMap, huv).r > 0.25) discard;`)
         .replace('#include <map_fragment>', `#include <map_fragment>
           // Up north the grass is under snow (with a wavy edge, not a straight line).
           diffuseColor.rgb *= seasonTint;
@@ -175,13 +191,101 @@ export class Ground {
     }
   }
 
+  // ---------- Deep water ----------
+
+  // The sandy bottom: one big plane down below the whole world, only drawn under deep water.
+  buildBottom(textures) {
+    const repeat = Math.ceil((WORLD.max - WORLD.min + 1) / 100) * 100 + 160;
+    const map = textures.sand.map.clone(), normalMap = textures.sand.normalMap.clone();
+    for (const t of [map, normalMap]) {
+      t.repeat.set(repeat, repeat);
+      t.needsUpdate = true;
+    }
+    const material = new THREE.MeshStandardMaterial({ map, normalMap, roughness: 0.95, color: 0xc8c0a8 });
+    const holeMap = this.holeMap;
+    material.onBeforeCompile = shader => {
+      shader.uniforms.holeMap = { value: holeMap };
+      shader.uniforms.holeRect = { value: new THREE.Vector3(WORLD.min, WORLD.min, SIZE) };
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec2 vGround;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGround = (modelMatrix * vec4(transformed, 1.0)).xz;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec2 vGround;\nuniform sampler2D holeMap;\nuniform vec3 holeRect;')
+        .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+          vec2 huv = (vGround - holeRect.xy) / holeRect.z;
+          if (huv.x < 0.0 || huv.y < 0.0 || huv.x >= 1.0 || huv.y >= 1.0) discard;
+          float hm = texture2D(holeMap, huv).r;
+          if (hm < 0.25 || hm > 0.75) discard;`);
+    };
+    const bottom = new THREE.Mesh(new THREE.PlaneGeometry(repeat, repeat).rotateX(-Math.PI / 2), material);
+    bottom.position.y = -WATER_DEPTH;
+    bottom.receiveShadow = true;
+    this.scene.add(bottom);
+    this.bottom = bottom;
+  }
+
+  // Where the deep water is ("x,z" cells: see World.water).
+  setWater(cells) {
+    this.water = new Set(cells);
+    this.remark();
+    this.rebuildBanks();
+  }
+
+  setWaterCell(x, z, on) {
+    const k = `${x},${z}`;
+    if (on === this.water.has(k)) return;
+    if (on) this.water.add(k);
+    else this.water.delete(k);
+    this.mark(k);
+    clearTimeout(this.bankTimer); // (lots of water at once, like a lake being filled in: once, after)
+    this.bankTimer = setTimeout(() => this.rebuildBanks(), 50);
+  }
+
+  // The banks: a sandy wall wherever deep water meets the ground.
+  rebuildBanks() {
+    const cells = [];
+    for (const k of this.water) {
+      const [x, z] = k.split(',').map(Number);
+      BANKS.forEach(([dx, dz], i) => {
+        const nk = `${x + dx},${z + dz}`;
+        if (!this.water.has(nk) && !this.holes.has(nk)) cells.push([i, x, z]);
+      });
+    }
+    if (cells.length > this.bankCapacity) {
+      for (const m of this.bankMeshes) {
+        this.scene.remove(m);
+        m.dispose();
+      }
+      this.bankCapacity = Math.max(256, cells.length * 2);
+      this.bankMeshes = BANKS.map(([, , geo]) => {
+        const mesh = new THREE.InstancedMesh(geo, this.bankMaterial, this.bankCapacity);
+        mesh.receiveShadow = true;
+        mesh.frustumCulled = false;
+        this.scene.add(mesh);
+        return mesh;
+      });
+    }
+    if (!this.bankMeshes.length) return;
+    const m = new THREE.Matrix4(), counts = [0, 0, 0, 0];
+    for (const [i, x, z] of cells) this.bankMeshes[i].setMatrixAt(counts[i]++, m.makeTranslation(x, 0, z));
+    this.bankMeshes.forEach((mesh, i) => {
+      mesh.count = counts[i];
+      mesh.instanceMatrix.needsUpdate = true;
+    });
+  }
+
   // ---------- Holes ----------
 
   set(list) {
     this.holes = new Set(list.map(([x, z]) => `${x},${z}`));
-    this.holeData.fill(0);
-    for (const k of this.holes) this.mark(k, 255);
+    this.remark();
     this.rebuild();
+  }
+
+  remark() {
+    this.holeData.fill(0);
+    for (const k of this.water) this.mark(k);
+    for (const k of this.holes) this.mark(k);
   }
 
   setHole(x, z, on) {
@@ -189,12 +293,13 @@ export class Ground {
     if (on === this.holes.has(k)) return;
     if (on) this.holes.add(k);
     else this.holes.delete(k);
-    this.mark(k, on ? 255 : 0);
+    this.mark(k);
     this.rebuild();
     if (this.tunnels.size) this.rebuildTunnels(); // (a tunnel's roof opened, or closed)
   }
 
-  mark(k, v) {
+  mark(k) {
+    const v = this.holes.has(k) ? HOLE : this.water.has(k) ? WATER : 0;
     const [x, z] = k.split(',').map(Number);
     if (x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max) return;
     this.holeData[(z - WORLD.min) * SIZE + (x - WORLD.min)] = v;

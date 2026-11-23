@@ -5,7 +5,7 @@ import {
   railMask, railBoxes, nearestRailEdge, canHoldItem, stack, itemOf, floorOf, turnLine, blockKey, faceIndex, hexToRgb,
   switchable, lightOff, toggleLight, setDoorOpen, isWaterBlock, facingTowards,
   PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP, BED_FOOT, NOTE_NAMES, NOTE_FREQS, PICTURES, isSnowyAt, SNOW_LINE, SIGN, SIGN_LENGTH,
-  GOLD_PAINT, GOLD_HEX, ELEVATOR, isCrop, cropStage, cropWet, CROP_RIPE,
+  GOLD_PAINT, GOLD_HEX, ELEVATOR, isCrop, cropStage, cropWet, CROP_RIPE, WATER_DEPTH,
 } from './shared/blocks.js';
 import { generateWorld } from './shared/worldgen.js';
 import { randomLook, sanitizeLook, cleanName, PREMIUM_HAIR, PREMIUM_HATS, hairItem, costumeItem } from './shared/avatar.js';
@@ -320,13 +320,22 @@ async function load() {
     structures.changed(x, y, z);
     signs.changed(x, y, z);
   };
-  world.onLoad = () => structures.scan();
+  world.onLoad = () => {
+    structures.scan();
+    ground?.setWater(world.water); // (deep water: the sandy bottoms and banks)
+  };
+  world.onWater = (x, z, on) => ground?.setWaterCell(x, z, on);
   sky.extraLights = structureLights;
   player = new Player(world);
   player.hungerMul = hungerSpeed(hunger);
   player.bouncePower = trampolineBounce;
   player.onBoost = () => sounds.zoom();
   player.onHardLanding = () => ouch();
+  // Into the water: splash!
+  player.onSplash = k => {
+    sounds.splash(0.35 + k * 0.65);
+    for (let i = 0; i < 4 + Math.round(k * 8); i++) effects.splash(player.pos.x + (Math.random() - 0.5) * 1.2, 0.15, player.pos.z + (Math.random() - 0.5) * 1.2);
+  };
   player.onLanded = () => {
     net.send({ t: 'flight', what: 'chute' });
     sounds.land();
@@ -3627,10 +3636,13 @@ function sendState() {
   const ballPos = ball.active && !ball.carried ? [r(ball.pos.x), r(ball.pos.y), r(ball.pos.z)] : 0;
   const balloon = hud.item === BALLOON && !riding() && !sleeping;
   const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || sliding || loopExpress?.sitting || funRides?.riding || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
-    (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) | (sledding && !balloon ? FLAG.sled : 0) | (player.parachute && !balloon ? FLAG.parachute : 0) | (perks.has('zoo') && !balloon ? FLAG.parrot : 0) | (perks.has('fire') && !balloon ? FLAG.helmet : 0) |
+    (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) | (sledding && !balloon ? FLAG.sled : 0) | (player.parachute && !balloon ? FLAG.parachute : 0) | (player.swimming && !balloon && !riding() ? FLAG.swim : 0) | (perks.has('zoo') && !balloon ? FLAG.parrot : 0) | (perks.has('fire') && !balloon ? FLAG.helmet : 0) |
     (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
   net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item, drone: agency.droneState(player.yaw) });
 }
+
+// The blue look under the water (see the render loop).
+const underwater = { on: false, el: document.getElementById('underwater') };
 
 // Lamps with real flames (tiki torches and candles), refreshed when the world changes.
 let flameLamps = [], flameVersion = -1;
@@ -6307,8 +6319,9 @@ function frame(timestamp) {
           player.moveAxis('z', e.dir[1] * 2.2 * dt, true);
           break;
         }
-      // (Never inside the ground, even if a hole grew back over us a moment ago.)
-      if (player.pos.y < 0 && world.isSolid(Math.floor(player.pos.x), Math.floor(player.pos.y + 0.05), Math.floor(player.pos.z))) {
+      // (Never inside the ground, even if a hole grew back over us a moment ago. Deep water's fine:
+      // that's swimming.)
+      if (player.pos.y < 0 && !(player.pos.y >= -WATER_DEPTH - 0.01 && world.deepWater(Math.floor(player.pos.x), Math.floor(player.pos.z))) && world.isSolid(Math.floor(player.pos.x), Math.floor(player.pos.y + 0.05), Math.floor(player.pos.z))) {
         let y = Math.floor(player.pos.y + 0.05);
         while (y < 0 && world.isSolid(Math.floor(player.pos.x), y, Math.floor(player.pos.z))) y++;
         player.pos.y = y;
@@ -6495,6 +6508,7 @@ function frame(timestamp) {
       else if (item === WATERING_CAN) hint = '💧 Click on your seeds to water them!';
       else if (item === TREATS) hint = myBody.pet ? '🦴 Right-click your pet to teach it tricks!' : '🦴 Get a pet first (🎨 Customize → Pet)';
       else if (BLOCKS[item]?.crop) hint = `🌱 Plant ${BLOCKS[item].crop.icon} on grass or dirt, then water it 💧`;
+      else if (player.swimming) hint = touch ? '🏊 ⬆ swim up (or climb out at the edge) · ⬇ dive' : '🏊 Space: swim up (or climb out at the edge) · C: dive';
       else if (player.jetting) hint = '🚀 WHOOSH!';
       else if (hud.wearing(SKIS) && player.skiing) hint = '⛷️ W: carve where you look · S: slow down · Space: jump';
       else if (hud.wearing(SKIS) && player.onGround && player.surface()) hint = '⛷️ Point downhill and go! (W carves, S slows)';
@@ -6591,6 +6605,7 @@ function frame(timestamp) {
     myBody.hotair = contraptions.riding === 'balloon';
     myBody.sledding = sledding;
     myBody.parachute = !!player.parachute && !riding();
+    myBody.swimming = !!player.swimming && !riding();
     myBody.parrot = perks.has('zoo');
     myBody.helmet = perks.has('fire');
     myBody.crouching = player.crouching && !riding();
@@ -6772,8 +6787,20 @@ function frame(timestamp) {
     scene.fog.color.lerp(tmpColor.copy(c).multiplyScalar(0.35), f * 0.6);
   }
   const firstPerson = inGame && !riding() && viewMode === 0 && !sleeping && !agency.active;
-  // While the ball is off being thrown (or fetched), it isn't in your hand.
-  view.holder.visible = !(hud?.item === BALL && ball?.active);
+  // Hanging on to something (a parachute, a zip line, a swing, a ride's bar…) or swimming: both
+  // hands on it, nothing in them. While the ball is off being thrown (or fetched), it isn't in
+  // your hand either.
+  const grip = player.parachute ? 'chute' : contraptions.riding === 'zip' ? 'zip' : contraptions.riding === 'swing' ? 'swing'
+    : contraptions.riding === 'balloon' ? 'basket' : liftRide || funRides?.riding || contraptions.riding === 'carousel' ? 'bar'
+      : sledding ? 'sled' : player.swimming ? 'swim' : null;
+  view.setGrip(grip, settings.look);
+  view.holder.visible = !grip && !(hud?.item === BALL && ball?.active);
+  // Under the water: everything looks blue.
+  const under = !riding() && camera.position.y < -0.02 && world.deepWater(Math.floor(camera.position.x), Math.floor(camera.position.z));
+  if (under !== underwater.on) {
+    underwater.on = under;
+    underwater.el.classList.toggle('hidden', !under);
+  }
   view.update(dt, player.moving && player.onGround, camera.aspect, scene.environment, sky.dayK);
 
   // Water ripples drift slowly.
@@ -6826,6 +6853,9 @@ window.buildzone = {
   get mallPlace() { return mallPlace; },
   get cinemaUI() { return cinemaUI; },
   get castlePlace() { return castlePlace; },
+  get viewMode() { return viewMode; },
+  get view() { return view; },
+  set viewMode(v) { viewMode = v; },
   get hurt() { return hurt; },
   get airportLights() { return airportLights; },
   get fireHose() { return fireHose; },

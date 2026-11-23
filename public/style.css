@@ -808,6 +808,7 @@ body.touch #quick-chat button { padding: 4px 7px; font-size: 12px; }
 
 /* ---------- The Secret Agency ---------- */
 body.spycam #game { filter: saturate(0.35) sepia(0.55) hue-rotate(70deg) contrast(1.15); }
+#underwater { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(40, 140, 200, 0.36), rgba(10, 60, 120, 0.62)); }
 #spy-overlay {
   position: fixed; inset: 0; pointer-events: none; z-index: 5;
   background: repeating-linear-gradient(rgba(0,0,0,0.12) 0 2px, transparent 2px 4px), radial-gradient(ellipse at center, transparent 55%, rgba(0,20,8,0.65));

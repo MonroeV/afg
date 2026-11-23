@@ -728,6 +728,16 @@ export function animateCharacter(ch, s) {
     crouchDrop = 0.72 * (1 - Math.cos(0.75)) + 0.05;
   }
   if (s.swing !== undefined && s.swing < 1) swingR = -1.8 * Math.sin(s.swing * Math.PI);
+  // Swimming (treading water): arms sweeping out to the sides and back, legs kicking.
+  if (s.swim) {
+    const k = t * 4.5;
+    swingL = swingR = 0.5 + Math.sin(k) * 0.35;
+    armLz = -1.6 - Math.cos(k) * 0.5;
+    armRz = 1.6 + Math.cos(k) * 0.5;
+    legL = Math.sin(k * 1.6) * 0.45;
+    legR = -Math.sin(k * 1.6) * 0.45;
+    bob = Math.sin(k) * 0.03;
+  }
 
   ch.legL.rotation.x = legL;
   ch.legR.rotation.x = legR;

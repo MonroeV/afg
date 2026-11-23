@@ -768,6 +768,12 @@ export class ViewModel {
 
     this.holder = new THREE.Group();
     this.scene.add(this.holder);
+    // (Hanging on to something, like a parachute's lines or a swing's chains: both hands on it,
+    // nothing else in them. See setGrip.)
+    this.gripGroup = new THREE.Group();
+    this.scene.add(this.gripGroup);
+    this.grip = null;
+    this.gripT = 0;
     this.models = {};
     this.swingT = 1;
     this.switchT = 1;
@@ -987,6 +993,106 @@ export class ViewModel {
     this.swingT = 0;
   }
 
+  // What both your hands are holding on to, instead of the item in your hand (since v0.73):
+  // 'chute' (a parachute's steering lines), 'zip' (a zip line's handle), 'swing' (its chains),
+  // 'bar' (a ride's safety bar: the ski lift, Fun Land), 'basket' (a hot-air balloon's basket),
+  // 'sled', 'swim' (paddling), or null (back to the item). look: your colors (skin, sleeves).
+  setGrip(kind, look) {
+    const key = kind && `${kind}|${look?.skin}|${look?.shirtColor}`;
+    if (key === this.gripKey) return;
+    this.gripKey = key;
+    this.grip = kind;
+    this.gripGroup.clear();
+    this.holder.visible = !kind;
+    if (!kind) return;
+    this.switchT = 0;
+    const skin = new THREE.MeshStandardMaterial({ color: look?.skin || '#f1c27d', roughness: 0.8 });
+    const sleeve = new THREE.MeshStandardMaterial({ color: look?.shirtColor || '#1e88e5', roughness: 0.85 });
+    const rope = new THREE.MeshStandardMaterial({ color: kind === 'swing' ? 0x9e9e9e : 0xf5f5f5, roughness: 0.6, metalness: kind === 'swing' ? 0.6 : 0 });
+    // An arm: the sleeve, and the hand at the end (pointing up its length), as a group whose
+    // origin is the hand.
+    const arm = () => {
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.1, 0.085), skin));
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.1).translate(0, -0.3, 0), sleeve));
+      return g;
+    };
+    const line = (x0, y0, z0, x1, y1, z1, r = 0.008) => {
+      const a = new THREE.Vector3(x0, y0, z0), b = new THREE.Vector3(x1, y1, z1), len = a.distanceTo(b);
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 5), rope);
+      m.position.copy(a).add(b).multiplyScalar(0.5);
+      m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+      return m;
+    };
+    const L = arm(), R = arm();
+    this.gripArms = [L, R];
+    this.gripGroup.add(L, R);
+    if (kind === 'chute') {
+      // Both arms up, holding the steering toggles; the lines run up out of sight.
+      L.position.set(-0.34, 0.16, -0.8);
+      R.position.set(0.34, 0.16, -0.8);
+      L.rotation.set(0.35, 0, -0.3);
+      R.rotation.set(0.35, 0, 0.3);
+      for (const [x, s] of [[-0.34, -1], [0.34, 1]]) {
+        this.gripGroup.add(line(x, 0.2, -0.8, x + s * 0.3, 1.8, -1.6));
+        this.gripGroup.add(line(x, 0.2, -0.8, x + s * 0.05, 1.8, -1.4));
+        this.gripGroup.add(new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 0.04).translate(x, 0.13, -0.8), new THREE.MeshStandardMaterial({ color: 0xe53935 })));
+      }
+    } else if (kind === 'zip') {
+      // Both hands up on the handle under the wheel, the line running off ahead.
+      L.position.set(-0.12, 0.2, -0.5);
+      R.position.set(0.12, 0.2, -0.5);
+      L.rotation.set(0.1, 0, -0.12);
+      R.rotation.set(0.1, 0, 0.12);
+      const metal = new THREE.MeshStandardMaterial({ color: 0xb0b6bd, metalness: 0.7, roughness: 0.35 });
+      this.gripGroup.add(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.42, 8).rotateZ(Math.PI / 2).translate(0, 0.22, -0.5), new THREE.MeshStandardMaterial({ color: 0x212121 })));
+      this.gripGroup.add(line(-0.2, 0.22, -0.5, 0, 0.55, -0.5, 0.012), line(0.2, 0.22, -0.5, 0, 0.55, -0.5, 0.012));
+      this.gripGroup.add(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 14).rotateZ(Math.PI / 2).translate(0, 0.6, -0.5), metal));
+      this.gripGroup.add(line(0, 0.66, 1.5, 0, 0.66, -6, 0.01));
+    } else if (kind === 'swing') {
+      // Holding the chains on either side.
+      L.position.set(-0.36, -0.05, -0.45);
+      R.position.set(0.36, -0.05, -0.45);
+      for (const x of [-0.36, 0.36]) this.gripGroup.add(line(x, -0.6, -0.45, x, 1.5, -0.45, 0.012));
+    } else if (kind === 'bar' || kind === 'basket') {
+      // Hands resting on the bar in front of you (or the edge of the balloon's basket).
+      L.position.set(-0.28, -0.3, -0.6);
+      R.position.set(0.28, -0.3, -0.6);
+      L.rotation.set(-1.1, 0, 0);
+      R.rotation.set(-1.1, 0, 0);
+      if (kind === 'bar') this.gripGroup.add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.2, 10).rotateZ(Math.PI / 2).translate(0, -0.33, -0.6), new THREE.MeshStandardMaterial({ color: 0xfdd835, metalness: 0.3, roughness: 0.4 })));
+      else this.gripGroup.add(new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.12, 0.14).translate(0, -0.38, -0.6), new THREE.MeshStandardMaterial({ color: 0xa1774a, roughness: 0.9 })));
+    } else if (kind === 'sled') {
+      // Holding the sled's rope, down in front.
+      L.position.set(-0.2, -0.36, -0.5);
+      R.position.set(0.2, -0.36, -0.5);
+      L.rotation.set(-0.9, 0, -0.2);
+      R.rotation.set(-0.9, 0, 0.2);
+      this.gripGroup.add(line(-0.2, -0.38, -0.5, 0, -0.6, -1.0, 0.012), line(0.2, -0.38, -0.5, 0, -0.6, -1.0, 0.012));
+    } else if (kind === 'swim') {
+      L.rotation.set(-1.5, 0, 0);
+      R.rotation.set(-1.5, 0, 0);
+    }
+  }
+
+  // Each frame, the hands move a little: swaying under the parachute, paddling in the water.
+  updateGrip(dt) {
+    if (!this.grip || !this.gripArms) return;
+    this.gripT += dt;
+    const t = this.gripT, [L, R] = this.gripArms, drop = (1 - this.switchT) * 0.3;
+    this.gripGroup.position.y = -drop;
+    if (this.grip === 'chute') this.gripGroup.rotation.z = Math.sin(t * 1.3) * 0.04;
+    else if (this.grip === 'swing') this.gripGroup.position.z = Math.sin(t * 1.6) * 0.04;
+    else if (this.grip === 'swim') {
+      // Breaststroke: hands together out in front, sweep apart and round, back together.
+      const k = (t * 1.1) % 1, out = Math.sin(k * Math.PI);
+      L.position.set(-0.07 - out * 0.3, -0.21 + out * 0.03, -0.85 + out * 0.22);
+      R.position.set(0.07 + out * 0.3, -0.21 + out * 0.03, -0.85 + out * 0.22);
+      L.rotation.z = out * 0.5;
+      R.rotation.z = -out * 0.5;
+    }
+  }
+
   update(dt, moving, aspect, envMap, dayK) {
     this.camera.aspect = aspect;
     this.camera.updateProjectionMatrix();
@@ -1004,5 +1110,6 @@ export class ViewModel {
     const drop = (1 - this.switchT) * 0.3;
     this.holder.position.set(0.38 + bob - s * 0.1, -0.32 + bobY - drop + s * 0.04, -0.6 - s * 0.12);
     this.holder.rotation.set(-s * 0.9, 0, -s * 0.2);
+    this.updateGrip(dt);
   }
 }

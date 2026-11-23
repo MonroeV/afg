@@ -416,6 +416,10 @@ export const turnLine = v => {
 
 // Water (boats float on it), even with something standing in it.
 export const isWaterBlock = v => blockId(itemOf(v)) === 36 || blockId(floorOf(v)) === 36;
+// Water on the ground (just water, nothing standing in it) is deep enough to swim in (since
+// v0.73): this many blocks down, to a sandy bottom.
+export const WATER_DEPTH = 2;
+export const isDeepWaterValue = v => blockId(v) === 36 && !floorOf(v);
 
 // ---------- Light switches ----------
 // Lamps can be switched off and on with a right-click (meta bit 1). Street lamps can't:

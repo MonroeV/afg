@@ -1,7 +1,7 @@
 // First-person movement and collision.
 // Collision works with boxes, so thin doors and car roofs feel solid in the right places.
 import * as THREE from 'three';
-import { BLOCKS, SPAWN, blockId, blockMeta, shapeOf, itemOf, floorOf, isSnowyAt } from './shared/blocks.js';
+import { BLOCKS, SPAWN, blockId, blockMeta, shapeOf, itemOf, floorOf, isSnowyAt, WATER_DEPTH } from './shared/blocks.js';
 
 const HALF_WIDTH = 0.3;
 export const HEIGHT = 1.8;
@@ -24,6 +24,10 @@ const SKI_MAX = 24; // the fastest you can go on skis
 const SNEAKER_SPEED = 1.7, SNEAKER_JUMP = 11.5; // Super Sneakers
 const MOON_JUMP = 10.8; // the Space Cadets' moon boots
 const AXES = { x: 0, y: 1, z: 2 };
+// Swimming (since v0.73): in deep water you float with your head out (your feet down here, the
+// surface being at about 0), paddle about slower than walking, Space swims up (and climbs out
+// at the edge), C (or Ctrl) dives.
+const FLOAT_Y = -1.27, SWIM_SPEED = 3.2, SWIM_UP = 2.8, SWIM_DOWN = 2.6, CLIMB_OUT = 7.6;
 
 export class Player {
   constructor(world) {
@@ -79,8 +83,19 @@ export class Player {
     if (wish.lengthSq() > (analog ? 1 : 0)) wish.normalize();
 
     this.climbing = !this.flying && this.onLadder();
-    // Ctrl or C to crouch (C is "down" while flying).
-    this.crouching = !this.flying && !this.climbing && (keys.has('ControlLeft') || keys.has('ControlRight') || keys.has('KeyC'));
+    const wasSwimming = this.swimming;
+    this.swimming = !this.flying && !this.climbing && this.inWater();
+    if (this.swimming && !wasSwimming) {
+      // Splash! (In you go: the water slows a fall right down.)
+      this.onSplash?.(Math.min(1, Math.abs(this.vel.y) / 12));
+      this.vel.y *= 0.25;
+      if (this.parachute) {
+        this.parachute = false;
+        this.onLanded?.();
+      }
+    }
+    // Ctrl or C to crouch (C is "down" while flying, or swimming).
+    this.crouching = !this.flying && !this.climbing && !this.swimming && (keys.has('ControlLeft') || keys.has('ControlRight') || keys.has('KeyC'));
     if (this.crouching) this.sprinting = false;
     this.speedPad(dt);
     if (this.climbing) {
@@ -91,6 +106,24 @@ export class Player {
       const k = 1 - Math.exp(-14 * dt);
       this.vel.x += (wish.x * WALK_SPEED * 0.6 - this.vel.x) * k;
       this.vel.z += (wish.z * WALK_SPEED * 0.6 - this.vel.z) * k;
+    } else if (this.swimming) {
+      // Paddling about: slower than walking. Space swims up (or, at the edge, climbs out onto
+      // the bank), C dives down; otherwise you float back up with your head out of the water.
+      const speed = SWIM_SPEED * (this.sprinting ? 1.4 : 1);
+      const k = 1 - Math.exp(-4 * dt);
+      this.vel.x += (wish.x * speed - this.vel.x) * k;
+      this.vel.z += (wish.z * speed - this.vel.z) * k;
+      const kv = 1 - Math.exp(-4 * dt);
+      if (keys.has('Space')) {
+        if (this.pos.y > FLOAT_Y - 0.35 && this.atBank(wish)) this.vel.y = CLIMB_OUT;
+        else this.vel.y += (SWIM_UP - this.vel.y) * kv;
+      } else if (keys.has('KeyC') || keys.has('ControlLeft') || keys.has('ControlRight')) {
+        this.vel.y += (-SWIM_DOWN - this.vel.y) * kv;
+      } else {
+        this.swimT = (this.swimT || 0) + dt;
+        const target = FLOAT_Y + Math.sin(this.swimT * 2.2) * 0.04;
+        this.vel.y += (Math.max(-2, Math.min(2, (target - this.pos.y) * 3)) - this.vel.y) * (1 - Math.exp(-3 * dt));
+      }
     } else if (this.flying) {
       const speed = this.sprinting ? FLY_SPEED * 1.8 : FLY_SPEED;
       const up = (keys.has('Space') ? 1 : 0) - (keys.has('KeyC') || keys.has('ControlLeft') ? 1 : 0);
@@ -127,7 +160,7 @@ export class Player {
     }
     // Gravity is added half before and half after moving, so a jump is just as high at
     // any frame rate (on a slow phone too).
-    const falling = !this.climbing && !this.flying;
+    const falling = !this.climbing && !this.flying && !this.swimming;
     // Holding a balloon, you drift down slowly (jumps go just as high, though).
     const gravity = this.balloon && this.vel.y < 0 ? GRAVITY * 0.35 : GRAVITY;
     if (falling) this.vel.y -= gravity * dt / 2;
@@ -240,6 +273,18 @@ export class Player {
     return true;
   }
 
+  // In deep water (swimming): water on the ground right here, and we're down in it.
+  inWater() {
+    return this.pos.y < 0.15 && this.world.deepWater(Math.floor(this.pos.x), Math.floor(this.pos.z));
+  }
+
+  // Swimming toward the edge of the water (dry land just ahead): a kick up gets us out.
+  atBank(wish) {
+    const len = Math.hypot(wish.x, wish.z);
+    const dirs = len > 0.1 ? [[wish.x / len, wish.z / len]] : [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    return dirs.some(([dx, dz]) => !this.world.deepWater(Math.floor(this.pos.x + dx * 0.7), Math.floor(this.pos.z + dz * 0.7)));
+  }
+
   // Is there something to stand on under our feet (no more than a small step down)?
   supported() {
     const p = this.pos, e = 0.001;
@@ -280,7 +325,10 @@ export class Player {
     const out = [];
     for (let x = Math.floor(r[0]); x <= Math.floor(r[3]); x++)
       for (let y = Math.floor(r[1]) - 1; y <= Math.floor(r[4]); y++) // one lower: railings stick up out of their cell
-        for (let z = Math.floor(r[2]); z <= Math.floor(r[5]); z++) this.world.cellBoxes(x, y, z, out);
+        for (let z = Math.floor(r[2]); z <= Math.floor(r[5]); z++) {
+          if (y < 0 && y >= -WATER_DEPTH && this.world.deepWater(x, z)) continue; // (deep water: down we can go)
+          this.world.cellBoxes(x, y, z, out);
+        }
     for (const b of this.extraBoxes()) {
       if (b[0] < r[3] && b[3] > r[0] && b[1] < r[4] && b[4] > r[1] && b[2] < r[5] && b[5] > r[2]) out.push(b);
     }
@@ -353,7 +401,7 @@ export class Player {
           return;
         }
     // A big fall: ouch! (Not with a parachute, a balloon or the jetpack, of course.)
-    if (impact < -23 && !this.parachute && !this.balloon && !this.flying) this.onHardLanding?.(impact);
+    if (impact < -23 && !this.parachute && !this.balloon && !this.flying && !this.swimming && !this.inWater()) this.onHardLanding?.(impact);
   }
 
   overlapsSomething() {

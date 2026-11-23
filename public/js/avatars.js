@@ -39,7 +39,7 @@ function nameTag(name, color) {
 
 // What a player is doing, sent with their position: bits of `flags`. The top 24 bits are
 // the color of the balloon they're holding.
-export const FLAG = { sleeping: 1, sitting: 2, crouching: 4, balloon: 8, jet: 16, trail: 32, pizza: 64, hotair: 128, sled: 256, parachute: 512, parrot: 1024, helmet: 2048 }; // (sled, parachute, parrot and helmet: only without a balloon, whose color takes those bits)
+export const FLAG = { sleeping: 1, sitting: 2, crouching: 4, balloon: 8, jet: 16, trail: 32, pizza: 64, hotair: 128, sled: 256, parachute: 512, parrot: 1024, helmet: 2048, swim: 4096 }; // (sled, parachute, parrot, helmet and swim: only without a balloon, whose color takes those bits)
 
 // A speech bubble: rounded and white, with up to two lines of text and a little tail.
 function speechBubble(text) {
@@ -469,6 +469,7 @@ export class Avatar {
     this.pizza = !!(flags & FLAG.pizza);
     this.hotair = !!(flags & FLAG.hotair);
     this.parachute = !(flags & FLAG.balloon) && !!(flags & FLAG.parachute);
+    this.swimming = !(flags & FLAG.balloon) && !!(flags & FLAG.swim);
     this.sledding = !(flags & FLAG.balloon) && !!(flags & FLAG.sled);
     this.parrot = !(flags & FLAG.balloon) && !!(flags & FLAG.parrot);
     this.helmet = !(flags & FLAG.balloon) && !!(flags & FLAG.helmet);
@@ -552,7 +553,7 @@ export class Avatar {
     const sit = this.seat && !this.lying ? (this.seat.stand ? 0 : 1) : Math.max(this.sitK, Math.sin(Math.PI * Math.min(1, this.lieK)) * 0.9);
     animateCharacter(this.character, {
       walk: this.walk, speed: sitting || this.lying ? 0 : this.speed, pitch: this.lieK > 0.5 ? 0 : this.pitch, time,
-      dance: this.dance, wave: this.wave, swing: this.swing, sit,
+      dance: this.dance, wave: this.wave, swing: this.swing, sit, swim: this.swimming && !sitting,
       flying: this.flying, crouch: (this.crouching && !sitting) || !!this.seat?.stand, // (knees bent, riding a board)
     });
     if (this.holdMic) this.updateMic();

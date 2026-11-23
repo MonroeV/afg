@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   BLOCKS, WORLD, PAINT_COLORS, blockKey, blockId, blockMeta, paintOf, withPaint, makeBlock, shapeOf, isSolidBlock, doorBox,
-  railBoxes, railMask, isSmallProp, itemOf, floorOf, carryPaint, rgbToHex, switchable, lightOff, liftRole, DOOR_OPEN, DOOR_TOP, BED_FOOT,
+  railBoxes, railMask, isSmallProp, itemOf, floorOf, carryPaint, rgbToHex, switchable, lightOff, liftRole, DOOR_OPEN, DOOR_TOP, BED_FOOT, isDeepWaterValue,
 } from './shared/blocks.js';
 import { modelGeometry, modelMaterials } from './models.js';
 import { openBelow, isTunnelY, tunnelKey } from './shared/underground.js';
@@ -229,6 +229,7 @@ export function createBlockMaterials(textures) {
       ...extra,
     });
     if (def.water) m.normalScale.set(1.6, 1.6);
+    if (def.water) m.side = THREE.DoubleSide; // (swimming underneath it, you see it from below too)
     // How strongly it reflects its surroundings (see lighting.js).
     // (Windows only reflect a little, so you can still see in and out through them.)
     m.userData.shine = def.mirror ? 1.6 : def.gold ? 1.3 : def.water ? 1.4 : def.clear ? 0.18 : def.transparent ? 0.5 : def.metal ? 1 : def.glossy ? 0.6 : 0;
@@ -341,6 +342,7 @@ export class World {
     this.scene = scene;
     this.materials = materials;
     this.blocks = new Map(); // "x,y,z" -> block value
+    this.water = new Set(); // "x,z": water on the ground, deep enough to swim in
     this.layers = {}; // "chunk|render key" -> { mesh, keys: [], index: Map(key -> instance index) }
     this.cellLayer = new Map(); // "x,y,z" -> the layer its instance is in
     this.lamps = new Set(); // keys of light-giving blocks
@@ -368,6 +370,12 @@ export class World {
   // hole or a tunnel is solid like anywhere else.
   openBelow(x, y, z) {
     return openBelow(this.holes, this.tunnels, x, y, z);
+  }
+
+  // Deep water here (water on the ground, nothing standing in it): the player can swim down into
+  // it (see Player.boxesNear). Cars, pets and everyone else still go across the top.
+  deepWater(x, z) {
+    return this.water.has(`${x},${z}`);
   }
 
   isSolid(x, y, z) {
@@ -500,6 +508,13 @@ export class World {
     const k = blockKey(x, y, z);
     const old = this.blocks.get(k) || 0;
     if (old === v) return false;
+    // (Water on the ground: deep enough to swim in. The ground's lake beds follow these.)
+    if (y === 0 && isDeepWaterValue(old) !== isDeepWaterValue(v)) {
+      const wk = `${x},${z}`;
+      if (isDeepWaterValue(v)) this.water.add(wk);
+      else this.water.delete(wk);
+      if (!this.loading) this.onWater?.(x, z, isDeepWaterValue(v));
+    }
     if (old) {
       this.removeInstance(k);
       this.lamps.delete(k);

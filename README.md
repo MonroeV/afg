@@ -651,6 +651,16 @@ customize your character, drive cars, build anything and play with friends.
   a Helicopter 🚁 400 🪙, a Sky Cub 🛩️ 350, an Airplane ✈️ 600 or a Jet 🚀 900. It waits for you on
   the apron, by the runway; only you can fly it (friends can ride along), and it counts as one of
   your 5 vehicles. BuildZone Motors buys it back for half
+- **Swimming** 🏊 (since v0.73): water on the ground (lakes, the sea, the castle's moat, or water you
+  put down yourself) is 2 blocks deep, with a sandy bottom. Walk or jump in (splash!) and you
+  float with your head out of the water, paddling along slower than walking. **Space** swims up,
+  and climbs out at the edge; **C** (or Ctrl) dives down, where everything looks blue. Falling
+  into water doesn't hurt. Everyone else sees you treading water. (Cars, boats, pets and the
+  town's people still go across the top, as before.)
+- **Both hands on it** 🙌 (since v0.73): under a parachute, on a zip line or a swing, in a hot-air
+  balloon's basket, on the ski lift or a Fun Land ride, on a sled, or swimming, you don't hold
+  your item any more: you see your two hands holding the lines, the handle, the chains, the
+  bar, the rope… (and paddling, in the water)
 - **Parachuting out of a helicopter** 🪂 (since v0.72): jump out (E) up high (5 blocks or more)
   and your parachute opens, just like out of an airplane; the helicopter lands itself, gently.
   Riding along in a helicopter or a plane up high? Jump out and your parachute opens too
