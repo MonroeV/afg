@@ -6854,7 +6854,6 @@ window.buildzone = {
   get cinemaUI() { return cinemaUI; },
   get castlePlace() { return castlePlace; },
   get viewMode() { return viewMode; },
-  get view() { return view; },
   set viewMode(v) { viewMode = v; },
   get hurt() { return hurt; },
   get airportLights() { return airportLights; },
