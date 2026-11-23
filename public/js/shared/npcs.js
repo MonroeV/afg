@@ -242,7 +242,7 @@ const NPCS = [
     id: -89, place: 'airport', name: 'Ace', title: 'Ace 🛩️ Sky High Aircraft', roam: 2, store: 'hangar',
     look: { face: 'grin', hair: 'short', hat: 'cap', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#f1c27d', hairColor: '#b0702a', hatColor: '#4fc3f7', shirtColor: '#0277bd', shirtColor2: '#ffffff', pantsColor: '#37474f', shoesColor: '#3e2723' },
     hello: n => [`Hey ${n}! Want your very own aircraft? 🛩️`, `${n}! Helicopters, planes, even a jet! ✈️🚁`],
-    tips: ['🚁 400 · 🛩️ 350 · ✈️ 600 · 🚀 900 🪙', 'Right-click me to see them! 🛩️', 'Jump out of a helicopter up high and your parachute opens! 🪂', 'Done with it? BuildZone Motors buys it back for half! 💰'],
+    tips: ['🚁 400 · 🛩️ 350 · ✈️ 600 · 🚀 900 🪙', 'Right-click me to see them! 🛩️', 'Jump out of a helicopter up high and your parachute opens! 🪂', 'Done with it? BuildZone Motors buys it back for half! 💰', 'Low on fuel? Park by a ⛽ pump at the edge of the apron!'],
   },
   {
     // The Starlight Cinema: Usher Ollie at the snack counter.
@@ -321,7 +321,7 @@ const NPCS = [
     id: -29, place: 'airport', name: 'Captain Sky', title: 'Captain Sky ✈️', roam: 2, club: 'pilot',
     look: { face: 'cool', hair: 'short', hat: 'cap', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#d39a6a', hairColor: '#3b2314', hatColor: '#263238', shirtColor: '#263238', shirtColor2: '#ffd54f', pantsColor: '#263238', shoesColor: '#111111' },
     hello: n => [`Welcome aboard, ${n}! Ready to fly? ✈️`, `${n}! The planes are out on the apron. Take one up! 🛫`],
-    tips: ['W: throttle up. Fast down the runway, then Space to lift off! 🛫', 'Too slow up there and you stall: nose down to speed up! ⚠️', 'Land gently on the runway: slow and level! 🛬', 'Landed? Hold S to brake! 🛑', 'Follow the yellow lines: out to the taxiway, then along to the runway! 🛫', 'Coming in to land? Two white and two red lights by the runway: just right! 🔴⚪', 'Follow the green lights to the runway! 💚', 'Jump out up high and your parachute opens! 🪂', 'Climb the ladder in the tower for the best view! 🗼', 'Want to see the sights? Take the slow Sky Cub, in the first hangar! 🐢✈️', 'Feeling brave? The jet is in the second hangar: zoom! 🚀', 'The jet needs lots of runway, and a long, slow landing! 🛬'],
+    tips: ['W: throttle up. Fast down the runway, then Space to lift off! 🛫', 'Too slow up there and you stall: nose down to speed up! ⚠️', 'Land gently on the runway: slow and level! 🛬', 'Landed? Hold S to brake! 🛑', 'Follow the yellow lines: out to the taxiway, then along to the runway! 🛫', 'Coming in to land? Two white and two red lights by the runway: just right! 🔴⚪', 'Follow the green lights to the runway! 💚', 'Jump out up high and your parachute opens! 🪂', 'Low on fuel? Park by a ⛽ pump at the edge of the apron! ✈️', 'Climb the ladder in the tower for the best view! 🗼', 'Want to see the sights? Take the slow Sky Cub, in the first hangar! 🐢✈️', 'Feeling brave? The jet is in the second hangar: zoom! 🚀', 'The jet needs lots of runway, and a long, slow landing! 🛬'],
   },
   {
     // Snip & Style, the hair salon (premium hairdos).

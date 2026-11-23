@@ -38,6 +38,13 @@ const HANGAR_PLANES = [{ kind: 'cub', u: 54.5, v: 12.5, color: '#ffb300' }, { ki
 const APRON_LINKS = [[4, 10], ...PARKED.map(u => [u - 2, u + 2]), [52, 57], [76, 81], [L - 11, L - 5]];
 const RUNWAY_LINKS = [[4, 10], [61, 67], [L - 11, L - 5]];
 const inLink = (links, u) => links.some(([a, b]) => u >= a && u <= b);
+// Aviation fuel (since v0.75): gas pumps on the grass just past the apron (between the links to
+// the taxiway), each within reach of a plane parked in front of it. They work like the town's
+// (see the pump handler in game.js): park beside one, right-click it.
+export const FUEL_PUMPS = [[29, 28], [42, 28], [100, 28], [114, 28]];
+const FUEL_SIGN = [30, 28];
+export const FUEL_SIGN_TEXT = '⛽ Aviation fuel: park beside a pump, right-click it';
+const GAS_PUMP = 113;
 
 // The airfield: the apron, the links, the taxiway and the runway, with their lines and lights.
 // put(u, y, v, block) in the airport's own space. (New airports, and old ones being redone.)
@@ -103,6 +110,23 @@ export function inApproach(place) {
   return (x, z) => {
     const dx = x - mx, dz = z - mz;
     return Math.abs(dx * ux + dz * uz) <= reach && Math.abs(dz * ux - dx * uz) <= APPROACH.half;
+  };
+}
+
+// The aviation fuel pumps for an airport that's already built (for worlds from before v0.75):
+// { pumps: [[x, y, z, value]], sign: [x, y, z, value] } (each facing the apron), or null.
+export function airportFuel(place) {
+  const frame = airportFrame(place);
+  if (!frame) return null;
+  const cell = (u, v) => frame.pos(u + 0.5, v + 0.5).map(Math.floor);
+  const [ax, az] = frame.pos(0, 0), [bx, bz] = frame.pos(0, 1);
+  const facing = faceDir(ax - bx, az - bz); // (toward the apron and the terminal)
+  return {
+    pumps: FUEL_PUMPS.map(([u, v]) => {
+      const [x, z] = cell(u, v);
+      return [x, 0, z, stack(makeBlock(GAS_PUMP, facing), B.sidewalk)];
+    }),
+    sign: [...((([x, z]) => [x, 0, z])(cell(...FUEL_SIGN))), makeBlock(SIGN, facing)],
   };
 }
 
@@ -264,6 +288,9 @@ function airportAt(site, set) {
 
   // The apron (where the planes park), the taxiway and the runway (see airfield).
   airfield(put, lineAlong, lineAcross);
+  // Aviation fuel, by the apron.
+  for (const [u, v] of FUEL_PUMPS) put(u, 0, v, stack(makeBlock(GAS_PUMP, outward), B.sidewalk));
+  sign(FUEL_SIGN[0], 0, FUEL_SIGN[1], outward, FUEL_SIGN_TEXT);
   // (The edges are left as the ground they're on. Before v0.56.2 they were a strip of Grass
   // blocks: a curb a block high at both ends of the runway, that blew up planes running off it.)
 

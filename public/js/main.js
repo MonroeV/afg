@@ -245,6 +245,7 @@ let gameUI = null; // Coach Kai's games (tag, hide-and-seek): see gameui.js
 let guardCatch = null, guardAsk = null; // bodyguards keeping you off their land, and someone asking yours to let them in
 let carryingCan = false; // a gas can bought at a gas station, to carry to a vehicle that's out of gas
 let gasStations = []; // where the gas stations are: [name, x, z]
+let airportPlace = null; // (the airport: aircraft fill up at its pumps)
 let landmarks = []; // where the town's places are: [name, x, z]
 let shopOpen = false;
 let book = null; // the badge book (clubs)
@@ -862,6 +863,7 @@ function startGame(welcome, resume = false) {
   spaceGate = welcome.space?.gate || null;
   fireHose.setFires(welcome.fires);
   airportLights.setPlace(welcome.airport);
+  airportPlace = welcome.airport || null;
   weather.set(welcome.rain || 0, welcome.snow);
   agency.setGuards(welcome.guards);
   if (guardCatch) guardCatch.cooldown = 1.5; // (not until the server knows where we are)
@@ -1527,11 +1529,16 @@ function nearestGas(from = player.pos) {
     const d = Math.hypot(x - from.x, z - from.z);
     if (d < bestD) [best, bestD] = [[x, z], d];
   }
-  if (!best) return '';
-  if (bestD < 20) return ' right here';
+  return best ? wordsTo(best[0], best[1], from) : '';
+}
+
+// " 120 blocks north-east of here" (or " right here").
+function wordsTo(x, z, from = player.pos) {
+  const d = Math.hypot(x - from.x, z - from.z);
+  if (d < 20) return ' right here';
   const dirs = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
-  const dir = dirs[(Math.round(Math.atan2(best[0] - from.x, -(best[1] - from.z)) / (Math.PI / 4)) + 8) % 8];
-  return ` ${Math.round(bestD / 10) * 10} blocks ${dir} of here`;
+  const dir = dirs[(Math.round(Math.atan2(x - from.x, -(z - from.z)) / (Math.PI / 4)) + 8) % 8];
+  return ` ${Math.round(d / 10) * 10} blocks ${dir} of here`;
 }
 
 // Running low (or out) of gas while you drive: say so, and where to get more.
@@ -1544,10 +1551,12 @@ function gasWarning(was, fuel) {
     hud.addChat({ system: true, text: `⛽ Out of gas! ${myCar.spec.flying ? 'You\'ll float gently down.' : 'The engine has stopped.'} Walk to the gas station${where ? ` (${where.trim()})` : ''}, right-click a pump to buy a gas can (${GAS_CAN_PRICE} coins), then carry it back and right-click your ${myCar.spec.name} to pour it in.` });
     return;
   }
+  // (In the air: the airport has pumps for aircraft, since v0.75.)
+  const airport = myCar.spec.flying && airportPlace ? wordsTo(airportPlace.x, airportPlace.z) : '';
   for (const k of [0.25, 0.1]) {
     if (was > k && fuel <= k) {
       sounds.tone(880, 660, 0.18, 0.2, 'triangle');
-      hud.toast(`⛽ ${k < 0.2 ? 'Very low' : 'Low'} on gas: ${Math.round(fuel * 100)}% left! ${where ? `The nearest gas station is${where}.` : 'Find a gas station!'}`);
+      hud.toast(`⛽ ${k < 0.2 ? 'Very low' : 'Low'} on gas: ${Math.round(fuel * 100)}% left! ${airport ? `Land at the airport${airport} and park by a ⛽ pump.` : where ? `The nearest gas station is${where}.` : 'Find a gas station!'}`);
     }
   }
 }

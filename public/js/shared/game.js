@@ -13,7 +13,7 @@ import { buildGasStations, usesFuel, getsDirty, TANK_RANGE, GAS_PUMP, GAS_CAN, G
 import { MAX_TUNNELS, isTunnelY, tunnelKey, openBelow } from './underground.js';
 import { buildShops, buildOuterShops } from './shops.js';
 import { buildChurch, meetingOn, meetingAt, giftSpots, MEETING_COINS, MEETING_STAY, GIFT_COINS } from './church.js';
-import { buildAirport, hangarPlanes, planesOutOfTheWay, airportCurb, addTaxiway, inApproach, airportFrame } from './airport.js';
+import { buildAirport, hangarPlanes, planesOutOfTheWay, airportCurb, addTaxiway, inApproach, airportFrame, airportFuel, FUEL_SIGN_TEXT } from './airport.js';
 import { buildPark } from './park.js';
 import { buildTrainLine, fixPlatforms } from './train.js';
 import { buildFunLand, rideSigns } from './funland.js';
@@ -48,7 +48,7 @@ import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
 const PLANE_HOME_AFTER = 300; // seconds a town airplane sits idle away from the airport before it's taken back
-export const SAVE_VERSION = 50;
+export const SAVE_VERSION = 51;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -362,6 +362,7 @@ export class GameRoom {
       this.upgradeTo48();
       this.upgradeTo49();
       this.upgradeTo50();
+      this.upgradeTo51();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -494,6 +495,7 @@ export class GameRoom {
     if (data.version < 48) this.upgradeTo48();
     if (data.version < 49) this.upgradeTo49();
     if (data.version < 50) this.upgradeTo50();
+    if (data.version < 51) this.upgradeTo51();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -1384,6 +1386,21 @@ export class GameRoom {
       this.addTrainStops();
     }
     this.log(`Added the castle (${castle ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
+  // Worlds saved before version 51: aviation fuel at the airport (gas pumps beside the apron, for
+  // helicopters and airplanes). Only into empty spots on the airport's own land.
+  upgradeTo51() {
+    const fuel = airportFuel(this.places?.airport);
+    let n = 0;
+    if (fuel) for (const [x, y, z, v] of [...fuel.pumps, fuel.sign]) {
+      if (claimAt(this.claims, x, z)?.key !== 'airport' || this.get(x, y, z) || this.get(x, y + 1, z)) continue;
+      this.world.set(blockKey(x, y, z), v);
+      if (v === fuel.sign[3] && x === fuel.sign[0] && z === fuel.sign[2]) this.signs.set(blockKey(x, y, z), cleanSignText(FUEL_SIGN_TEXT));
+      else n++;
+    }
+    this.log(`Aviation fuel at the airport (${n} pumps)`);
     this.onDirty();
   }
 

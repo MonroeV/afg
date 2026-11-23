@@ -400,7 +400,10 @@ customize your character, drive cars, build anything and play with friends.
   Walk to a gas station, right-click a pump with no car beside it to buy a **gas can** (3 coins, a
   quarter of a tank), carry it back (it's in your hand) and right-click your vehicle to pour it
   in. You can carry one can at a time. Town vehicles left nearly empty get filled up by the town
-  after 10 minutes; your own vehicles are up to you
+  after 10 minutes; your own vehicles are up to you. **Aviation fuel** ✈️⛽ (since v0.75): the
+  airport has four pumps of its own, on the grass at the edge of the apron (a sign says so).
+  Land or taxi your helicopter or plane up beside one, get out and right-click it, just like
+  at a gas station. Low on fuel up in the air, the warning tells you which way the airport is
 - **Mud and the car wash** 🧽: vehicles get dirty as you drive, slowly on roads, three times as
   fast on grass, sand and snow, and twice as fast again off the road in the rain. They get
   splashed with mud and lose their shine. Every gas station has a free **car wash**: drive through
