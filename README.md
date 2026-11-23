@@ -140,8 +140,9 @@ customize your character, drive cars, build anything and play with friends.
     - **BuildZone Hospital** 🏥 (since v0.65, by the Outer Loop, with its own Loop Express stop):
       a big white hospital with red crosses on the front, an ambulance bay under a canopy, a
       lobby with Dr. Hart at the reception desk, a waiting room, an emergency room, a row of
-      patient rooms with beds, and a helipad on the roof. **Ouch!** A big fall or a hard crash
-      and you're hurt (🤕 shows top left, and you walk a little slower). Come to the hospital
+      patient rooms with beds, and a helipad on the roof. **Ouch!** A really big fall (about 18
+      blocks or more) or a really hard crash (since v0.74.1; little ones are fine, and once a
+      minute at most) and you're hurt (🤕 shows next to your coins, and you walk a little slower). Come to the hospital
       and **lie down in one of its beds** to feel better (a brave-patient sticker: +2 🪙). Or a
       friend can drive you there in an **ambulance** 🚑 (two wait in the bay; **G** for the
       lights and siren): ride in it, and when it stops in the ambulance bay you're all better

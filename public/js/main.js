@@ -2825,6 +2825,10 @@ function getOut() {
 // hospital (lie in one of its beds, or a friend drives you there in an ambulance).
 function ouch() {
   if (!inGame) return;
+  // (Not again straight away: one ouch a minute at most.)
+  const now = performance.now();
+  if (now - lastOuch < 60000) return;
+  lastOuch = now;
   hurt = Math.min(3, hurt + 1);
   hurtNag = 0;
   sounds.tone(500, 250, 0.25, 0.2, 'triangle');
@@ -2833,13 +2837,15 @@ function ouch() {
   updateHurt();
 }
 
+let lastOuch = -Infinity;
 function updateHurt() {
   let chip = document.getElementById('hurt-chip');
   if (!chip) {
+    // (In the row with your coins, after them: never over them.)
     chip = document.createElement('div');
     chip.id = 'hurt-chip';
-    Object.assign(chip.style, { position: 'fixed', top: '96px', left: '12px', padding: '2px 10px', borderRadius: '12px', background: 'rgba(211, 47, 47, 0.85)', color: '#fff', font: 'bold 18px system-ui, sans-serif', pointerEvents: 'none', zIndex: 5 });
-    document.body.appendChild(chip);
+    Object.assign(chip.style, { padding: '2px 10px', borderRadius: '12px', background: 'rgba(211, 47, 47, 0.85)', color: '#fff', font: 'bold 16px system-ui, sans-serif', pointerEvents: 'none', whiteSpace: 'nowrap' });
+    (document.getElementById('purse') || document.body).appendChild(chip);
   }
   chip.textContent = `🤕${hurt > 1 ? ` ×${hurt}` : ''} ➡ 🏥`;
   chip.style.display = hurt ? 'block' : 'none';
@@ -3008,7 +3014,7 @@ function vehicleEvent(ev, car) {
   else if (ev.type === 'boost') sounds.zoom();
   else if (ev.type === 'damage') {
     reportDamage(ev.other || car, ev.amount, ev.impact);
-    if (car === myCar && !ev.other && ev.amount > 18 && !car.spec.noDamage) ouch(); // (a hard crash)
+    if (car === myCar && !ev.other && ev.amount > 45 && !car.spec.noDamage && !['bumper', 'kart'].includes(car.kind)) ouch(); // (a really hard crash)
   }
   else if (ev.type === 'impulse') net.send({ t: 'car_impulse', id: ev.other.id, vx: ev.dv.x, vz: ev.dv.z, spin: ev.spin });
   else if (ev.type === 'push') net.send({ t: 'push', id: ev.id, vx: ev.dv.x, vy: ev.dv.y, vz: ev.dv.z });

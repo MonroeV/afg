@@ -24,6 +24,7 @@ const SKI_MAX = 24; // the fastest you can go on skis
 const SNEAKER_SPEED = 1.7, SNEAKER_JUMP = 11.5; // Super Sneakers
 const MOON_JUMP = 10.8; // the Space Cadets' moon boots
 const AXES = { x: 0, y: 1, z: 2 };
+const HARD_LANDING = -32; // landing this fast (falling about 18 blocks) hurts
 // Swimming (since v0.73): in deep water you float with your head out (your feet down here, the
 // surface being at about 0), paddle about slower than walking, Space swims up (and climbs out
 // at the edge), C (or Ctrl) dives.
@@ -401,7 +402,8 @@ export class Player {
           return;
         }
     // A big fall: ouch! (Not with a parachute, a balloon or the jetpack, of course.)
-    if (impact < -23 && !this.parachute && !this.balloon && !this.flying && !this.swimming && !this.inWater()) this.onHardLanding?.(impact);
+    // (Since v0.74.1 only a really big fall, about 18 blocks or more: little drops are fine.)
+    if (impact < HARD_LANDING && !this.parachute && !this.balloon && !this.flying && !this.swimming && !this.inWater()) this.onHardLanding?.(impact);
   }
 
   overlapsSomething() {
