@@ -156,6 +156,15 @@ function planks(u, v) {
   return { c, h: gap ? 0 : 0.6 + grain * 0.2 };
 }
 
+// The drawbridge: thick planks with two iron bands across, and rivets.
+function drawbridge(u, v) {
+  const p = planks(u, v);
+  const band = [0.18, 0.78].some(b => Math.abs(v - b) < 0.06);
+  if (!band) return p;
+  const rivet = Math.abs(((u * 6) % 1) - 0.5) < 0.12 && [0.18, 0.78].some(b => Math.abs(v - b) < 0.025);
+  return { c: rivet ? [0.62, 0.62, 0.66] : [0.2, 0.21, 0.24], h: rivet ? 1 : 0.75 };
+}
+
 function logSide(u, v) {
   const n = fbm(u, v, 10, 5, 60, 2);
   const groove = Math.pow(1 - Math.abs(Math.sin((u * 10 + fbm(u, v, 4, 3, 61, 4) * 2) * Math.PI)), 3);
@@ -612,6 +621,7 @@ const GENERATORS = {
   cobble,
   brick,
   planks,
+  drawbridge,
   log_side: logSide,
   log_top: logTop,
   leaves,
@@ -671,7 +681,7 @@ const GENERATORS = {
 };
 
 const NORMAL_STRENGTH = {
-  grass_top: 2, dirt: 3, stone: 3, cobble: 5, brick: 4, planks: 3, log_side: 4, log_top: 2,
+  grass_top: 2, dirt: 3, stone: 3, cobble: 5, brick: 4, planks: 3, drawbridge: 3, log_side: 4, log_top: 2,
   sand: 2, metal: 4, tiles: 3, lamp: 2, bounce: 2, leaves: 2,
   door_bottom: 3, door_top: 3, garage: 3, asphalt: 2, sidewalk: 3, roof: 4, rainbow: 2, water: 1,
 };

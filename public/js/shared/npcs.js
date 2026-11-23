@@ -238,6 +238,13 @@ const NPCS = [
     tips: ['🏴‍☠️👨‍🍳🐰'],
   },
   {
+    // BuildZone Airport: Ace, who sells aircraft (Sky High Aircraft, since v0.72).
+    id: -89, place: 'airport', name: 'Ace', title: 'Ace 🛩️ Sky High Aircraft', roam: 2, store: 'hangar',
+    look: { face: 'grin', hair: 'short', hat: 'cap', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#f1c27d', hairColor: '#b0702a', hatColor: '#4fc3f7', shirtColor: '#0277bd', shirtColor2: '#ffffff', pantsColor: '#37474f', shoesColor: '#3e2723' },
+    hello: n => [`Hey ${n}! Want your very own aircraft? 🛩️`, `${n}! Helicopters, planes, even a jet! ✈️🚁`],
+    tips: ['🚁 400 · 🛩️ 350 · ✈️ 600 · 🚀 900 🪙', 'Right-click me to see them! 🛩️', 'Jump out of a helicopter up high and your parachute opens! 🪂', 'Done with it? BuildZone Motors buys it back for half! 💰'],
+  },
+  {
     // The Starlight Cinema: Usher Ollie at the snack counter.
     id: -85, place: 'cinema_snacks', name: 'Ollie', title: 'Usher Ollie 🎬', roam: 1.5, store: 'cinema',
     look: { face: 'smile', hair: 'short', hat: 'cap', shirt: 'jacket', pants: 'jeans', extra: 'none', skin: '#f1c27d', hairColor: '#3b2314', hatColor: '#b71c1c', shirtColor: '#b71c1c', shirtColor2: '#ffd54f', pantsColor: '#111111', shoesColor: '#111111' },

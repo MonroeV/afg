@@ -29,6 +29,7 @@ import { ANIMALS } from './shared/zoo.js';
 import { FARM_ANIMALS } from './shared/farm.js';
 import { GATE_BLOCK } from './shared/funland.js';
 import { gameTime, STOP_BLOCK } from './shared/train.js';
+import { DRAWBRIDGE, LEVER } from './shared/drawbridge.js';
 import { meetingAt, meetingOn, isSunday, MEETING_COINS, GIFT_COINS } from './shared/church.js';
 import { generateTextures } from './textures.js';
 import { World, createBlockMaterials, blockMaterial, RAILING, WIND, rayBox } from './world.js';
@@ -2679,11 +2680,11 @@ function enterCar(car) {
       : '✈️ W opens the throttle (S closes it, and brakes on the ground). Roll down the runway, and when you\'re fast enough hold Space to lift off! It turns to where you look. Space climbs, Shift dives. Too slow and it stalls! Land gently on the runway, then hold S to brake. (Jump out up high and your parachute opens!)' });
     settings.planeTip = 1;
     saveSettings();
-  } else if (car.spec.flying && !car.spec.plane && settings.heliTip !== 2) { // shown again when the controls change
+  } else if (car.spec.flying && !car.spec.plane && settings.heliTip !== 3) { // shown again when the controls change (or there's something new)
     hud.addChat({ system: true, text: touch
-      ? '🚁 Wait for the rotor to spin up, then hold ⬆ to lift off and ⬇ to come down. It turns to face where you look (drag on the right side). The joystick tilts it forward and back (it stays tilted until you push the other way) and slides it sideways. Land gently!'
-      : '🚁 Wait for the rotor to spin up, then hold Space to lift off. Steer with the mouse (it turns to where you look). W/S tilt it forward and back, and it stays tilted until you tilt it back (watch "Tilt" at the top). A/D slide sideways. Shift goes down. Land gently!' });
-    settings.heliTip = 2;
+      ? '🚁 Wait for the rotor to spin up, then hold ⬆ to lift off and ⬇ to come down. It turns to face where you look (drag on the right side). The joystick tilts it forward and back (it stays tilted until you push the other way) and slides it sideways. Land gently! Jump out up high and your parachute opens 🪂'
+      : '🚁 Wait for the rotor to spin up, then hold Space to lift off. Steer with the mouse (it turns to where you look). W/S tilt it forward and back, and it stays tilted until you tilt it back (watch "Tilt" at the top). A/D slide sideways. Shift goes down. Land gently! Jump out (E) up high and your parachute opens 🪂' });
+    settings.heliTip = 3;
     saveSettings();
   }
 }
@@ -2774,11 +2775,15 @@ function leaveCar(tell = false) {
   const car = myCar;
   if (!car) return;
   wakeInVan();
-  const bail = tell && car.spec.plane && !car.onGround && car.pos.y - groundBelow(car.pos.x, car.pos.y, car.pos.z) > 2;
-  if (tell && car.spec.flying && !car.spec.plane && !car.onGround) dropHelicopter(car);
+  // Up in the air: out you jump, and your parachute opens (out of an airplane, or a helicopter
+  // high enough up: since v0.72). A helicopter you jump out of lands itself, gently.
+  const heli = car.spec.flying && !car.spec.plane;
+  const bail = tell && car.spec.flying && !car.onGround && car.pos.y - groundBelow(car.pos.x, car.pos.y, car.pos.z) > (heli ? HELI_JUMP : 2);
+  if (bail && heli) bailOut(car);
+  if (tell && heli && !car.onGround) dropHelicopter(car, bail);
   if (tell) {
     sendCarState();
-    net.send(bail ? { t: 'car_exit', id: car.id, vel: [car.vel.x, car.vel.y, car.vel.z].map(v => Math.round(v * 100) / 100) } : { t: 'car_exit', id: car.id });
+    net.send(bail && !heli ? { t: 'car_exit', id: car.id, vel: [car.vel.x, car.vel.y, car.vel.z].map(v => Math.round(v * 100) / 100) } : { t: 'car_exit', id: car.id });
   }
   myCar = null;
   kartUI?.reset();
@@ -2787,12 +2792,14 @@ function leaveCar(tell = false) {
   if (car.kind !== 'police') car.siren = 0; // (the police lights stay on: just the siren stops)
   car.braking = car.reversing = false;
   if (car.kind === 'rv' && tell) enterRV(car, 'cab'); // (out of the RV's driver's seat: still inside it)
-  else if (bail) bailOut(car);
-  else stepOut(car, -1); // the driver's door is on the left
+  else if (bail && !heli) bailOut(car);
+  else if (!bail) stepOut(car, -1); // the driver's door is on the left
   hud.setCarHelp(null);
   hud.setVehicleInfo(null);
   sounds.engine(null);
 }
+
+const HELI_JUMP = 5; // (how high up a helicopter has to be for a parachute jump)
 
 // Jumping out of an airplane in the air: you tumble out of the door, and your parachute pops
 // open (you float gently down, and can steer). The plane flies on without you… and crashes.
@@ -2816,7 +2823,9 @@ function leaveRide(tell = false) {
   if (tell) net.send({ t: 'car_exit', id: car.id });
   myRide = null;
   car.passengers = car.passengers.filter(id => id !== myId);
-  stepOut(car, seat === 1 ? 1 : Math.random() < 0.5 ? -1 : 1);
+  // (Riding along in something flying, up high: jump, and the parachute opens.)
+  if (car.spec.flying && car.pos.y - groundBelow(car.pos.x, car.pos.y, car.pos.z) > HELI_JUMP) bailOut(car);
+  else stepOut(car, seat === 1 ? 1 : Math.random() < 0.5 ? -1 : 1);
   hud.setCarHelp(null);
   hud.setVehicleInfo(null);
 }
@@ -2862,12 +2871,12 @@ function stepOut(car, side) {
 }
 
 // Nobody's flying it any more: it falls to the ground (and gets hurt if it was high up).
-function dropHelicopter(car) {
+function dropHelicopter(car, gently = false) {
   const start = car.pos.y;
   for (let i = 0; i < 400 && !cars.blocked(car.spec, car.pos.x, car.pos.y - 0.25, car.pos.z, car.h, car.id, car.outline); i++) car.pos.y -= 0.25;
   car.pitch = car.roll = 0;
   const fall = start - car.pos.y;
-  if (fall > 3) net.send({ t: 'car_damage', id: car.id, amount: Math.min(45, fall * 3), impact: [0, 0, 0] });
+  if (fall > 3 && !gently) net.send({ t: 'car_damage', id: car.id, amount: Math.min(45, fall * 3), impact: [0, 0, 0] });
 }
 
 function sendCarState() {
@@ -4674,6 +4683,8 @@ function interact() {
     }
     if (BLOCKS[blockId(hit.value)]?.slide) return startSlide(...hit.block);
     if (blockId(hit.value) === STOP_BLOCK) return trainTimes(hit.block);
+    // Someone's own drawbridge: its lever.
+    if (blockId(itemOf(hit.value)) === LEVER) return net.send({ t: 'lever', x: hit.block[0], y: hit.block[1], z: hit.block[2] });
     // The castle: a lever (the drawbridge), or one of the hidden golden trophies.
     if (castlePlace && !hit.ground) {
       const at = ([x, y, z]) => hit.block[0] === x && hit.block[1] === y && hit.block[2] === z;
@@ -6469,6 +6480,9 @@ function frame(timestamp) {
       else if (s?.type === 'balloon') hint = '🎈 Right-click to fly the balloon!';
       else if (s?.type === 'hoop') hint = '🏀 Throw the Pet Ball through the hoop!';
       else if (hit && blockId(hit.value) === STOP_BLOCK && !tool) hint = '🚉 Right-click: when do the trains come?';
+      else if (hit && blockId(hit.value) === LEVER && item !== HAMMER) hint = '🕹️ Right-click to raise or lower the drawbridge!';
+      else if (item === DRAWBRIDGE) hint = '🌉 A row of Drawbridge blocks across a moat or gap, and a 🕹️ Lever right by one end';
+      else if (item === LEVER) hint = '🕹️ Put the Lever right next to one end of your Drawbridge blocks';
       else if (hit && blockId(hit.value) === GATE_BLOCK) hint = spaceGate && Math.hypot(hit.block[0] + 0.5 - spaceGate[0], hit.block[2] + 0.5 - spaceGate[1]) < 6 ? '🚀 Right-click to fly to space!' : '🎟️ Right-click to ride!';
       else if (s?.type === 'tv') hint = tvs.onGame(s) ? '🎮 Right-click to play Block Hopper!' : '📺 Right-click to change the channel';
       else if (item === CLAIM) hint = `🚩 Click a corner to start claiming land (max ${CLAIM_MAX}×${CLAIM_MAX}), or a vehicle to make it yours` + (myVehicles().length ? ` · 🔑 ${whereMyVehicles()}` : '');

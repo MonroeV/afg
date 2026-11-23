@@ -231,6 +231,11 @@ export const BLOCKS = {
   // Stairs: four little steps up a block, rising away from the way they face (walk straight up
   // them). The Loop Express stations have them, and you can build them too.
   149: { name: 'Stairs', shape: 'model', model: 'stairs', facing: true, box: [0, 0, 0, 1, 1, 1], boxes: [[0, 0, 0, 1, 0.25, 1], [0, 0.25, 0, 1, 0.5, 0.75], [0, 0.5, 0, 1, 0.75, 0.5], [0, 0.75, 0, 1, 1, 0.25]] },
+  // Your own drawbridge (since v0.72): a row of Drawbridge blocks across a moat or a gap, and a
+  // Lever by one end. Right-click the lever: up it swings, standing tall like a wall; again, and
+  // down it comes (see drawbridge.js).
+  150: { name: 'Drawbridge', tex: 'drawbridge' },
+  151: { name: 'Lever', shape: 'model', model: 'lever', facing: true, box: [0.3, 0, 0.3, 0.7, 0.95, 0.7] },
 };
 // Crops: how grown (0 seeds .. 3 ripe) and whether they've just been watered.
 export const CROP_RIPE = 3, CROP_WET = 4;
@@ -288,6 +293,11 @@ export const SHOP_TOOLS = {
   ...Object.fromEntries(Object.entries(PREMIUM_HATS).map(([style, price]) => [costumeItem(style), { name: OPTION_LABELS[style], price, store: 'costume', hat: style, about: `🎭 A fun costume hat: ${OPTION_LABELS[style]}!`, got: '🎭 On it goes! (Change hats any time: 🎨 Customize.)' }])),
   // Your very own skateboard or BMX bike (Sporty Sam's, at the mall): it rolls out right beside you.
   ride_skateboard: { name: 'Your Own Skateboard', price: 25, store: 'sports', vehicle: 'skateboard', again: true, about: '🛹 A skateboard that\'s all yours (only you can ride it). Ramps: A/D spin, Space flip!', got: '' },
+  // Sky High Aircraft, at the airport (since v0.72): your very own helicopter or airplane.
+  ride_heli: { name: 'Your Own Helicopter', price: 400, store: 'hangar', vehicle: 'heli', again: true, about: '🚁 A helicopter that\'s all yours (only you can fly it). Jump out up high: your parachute opens! 🪂', got: '' },
+  ride_cub: { name: 'Your Own Sky Cub', price: 350, store: 'hangar', vehicle: 'cub', again: true, about: '🛩️ A slow little sightseeing plane, all yours. Easy to fly, lands almost anywhere!', got: '' },
+  ride_plane: { name: 'Your Own Airplane', price: 600, store: 'hangar', vehicle: 'plane', again: true, about: '✈️ A propeller plane that\'s all yours (a friend can fly with you).', got: '' },
+  ride_jet: { name: 'Your Own Jet', price: 900, store: 'hangar', vehicle: 'jet', again: true, about: '🚀 A super fast jet, all yours. It needs lots of runway!', got: '' },
   ride_bmx: { name: 'Your Own BMX Bike', price: 35, store: 'sports', vehicle: 'bmx', again: true, about: '🚲 A BMX bike that\'s all yours (only you can ride it). Hit the ramps!', got: '' },
   ...Object.fromEntries(Object.entries(PREMIUM_HAIR).map(([style, price]) => [hairItem(style), { name: OPTION_LABELS[style], price, store: 'salon', hair: style, about: `✂️ A cool new hairdo: ${OPTION_LABELS[style]}!`, got: '💇 Your new hairdo is on! (Change it any time: 🎨 Customize.)' }])),
   ...Object.fromEntries(Object.entries(FOODS).filter(([, f]) => f.store).map(([id, f]) => [foodItem(id), { name: f.name, price: f.price, store: f.store, again: true, food: id, about: `${f.icon} Fills you up (+${f.fill}). It goes in your lunchbox 🍱 till you eat it.`, got: '' }])),
@@ -331,6 +341,7 @@ export const STORES = {
   candy: { name: 'The Sweet Spot', icon: '🍬', color: '#ec407a', keeper: 'Coco' },
   costume: { name: 'Costume Corner', icon: '🎭', color: '#7b1fa2', keeper: 'Mimi' },
   sports: { name: 'Sporty Sam\'s', icon: '🛹', color: '#1e88e5', keeper: 'Sam' },
+  hangar: { name: 'Sky High Aircraft', icon: '🛩️', color: '#4fc3f7', keeper: 'Ace' },
   cinema: { name: 'Starlight Snacks', icon: '🍿', color: '#b71c1c', keeper: 'Ollie' },
 };
 export const storeOf = item => (typeof item === 'number' ? BLOCKS[item]?.store : SHOP_TOOLS[item]?.store) || 'luxe';

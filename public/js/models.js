@@ -665,6 +665,14 @@ MODELS.trainStop = {
   colors: { body: 0x1565c0, glow: 0xbbe6ff, accent: 0xe53935, trim: 0x9e9e9e, metal: 0.3 },
 };
 
+// A lever (for a drawbridge): a stone base, a wooden handle with a red knob, tipped back.
+MODELS.lever = {
+  body: [box(0.4, 0.14, 0.4, 0.5, 0.07, 0.5)],
+  trim: [new THREE.CylinderGeometry(0.035, 0.035, 0.75, 8).translate(0, 0.37, 0).rotateX(-0.45).translate(0.5, 0.12, 0.5)],
+  accent: [new THREE.SphereGeometry(0.08, 10, 8).translate(0, 0.75, 0).rotateX(-0.45).translate(0.5, 0.12, 0.5)],
+  colors: { body: 0x8a8f96, trim: 0x8d6e63, accent: 0xe53935, metal: 0.2 },
+};
+
 // Stairs: four steps rising toward -z (the low step at the front, +z), with a yellow edge on
 // each step so you can see them.
 MODELS.stairs = {

@@ -13,7 +13,7 @@ import { buildGasStations, usesFuel, getsDirty, TANK_RANGE, GAS_PUMP, GAS_CAN, G
 import { MAX_TUNNELS, isTunnelY, tunnelKey, openBelow } from './underground.js';
 import { buildShops, buildOuterShops } from './shops.js';
 import { buildChurch, meetingOn, meetingAt, giftSpots, MEETING_COINS, MEETING_STAY, GIFT_COINS } from './church.js';
-import { buildAirport, hangarPlanes, planesOutOfTheWay, airportCurb, addTaxiway, inApproach } from './airport.js';
+import { buildAirport, hangarPlanes, planesOutOfTheWay, airportCurb, addTaxiway, inApproach, airportFrame } from './airport.js';
 import { buildPark } from './park.js';
 import { buildTrainLine, fixPlatforms } from './train.js';
 import { buildFunLand, rideSigns } from './funland.js';
@@ -29,6 +29,7 @@ import { buildSchool, QUIZ, QUIZ_COINS, QUIZ_DAILY, DESKS_IN_DOORWAYS, schoolFra
 import { buildMall } from './mall.js';
 import { buildCinema, STAGE_IN_DOORWAYS, cinemaFrame } from './cinema.js';
 import { buildCastle, TREASURE_COINS } from './castle.js';
+import { pullLever } from './drawbridge.js';
 import { buildDealership, newCarFor, LOT_KINDS, SHOW_KINDS, townCarsToKeep, SELL_SIGN } from './dealership.js';
 import { buildFireStation, FIRE_CALL, FIRE_GAP, FIRE_OUT, FIRE_LIFE, DOUSE, FIRE_REWARD, HOSE_RANGE } from './firestation.js';
 import { findHomes } from './residents.js';
@@ -85,7 +86,8 @@ const WATERING_CAN = 'wateringcan';
 // them again (longer after a "no"), and how long a "just this visit" pass lasts.
 const ASK_ANSWER = 45 * 1000, ASK_AGAIN = 2 * 60 * 1000, ASK_AFTER_NO = 10 * 60 * 1000, VISIT_PASS = 15 * 60 * 1000;
 const INTRUDE_WAYS = ['foot', 'air', 'car', 'tunnel'];
-const SKYE_AWAY = 3; // (how far round guarded land Skye keeps away)
+const SKYE_AWAY = 3;
+const AIRCRAFT_SPOTS = [116.5, 124.5, 102.5, 90.5, 30.5, 16.5, 8.5, 66.5, 42.5]; // (u, along the airport's apron: where a bought aircraft waits) // (how far round guarded land Skye keeps away)
 export const MAX_OWNED_VEHICLES = 5; // vehicles one person can have of their own
 // Selling a vehicle you bought back to BuildZone Motors: half what you paid. Only while it's
 // parked at the dealership (or a few blocks from it).
@@ -1306,14 +1308,22 @@ export class GameRoom {
     if (this.ownedVehicles(key).length >= MAX_OWNED_VEHICLES) return reply(`🔑 You have ${MAX_OWNED_VEHICLES} vehicles already! Give one back first (click it with the Land Flag).`);
     if (w.coins < price) return reply(`🪙 ${price}`);
     const [x, y, z] = client.pos, spec = VEHICLES[kind];
-    const home = this.addHome({ kind, color: ['#e53935', '#1e88e5', '#43a047', '#8e24aa', '#ff7043'][Math.floor(Math.random() * 5)], x: Math.floor(x) + 2, y: Math.max(0, Math.floor(y)), z: Math.floor(z), h: 0, owner: client.name, key, paid: price });
-    if (!this.spawn(home)) {
+    const color = ['#e53935', '#1e88e5', '#43a047', '#8e24aa', '#ff7043', '#fdd835', '#f5f5f5'][Math.floor(Math.random() * (spec.flying ? 7 : 5))];
+    // (Where it rolls out: beside you; an airplane or a helicopter, out on the airport's apron,
+    // nose toward the runway.)
+    const frame = spec.flying && airportFrame(this.places?.airport);
+    const spots = frame ? AIRCRAFT_SPOTS.map(u => [...frame.pos(u, 23.5), frame.h]) : [[Math.floor(x) + 2, Math.floor(z), 0]];
+    let home = null;
+    for (const [sx, sz, h] of spots) {
+      home = this.addHome({ kind, color, x: sx, y: frame ? 0 : Math.max(0, Math.floor(y)), z: sz, h, owner: client.name, key, paid: price });
+      if (this.spawn(home)) break;
       this.homes.delete(home.id);
-      return reply('🛹 No room here! Step somewhere roomier and try again.');
+      home = null;
     }
+    if (!home) return reply(frame ? '✈️ The apron is full right now! Try again in a little while.' : '🛹 No room here! Step somewhere roomier and try again.');
     w.coins -= price;
     this.sendWallet(client);
-    reply(`${kind === 'bmx' ? '🚲' : '🛹'} It's yours! Hop on (E) and hit the ramps!`);
+    reply(frame ? `${spec.plane ? '✈️' : '🚁'} Your ${spec.name} is waiting for you out on the apron, by the runway! Only you can fly it. 🛫` : `${kind === 'bmx' ? '🚲' : '🛹'} It's yours! Hop on (E) and hit the ramps!`);
     this.log(`${client.name} bought a ${spec.name}`);
     this.onDirty();
   }
@@ -2318,7 +2328,8 @@ export class GameRoom {
     if (!v) return;
     // Your own vehicle: wherever you leave it is where it lives now.
     const home = this.homes.get(v.home);
-    if (home?.key && v.driver === client.id) {
+    // (Not an airplane someone's jumped out of, up in the sky: it stays parked where it was.)
+    if (home?.key && v.driver === client.id && !(VEHICLES[v.kind].plane && this.airborne(v))) {
       Object.assign(home, { x: v.x, y: v.y, z: v.z, h: v.h });
       this.onDirty();
     }
@@ -3354,6 +3365,26 @@ export class GameRoom {
       for (const [gx, gy, gz] of c.gate) this.serverSet(gx, gy, gz, down ? 11 : 0);
       this.broadcast({ t: 'fx', kind: 'drawbridge', up: down, x: c.bridge[0][0], y: 1, z: c.bridge[0][2] });
       this.progress(client, 'castle', 'bridge', 1, true);
+    },
+
+    // Someone's own drawbridge: its lever pulled (see drawbridge.js). On someone's land, only
+    // people who can build there can work it.
+    lever(client, { x, y, z }) {
+      if (![x, y, z].every(Number.isInteger) || !this.allow(client, 'lever', 1, 2)) return;
+      const reply = text => client.send({ t: 'chat', system: true, text });
+      const [px, py, pz] = client.pos;
+      if (Math.hypot(px - x - 0.5, pz - z - 0.5) > 7 || Math.abs(py - y) > 5) return;
+      const r = pullLever((a, b, c) => this.get(a, b, c), x, y, z);
+      if (r.error) return reply({ none: '🌉 Put Drawbridge blocks right by the lever first!', short: '🌉 Make the drawbridge at least 2 blocks long!', big: '🌉 That drawbridge is too big! (96 blocks at most)', blocked: '🌉 Something is in the way!' }[r.error]);
+      for (const [cx, , cz] of [[x, y, z], ...r.cells]) if (!canBuild(this.claims, client.name, cx, cz)) {
+        const land = claimAt(this.claims, cx, cz);
+        return reply(`🔒 That's ${possessive(land?.owner || 'someone')} drawbridge!`);
+      }
+      for (const [cx, cy, cz, v] of r.cells) {
+        this.serverSet(cx, cy, cz, v);
+        this.touched(cx, cy, cz);
+      }
+      this.broadcast({ t: 'fx', kind: 'drawbridge', up: r.up, x: x + 0.5, y: y + 1, z: z + 0.5 });
     },
 
     // Found one of the castle's hidden treasures (a golden trophy).

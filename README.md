@@ -618,6 +618,12 @@ customize your character, drive cars, build anything and play with friends.
   Your hunger and lunchbox are saved
 - **Stairs** (since v0.55, in the 🏠 Home tab, next to the Ladder): four little steps up a
   block. Put them in a line, each one a block higher, and just walk up (no jumping)
+- **Your own drawbridge** 🌉 (since v0.72, in the 🌳 Town tab): put **Drawbridge** blocks (planks
+  with iron bands) in a row, or a wider path, across a moat or a gap, and a **Lever** 🕹️ right by
+  one end. Right-click the lever: the bridge swings up on that end and stands tall like a wall,
+  so nobody can cross (the moat fills back in under it); right-click again and it comes back
+  down. Up to 96 blocks. On your land only you (and people who can build there) can work it;
+  if something's in the way, it won't move
 - **Slides** 🎢 (since v0.50): Slide blocks (in the 🎉 Fun tab) in a line going down, each one a
   step lower, make a slide (a new one placed below and beside another lines up with it); put a
   Ladder up to the top. Climb up and right-click the slide: you zoom down it, faster and faster,
@@ -638,9 +644,16 @@ customize your character, drive cars, build anything and play with friends.
   hitting the ground (or anything) hard is a crash, and it blows up. **Jump out** (E) up in the
   air and your **parachute** opens 🪂: you float gently down and can steer with WASD. The plane
   flies on without you… and crashes to the ground in a ball of fire (the wreck burns for a
-  while). Everyone sees it. A new plane is back on the apron 2 minutes later. (And a plane
+  while). Everyone sees it. (Your own plane goes back to where you last parked it.) A new plane is back on the apron 2 minutes later. (And a plane
   left parked somewhere else, with nobody about, goes back to the airport after 5 minutes.) Planes use gas,
   like everything else that drives
+- **Your own aircraft** 🛩️ (since v0.72): **Ace** at the airport sells them (Sky High Aircraft):
+  a Helicopter 🚁 400 🪙, a Sky Cub 🛩️ 350, an Airplane ✈️ 600 or a Jet 🚀 900. It waits for you on
+  the apron, by the runway; only you can fly it (friends can ride along), and it counts as one of
+  your 5 vehicles. BuildZone Motors buys it back for half
+- **Parachuting out of a helicopter** 🪂 (since v0.72): jump out (E) up high (5 blocks or more)
+  and your parachute opens, just like out of an airplane; the helicopter lands itself, gently.
+  Riding along in a helicopter or a plane up high? Jump out and your parachute opens too
 - **Three kinds of airplanes** (since v0.56): the four on the apron are the ordinary propeller
   planes (top speed about 155 km/h), parked out of the way of the hangar doors (since v0.56.1). In the first hangar is the **Sky Cub** 🐢: a little yellow
   plane with big wings, fat tires and big windows, for **sightseeing**. It takes off after a
