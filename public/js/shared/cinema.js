@@ -2,8 +2,9 @@
 // out front (it says what's showing), a lobby with a snack counter (Usher Ollie: big popcorn,
 // nachos, slushies), and a big dark theater with rows of seats stepping up toward the back, all
 // facing a giant screen. The shows run all day on the game's clock (the same for everyone):
-// previews, then the feature (a cartoon, The Space Show or Animal Friends). Right-click a seat to
-// sit down and watch. (The screen and the marquee are drawn by everyone's game: see cinemaui.js.)
+// previews, then the feature (The Blocksons, a sitcom, every other time; or a cartoon, The Space
+// Show or Animal Friends). Right-click a seat to sit down and watch. (The screen and the marquee
+// are drawn by everyone's game: see cinemaui.js, and sitcom.js for The Blocksons.)
 import { makeBlock, stack, SIGN, DOOR_TOP } from './blocks.js';
 import { findBigSite } from './airport.js';
 import { RING } from './outerlands.js';
@@ -17,19 +18,39 @@ export const CINEMA = { L: 44, D: 50 };
 const BLD = [3, 40, 6, 46], H = 15; // (the building; the walls go up to y 14)
 const LOBBY = 17; // (the wall between the lobby and the theater, at v)
 const ROWS = 9; // (rows of seats)
-// The shows: what's on, second by second, round and round (game time).
-export const SHOW = { cycle: 150, previews: 18, title: 4 };
+// The stage (u0, u1). Before v0.70.2 it ran from 6 to 37, right across both doorways into the
+// theater (at u 8-9 and 34-35): a step up with no room over it, so you couldn't get in.
+const STAGE = [11, 32], OLD_STAGE = [6, 37];
+export const STAGE_IN_DOORWAYS = [];
+for (let u = OLD_STAGE[0]; u <= OLD_STAGE[1]; u++) if (u < STAGE[0] || u > STAGE[1]) for (const v of [LOBBY + 1, LOBBY + 2]) STAGE_IN_DOORWAYS.push([u, v]);
+// The shows: what's on, second by second, round and round (game time). Each one: a few
+// previews, the title, then the feature. Since v0.71 every other one is The Blocksons, a sitcom
+// (drawn by sitcom.js), and each feature runs for its own length.
+export const SHOW = { previews: 18, title: 4 };
+export const SITCOM_LENGTH = 235; // (seconds: the whole episode, end credits and all)
+const SITCOM = { sitcom: true, title: 'The Blocksons 🏠', length: SITCOM_LENGTH };
 export const FEATURES = [
-  { channel: 'Cartoons', title: 'Blocky Bunny Adventures 🐰' },
-  { channel: 'The Space Show 🚀', title: 'Journey to the Stars 🚀' },
-  { channel: 'Animal Friends 🦁', title: 'Wild Animal Friends 🦁' },
+  SITCOM,
+  { channel: 'Cartoons', title: 'Blocky Bunny Adventures 🐰', length: 128 },
+  SITCOM,
+  { channel: 'The Space Show 🚀', title: 'Journey to the Stars 🚀', length: 128 },
+  SITCOM,
+  { channel: 'Animal Friends 🦁', title: 'Wild Animal Friends 🦁', length: 128 },
 ];
+const slot = f => SHOW.previews + SHOW.title + f.length;
+const ROUND = FEATURES.reduce((sum, f) => sum + slot(f), 0);
 // What's on at game time t: { part: 'previews' | 'title' | 'feature', feature, since }.
 export function showAt(t) {
-  const n = Math.floor(t / SHOW.cycle), s = t - n * SHOW.cycle, feature = FEATURES[((n % FEATURES.length) + FEATURES.length) % FEATURES.length];
-  if (s < SHOW.previews) return { part: 'previews', feature, since: s };
-  if (s < SHOW.previews + SHOW.title) return { part: 'title', feature, since: s - SHOW.previews };
-  return { part: 'feature', feature, since: s - SHOW.previews - SHOW.title };
+  let s = ((t % ROUND) + ROUND) % ROUND;
+  for (const feature of FEATURES) {
+    if (s < slot(feature)) {
+      if (s < SHOW.previews) return { part: 'previews', feature, since: s };
+      if (s < SHOW.previews + SHOW.title) return { part: 'title', feature, since: s - SHOW.previews };
+      return { part: 'feature', feature, since: s - SHOW.previews - SHOW.title };
+    }
+    s -= slot(feature);
+  }
+  return { part: 'previews', feature: FEATURES[0], since: 0 };
 }
 
 export function buildCinema({ get, set, canUse, near = [RING - 60, -380] }) {
@@ -118,8 +139,8 @@ function cinemaAt(site, set) {
   }
   // (steps up the aisles: dark carpet over stone)
   for (const u of [5, 38]) put(u, H - 1, 30, B.light);
-  // The stage under the screen.
-  for (let u = 6; u <= 37; u++) for (let v = LOBBY + 1; v <= LOBBY + 2; v++) put(u, 0, v, B.black);
+  // The stage under the screen (between the doorways: since v0.70.2 it doesn't block them).
+  for (let u = STAGE[0]; u <= STAGE[1]; u++) for (let v = LOBBY + 1; v <= LOBBY + 2; v++) put(u, 0, v, B.black);
 
   // Where things are, in the world.
   const at = (u, v) => site.pos(u, v);
@@ -144,4 +165,16 @@ function cinemaAt(site, set) {
       cinema_snacks: { x: px, y: 0, z: pz, face: Math.atan2(-fx, -fz), area: [Math.min(qa[0], qb[0]), Math.min(qa[1], qb[1]), Math.max(qa[0], qb[0]), Math.max(qa[1], qb[1])] },
     },
   };
+}
+
+// A cinema that's already built: where its (u, v) cells are in the world, worked out from its
+// places (its own spot, the screen's, and the snack counter's).
+export function cinemaFrame(places) {
+  const c = places?.cinema, k = places?.cinema_snacks;
+  if (!c?.screen || !k) return null;
+  const V = [Math.round((c.screen.x - c.x) / 9.05), Math.round((c.screen.z - c.z) / 9.05)];
+  const U = [Math.round((k.x - c.x - 5.5 * V[0]) / -11), Math.round((k.z - c.z - 5.5 * V[1]) / -11)];
+  if (Math.abs(U[0]) + Math.abs(U[1]) !== 1 || Math.abs(V[0]) + Math.abs(V[1]) !== 1) return null;
+  const back = V[0] + V[1] < 0 ? V : [0, 0]; // (cells sit one back from exact spots on that side)
+  return { at: (u, v) => [Math.round(c.x + (u - 21.5) * U[0] + (v - 9) * V[0] + back[0]), Math.round(c.z + (u - 21.5) * U[1] + (v - 9) * V[1] + back[1])] };
 }

@@ -27,7 +27,7 @@ import { buildSkatePark, TRICK_COINS } from './skatepark.js';
 import { buildHospital, HEAL_COINS, RESCUE_COINS } from './hospital.js';
 import { buildSchool, QUIZ, QUIZ_COINS, QUIZ_DAILY, DESKS_IN_DOORWAYS, schoolFrame } from './school.js';
 import { buildMall } from './mall.js';
-import { buildCinema } from './cinema.js';
+import { buildCinema, STAGE_IN_DOORWAYS, cinemaFrame } from './cinema.js';
 import { buildCastle, TREASURE_COINS } from './castle.js';
 import { buildDealership, newCarFor, LOT_KINDS, SHOW_KINDS, townCarsToKeep, SELL_SIGN } from './dealership.js';
 import { buildFireStation, FIRE_CALL, FIRE_GAP, FIRE_OUT, FIRE_LIFE, DOUSE, FIRE_REWARD, HOSE_RANGE } from './firestation.js';
@@ -47,7 +47,7 @@ import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
 const PLANE_HOME_AFTER = 300; // seconds a town airplane sits idle away from the airport before it's taken back
-export const SAVE_VERSION = 49;
+export const SAVE_VERSION = 50;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -351,6 +351,7 @@ export class GameRoom {
       this.upgradeTo47();
       this.upgradeTo48();
       this.upgradeTo49();
+      this.upgradeTo50();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -482,6 +483,7 @@ export class GameRoom {
     if (data.version < 47) this.upgradeTo47();
     if (data.version < 48) this.upgradeTo48();
     if (data.version < 49) this.upgradeTo49();
+    if (data.version < 50) this.upgradeTo50();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -1364,6 +1366,22 @@ export class GameRoom {
       this.addTrainStops();
     }
     this.log(`Added the castle (${castle ? 'yes' : 'no room'})`);
+    this.onDirty();
+  }
+
+  // Worlds saved before version 50: the cinema's stage ran right across both doorways into the
+  // theater (a step up with no room over it: you couldn't get in). The ends of it go, back to the
+  // carpet that's all round it (just the cinema's own blocks).
+  upgradeTo50() {
+    const f = cinemaFrame(this.places);
+    let n = 0;
+    if (f) for (const [u, v] of STAGE_IN_DOORWAYS) {
+      const [x, z] = f.at(u, v), k = blockKey(x, 0, z);
+      if (claimAt(this.claims, x, z)?.key !== 'cinema' || this.world.get(k) !== 17) continue;
+      this.world.set(k, 35);
+      n++;
+    }
+    this.log(`Cinema doorways cleared (${n} stage blocks)`);
     this.onDirty();
   }
 

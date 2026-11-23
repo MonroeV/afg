@@ -109,7 +109,16 @@ customize your character, drive cars, build anything and play with friends.
       and a big dark theater with rows of seats stepping up toward the back, facing a **giant
       screen**. The shows run all day, the same for everyone: a few previews, the title, then
       the feature (Blocky Bunny Adventures, Journey to the Stars, Wild Animal Friends), a new
-      one every couple of minutes. Right-click a seat to sit and watch 🍿
+      one every couple of minutes. Right-click a seat to sit and watch 🍿 (Since v0.71 the stage
+      under the screen stops short of the two doorways from the lobby: before, it blocked them.)
+      - **The Blocksons** 🏠 (since v0.71, every other show): a sitcom! Episode 1, "The Big
+        Surprise" (about 4 minutes): it's Grandpa Gus's birthday, and Barry, Pam, Penny and Max
+        try to bake him a surprise cake without him finding out. Dad turns himself into a
+        snowman with the flour, Ned from next door ("Howdy-doodle, neighbors!") falls in through
+        the kitchen window and sneezes flour over everybody, Max does a magic show, and Biscuit
+        the dog sends the cake flying. Opening titles with a theme song, speech bubbles, a
+        studio audience laughing, clapping and going "awww" (made with Suno), little voices for
+        everyone, and end credits. The sound is just for people in the theater.
     - **BuildZone Mall** 🛍️ (since v0.67, inside the Outer Loop, sharing the Stadium's Loop Express
       stop): a big two-floor mall with a glass front and neon along the top, a parking lot, and a
       bright atrium in the middle (a fountain, plants, benches, a glass roof). **Escalators**
@@ -1167,6 +1176,7 @@ public/
     rocketui.js        The Space Center's rocket: countdown, liftoff, the ride to space, parachutes; museum planets
     stadiumui.js       The stadium's giant ball (and kicking it), the scoreboard and the cheering crowd
     cinemaui.js        The cinema's giant screen (the TV channels, big) and its marquee
+    sitcom.js          The Blocksons: the sitcom on the cinema's screen (cast, sets, script) and its sound
     golfui.js          Mini golf: your ball and putting it (the power meter), cups, flags, windmill, loop, scorecard
     firehose.js        Fires in town (flames, smoke, the 🔥 arrow) and the fire trucks' hoses
     guardcatch.js      Bodyguards keeping you off their land: caught and walked off, blown away, flushed out

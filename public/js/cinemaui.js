@@ -4,12 +4,14 @@
 import * as THREE from 'three';
 import { CHANNELS } from './tv.js';
 import { showAt } from './shared/cinema.js';
+import { drawSitcom, SitcomSound } from './sitcom.js';
 
 const SEE = 120; // (farther than this, it's not drawn)
 
 export class CinemaUI {
-  constructor({ scene }) {
+  constructor({ scene, sounds }) {
     this.scene = scene;
+    this.sitcomSound = sounds ? new SitcomSound(sounds) : null;
     this.group = new THREE.Group();
     scene.add(this.group);
     this.place = null;
@@ -33,7 +35,7 @@ export class CinemaUI {
       this.group.add(mesh);
       return { canvas, ctx: canvas.getContext('2d'), texture };
     };
-    this.screen = panel(this.place.screen, 512, 200);
+    this.screen = panel(this.place.screen, 640, 252);
     this.marquee = panel(this.place.marquee, 512, 184);
     this.lastMarquee = null;
   }
@@ -44,8 +46,11 @@ export class CinemaUI {
     if (!this.place) return;
     const near = Math.hypot(eye.x - this.place.x, eye.z - this.place.z) < SEE;
     this.group.visible = near;
-    if (!near) return;
     const show = showAt(t);
+    // The Blocksons' sound: for whoever's in the theater.
+    const h = this.place.hall, inside = !!h && eye.x >= h[0] && eye.x <= h[2] && eye.z >= h[1] && eye.z <= h[3] && eye.y < 16;
+    this.sitcomSound?.update(dt, show.part === 'feature' && show.feature.sitcom ? show.since : null, inside);
+    if (!near) return;
     const key = show.feature.title;
     if (key !== this.lastMarquee) {
       this.lastMarquee = key;
@@ -69,6 +74,8 @@ export class CinemaUI {
       ctx.fillText('🎬 NOW SHOWING 🎬', W / 2, H * 0.3);
       ctx.font = 'bold 34px system-ui, sans-serif';
       ctx.fillText(show.feature.title, W / 2, H * 0.62, W - 30);
+    } else if (show.part === 'feature' && show.feature.sitcom) {
+      drawSitcom(ctx, W, H, show.since);
     } else {
       const channel = CHANNELS.find(c => c.name === (show.part === 'previews' ? 'Commercials' : show.feature.channel)) || CHANNELS[0];
       channel.draw(ctx, W, H, t, { players: 0, clock: '', night: false, dayPhase: 0.5 });
