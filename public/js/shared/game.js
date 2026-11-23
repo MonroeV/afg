@@ -87,6 +87,10 @@ const WATERING_CAN = 'wateringcan';
 const ASK_ANSWER = 45 * 1000, ASK_AGAIN = 2 * 60 * 1000, ASK_AFTER_NO = 10 * 60 * 1000, VISIT_PASS = 15 * 60 * 1000;
 const INTRUDE_WAYS = ['foot', 'air', 'car', 'tunnel'];
 const SKYE_AWAY = 3;
+// Idle players (see updateIdle): how long before they're sent home they hear "Still there?", and
+// what their game sends by itself (that doesn't count as doing anything).
+const IDLE_WARNING = 60000;
+const PASSIVE = new Set(['state', 'ping', 'car_state', 'fx', 'snack', 'splashed', 'intrude', 'intrude_off', 'hurt', 'flight', 'douse', 'shower', 'slid']);
 const AIRCRAFT_SPOTS = [116.5, 124.5, 102.5, 90.5, 30.5, 16.5, 8.5, 66.5, 42.5]; // (u, along the airport's apron: where a bought aircraft waits) // (how far round guarded land Skye keeps away)
 export const MAX_OWNED_VEHICLES = 5; // vehicles one person can have of their own
 // Selling a vehicle you bought back to BuildZone Motors: half what you paid. Only while it's
@@ -120,8 +124,12 @@ const pickOne = list => list[Math.floor(Math.random() * list.length)];
 const numbers = (a, n) => (Array.isArray(a) ? a.slice(0, n).map(num) : 0);
 
 export class GameRoom {
-  constructor({ maxPlayers = 32, onDirty = () => {}, log = () => {} } = {}) {
+  constructor({ maxPlayers = 32, onDirty = () => {}, log = () => {}, idleMinutes = 0 } = {}) {
     this.maxPlayers = maxPlayers;
+    // Players who don't do anything for this long are sent back to the menu (their spot, land and
+    // everything kept, as if they'd closed the page), with a "Still there?" a minute before. 0: off
+    // (playing by yourself). Since v0.74.
+    this.idleMs = Math.max(0, num(idleMinutes)) * 60000;
     this.onDirty = onDirty;
     this.log = log;
     this.world = new Map(); // "x,y,z" -> block value
@@ -1964,6 +1972,36 @@ export class GameRoom {
     this.onDirty();
   }
 
+  // ---------- Idle players ----------
+
+  active(client) {
+    client.activeAt = Date.now();
+    if (client.idleWarned) {
+      client.idleWarned = false;
+      client.send({ t: 'idle_ok' });
+    }
+  }
+
+  // Every couple of seconds: anyone who hasn't done anything for a while gets a "Still there?"
+  // (a minute before), then is sent back to the menu, freeing up their place.
+  updateIdle() {
+    if (!this.idleMs) return;
+    const now = Date.now(), warnAt = Math.max(this.idleMs / 2, this.idleMs - IDLE_WARNING);
+    for (const c of [...this.clients.values()]) {
+      if (!c.joined || c.idleKicked) continue;
+      const idle = now - (c.activeAt ?? now);
+      if (idle >= this.idleMs) {
+        c.idleKicked = true;
+        c.send({ t: 'idle_kick' });
+        this.log(`${c.name} was idle for ${(idle / 60000).toFixed(idle < 120000 ? 1 : 0)} minutes: sent back to the menu`);
+        setTimeout(() => (c.drop ? c.drop() : this.disconnect(c)), 1500);
+      } else if (idle >= warnAt && !c.idleWarned) {
+        c.idleWarned = true;
+        c.send({ t: 'idle_warn', seconds: Math.round((this.idleMs - idle) / 1000) });
+      }
+    }
+  }
+
   // ---------- Connections ----------
 
   // `send` delivers one message object to this client; `drop` hangs up on them (used when
@@ -2224,9 +2262,12 @@ export class GameRoom {
     client.heard = Date.now();
     if (msg.t === 'join') {
       if (!client.joined) this.join(client, msg);
+      client.activeAt = Date.now();
       return;
     }
     if (!client.joined) return;
+    // Anything they do counts as being here (not what their game sends by itself).
+    if (!PASSIVE.has(msg.t)) this.active(client);
     const handler = this.handlers[msg.t];
     if (handler) handler.call(this, client, msg);
   }
@@ -2499,6 +2540,11 @@ export class GameRoom {
 
   handlers = {
     state(client, msg) {
+      // (Pressed a key, moved the mouse, touched the screen since last time? Since v0.74 the game
+      // says so; an older page: moving or looking about counts.)
+      if (msg.act !== undefined) {
+        if (msg.act) this.active(client);
+      } else if (Array.isArray(msg.pos) && Array.isArray(msg.rot) && client.pos && (Math.hypot(num(msg.pos[0]) - client.pos[0], num(msg.pos[2]) - client.pos[2]) > 0.3 || Math.abs(num(msg.rot[0]) - client.rot[0]) > 0.02)) this.active(client);
       if (Array.isArray(msg.pos) && Array.isArray(msg.rot)) {
         client.pos = msg.pos.slice(0, 3).map(num);
         client.rot = msg.rot.slice(0, 2).map(num);
@@ -2615,6 +2661,9 @@ export class GameRoom {
     npc_bed(client, { id }) {
       if (this.allow(client, 'npcBed', 0.5, 2)) this.npcs.helpUp(client, num(id));
     },
+
+    // "I'm here!" (answering "Still there?").
+    awake() {},
 
     // "Still there?" from a browser, every few seconds: yes. (So it knows the connection's fine,
     // even when nothing else is happening.)
@@ -4111,6 +4160,10 @@ export class GameRoom {
     if (t.expire <= 0) {
       t.expire = 600;
       this.expireClaims();
+    }
+    if (!(t.idle > 0)) {
+      t.idle = 2;
+      this.updateIdle();
     }
     if (!(t.guards > 0)) {
       t.guards = 2; // (land claimed, moved or given up: the bodyguards (and families) go with it)

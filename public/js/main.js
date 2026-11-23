@@ -475,8 +475,101 @@ async function load() {
     autoJoin = sessionStorage.getItem('buildzone-autojoin') === '1';
     sessionStorage.removeItem('buildzone-autojoin');
   } catch { /* storage unavailable */ }
+  // Quick Resume: back in the game a moment ago (the page reloaded, or was closed by accident)?
+  // Then straight back in. (Hold Shift while it loads for the menu instead.)
+  const last = lastPlay();
+  if (!autoJoin && last && !shiftHeld) {
+    resumed = true;
+    if (last.how === 'solo') {
+      $('play').disabled = true;
+      sounds.ensure();
+      playSolo();
+      return;
+    }
+    autoJoin = true;
+  }
   if (autoJoin) $('join-form').requestSubmit();
 }
+
+// ---------- Quick Resume ----------
+
+const LAST_PLAY = 'buildzone-last-play', RESUME_WITHIN = 10 * 60000;
+let resumed = false, shiftHeld = false, noResume = false; // (noResume: going to the menu on purpose)
+window.addEventListener('keydown', e => e.key === 'Shift' && (shiftHeld = true));
+window.addEventListener('keyup', e => e.key === 'Shift' && (shiftHeld = false));
+function lastPlay() {
+  try {
+    const last = JSON.parse(localStorage.getItem(LAST_PLAY));
+    return last && Date.now() - last.at < RESUME_WITHIN ? last : null;
+  } catch {
+    return null;
+  }
+}
+function forgetLastPlay() {
+  try {
+    localStorage.removeItem(LAST_PLAY);
+  } catch { /* storage unavailable */ }
+}
+
+// ---------- Idle ----------
+// Not doing anything for a long while (see updateIdle in game.js): a "Still there?" box with a
+// countdown (any key, click or tap and you're still here), then you're sent back to the menu
+// ("Play again" puts you right back).
+
+const idle = { lastInput: performance.now(), sent: 0, warnTimer: null, kicked: false, box: false };
+function noteInput() {
+  idle.lastInput = performance.now();
+  if (idle.box && !idle.kicked) {
+    net.send({ t: 'awake' });
+    hideIdle();
+  }
+}
+for (const ev of ['keydown', 'mousedown', 'mousemove', 'wheel', 'touchstart', 'pointerdown']) window.addEventListener(ev, noteInput, { passive: true, capture: true });
+
+function showIdle(kicked, seconds = 60) {
+  idle.box = true;
+  clearInterval(idle.warnTimer);
+  $('idle-title').textContent = kicked ? 'See you soon!' : 'Still there?';
+  $('idle-text').textContent = kicked ? 'You were away for a while, so we saved your game.' : '';
+  $('idle-count').textContent = kicked ? '' : `⏰ ${seconds}`;
+  $('idle-here').classList.toggle('hidden', kicked);
+  $('idle-again').classList.toggle('hidden', !kicked);
+  $('idle-menu').classList.toggle('hidden', !kicked);
+  $('idle').classList.remove('hidden');
+  sounds.tone?.(660, 880, 0.25, 0.08, 'sine');
+  if (!kicked) {
+    let left = seconds;
+    idle.warnTimer = setInterval(() => {
+      left = Math.max(0, left - 1);
+      $('idle-count').textContent = `⏰ ${left}`;
+    }, 1000);
+  }
+}
+function hideIdle() {
+  idle.box = false;
+  clearInterval(idle.warnTimer);
+  $('idle').classList.add('hidden');
+}
+net.on('idle_warn', ({ seconds }) => showIdle(false, seconds || 60));
+net.on('idle_ok', () => !idle.kicked && hideIdle());
+net.on('idle_kick', () => {
+  // (The server's about to hang up: that's not a lost connection, so no reconnecting.)
+  idle.kicked = true;
+  net.leaving = true;
+  forgetLastPlay();
+  keys.clear();
+  unlock();
+  showIdle(true);
+});
+$('idle-here').addEventListener('click', () => noteInput());
+$('idle-again').addEventListener('click', () => {
+  sounds.click();
+  rejoin();
+});
+$('idle-menu').addEventListener('click', () => {
+  sounds.click();
+  location.reload();
+});
 
 // ---------- Joining ----------
 
@@ -654,6 +747,8 @@ $('conn-menu').addEventListener('click', async () => {
   if (!conn) return;
   sounds.click();
   const lost = conn.kind === 'lost';
+  noResume = true;
+  forgetLastPlay();
   closeConnection();
   $('play').disabled = false;
   if (!lost) return;
@@ -796,6 +891,10 @@ function startGame(welcome, resume = false) {
   $('status').textContent = '';
   net.stillListening(); // (setting up the world took a while: we've not been listening)
   lock();
+  if (resumed) {
+    resumed = false;
+    hud.toast('👋 Welcome back! Right where you left off.');
+  }
 }
 
 // Holes dug in the ground (and the grass growing back over them).
@@ -1670,7 +1769,7 @@ function goFullscreen() {
 }
 
 function updateOverlays() {
-  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!cards?.open || !!gameUI?.pickerOpen || !!weatherPicker?.open || !!lunchbox?.open || !!hopper?.open || !!palAsk?.open || !!guardAsk?.open || !!conn);
+  $('pause').classList.toggle('hidden', !inGame || locked || inventoryOpen || hud?.chatOpen || editorOpen || galleryOpen || shopOpen || book?.open || !!familyEdit || !!signOpen || !!askOpen || !!elevators?.panel || !!guestPanel || !!petMenu?.open || !!cards?.open || !!gameUI?.pickerOpen || !!weatherPicker?.open || !!lunchbox?.open || !!hopper?.open || !!palAsk?.open || !!guardAsk?.open || !!conn || idle.kicked);
   $('inventory').classList.toggle('hidden', !inventoryOpen);
 }
 
@@ -1696,6 +1795,8 @@ $('go-home').addEventListener('click', () => {
 });
 // Back to the main menu: get out of any vehicle, save, and start the page fresh.
 $('exit-menu').addEventListener('click', () => {
+  noResume = true; // (chose the menu: no jumping straight back in)
+  forgetLastPlay();
   getOut();
   wakeUp(true);
   saveSettings();
@@ -2133,18 +2234,17 @@ window.addEventListener('keydown', e => {
     undo();
   }
 });
-// Leaving the page by accident (Ctrl+W while crouch-walking!) asks first.
-window.addEventListener('beforeunload', e => {
-  if (!inGame) return;
-  e.preventDefault();
-  e.returnValue = '';
-});
 // Closing the browser (or the tab, or switching away on a tablet): tell the game exactly where
-// we are right now, so next time we start right here.
+// we are right now, so next time we start right here. And if the page comes back soon (a reload,
+// the tab closed by accident: Ctrl+W while crouch-walking!), it jumps straight back into the game
+// (Quick Resume, since v0.74: no "Leave site?" box any more).
 function leavingPage() {
-  if (!inGame) return;
+  if (!inGame || idle.kicked || noResume) return;
   sendState();
   net.checkpoint();
+  try {
+    localStorage.setItem(LAST_PLAY, JSON.stringify({ at: Date.now(), how: online ? 'online' : 'solo' }));
+  } catch { /* storage unavailable */ }
 }
 window.addEventListener('pagehide', leavingPage);
 document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && leavingPage());
@@ -3638,7 +3738,9 @@ function sendState() {
   const flags = (sleeping || vanSleep || rv.bed >= 0 ? FLAG.sleeping : 0) | (seated || sliding || loopExpress?.sitting || funRides?.riding || rv.sit || liftRide || contraptions.riding === 'swing' || contraptions.riding === 'zip' || contraptions.riding === 'carousel' ? FLAG.sitting : 0) | (job ? FLAG.pizza : 0) | (contraptions.riding === 'balloon' ? FLAG.hotair : 0) | (player.crouching && !riding() ? FLAG.crouching : 0) |
     (player.jetting && !riding() ? FLAG.jet : 0) | (hud.wearing(TRAIL) && !riding() ? FLAG.trail : 0) | (sledding && !balloon ? FLAG.sled : 0) | (player.parachute && !balloon ? FLAG.parachute : 0) | (player.swimming && !balloon && !riding() ? FLAG.swim : 0) | (perks.has('zoo') && !balloon ? FLAG.parrot : 0) | (perks.has('fire') && !balloon ? FLAG.helmet : 0) |
     (balloon ? FLAG.balloon | (hexToRgb(paintHex()) << 8) : 0);
-  net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item, drone: agency.droneState(player.yaw) });
+  const act = idle.lastInput > idle.sent ? 1 : 0; // (pressed a key, moved the mouse, touched the screen since last time: see updateIdle in game.js)
+  idle.sent = performance.now();
+  net.send({ t: 'state', ts: Math.round(performance.now()), pos: [r(player.pos.x), r(player.pos.y), r(player.pos.z)], rot, pet: myBody.petState(), ball: ballPos, flags, hold: riding() ? '' : hud.item, drone: agency.droneState(player.yaw), act });
 }
 
 // The blue look under the water (see the render loop).

@@ -175,6 +175,8 @@ let saveTimer = null;
 // stutters while the file is being written.
 const SAVE_DELAY = 15000;
 const room = new GameRoom({
+  // (Players idle this many minutes are sent back to the menu: IDLE_MINUTES=0 turns it off.)
+  idleMinutes: process.env.IDLE_MINUTES !== undefined ? Number(process.env.IDLE_MINUTES) : 10,
   onDirty: () => (saveTimer ??= setTimeout(saveWorld, SAVE_DELAY)),
   log: msg => console.log(msg),
 });

@@ -856,6 +856,12 @@ customize your character, drive cars, build anything and play with friends.
 - **Real-time multiplayer**: see each other, drive together, chat. Other players, their pets, their
   cars and the town's people move smoothly: their moves are replayed a split second behind, at the
   even pace they really moved, so a bumpy connection doesn't make them jitter or bounce
+- **Idle players** 💤 (since v0.74): anyone who doesn't press a key, move the mouse or touch the
+  screen for **10 minutes** is sent back to the menu, so they're not using up the server (their
+  spot, land, vehicles and everything are kept, just as if they'd closed the page). A minute
+  before, a big "💤 Still there?" box counts down: any key, click or tap and you stay. Sent home,
+  "▶️ Play again" puts you right back. (Running the server: `IDLE_MINUTES=20 npm start` changes
+  the time; `IDLE_MINUTES=0` turns it off. Playing by yourself, it's off.)
 - **Single player works too**: with no server, the world runs and saves right in the browser
 - **A connection that cuts out for a moment** (wi-fi blips) isn't even noticed: the game keeps
   going, the corner says "Reconnecting…", and it gets back on the server by itself without
@@ -941,7 +947,9 @@ on the docks, the pizza job is at the Pizza Palace and the Build Book things are
 New blocks that look like ones already there become another style of them.
 
 > **Careful with Ctrl:** Ctrl+W closes a browser tab, and browsers don't let games stop that.
-> If you crouch-walk with Ctrl held, the game asks before leaving, but **C** is the safer crouch key.
+> **C** is the safer crouch key. But if it happens, just open the game again: **Quick Resume**
+> (since v0.74) puts you straight back where you were, no menu, as long as it's within 10
+> minutes (hold Shift while it loads for the menu instead). The old "Leave site?" box is gone.
 
 **Driving:** W to drive, S to brake (keep holding it once you've stopped to back up), A/D to
 steer, Space to brake, Shift for a boost, H (or click) for the horn, G for the police siren, V to
