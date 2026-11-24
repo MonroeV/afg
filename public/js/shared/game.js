@@ -1,7 +1,7 @@
 // The game "room": the world, players, vehicles, land claims, growing trees and the clock.
 // The Node server runs one of these for everybody. When there is no server,
 // the browser runs its own copy so single player works exactly the same way.
-import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, isExclusive, DOOR_OPEN, DOOR_TOP, DAY_LENGTH, WORLD, isNightTime, SHOP_ITEMS, BLOCKS, SHOP_TOOLS, FOUND_GEAR, HOLE_HEAL, SIGN, cleanSignText, cleanWords, isCrop, cropStage, cropWet, CROP_RIPE, CROP_WET, makeBlock, blockMeta, toggleDoorValue } from './blocks.js';
+import { blockKey, inBounds, isValidBlock, isSolidBlock, blocksVehicles, blockId, shapeOf, itemOf, floorOf, validFaces, carryPaint, isWaterBlock, isExclusive, DOOR_OPEN, DOOR_TOP, DAY_LENGTH, WORLD, isNightTime, SHOP_ITEMS, BLOCKS, SHOP_TOOLS, FOUND_GEAR, HOLE_HEAL, SIGN, cleanSignText, cleanWords, isCrop, cropStage, cropWet, CROP_RIPE, CROP_WET, makeBlock, blockMeta, toggleDoorValue, isFlower, flowerFits, FLOWER_POT, stack } from './blocks.js';
 import { sanitizeLook, cleanName, randomLook, PREMIUM_HAIR, PREMIUM_HATS, hairItem, costumeItem } from './avatar.js';
 import { generateWorld, helipadBlocks, upgradeLamps, buildLandmarks, buildLake, orientRoadLines, buildStore, furnishHouses, furnishTowers, elevatorTowers, buildOuterTowers } from './worldgen.js';
 import { buildSecretBase, hideSecretFiles, AGENCY, AGENT_SPOT, FILES_NEEDED, FILE_HINTS, inZone } from './secretbase.js';
@@ -48,7 +48,7 @@ import { CLUBS, clubById, PIZZA_TIP, MAGNET, STREAK_MAX } from './clubs.js';
 import { normalizeRect, claimSizeOk, rectsOverlap, canBuild, claimAt, nameKey, CLAIM_EXPIRE_DAYS, CLAIM_MAX, possessive } from './claims.js';
 
 const PLANE_HOME_AFTER = 300; // seconds a town airplane sits idle away from the airport before it's taken back
-export const SAVE_VERSION = 51;
+export const SAVE_VERSION = 52;
 const MAX_FAMILY = 5; // people in a family (from the Luxe Store)
 const MAX_HOLES = 3000; // holes in the ground at once
 const JOB_TIP = 2; // extra coins for a quick pizza delivery
@@ -363,6 +363,7 @@ export class GameRoom {
       this.upgradeTo49();
       this.upgradeTo50();
       this.upgradeTo51();
+      this.upgradeTo52();
       this.setOriginal(generateWorld());
       this.populate();
       return true;
@@ -496,6 +497,7 @@ export class GameRoom {
     if (data.version < 49) this.upgradeTo49();
     if (data.version < 50) this.upgradeTo50();
     if (data.version < 51) this.upgradeTo51();
+    if (data.version < 52) this.upgradeTo52();
     this.setOriginal(generateWorld(), data.damaged);
     this.populate();
     return true;
@@ -1389,6 +1391,22 @@ export class GameRoom {
     this.onDirty();
   }
 
+  // Worlds saved before version 52: flowers only grow in the earth now. Any Flowers or Sunflower
+  // that isn't (on a table, a floor, the street) turns into a Flower Pot instead, on its floor:
+  // nothing is lost, it just gets a pot.
+  upgradeTo52() {
+    let n = 0;
+    for (const [k, v] of this.world) {
+      if (!isFlower(v)) continue;
+      const [x, y, z] = k.split(',').map(Number);
+      if (this.flowerOk(x, y, z, v)) continue;
+      this.world.set(k, stack(FLOWER_POT, floorOf(v)));
+      n++;
+    }
+    this.log(`Flowers out of the earth put in pots (${n})`);
+    if (n) this.onDirty();
+  }
+
   // Worlds saved before version 51: aviation fuel at the airport (gas pumps beside the apron, for
   // helicopters and airplanes). Only into empty spots on the airport's own land.
   upgradeTo51() {
@@ -1961,6 +1979,12 @@ export class GameRoom {
       for (const v of this.vehicles.values()) if (Math.hypot(v.x - x - 0.5, v.z - z - 0.5) < 4 && Math.abs(v.y - y) < 4) parked = true;
       if (parked) continue;
       const v = this.original.get(k);
+      if (isFlower(v) && !this.flowerOk(x, y, z, v)) {
+        // (Its earth has gone: no flower to put back.)
+        this.damaged.delete(k);
+        this.original.delete(k);
+        continue;
+      }
       this.world.set(k, v);
       for (const pk of [k, `${k}|f`]) {
         if (!this.paints.delete(pk)) continue;
@@ -2613,6 +2637,11 @@ export class GameRoom {
           return;
         }
       }
+      // Flowers only go in the earth (or get a Flower Pot).
+      if (isFlower(b) && !isFlower(old) && !this.flowerOk(x, y, z, b)) {
+        client.send({ t: 'set', x, y, z, b: old });
+        return;
+      }
       if (isCrop(old)) this.crops = this.crops.filter(c => c.x !== x || c.y !== y || c.z !== z);
       if (planting) this.crops.push({ x, y, z, by: nameKey(client.name), at: 0 });
       const k = blockKey(x, y, z);
@@ -2631,6 +2660,8 @@ export class GameRoom {
       }
       if (y === -1 && b && !old) this.progress(client, 'tunnel', 'fill'); // something put in a hole
       if (blockId(b) === LOG && blockId(old) !== LOG && this.maybePlant(x, y, z)) this.progress(client, 'nature', 'trees');
+      this.wilt(x, y, z); // (a flower given a floor)
+      this.wilt(x, y + 1, z); // (the earth under a flower gone)
       this.onDirty();
     },
 
@@ -2730,7 +2761,7 @@ export class GameRoom {
         const [x, y, z, b] = cells.slice(i, i + 4);
         if (!(inBounds(x, y, z) || this.underground(client, x, y, z)) || !isValidBlock(b)) continue;
         const old = this.get(x, y, z);
-        if (tooFast || !canBuild(this.claims, client.name, x, z) || !this.mayPlace(client, b, old)) {
+        if (tooFast || !canBuild(this.claims, client.name, x, z) || !this.mayPlace(client, b, old) || (isFlower(b) && !isFlower(old) && !this.flowerOk(x, y, z, b))) {
           // Not allowed: put it back the way it was for this player.
           back.push(x, y, z, old);
           if (!tooFast) blocked ??= claimAt(this.claims, x, z);
@@ -2754,6 +2785,10 @@ export class GameRoom {
         this.onDirty();
       }
       if (back.length) client.send({ t: 'many', cells: back });
+      for (let i = 0; i < applied.length; i += 4) {
+        this.wilt(applied[i], applied[i + 1], applied[i + 2]);
+        this.wilt(applied[i], applied[i + 1] + 1, applied[i + 2]);
+      }
       if (blocked && this.allow(client, 'claimMsg', 0.2, 1)) client.send({ t: 'chat', system: true, text: `🚧 Some of that is ${possessive(blocked.owner)} land, so it was left alone.` });
       if (tooFast) client.send({ t: 'chat', system: true, text: '🐢 Whoa, slow down! Wait a moment between big builds.' });
     },
@@ -3450,6 +3485,7 @@ export class GameRoom {
         this.serverSet(cx, cy, cz, v);
         this.touched(cx, cy, cz);
       }
+      for (const [cx, cy, cz] of r.cells) this.wilt(cx, cy + 1, cz);
       this.broadcast({ t: 'fx', kind: 'drawbridge', up: r.up, x: x + 0.5, y: y + 1, z: z + 0.5 });
     },
 
@@ -3801,6 +3837,7 @@ export class GameRoom {
       if (!this.canDig(client, x, z) || this.holes.has(`${x},${z}`) || this.holes.size >= MAX_HOLES) return client.send({ t: 'hole', x, z, on: this.holes.has(`${x},${z}`) });
       this.holes.set(`${x},${z}`, Date.now());
       this.broadcast({ t: 'hole', x, z, on: true });
+      this.wilt(x, 0, z);
       this.progress(client, 'tunnel', 'dig');
       this.onDirty();
     },
@@ -3971,10 +4008,29 @@ export class GameRoom {
 
   // ---------- The garden ----------
 
-  // Seeds need grass or dirt under them (the ground counts, unless there's a hole in it).
+  // Seeds need grass or dirt under them (the ground counts, unless there's a hole in it, or it's
+  // been filled in with something else).
   soilUnder(x, y, z) {
-    const below = y === 0 ? (this.holes.has(`${x},${z}`) ? 0 : GRASS) : blockId(this.get(x, y - 1, z));
-    return below === GRASS || below === DIRT;
+    return this.soilBelow(x, y, z) === GRASS || this.soilBelow(x, y, z) === DIRT;
+  }
+
+  soilBelow(x, y, z) {
+    if (y === 0) return this.holes.has(`${x},${z}`) ? blockId(this.get(x, -1, z)) : GRASS;
+    return blockId(this.get(x, y - 1, z));
+  }
+
+  // Flowers only grow in the earth (Grass or Dirt under them, and no floor). Since v0.76.
+  flowerOk(x, y, z, v) {
+    return flowerFits(v, this.soilBelow(x, y, z));
+  }
+
+  // The earth under a flower has gone (dug out, broken, built over): the flower goes too.
+  wilt(x, y, z) {
+    const v = this.get(x, y, z);
+    if (!isFlower(v) || this.flowerOk(x, y, z, v)) return;
+    carryPaint(this.paints, blockKey(x, y, z), v, 0);
+    this.serverSet(x, y, z, 0);
+    this.touched(x, y, z);
   }
 
   cropAt(x, y, z) {

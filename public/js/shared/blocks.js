@@ -240,6 +240,15 @@ export const BLOCKS = {
 // Crops: how grown (0 seeds .. 3 ripe) and whether they've just been watered.
 export const CROP_RIPE = 3, CROP_WET = 4;
 export const isCrop = v => !!BLOCKS[v & 255]?.crop;
+
+// Flowers (and sunflowers) only grow in the earth: Grass or Dirt under them (the ground counts),
+// never on a floor, a table or the street. (A Flower Pot can go anywhere.) Since v0.76.
+export const FLOWER_POT = 67;
+const FLOWER_IDS = new Set([27, 116]);
+export const isFlower = v => !!v && FLOWER_IDS.has((v % 65536) & 255);
+export const isSoil = id => id === 1 || id === 2;
+// below: the block id under it (1, Grass, for the plain ground).
+export const flowerFits = (v, below) => isSoil(below) && (!Math.floor(v / 65536) || isSoil(Math.floor(v / 65536) & 255));
 export const cropStage = v => blockMeta(v) & 3;
 export const cropWet = v => (blockMeta(v) & CROP_WET) !== 0;
 // Elevator shaft parts (in the meta, above the facing bits).

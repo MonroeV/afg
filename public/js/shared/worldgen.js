@@ -272,9 +272,9 @@ export function generateWorld(seed = 2024) {
     } else {
       P(w - 2, 0, d - 2, stack(makeBlock(B.bed, faceDir(0, -sv)), B.floor));
       P(w - 2, 0, d - 3, stack(makeBlock(B.bed, faceDir(0, -sv) | BED_FOOT), B.floor));
-      // A table with a lamp (or flowers, or a candle) and sometimes a floor lamp.
+      // A table with a lamp (or a pot of flowers, or a candle) and sometimes a floor lamp.
       P(1, 0, d - 2, B.planks);
-      P(1, 1, d - 2, pick([B.tableLamp, B.tableLamp, B.flowers, B.candle, B.lavaLamp]));
+      P(1, 1, d - 2, pick([B.tableLamp, B.tableLamp, B.flowerPot, B.candle, B.lavaLamp]));
       if (d >= 6 && w - 2 !== du && chance(0.5)) P(w - 2, 0, d - 4, B.floorLamp);
     }
     P(du, 0, 1, B.carpet);

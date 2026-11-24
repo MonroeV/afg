@@ -3,7 +3,7 @@
 // store's colors, a glass front with double doors, its things on display, a counter with a cash
 // register, a sign, and its shopkeeper inside. They belong to their store (permanent claims), so
 // nobody can knock them down. What each one sells is in blocks.js (STORES, and `store` on things).
-import { DOOR_TOP, makeBlock, stack, BLOCKS } from './blocks.js';
+import { DOOR_TOP, makeBlock, stack, BLOCKS, isFlower } from './blocks.js';
 import { exitRoads, makeSite, siteFree } from './worldgen.js';
 import { ringRoads, RING } from './outerlands.js';
 import { FAR_ROADS } from './frontier.js';
@@ -153,7 +153,8 @@ function shopAt(site, shop, goods, set) {
     const s = spots[i];
     if (!s || !item) return;
     const def = BLOCKS[item];
-    put(s[0], 0, s[1], stack(def.facing ? makeBlock(item, outward) : item, B.floor));
+    const v = def.facing ? makeBlock(item, outward) : item;
+    put(s[0], 0, s[1], isFlower(v) ? v : stack(v, B.floor)); // (flowers in a patch of earth, not on the floor)
   });
   shop.decor?.({ put, site, inward, outward });
   // A sign with the store's name over the door, outside.

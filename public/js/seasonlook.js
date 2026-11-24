@@ -1,7 +1,8 @@
 // How the world looks through the seasons (shared/seasons.js says which one it is): the trees'
 // leaves (green, then red and gold, then bare twigs with snow on, then buds and blossom), the
 // grass and the ground (snow all over in winter), snow on the roofs, the flowers; leaves blowing
-// about in the fall, and wildflowers popping up all over the grass in spring. All just on this
+// about in the fall, and wildflowers popping up all over the grass in spring (not on anyone's
+// land, though: there it's just the flowers they plant). All just on this
 // screen (everyone works out the same season from the server's day and time).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -15,11 +16,12 @@ const FLOWERS = 220; // wildflowers at most (round you)
 const FLOWER_R = 20;
 
 export class SeasonLook {
-  constructor({ scene, textures, ground, effects, world }) {
+  constructor({ scene, textures, ground, effects, world, claimed }) {
     this.textures = textures;
     this.ground = ground;
     this.effects = effects;
     this.world = world;
+    this.claimed = claimed || (() => false); // (no wildflowers on anyone's land: only what they plant)
     this.key = '1>1:1'; // (the textures start off looking like summer)
     this.queue = [];
     this.tint = new THREE.Color();
@@ -102,7 +104,7 @@ export class SeasonLook {
       for (let x = cx - FLOWER_R; x <= cx + FLOWER_R && f.cells.length < FLOWERS; x++)
         for (let z = cz - FLOWER_R; z <= cz + FLOWER_R && f.cells.length < FLOWERS; z++) {
           const h = Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1;
-          if (h > 0.16 || isSnowyAt(x, z) || this.world.get(x, 0, z) || !this.world.isSolid(x, -1, z)) continue;
+          if (h > 0.16 || isSnowyAt(x, z) || this.world.get(x, 0, z) || !this.world.isSolid(x, -1, z) || this.claimed(x, z)) continue;
           f.cells.push([x + 0.2 + ((h * 37) % 0.6), z + 0.2 + ((h * 91) % 0.6), (h * 1000) % (Math.PI * 2)]);
         }
     }
@@ -116,6 +118,12 @@ export class SeasonLook {
     });
     f.mesh.count = f.cells.length;
     f.mesh.instanceMatrix.needsUpdate = true;
+  }
+
+  // The land claims changed: work out where the wildflowers go again.
+  refresh() {
+    this.flowers.at = null;
+    this.flowers.shownAs = null;
   }
 
   get winter() {

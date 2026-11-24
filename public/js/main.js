@@ -5,7 +5,7 @@ import {
   railMask, railBoxes, nearestRailEdge, canHoldItem, stack, itemOf, floorOf, turnLine, blockKey, faceIndex, hexToRgb,
   switchable, lightOff, toggleLight, setDoorOpen, isWaterBlock, facingTowards,
   PAINT_COLORS, PAINT_NAMES, DOOR_OPEN, DOOR_TOP, BED_FOOT, NOTE_NAMES, NOTE_FREQS, PICTURES, isSnowyAt, SNOW_LINE, SIGN, SIGN_LENGTH,
-  GOLD_PAINT, GOLD_HEX, ELEVATOR, isCrop, cropStage, cropWet, CROP_RIPE, WATER_DEPTH,
+  GOLD_PAINT, GOLD_HEX, ELEVATOR, isCrop, isFlower, flowerFits, cropStage, cropWet, CROP_RIPE, WATER_DEPTH,
 } from './shared/blocks.js';
 import { generateWorld } from './shared/worldgen.js';
 import { randomLook, sanitizeLook, cleanName, PREMIUM_HAIR, PREMIUM_HATS, hairItem, costumeItem } from './shared/avatar.js';
@@ -389,7 +389,7 @@ async function load() {
   });
   elevators = new Elevators(scene, world, sounds);
   weather = new Weather(scene, world, sounds, () => cars.boxes());
-  seasonLook = new SeasonLook({ scene, textures, ground, effects, world });
+  seasonLook = new SeasonLook({ scene, textures, ground, effects, world, claimed: (x, z) => !!claimAt(claims, x, z) });
   weather.setQuality(RAINDROPS[settings.quality] || RAINDROPS.high);
   agency = new SecretAgency({
     scene, world, sounds, effects, hud, net, headlight,
@@ -3204,6 +3204,7 @@ let lastLandKey = null, landMsgTime = 0;
 function setClaims(list) {
   claims = list;
   landView.set(claims, settings.name);
+  seasonLook?.refresh();
 }
 
 const canBuildAt = (x, z) => canBuild(claims, settings.name, x, z);
@@ -4557,7 +4558,15 @@ function placeBlock(item) {
     const below = y === 0 ? (world.isSolid(x, -1, z) ? 1 : 0) : blockId(world.get(x, y - 1, z));
     if (below !== 1 && below !== 2) return hud.toast('🌱👉 🟩🟫');
   }
-  if (def.shape === 'model' && item !== BED && !def.crop && placeOnFloor(placed)) return;
+  if (isFlower(placed)) {
+    // Flowers only grow in the earth (the ground, or a Grass or Dirt block), not on a floor or a
+    // table: there, a Flower Pot. (The server checks too.)
+    const [x, y, z] = hit.value && isReplaceable(hit.value) ? hit.block : hit.place;
+    const under = world.get(x, y - 1, z);
+    const below = y === 0 ? (world.isSolid(x, -1, z) ? (under ? blockId(under) : 1) : 0) : blockId(under);
+    if (!flowerFits(placed, below) || floorOf(world.get(x, y, z))) return hud.toast('🌷👉 🟩🟫');
+  }
+  if (def.shape === 'model' && item !== BED && !def.crop && !isFlower(placed) && placeOnFloor(placed)) return;
   if (def.shape === 'flat' && placeUnder(item)) return;
   let [x, y, z] = hit.value && isReplaceable(hit.value) ? hit.block : hit.place;
   if (!canBuildAt(x, z)) {

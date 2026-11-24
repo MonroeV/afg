@@ -294,6 +294,11 @@ customize your character, drive cars, build anything and play with friends.
   it: water for a little pond, glass for a window in the ground, a lamp, a flower pot. Then it
   stays (break what's in it and it's a plain hole again). Digging on someone else's land isn't
   allowed
+- **Flowers grow in the earth** 🌷🟫 (since v0.76): Flowers and Sunflowers only go on the
+  ground, or on a Grass or Dirt block. Not on stone, a floor, a table or the street: for those,
+  use a **Flower Pot** (it goes anywhere). If the earth under a flower goes (broken, dug out, swapped
+  for something else), the flower goes too. Older worlds: any flowers that weren't in the earth
+  (like the vases on the town's tables) were put in Flower Pots, so nothing was lost
 - **Secret tunnels** ⛏️🤫: under the ground is solid earth, 8 blocks deep, then the bedrock (which
   nothing can break). Only **Tunnel Diggers** (the ⛏️ club: Digger Dot at Big Rock Quarry) can
   dig into it: from the bottom of a hole, hammer down (3 hits a block), then dig along, sideways
@@ -465,7 +470,8 @@ customize your character, drive cars, build anything and play with friends.
   The game has its own **week** too (Sun, Mon, Tue… one game day each), shown by the clock:
   Tuesday is Taco Tuesday at Casa Fiesta 🌮
   - **Spring**: the trees are covered in buds and pink blossom, the grass turns fresh green, and
-    wildflowers pop up all over the grass around you
+    wildflowers pop up all over the grass around you (but not on anyone's land: there, the only
+    flowers are the ones the owner plants, since v0.76)
   - **Summer**: green trees, green grass
   - **Fall**: the trees turn red, orange and gold, the grass goes golden, and leaves blow around
     and tumble down from the trees
