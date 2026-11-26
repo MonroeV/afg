@@ -3016,7 +3016,12 @@ function sendCarState() {
 // Things that happen to vehicles: sounds, damage, and shoves to pass on to other players.
 function vehicleEvent(ev, car) {
   const volume = car === myCar ? 1 : loudness(car.pos.x, car.pos.y, car.pos.z, 50);
-  if (ev.type === 'shift') sounds.shift();
+  if (ev.type === 'freed') {
+    // It was stuck: popped out to the nearest open spot (see Cars.rescue).
+    effects.sparkle(car.pos.x, car.pos.y + 1, car.pos.z, 24);
+    sounds.pop();
+    if (car === myCar) hud.toast('✨🚗✨');
+  } else if (ev.type === 'shift') sounds.shift();
   else if (ev.type === 'bump') sounds.crash(ev.power * volume);
   else if (ev.type === 'land') sounds.land();
   else if (ev.type === 'bounce') sounds.bounce();

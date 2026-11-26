@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BLOCKS, blockId, blockMeta, itemOf, floorOf, isWaterBlock, WORLD } from './shared/blocks.js';
 import { PlayClock, Track } from './smooth.js';
-import { VEHICLES, MAX_HP, SMOKE_HP, FIRE_HP, PERSON_MASS, outlinePoints, rotorPoints, vehicleBlocked, toWorld, afloat } from './shared/vehicles.js';
+import { VEHICLES, MAX_HP, SMOKE_HP, FIRE_HP, PERSON_MASS, outlinePoints, rotorPoints, vehicleBlocked, toWorld, afloat, findVehicleSpot } from './shared/vehicles.js';
 import { usesFuel } from './shared/fuel.js';
 
 export const CAR_SPECS = VEHICLES;
@@ -1639,10 +1639,12 @@ export class Cars {
   // aimYaw: for the helicopter, the direction the pilot is looking (it turns to face it).
   drive(car, dt, keys, aimYaw = car.h) {
     this.myCarId = car.id;
-    if (car.spec.boat) return this.sail(car, dt, keys);
-    if (car.spec.plane) return this.flyPlane(car, dt, keys, aimYaw);
-    if (car.spec.skate) return this.driveSkate(car, dt, keys);
-    return car.spec.flying ? this.fly(car, dt, keys, aimYaw) : this.driveCar(car, dt, keys);
+    const events = (car.spec.boat ? this.sail(car, dt, keys)
+      : car.spec.plane ? this.flyPlane(car, dt, keys, aimYaw)
+        : car.spec.skate ? this.driveSkate(car, dt, keys)
+          : car.spec.flying ? this.fly(car, dt, keys, aimYaw) : this.driveCar(car, dt, keys)) || [];
+    this.rescue(car, dt, keys, events);
+    return events;
   }
 
   // Skateboards and BMX bikes: push off (W), brake (S), steer (A/D). Ride up a ramp (the Stairs
@@ -2038,6 +2040,67 @@ export class Cars {
       car.unstick = { dx, dz, dh, duration: 0.3, done: 0 };
       return;
     }
+  }
+
+  // ---------- Getting un-stuck (since v0.78) ----------
+  // Every vehicle: if you're trying to go and it can't move at all (not forward, not back, not
+  // turning; for a helicopter not up or any way at all), or it's sitting inside something (a
+  // block built into it, another car), then after a moment it pops out to the nearest open spot
+  // that fits it (solid ground for cars, open water for boats, open air for helicopters), with a
+  // sparkle (the same way it would come back if it were lost). Just driving into a wall doesn't count (you can back away), and nor does being out
+  // of gas or a helicopter sitting on the ground (it can't move till it lifts off anyway).
+  rescue(car, dt, keys, events) {
+    car.rescueT = (car.rescueT || 0) + dt;
+    if (car.rescueT < 0.25) return;
+    const step = car.rescueT;
+    car.rescueT = 0;
+    const s = car.spec, heli = s.flying && !s.plane;
+    const go = keys.has('KeyW') || keys.has('KeyS');
+    const trying = !this.empty(car) && (heli ? keys.has('Space') || (!car.onGround && (go || keys.has('KeyA') || keys.has('KeyD'))) : go);
+    const inside = this.blocked(s, car.pos.x, car.pos.y, car.pos.z, car.h, car.id, car.outline);
+    if (!inside && !(trying && this.trapped(car))) {
+      car.trappedFor = 0;
+      return;
+    }
+    car.trappedFor = (car.trappedFor || 0) + step;
+    if (car.trappedFor < 1.5) return;
+    car.trappedFor = 0;
+    const spot = this.freeSpot(car);
+    if (!spot) return;
+    car.pos.set(spot.x, spot.y, spot.z);
+    car.h = spot.h;
+    car.speed = 0;
+    car.vy = 0;
+    car.vel?.set(0, 0, 0);
+    car.push?.set(0, 0, 0);
+    car.unstick = null;
+    car.air = null;
+    car.target?.copy(car.pos);
+    car.targetH = car.h;
+    events.push({ type: 'freed' });
+  }
+
+  // Can it go anywhere from here? (A little way forward or back, straight or turning; a
+  // helicopter: up, or any way along.)
+  trapped(car) {
+    const s = car.spec, { x, y, z } = car.pos, h = car.h;
+    const open = (nx, ny, nz, nh) => !this.blocked(s, nx, ny, nz, nh, car.id, car.outline) && (!s.boat || afloat(this.isWater, s, nx, ny, nz, nh));
+    if (s.flying && !s.plane) {
+      if (open(x, y + 0.4, z, h)) return false;
+      return ![[0.4, 0], [-0.4, 0], [0, 0.4], [0, -0.4]].some(([dx, dz]) => open(x + dx, y, z + dz, h));
+    }
+    for (const d of [0.3, -0.3])
+      for (const dh of [0, 0.2, -0.2]) if (open(x - Math.sin(h + dh) * d, y, z - Math.cos(h + dh) * d, h + dh)) return false;
+    return true;
+  }
+
+  // The nearest spot where it fits and can go again: the same search that finds a vehicle a
+  // place to (re)appear (solid ground under it, or water for a boat; not on another vehicle),
+  // starting from right here.
+  freeSpot(car) {
+    const home = { x: car.pos.x, y: Math.round(car.pos.y), z: car.pos.z, h: car.h };
+    const others = [...this.list.values()].filter(o => o.id !== car.id).map(o => ({ x: o.pos.x, y: o.pos.y, z: o.pos.z }));
+    return findVehicleSpot(this.isSolid, car.spec, home, others, this.isWater);
   }
 
   // Helicopter flight, a bit like the real thing: W/S move the stick forward and back, and the
