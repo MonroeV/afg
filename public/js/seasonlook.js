@@ -28,6 +28,7 @@ export class SeasonLook {
     this.leafT = 0;
     this.season = seasonAt(0, 0);
     this.flowers = this.makeFlowers(scene);
+    this.lite = false; // (Lowest graphics: see update)
   }
 
   // A wildflower: two crossed pictures of flowers (the Flowers block's own picture, which is
@@ -53,6 +54,12 @@ export class SeasonLook {
     this.tint.copy(TINTS[s.last]).lerp(TINTS[s.i], s.mix);
     this.ground.setSeason(snow, this.tint);
     if (!me) return;
+    if (this.lite) {
+      // (Lowest graphics: no wildflowers or blowing leaves; the colors still change.)
+      this.flowers.mesh.count = 0;
+      this.flowers.at = this.flowers.shownAs = null;
+      return;
+    }
     // Fall: leaves blowing about.
     if (s.i === FALL) {
       this.leafT -= dt;

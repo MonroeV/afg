@@ -85,6 +85,7 @@ import { usesFuel, fillPrice, GAS_CAN_PRICE, PUMP_REACH } from './shared/fuel.js
 import { TURBO, MAGNET } from './shared/clubs.js';
 import { isTunnelY } from './shared/underground.js';
 import { BadgeBook } from './badges.js';
+import { detectPower, lowerOf, stepDown, LEVELS, LEVEL_NAMES } from './power.js';
 import { Lunchbox } from './lunchbox.js';
 import { FOODS, HUNGER_FULL, FREE_TACOS, hungerSpeed } from './shared/food.js';
 
@@ -106,7 +107,14 @@ try {
 } catch { /* storage unavailable */ }
 Object.assign(settings, savedSettings);
 delete settings.canFly; // (flying isn't remembered: the magic words only last while you're connected)
-if (IS_TOUCH && !savedSettings.quality) settings.quality = 'low'; // phones start on the faster graphics
+// Graphics (since v0.78): on Auto (the default) the game picks the level itself. It starts at
+// what this computer looks able for (see power.js; phones and slow computers start lower), or
+// lower if it had to turn things down here before, then keeps an eye on how smoothly it's really
+// running (watchSpeed). Picking a level in the menu yourself turns Auto off.
+if (settings.qualityMode !== 'manual') settings.qualityMode = 'auto';
+if (!LEVELS.includes(settings.quality)) settings.quality = 'high';
+const power = detectPower(IS_TOUCH);
+if (settings.qualityMode === 'auto') settings.quality = lowerOf(settings.quality, power.level);
 if (!Array.isArray(settings.hotbar) || settings.hotbar.length !== 9) settings.hotbar = DEFAULT_HOTBAR.slice();
 // Gear (sneakers, jetpack, rainbow trail, skis) used to be held, and Gold Car Paint was a tool: now
 // gear is worn (🎒 Gear, in the Fun tab) and gold is a Paint Brush color. Slots that had them
@@ -150,7 +158,8 @@ function saveSettings() {
 
 const canvas = $('game');
 // (The browser picks the graphics chip: on laptops that's usually the cooler, battery-friendly one.)
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+// (No smoothing of edges on Lowest: that's a lot of extra work for a slow computer.)
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: settings.quality !== 'lowest' });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -168,16 +177,22 @@ const reflections = new Reflections(renderer, scene);
 const glow = new Glow(renderer, scene, camera);
 
 let weather; // the rain (made once the world is)
+let seasonLook = null, worldDay = 0; // the seasons (the server counts the days)
 
 // Graphics settings. Live reflections and glow look great but need a good graphics card.
 // shadowEvery: shadows are redrawn every this many frames (they barely change between two).
+// view: how far you can see (the haze comes in to there); live: how many times a second the BZ
+// Live camera's picture on the TVs is drawn (it's the whole town drawn a second time).
+// Lowest is for slow computers (since v0.78).
 const QUALITY = {
-  high: { pixelRatio: 1.5, shadowMap: 2048, shadowSoftness: 3, shadowEvery: 2, lamps: 8, bloom: true, reflections: 128, reflectEvery: 2 },
-  medium: { pixelRatio: 1, shadowMap: 1024, shadowSoftness: 2, shadowEvery: 3, lamps: 6, bloom: true, reflections: 64, reflectEvery: 4 },
-  low: { pixelRatio: 0.75, shadowMap: 0, shadowSoftness: 1, shadowEvery: 4, lamps: 3, bloom: false, reflections: 0 },
+  high: { pixelRatio: 1.5, shadowMap: 2048, shadowSoftness: 3, shadowEvery: 2, lamps: 8, bloom: true, reflections: 128, reflectEvery: 2, live: 12 },
+  medium: { pixelRatio: 1, shadowMap: 1024, shadowSoftness: 2, shadowEvery: 3, lamps: 6, bloom: true, reflections: 64, reflectEvery: 4, live: 12 },
+  low: { pixelRatio: 0.75, shadowMap: 0, shadowSoftness: 1, shadowEvery: 4, lamps: 3, bloom: false, reflections: 0, view: 140, live: 12 },
+  lowest: { pixelRatio: 0.6, shadowMap: 0, shadowSoftness: 1, shadowEvery: 4, lamps: 2, bloom: false, reflections: 0, view: 90, live: 3 },
 };
+const quality = () => QUALITY[settings.quality] || QUALITY.high;
 function applyQuality() {
-  const q = QUALITY[settings.quality] || QUALITY.high;
+  const q = quality();
   const pixelRatio = Math.min(window.devicePixelRatio, q.pixelRatio);
   renderer.setPixelRatio(pixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -194,9 +209,57 @@ function applyQuality() {
   }
   if (sky.lampLights.length !== q.lamps) sky.setLampLightCount(q.lamps);
   weather?.setQuality(RAINDROPS[settings.quality] || RAINDROPS.high);
+  if (seasonLook) seasonLook.lite = settings.quality === 'lowest'; // (no wildflowers or blowing leaves)
+  showQuality();
 }
 // How many raindrops there are at most, for each graphics setting.
-const RAINDROPS = { high: 1400, medium: 1000, low: 500 };
+const RAINDROPS = { high: 1400, medium: 1000, low: 500, lowest: 250 };
+
+// The Graphics setting in the menu: Auto shows the level it's on.
+function showQuality() {
+  const sel = document.getElementById('quality');
+  if (!sel) return;
+  const auto = sel.querySelector('option[value="auto"]');
+  if (auto) auto.textContent = `Auto (${LEVEL_NAMES[settings.quality] || 'High'})`;
+  sel.value = settings.qualityMode === 'auto' ? 'auto' : settings.quality;
+}
+
+// Auto: while you're really playing (not in a menu, the tab showing), after a little warm-up, the
+// game counts the frames it manages every 15 seconds. Twice in a row too few, and it turns the
+// graphics down a step (and remembers that for next time). It never turns them up by itself
+// (picking Auto in the menu again starts over).
+const speed = { last: 0, warm: 0, frames: 0, ms: 0, slow: 0, playing: false };
+document.addEventListener('visibilitychange', () => (speed.playing = false));
+const SPEED_WARMUP = 15000, SPEED_WINDOW = 15000;
+function watchSpeed(now) {
+  const gap = now - speed.last;
+  speed.last = now;
+  const playing = inGame && settings.qualityMode === 'auto' && settings.quality !== 'lowest' && frameRateNow() > 12 && !document.hidden;
+  // (Only time spent really playing counts: not the first frame back from a menu or another tab.
+  // A slow frame, even a few seconds long, does count: that's what it's watching for.)
+  const was = speed.playing;
+  speed.playing = playing;
+  if (!playing || !was || gap > 10000) {
+    speed.warm = speed.frames = speed.ms = 0;
+    if (!playing) speed.slow = 0;
+    return;
+  }
+  speed.warm += gap;
+  if (speed.warm < SPEED_WARMUP) return;
+  speed.frames++;
+  speed.ms += gap;
+  if (speed.ms < SPEED_WINDOW) return;
+  const rate = (speed.frames * 1000) / speed.ms;
+  speed.frames = speed.ms = 0;
+  speed.slow = rate < (settings.fps === 30 ? 20 : 24) ? speed.slow + 1 : 0;
+  if (speed.slow < 2) return;
+  speed.slow = 0;
+  speed.warm = SPEED_WARMUP - 10000; // (10 seconds to settle before counting again)
+  settings.quality = stepDown(settings.quality);
+  saveSettings();
+  applyQuality();
+  hud.toast(`🐢 ➡️ ⚡ ${LEVEL_NAMES[settings.quality]}`);
+}
 applyQuality();
 
 // Block highlight under the crosshair.
@@ -276,7 +339,6 @@ let hunger = HUNGER_FULL; // how full you are (out of 100: the server counts it 
 let tacoTuesday = { day: -1, n: 0 }; // free tacos had (on which Tuesday)
 let churchPlace = null, churchMeeting = null, churchHello = ''; // the church, its meetings, and the last meeting we said hello at
 let fiestaBand = null, tacoToldDay = -1; // Mateo's band at Casa Fiesta; the last Taco Tuesday we said so
-let seasonLook = null, worldDay = 0; // the seasons (the server counts the days)
 let autoJoin = false; // joining by itself (back after a lost connection, or an update)
 let myCar = null; // the vehicle we're driving
 let myRide = null; // the vehicle we're riding in as a passenger
@@ -390,6 +452,7 @@ async function load() {
   elevators = new Elevators(scene, world, sounds);
   weather = new Weather(scene, world, sounds, () => cars.boxes());
   seasonLook = new SeasonLook({ scene, textures, ground, effects, world, claimed: (x, z) => !!claimAt(claims, x, z) });
+  seasonLook.lite = settings.quality === 'lowest';
   weather.setQuality(RAINDROPS[settings.quality] || RAINDROPS.high);
   agency = new SecretAgency({
     scene, world, sounds, effects, hud, net, headlight,
@@ -465,7 +528,7 @@ async function load() {
   $('volume').value = settings.volume;
   $('night-light').value = settings.nightLight;
   $('fov').value = settings.fov;
-  $('quality').value = settings.quality;
+  showQuality();
   $('fps').value = String(settings.fps);
   $('loading').classList.add('hidden');
   $('join-form').classList.remove('hidden');
@@ -1837,7 +1900,15 @@ $('night-light').addEventListener('input', e => {
   saveSettings();
 });
 $('quality').addEventListener('change', e => {
-  settings.quality = e.target.value;
+  if (e.target.value === 'auto') {
+    // Auto again: start over from what this computer looks able for.
+    settings.qualityMode = 'auto';
+    settings.quality = power.level;
+    speed.warm = speed.frames = speed.ms = speed.slow = 0;
+  } else {
+    settings.qualityMode = 'manual';
+    settings.quality = e.target.value;
+  }
   saveSettings();
   applyQuality();
 });
@@ -3978,7 +4049,7 @@ function renderLive(dt, time, viewDist) {
   if (!tvs.wantsLive || !npcs.has(REPORTER)) return;
   aimNewsCam(dt, time);
   if (liveTimer > 0) return;
-  liveTimer = 1 / 12;
+  liveTimer = 1 / quality().live;
   // What's drawn (and the sky) goes with the news camera for a moment, and so does your own
   // body, in case you're the one on TV.
   world.updateVisibility(newsCam.position, 90);
@@ -6350,6 +6421,7 @@ function frame(timestamp) {
   if (timestamp - lastFrame < interval - 2) return;
   lastFrame = Math.max(lastFrame + interval, timestamp - interval);
   frameCount++;
+  watchSpeed(timestamp);
   timer.update(timestamp);
   const dt = Math.min(timer.getDelta(), 0.05);
   const time = timer.getElapsed();
@@ -6862,7 +6934,10 @@ function frame(timestamp) {
     const phase = sky.phase;
     tvs.update(dt, time, camera.position, { players: avatars.list.size + 1, clock: sky.clockText(), night: sky.isNight, dayPhase: phase < 0.62 ? phase / 0.62 : 0, news: { ...news, on: news.on && npcs.has(REPORTER) } });
   }
-  const viewDist = settings.quality === 'low' ? Math.min(140, scene.fog.far) : scene.fog.far;
+  // On the lower settings you can't see as far: the haze comes in to there, so the town fades out
+  // instead of stopping (and fewer cars are drawn).
+  if (quality().view && scene.fog.far > quality().view) scene.fog.far = quality().view;
+  const viewDist = scene.fog.far;
   world.updateVisibility(camera.position, viewDist);
   world.update(dt);
   for (const a of avatars.list.values()) a.fishing = a.sitting && !!BLOCKS[blockId(itemOf(world.get(Math.floor(a.pos.x), Math.floor(a.pos.y + 0.5), Math.floor(a.pos.z))))]?.fishing;
@@ -6899,7 +6974,7 @@ function frame(timestamp) {
   }
   cars.setView(camera.position, scene.fog.far);
   if (inGame) questHud.update(time, player, camera, npcs);
-  cars.setPoliceLights((QUALITY[settings.quality] || QUALITY.high).lamps >= 6); // (police lights light up the street, except on Low)
+  cars.setPoliceLights(quality().lamps >= 6); // (police lights light up the street, except on Low)
   cars.update(dt, time, nightK, myCar?.id);
   if (inGame) for (const ev of cars.events) vehicleEvent(ev, ev.other);
   particles.update(dt, world);
@@ -6943,7 +7018,7 @@ function frame(timestamp) {
   }
 
   // Shadows only need redrawing every couple of frames.
-  if (frameCount % (QUALITY[settings.quality] || QUALITY.high).shadowEvery === 0) renderer.shadowMap.needsUpdate = true;
+  if (frameCount % quality().shadowEvery === 0) renderer.shadowMap.needsUpdate = true;
   reflections.update(dt, camera, [highlight, crack], fireworks.flash * nightK > 0.03);
   reflections.refresh(sky.dayK);
   renderLive(dt, time, viewDist);
@@ -7036,6 +7111,7 @@ window.buildzone = {
   get guardCatch() { return guardCatch; },
   get guardAsk() { return guardAsk; },
   get seasonLook() { return seasonLook; },
+  get power() { return { ...power, quality: settings.quality, mode: settings.qualityMode, speed: { ...speed } }; },
   get petMenu() { return petMenu; },
   openPetMenu: () => myBody.pet && openPetMenu({ avatar: myBody, pet: myBody.pet, point: myBody.pet.pos.clone() }),
   setDay: d => (worldDay = d), // (for trying out the seasons)

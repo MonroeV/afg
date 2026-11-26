@@ -386,11 +386,7 @@ customize your character, drive cars, build anything and play with friends.
   outboard motors. (They're recordings, see `tools/make-engine-sounds.py`; you hear other people's
   vehicles nearby too.) A 3-speed automatic you can hear: 1st revs up slowly from a stop, 2nd pulls to top speed,
   and 3rd is an overdrive that cruises at medium revs. If a car's corner gets caught on something it
-  gently slides itself free. And if any vehicle (car, truck, boat, plane or helicopter) is really
-  stuck (a block built into it, another vehicle on top of it, a drawbridge raised through it, or
-  shut in so it can't go forward, back or turn), it pops out to the nearest open spot it fits after
-  a second or so, with a sparkle ✨🚗✨ (since v0.77). Just driving into a wall doesn't count (you
-  can back away), and nor does running out of gas. Brake lights come on when you brake (with a third light at the top of
+  gently slides itself free. Brake lights come on when you brake (with a third light at the top of
   the back window), and when you hold S to back up the car stops, waits a moment, then switches on
   its white reverse lights and backs up. Two friends can ride along as passengers, and everyone
   climbs out beside the car, not on the roof. Crash hard and they dent, smoke, catch fire and blow
@@ -1056,7 +1052,7 @@ When you press PLAY it goes full screen.
 - Tap a hotbar slot to pick an item. The round buttons at the top are pause **⏸** (with Go Home
   and Exit to Menu), items **🎒**, camera **🎥**, dance **💃** and chat **💬**.
 
-Phones start with the Low graphics setting so the game runs smoothly; you can change it in the
+Phones start on Low graphics (or Lowest) so the game runs smoothly; you can change it in the
 pause menu.
 
 ## Running it on your computer
@@ -1076,8 +1072,22 @@ pause menu.
 
 To play with someone else on the same Wi-Fi, they can open `http://YOUR-COMPUTER-IP:5010`.
 
-If the game feels slow, press Esc and set **Graphics** to Medium or Low. High has live
-reflections, glow and soft shadows; Medium has cheaper versions; Low turns them off.
+**Graphics** (in the Esc menu) is on **Auto** to start with (since v0.78). The game picks the
+right level for your computer by itself:
+
+- When it starts, it checks what it's running on: the graphics chip (a computer with no real one,
+  or a very basic one, starts low), how many processor cores and how much memory it has, and
+  whether it's a phone or tablet. (Nothing about your computer leaves it.)
+- While you play, it keeps an eye on how smoothly it's really going. If it's struggling (fewer
+  than about 24 frames a second, twice in a row over 15 seconds), it turns the graphics down a
+  step, shows 🐢 ➡️ ⚡ and the new level, and remembers it for next time. It never turns them up by
+  itself; pick **Auto** again in the menu to have it check afresh.
+
+The levels: **High** has live reflections, glow and soft shadows; **Medium** has cheaper versions;
+**Low** turns them off and you see a little less far; **Lowest (slow computers)** goes further:
+a smaller picture with no edge smoothing, you see about 90 blocks (the haze comes in closer),
+fewer lamp lights and raindrops, no spring wildflowers or blowing leaves, and the BZ Live picture
+on the TVs only changes a few times a second. Pick any level yourself and Auto is turned off.
 
 ### Updating the game
 
@@ -1101,7 +1111,8 @@ Drawing a 3D world is hard work for a computer, so the game tries not to do more
   fewer real lamp lights at once, small lamp models don't cast shadows, and smoke and sparkles
   only send the particles that are alive to the graphics card.
 - On laptops with two graphics chips, the browser picks the cooler, battery-friendly one.
-- Still hot? **Graphics: Medium** is much lighter than High, and **Low** is lightest of all.
+- Still hot? **Graphics: Medium** is much lighter than High, **Low** lighter still, and
+  **Lowest** is for slow computers (Auto picks it by itself on a computer that needs it).
 - Blocks buried inside other blocks (like the inside of a mountain) aren't drawn at all, so the
   mountains cost about as much to draw as their surface.
 
