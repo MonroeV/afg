@@ -386,7 +386,18 @@ customize your character, drive cars, build anything and play with friends.
   outboard motors. (They're recordings, see `tools/make-engine-sounds.py`; you hear other people's
   vehicles nearby too.) A 3-speed automatic you can hear: 1st revs up slowly from a stop, 2nd pulls to top speed,
   and 3rd is an overdrive that cruises at medium revs. If a car's corner gets caught on something it
-  gently slides itself free. Brake lights come on when you brake (with a third light at the top of
+  gently slides itself free. And if any vehicle (car, truck, boat, plane or helicopter) is really
+  stuck (a block built into it, a drawbridge raised through it, or shut in so it can't go forward,
+  back or turn), it pops out to the nearest open spot it fits after a second or so, with a sparkle
+  ✨🚗✨ (since v0.77). Just driving into a wall doesn't count (you can back away), and nor does
+  running out of gas. Airplanes, skateboards and BMX bikes can't back up, so when one is nose-in to
+  a wall it gets turned round instead (and skateboards and bikes get freed quicker, in about half a
+  second). **Vehicles pass through each other when they'd otherwise be stuck** (since v0.79): for
+  the first 10 seconds after you get in, through any vehicle you're overlapping until you're apart,
+  and through one you've been pushing against for a second (like an airplane taxiing into a parked
+  one). While it's passing through, your vehicle looks see-through. The rest of the time bumping
+  works as always (and bumper cars and go-karts always bump). Bought airplanes and helicopters wait
+  at a clear spot on the apron. Brake lights come on when you brake (with a third light at the top of
   the back window), and when you hold S to back up the car stops, waits a moment, then switches on
   its white reverse lights and backs up. Two friends can ride along as passengers, and everyone
   climbs out beside the car, not on the roof. Crash hard and they dent, smoke, catch fire and blow
