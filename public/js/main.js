@@ -2848,6 +2848,7 @@ function enterCar(car) {
   wakeUp(true);
   standUp(true);
   myCar = car;
+  car.ghostUntil = performance.now() + 10000; // (10 seconds to get clear of anything it's parked in: see Cars.passes)
   flightLog = { air: 0, was: true };
   car.driver = myId;
   car.gear = 1;

@@ -1098,6 +1098,7 @@ function buildBoatModel(color) {
 const solidAt = (world, x, y, z) => world.isSolid(Math.floor(x), Math.floor(y), Math.floor(z));
 // Ramps for skateboards and bikes: the Stairs block, and which way it goes up for each facing.
 const STAIRS = 149;
+const NO_GHOST = new Set(['bumper', 'kart']); // (these never pass through other vehicles: bumping and racing are the point)
 const STAIR_RISE = [[0, -1], [-1, 0], [0, 1], [1, 0]];
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -1449,14 +1450,68 @@ export class Cars {
   blocked(spec, x, y, z, h, ignoreId, points) {
     this.lastHit = null;
     if (vehicleBlocked(this.isSolid, spec, x, y, z, h, points || outlinePoints(spec))) return true;
+    return this.vehicleInWay(spec, x, y, z, h, ignoreId);
+  }
+
+  // Another vehicle where this one would be? (Not one it's passing through: see passes.)
+  vehicleInWay(spec, x, y, z, h, ignoreId) {
+    const mover = this.list.get(ignoreId);
     for (const other of this.list.values()) {
       if (other.id === ignoreId || Math.abs(other.pos.y - y) > 2) continue;
+      if (mover && this.passes(mover, other)) continue;
       if (footprintsOverlap(spec, x, z, h, other.spec, other.pos.x, other.pos.z, other.h)) {
         this.lastHit = other;
+        if (mover) mover.vehicleHit = { id: other.id, at: performance.now() };
         return true;
       }
     }
     return false;
+  }
+
+  // ---------- Passing through other vehicles (since v0.79) ----------
+  // Bumping into each other is fun, but two vehicles can end up overlapping (one appears on top of
+  // another, one gets shoved into another) and then neither can move. So a vehicle goes right
+  // through other vehicles: for the first 10 seconds after you get in (not bumper cars or karts:
+  // bumping and racing are the point), through any vehicle it's overlapping until they're apart,
+  // and through one it's been stuck against for a second (an airplane can't back up!). It looks
+  // see-through while it's passing.
+  passes(car, other) {
+    if ((car.passing?.get(other.id) || 0) > performance.now()) return true;
+    return (car.ghostUntil || 0) > performance.now() && !NO_GHOST.has(car.kind);
+  }
+
+  // Each frame for the vehicle you're driving: the ones it overlaps are passed through (for as
+  // long as they overlap, and a moment after); the see-through look goes on and off to match.
+  updatePassing(car) {
+    const now = performance.now(), passing = (car.passing ??= new Map());
+    for (const other of this.list.values()) {
+      if (other.id === car.id || Math.abs(other.pos.y - car.pos.y) > 2) continue;
+      if (footprintsOverlap(car.spec, car.pos.x, car.pos.z, car.h, other.spec, other.pos.x, other.pos.z, other.h)) passing.set(other.id, Math.max(passing.get(other.id) || 0, now + 400));
+    }
+    for (const [id, until] of passing) if (until <= now) passing.delete(id);
+    const ghost = passing.size > 0 || ((car.ghostUntil || 0) > now && !NO_GHOST.has(car.kind));
+    if (ghost !== !!car.ghostLook) this.setGhost(car, ghost);
+  }
+
+  // The see-through look (each vehicle has its own materials, so only this one changes).
+  setGhost(car, on) {
+    car.ghostLook = on;
+    car.model.group.traverse(o => {
+      if (!o.isMesh && !o.isSprite) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (on) {
+          if (m.userData.ghostWas) continue;
+          m.userData.ghostWas = { transparent: m.transparent, opacity: m.opacity, depthWrite: m.depthWrite };
+          m.transparent = true;
+          m.opacity = m.opacity * 0.45;
+          m.depthWrite = false;
+        } else if (m.userData.ghostWas) {
+          Object.assign(m, m.userData.ghostWas);
+          delete m.userData.ghostWas;
+        }
+        m.needsUpdate = true;
+      }
+    });
   }
 
   // ---------- Momentum ----------
@@ -1639,6 +1694,7 @@ export class Cars {
   // aimYaw: for the helicopter, the direction the pilot is looking (it turns to face it).
   drive(car, dt, keys, aimYaw = car.h) {
     this.myCarId = car.id;
+    this.updatePassing(car);
     const events = (car.spec.boat ? this.sail(car, dt, keys)
       : car.spec.plane ? this.flyPlane(car, dt, keys, aimYaw)
         : car.spec.skate ? this.driveSkate(car, dt, keys)
@@ -1744,14 +1800,7 @@ export class Cars {
     this.lastHit = null;
     const solid = (bx, by, bz) => blockId(itemOf(this.world.get(bx, by, bz))) !== STAIRS && this.isSolid(bx, by, bz);
     if (vehicleBlocked(solid, spec, x, y, z, h, points || outlinePoints(spec))) return true;
-    for (const other of this.list.values()) {
-      if (other.id === ignoreId || Math.abs(other.pos.y - y) > 2) continue;
-      if (footprintsOverlap(spec, x, z, h, other.spec, other.pos.x, other.pos.z, other.h)) {
-        this.lastHit = other;
-        return true;
-      }
-    }
-    return false;
+    return this.vehicleInWay(spec, x, y, z, h, ignoreId);
   }
 
   // Boats: the throttle pushes you along and the water slows you down (there are no brakes,
@@ -2057,13 +2106,25 @@ export class Cars {
     const s = car.spec, heli = s.flying && !s.plane;
     const go = keys.has('KeyW') || keys.has('KeyS');
     const trying = !this.empty(car) && (heli ? keys.has('Space') || (!car.onGround && (go || keys.has('KeyA') || keys.has('KeyD'))) : go);
-    const inside = this.blocked(s, car.pos.x, car.pos.y, car.pos.z, car.h, car.id, car.outline);
+    // Pressing to go but not getting anywhere, with another vehicle in the way: after a second,
+    // through it you go (since v0.79).
+    const from = car.rescueFrom, moved = from ? car.pos.distanceTo(from) : 1;
+    car.rescueFrom = car.pos.clone();
+    const hit = car.vehicleHit, now = performance.now();
+    if (trying && moved < 0.1 && hit && now - hit.at < 500 && !NO_GHOST.has(car.kind)) {
+      car.pushingFor = (car.pushingFor || 0) + step;
+      if (car.pushingFor >= 1) {
+        (car.passing ??= new Map()).set(hit.id, now + 2000);
+        car.pushingFor = 0;
+      }
+    } else car.pushingFor = 0;
+    const inside = this.blockHit(car, car.pos.x, car.pos.y, car.pos.z, car.h); // (in a block: vehicles it overlaps it just goes through)
     if (!inside && !(trying && this.trapped(car))) {
       car.trappedFor = 0;
       return;
     }
     car.trappedFor = (car.trappedFor || 0) + step;
-    if (car.trappedFor < 1.5) return;
+    if (car.trappedFor < (s.noDamage ? 0.5 : 1.5)) return; // (small rides: sooner)
     car.trappedFor = 0;
     const spot = this.freeSpot(car);
     if (!spot) return;
@@ -2081,26 +2142,52 @@ export class Cars {
   }
 
   // Can it go anywhere from here? (A little way forward or back, straight or turning; a
-  // helicopter: up, or any way along.)
+  // helicopter: up, or any way along.) Only blocks count: other vehicles it just goes through.
   trapped(car) {
-    const s = car.spec, { x, y, z } = car.pos, h = car.h;
-    const open = (nx, ny, nz, nh) => !this.blocked(s, nx, ny, nz, nh, car.id, car.outline) && (!s.boat || afloat(this.isWater, s, nx, ny, nz, nh));
+    return this.trappedAt(car, car.pos.x, car.pos.y, car.pos.z, car.h);
+  }
+
+  trappedAt(car, x, y, z, h) {
+    const s = car.spec;
+    const open = (nx, ny, nz, nh) => !this.blockHit(car, nx, ny, nz, nh) && (!s.boat || afloat(this.isWater, s, nx, ny, nz, nh));
     if (s.flying && !s.plane) {
       if (open(x, y + 0.4, z, h)) return false;
       return ![[0.4, 0], [-0.4, 0], [0, 0.4], [0, -0.4]].some(([dx, dz]) => open(x + dx, y, z + dz, h));
     }
-    for (const d of [0.3, -0.3])
+    // (Airplanes, skateboards and BMX bikes can't back up: S is just the brakes. So only going
+    // forward counts for them.)
+    for (const d of s.plane || s.skate ? [0.3] : [0.3, -0.3])
       for (const dh of [0, 0.2, -0.2]) if (open(x - Math.sin(h + dh) * d, y, z - Math.cos(h + dh) * d, h + dh)) return false;
     return true;
   }
 
-  // The nearest spot where it fits and can go again: the same search that finds a vehicle a
-  // place to (re)appear (solid ground under it, or water for a boat; not on another vehicle),
-  // starting from right here.
+  // Would it be in a block there? (Skateboards and bikes ride up ramps, so those don't count.)
+  blockHit(car, x, y, z, h) {
+    const s = car.spec;
+    const solid = s.skate ? (bx, by, bz) => blockId(itemOf(this.world.get(bx, by, bz))) !== STAIRS && this.isSolid(bx, by, bz) : this.isSolid;
+    return vehicleBlocked(solid, s, x, y, z, h, car.outline);
+  }
+
+  // The nearest spot where it fits (solid ground under it, or water for a boat) and can drive
+  // away from.
   freeSpot(car) {
-    const home = { x: car.pos.x, y: Math.round(car.pos.y), z: car.pos.z, h: car.h };
+    const s = car.spec, { x, y, z } = car.pos, h = car.h;
+    const ok = (nx, ny, nz, nh) => !this.blockHit(car, nx, ny, nz, nh) && !this.trappedAt(car, nx, ny, nz, nh);
+    // First, close by: turned round (best for an airplane or a skateboard nose-in to a wall: they
+    // can't reverse), or backed out a little at a time.
+    const under = (nx, nz, nh) => (s.boat ? afloat(this.isWater, s, nx, y, nz, nh) : s.flying && !s.plane) || y <= 0.01 || this.isSolid(Math.floor(nx), Math.floor(y) - 1, Math.floor(nz));
+    const tries = [[x, z, h + Math.PI], [x, z, h + Math.PI / 2], [x, z, h - Math.PI / 2]];
+    for (const d of [0.5, 1, 1.5, 2, 3, 4, 6, 8]) tries.push([x + Math.sin(h) * d, z + Math.cos(h) * d, h], [x + Math.sin(h) * d, z + Math.cos(h) * d, h + Math.PI]);
+    for (const [nx, nz, nh] of tries) if (under(nx, nz, nh) && ok(nx, y, nz, nh)) return { x: nx, y, z: nz, h: nh };
+    // Then further: the same search that finds a vehicle a place to (re)appear, from here and
+    // from a vehicle-length back (only taking a spot this vehicle can really drive from).
     const others = [...this.list.values()].filter(o => o.id !== car.id).map(o => ({ x: o.pos.x, y: o.pos.y, z: o.pos.z }));
-    return findVehicleSpot(this.isSolid, car.spec, home, others, this.isWater);
+    for (const back of [0, s.length || 4, 2 * (s.length || 4)]) {
+      const home = { x: x + Math.sin(h) * back, y: Math.round(y), z: z + Math.cos(h) * back, h };
+      const spot = findVehicleSpot(this.isSolid, s, home, others, this.isWater);
+      if (spot && ok(spot.x, spot.y, spot.z, spot.h)) return spot;
+    }
+    return null;
   }
 
   // Helicopter flight, a bit like the real thing: W/S move the stick forward and back, and the

@@ -1325,6 +1325,11 @@ export class GameRoom {
     // nose toward the runway.)
     const frame = spec.flying && airportFrame(this.places?.airport);
     const spots = frame ? AIRCRAFT_SPOTS.map(u => [...frame.pos(u, 23.5), frame.h]) : [[Math.floor(x) + 2, Math.floor(z), 0]];
+    // (Spots with nothing parked on them first: an airplane is 7 to 10 blocks across, so it can
+    // overlap one parked at the next spot along. Since v0.79.)
+    const size = sp => Math.max(sp.length, sp.width);
+    const clear = ([sx, sz]) => [...this.vehicles.values()].every(v => !VEHICLES[v.kind] || Math.abs(v.y) > 3 || Math.hypot(v.x - sx, v.z - sz) > (size(spec) + size(VEHICLES[v.kind])) / 2);
+    spots.sort((a, b) => clear(b) - clear(a));
     let home = null;
     for (const [sx, sz, h] of spots) {
       home = this.addHome({ kind, color, x: sx, y: frame ? 0 : Math.max(0, Math.floor(y)), z: sz, h, owner: client.name, key, paid: price });
