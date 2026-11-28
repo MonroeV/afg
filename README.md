@@ -480,6 +480,18 @@ customize your character, drive cars, build anything and play with friends.
   first half day. Skye announces each new one on BZ Live.
   The game has its own **week** too (Sun, Mon, Tue… one game day each), shown by the clock:
   Tuesday is Taco Tuesday at Casa Fiesta 🌮
+  **Holidays** 🎉 (since v0.80): Christmas 🎄, New Year's 🎆, Halloween 🎃, Thanksgiving 🦃, Easter 🐣,
+  the Fourth of July 🇺🇸 and Valentine's Day 💝. Each comes on its real date (all day), and in the
+  game's own year too: the second day of every season is a holiday (spring: Easter or Valentine's,
+  summer: the Fourth of July, fall: Halloween or Thanksgiving, winter: Christmas or New Year's,
+  taking turns year by year), so there's one about every 20 minutes. While it's on, the clock shows
+  its picture, the street lamps shine in its colors, the town's people wish you a happy one, and
+  there's a **treat hunt**: presents, party poppers, candy (on the doorsteps on Halloween), pies,
+  eggs, stars or hearts all over town. Walk into one for 2 🪙, and now and then there's a giant one
+  worth 10. Halloween nights are darker and spookier, on Thanksgiving the food is free (5 each) and
+  pies fill you up, the Fourth of July and New Year's have fireworks over the town square every
+  night, and New Year's counts down to midnight 🎆. (Running the server with `HOLIDAY=halloween`
+  makes it Halloween any day, to try one out; `HOLIDAY=none` turns holidays off.)
   - **Spring**: the trees are covered in buds and pink blossom, the grass turns fresh green, and
     wildflowers pop up all over the grass around you (but not on anyone's land: there, the only
     flowers are the ones the owner plants, since v0.76)

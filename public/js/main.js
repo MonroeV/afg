@@ -86,6 +86,7 @@ import { TURBO, MAGNET } from './shared/clubs.js';
 import { isTunnelY } from './shared/underground.js';
 import { BadgeBook } from './badges.js';
 import { detectPower, lowerOf, stepDown, LEVELS, LEVEL_NAMES } from './power.js';
+import { HOLIDAYS } from './shared/holidays.js';
 import { Lunchbox } from './lunchbox.js';
 import { FOODS, HUNGER_FULL, FREE_TACOS, hungerSpeed } from './shared/food.js';
 
@@ -301,6 +302,8 @@ let world, player, materials, textures, icons, hud, cars, myBody, editor, galler
 let elevators, agency; // elevators (riding them), and the Secret Agency (its base and gadgets)
 const npcs = new Map(); // the town's people (run by the server): id -> Avatar
 const coinMap = new Map(); // gold coins lying about: id -> { x, y, z, value, asked }
+let holiday = null; // the holiday today (see shared/holidays.js), or null
+const treatMap = new Map(); // its treats lying about: id -> { x, y, z, value, sprite, asked }
 let wallet = { coins: 0, owned: [] };
 let petMenu = null; // your pet's menu (tricks and hats): see petmenu.js
 let cards = null; // Builder Bea's picture cards: see challengeui.js
@@ -742,6 +745,7 @@ function leaveWorld() {
   for (const a of npcs.values()) a.dispose();
   npcs.clear();
   coinMap.clear();
+  clearTreats();
   avatars.clear();
   $('banner').classList.add('hidden');
 }
@@ -881,6 +885,7 @@ function startGame(welcome, resume = false) {
     for (const a of npcs.values()) a.dispose();
     npcs.clear();
     coinMap.clear();
+    clearTreats();
   }
   myId = welcome.id;
   if (resume) world.sync(welcome.world);
@@ -900,6 +905,8 @@ function startGame(welcome, resume = false) {
   }
   Object.assign(news, { on: !!welcome.news, place: welcome.news?.place || '', guest: welcome.news?.guest || 0, caption: '', cut: true });
   for (const [id, x, y, z, value] of welcome.coins || []) coinMap.set(id, { x, y, z, value });
+  setHoliday(welcome.holiday || null, true);
+  for (const [id, x, y, z, value] of welcome.treats || []) addTreat(id, x, y, z, value);
   $('coins').classList.remove('hidden');
   $('hunger-chip').classList.remove('hidden');
   cars.clear();
@@ -1332,6 +1339,26 @@ net.on('coin_gone', ({ id }) => {
   const c = coinMap.get(id);
   if (c) effects.sparkle(c.x, c.y + 0.4, c.z, 16);
   coinMap.delete(id);
+});
+// Holidays (since v0.80): which one it is, its treats, and New Year's countdown.
+net.on('holiday', ({ id }) => setHoliday(id || null, true));
+net.on('treat_new', ({ id, x, y, z, value }) => addTreat(id, x, y, z, value));
+net.on('treat_gone', ({ id }) => {
+  const t = treatMap.get(id);
+  if (!t) return;
+  effects.sparkle(t.x, t.y + 0.6, t.z, 16);
+  scene.remove(t.sprite);
+  treatMap.delete(id);
+});
+net.on('treat_got', ({ value, n, big }) => {
+  const h = HOLIDAYS[holiday];
+  if (big) sounds.magic();
+  else sounds.coin();
+  hud.toast(`${h?.treat.icon || '🎁'}${big ? '✨' : ''} +${value} 🪙 (${n})`);
+});
+net.on('countdown', ({ n, icon }) => {
+  hud.toast(n ? `${icon || '🎆'} ${n}…` : '🎆 HAPPY NEW YEAR! 🎉');
+  if (!n) sounds.magic();
 });
 net.on('coin_got', ({ value }) => {
   if (value >= 5) sounds.magic();
@@ -6167,6 +6194,69 @@ function updateCoins(dt, time) {
   if (coinMesh.instanceColor) coinMesh.instanceColor.needsUpdate = true;
 }
 
+// ---------- Holidays (since v0.80) ----------
+// The holiday's look: the street lamps in its colors (and Halloween's darker nights), and its
+// treats (a present, candy, an egg…) bobbing about town to pick up by walking into them.
+const treatMaterials = new Map(); // icon -> sprite material (its picture drawn from the emoji)
+function treatMaterial(icon) {
+  if (!treatMaterials.has(icon)) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 96;
+    const g = c.getContext('2d');
+    g.font = '76px serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(icon, 48, 54);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    treatMaterials.set(icon, new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  }
+  return treatMaterials.get(icon);
+}
+
+function setHoliday(id, announce) {
+  if (id === holiday) return;
+  holiday = id;
+  const h = HOLIDAYS[id];
+  sky.holidayLamps = h?.lamps || null;
+  sky.spooky = !!h?.spooky;
+  lightPools.holiday = h?.lamps || null;
+  lightPools.version = null; // (the light on the ground under the lamps: redrawn in the new colors)
+  if (h && announce) {
+    hud.toast(`${h.icon} ${h.greeting} ${h.treat.icon}🔍`);
+    sounds.magic();
+  }
+}
+
+function addTreat(id, x, y, z, value) {
+  const h = HOLIDAYS[holiday];
+  if (!h || treatMap.has(id)) return;
+  const sprite = new THREE.Sprite(treatMaterial(h.treat.icon));
+  sprite.position.set(x, y + 0.7, z);
+  scene.add(sprite);
+  treatMap.set(id, { x, y, z, value, sprite, big: value >= 10 });
+}
+
+function clearTreats() {
+  for (const t of treatMap.values()) scene.remove(t.sprite);
+  treatMap.clear();
+}
+
+function updateTreats(dt, time) {
+  const p = player.pos;
+  for (const [id, t] of treatMap) {
+    const s = (t.big ? 1.4 : 0.8) * (1 + 0.08 * Math.sin(time * 3 + id));
+    t.sprite.scale.set(s, s, s);
+    t.sprite.position.y = t.y + 0.7 + Math.sin(time * 2 + id) * 0.15;
+    if (t.big && Math.random() < dt * 2) effects.sparkle(t.x, t.y + 0.9, t.z, 3);
+    // Close enough to grab? Ask the server (once every couple of seconds).
+    if (Math.hypot(p.x - t.x, p.z - t.z) < (myCar ? 2 : 1.2) && Math.abs(p.y - t.y) < 2 && time - (t.asked ?? -9) > 2) {
+      t.asked = time;
+      net.send({ t: 'treat', id });
+    }
+  }
+}
+
 // Jetpack flames and rainbow trails (yours and everyone else's).
 let sparkleTimer = 0, jetSoundTimer = 0;
 function updateSparkly(dt, time) {
@@ -6867,7 +6957,7 @@ function frame(timestamp) {
       hudTimer = 0.5;
       fps = Math.round(fpsFrames / Math.max(fpsTime, 1e-3));
       fpsFrames = fpsTime = 0;
-      hud.updateInfo({ online: online || (reconnecting ? 'reconnecting' : false), fps, pos: player.pos, flying: player.flying, clock: `${seasonLook.season.icon} ${WEEKDAYS[weekday(worldDay)]}${isTacoTuesday(worldDay) ? ' 🌮' : isSunday(worldDay) || meetingOn(worldDay, sky.time) ? ` ${meetingOn(worldDay, sky.time)?.icon || '⛪'}` : ''} ${sky.clockText()}` });
+      hud.updateInfo({ online: online || (reconnecting ? 'reconnecting' : false), fps, pos: player.pos, flying: player.flying, clock: `${HOLIDAYS[holiday] ? `${HOLIDAYS[holiday].icon} ` : ''}${seasonLook.season.icon} ${WEEKDAYS[weekday(worldDay)]}${isTacoTuesday(worldDay) ? ' 🌮' : isSunday(worldDay) || meetingOn(worldDay, sky.time) ? ` ${meetingOn(worldDay, sky.time)?.icon || '⛪'}` : ''} ${sky.clockText()}` });
       hud.updatePlayers([{ name: settings.name + ' (you)', color: settings.look.shirtColor }, ...[...avatars.list.values()].map(a => ({ name: a.name, color: a.color }))]);
     }
     hud.update(dt);
@@ -6947,6 +7037,7 @@ function frame(timestamp) {
   gameUI.update(); // (the game's countdown)
   if (inGame) {
     updateCoins(dt, time);
+    updateTreats(dt, time);
     updateSparkly(dt, time);
     updateFiesta(dt);
     loopExpress.update(dt, gameTime(worldDay, sky.time), camera.position);
@@ -7112,6 +7203,8 @@ window.buildzone = {
   get guardCatch() { return guardCatch; },
   get guardAsk() { return guardAsk; },
   get seasonLook() { return seasonLook; },
+  get holiday() { return holiday; },
+  get treats() { return treatMap; },
   get power() { return { ...power, quality: settings.quality, mode: settings.qualityMode, speed: { ...speed } }; },
   get petMenu() { return petMenu; },
   openPetMenu: () => myBody.pet && openPetMenu({ avatar: myBody, pet: myBody.pet, point: myBody.pet.pos.clone() }),

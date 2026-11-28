@@ -160,6 +160,11 @@ export class DayNight {
     // nights used to be, 1 nearly as light as dusk. In the middle (the usual) the moon lights
     // things up a little more and you can see further.
     this.nightLight = 0.5;
+    // A holiday (since v0.80): the lamps shine in its colors (null: their own), and Halloween's
+    // nights are darker and spookier.
+    this.holidayLamps = null;
+    this.spooky = false;
+    this.tintColor = new THREE.Color();
     this.nightVision = 0; // wearing night-vision goggles (0..1)
     this.time = DAY_LENGTH * 0.1;
     this.sky = makeSky();
@@ -270,7 +275,8 @@ export class DayNight {
 
     this.dayK = smooth(-0.1, 0.18, h);
     const nightK = 1 - this.dayK;
-    const lift = this.nightLight * nightK; // (only at night: the days stay the same)
+    const nightLight = this.nightLight * (this.spooky ? 0.45 : 1);
+    const lift = nightLight * nightK; // (only at night: the days stay the same)
     const sunsetK = (1 - smooth(0.05, 0.35, Math.abs(h))) * smooth(-0.15, 0, h);
     // How low (and so how glaring) the sun is: all morning and evening, not just right at sunset.
     const lowSun = (1 - smooth(0.3, 0.75, h)) * smooth(-0.2, -0.02, h);
@@ -293,7 +299,7 @@ export class DayNight {
       this.sun.intensity = 3 * smooth(-0.03, 0.15, h) * (1 - 0.3 * lowSun);
       this.sun.color.setRGB(1, 0.94 - sunsetK * 0.24 - lowSun * 0.06, 0.86 - sunsetK * 0.38 - lowSun * 0.12);
     } else {
-      this.sun.intensity = 0.5 * (1 + 0.9 * this.nightLight) * smooth(0.03, 0.2, -h);
+      this.sun.intensity = 0.5 * (1 + 0.9 * nightLight) * smooth(0.03, 0.2, -h);
       this.sun.color.setHex(0x9db4ff);
     }
 
@@ -308,7 +314,7 @@ export class DayNight {
     // And a touch more exposure at night (like eyes getting used to the dark).
     this.renderer.toneMappingExposure = 0.8 * (1 + 0.25 * lift);
 
-    this.scene.fog.color.copy(this.fogNight).lerp(this.fogNightLight, this.nightLight).lerp(this.fogDay, this.dayK).lerp(this.fogSunset, sunsetK * 0.6);
+    this.scene.fog.color.copy(this.fogNight).lerp(this.fogNightLight, nightLight).lerp(this.fogDay, this.dayK).lerp(this.fogSunset, sunsetK * 0.6);
     this.scene.fog.near = 40 + 20 * this.dayK;
     this.scene.fog.far = 170 + 60 * this.dayK;
     // Rain (0..1, set by the game): grey clouds over the sun and moon, a dimmer, hazier day, and
@@ -367,9 +373,12 @@ export class DayNight {
     const lamp = materials?.[18];
     // With the glow effect on, lamps already shine brighter, so they need less of a boost.
     if (lamp) lamp.emissiveIntensity = 1.3 + (this.glowOn ? 0.4 : 1) * lampK;
+    const holiday = this.holidayLamps;
     for (const g of this.glowMaterials || []) {
       const k = g.always ? 1.05 + 0.2 * lampK : 0.6 + 0.75 * lampK;
-      g.material.color.copy(g.material.userData.baseColor).multiplyScalar(k);
+      g.material.color.copy(g.material.userData.baseColor);
+      if (holiday && !g.always) g.material.color.lerp(this.tintColor.set(holiday[0]), 0.65); // (street lamps in the holiday's colors)
+      g.material.color.multiplyScalar(k);
     }
 
     // A handful of real lights move to the lamps nearest to you. Lights already on a lamp
@@ -443,6 +452,8 @@ export class DayNight {
         const live = def.live ? def.live(t) : 1;
         l.position.set(n.x, n.y, n.z);
         l.color.set(def.color);
+        // (A holiday: the lamps outdoors take turns in its colors.)
+        if (holiday && !n.extra && !def.always) l.color.set(holiday[Math.abs(Math.floor(n.x) * 7 + Math.floor(n.z) * 13) % holiday.length]);
         l.distance = def.range;
         const flicker = def.flicker ? 1 - def.flicker * (0.5 + 0.5 * Math.sin(t * 13 + l.userData.phase) * Math.sin(t * 7.3 + l.userData.phase * 2)) : 1;
         target = LAMP_BRIGHTNESS * def.power * (def.always ? 1 : lampK) * flicker * live;

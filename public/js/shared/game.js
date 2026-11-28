@@ -37,6 +37,7 @@ import { buildWeatherStation, SHOWERS } from './weather.js';
 import { buildBuildPark } from './buildpark.js';
 import { buildOuterLands } from './outerlands.js';
 import { seasonAt, WINTER, SEASON_ICONS, isTacoTuesday } from './seasons.js';
+import { HOLIDAYS, holidayNow, MIDNIGHT } from './holidays.js';
 import { Quests, cleanQuest } from './quests.js';
 import { TRICKS, TRICK_TRIES, TREATS, trickIndex, hatItem } from './tricks.js';
 import { CHALLENGES, partCount } from './challenges.js';
@@ -55,6 +56,8 @@ const JOB_TIP = 2; // extra coins for a quick pizza delivery
 const DOOR = 21;
 const VACATION = 'vacationflag';
 const COIN_COUNT = 26; // gold coins lying around the world at once
+const TREAT_COUNT = 24, TREAT_VALUE = 2, TREAT_BIG = 10; // holiday treats lying about town (and what they're worth)
+const FREE_FEAST = 5; // Thanksgiving: free food each
 const DAILY_BONUS = 10;
 const RACE_PRIZE = 3;
 const FIX_AMOUNT = 8; // health a turn of the wrench puts back (out of 100)
@@ -155,6 +158,13 @@ export class GameRoom {
     this.signs = new Map(); // "x,y,z" -> what that sign says
     this.jobs = new Map(); // client id -> the pizza they're delivering: { x, z, reward, par, at }
     this.coins = new Map(); // id -> [x, y, z, value]: gold coins to pick up
+    // Holidays (since v0.80; see holidays.js): which one it is (or null), its treats lying about
+    // town (id -> [x, y, z, value]), and how many each player has found (name key -> count).
+    this.holiday = null;
+    this.treats = new Map();
+    this.nextTreat = 1;
+    this.treatCounts = new Map();
+    this.feasts = new Map(); // (Thanksgiving: free food had, name key -> count)
     this.coinTimers = []; // when to put new coins out
     this.nextCoin = 1;
     this.npcs = new NpcCrew(this);
@@ -174,7 +184,7 @@ export class GameRoom {
     this.nextHomeId = 1;
     this.time = DAY_LENGTH * 0.08; // start in the morning
     this.day = 0; // how many days have gone by (for the seasons: see seasons.js)
-    this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0, holes: 5, crops: 2, guardThings: 1, hunger: 5, church: 1, fire: 2, homes: 5 };
+    this.timers = { sync: 0, state: 0, names: 0, expire: 0, burn: 0, holes: 5, crops: 2, guardThings: 1, hunger: 5, church: 1, fire: 2, homes: 5, holiday: 0, treats: 0, fireworks: 0 };
     this.isSolid = (x, y, z) =>
       y < 0 || x < WORLD.min || x > WORLD.max || z < WORLD.min || z > WORLD.max ||
       blocksVehicles(this.world.get(blockKey(x, y, z)) || 0);
@@ -2301,6 +2311,114 @@ export class GameRoom {
     }
   }
 
+  // ---------- Holidays (since v0.80) ----------
+
+  // Every tick: which holiday is it (a real one by the calendar, or the game's own); its treats
+  // topped up; and on a fireworks holiday, a show over the town square every night (New Year's
+  // counts down to midnight first).
+  updateHoliday(before) {
+    const t = this.timers;
+    if (t.holiday <= 0) {
+      t.holiday = 1;
+      const id = this.forceHoliday !== undefined ? this.forceHoliday : holidayNow(this.day); // (forceHoliday: for trying one out)
+      if (id !== this.holiday) this.setHoliday(id);
+    }
+    const h = HOLIDAYS[this.holiday];
+    if (!h) return;
+    if (t.treats <= 0) {
+      t.treats = this.treats.size < TREAT_COUNT / 2 ? 0.3 : 3;
+      if (this.treats.size < TREAT_COUNT) this.dropTreat();
+    }
+    if (h.fireworks && isNightTime(this.time) && t.fireworks <= 0 && this.clients.size) {
+      t.fireworks = 1.5 + Math.random() * 2.5;
+      this.townFirework();
+    }
+    if (h.countdown && this.time < before + 1) {
+      // The last ten seconds to midnight: 10… 9… … then a big burst.
+      for (let k = 10; k >= 0; k--) {
+        const at = MIDNIGHT - k;
+        if (before < at && this.time >= at) {
+          this.broadcast({ t: 'countdown', n: k, icon: h.icon });
+          if (!k) {
+            for (let i = 0; i < 8; i++) setTimeout(() => this.townFirework(), i * 250);
+            this.npcs.breaking(`🎆 HAPPY NEW YEAR, BuildZone!!! 🎉🎆`);
+          }
+        }
+      }
+    }
+  }
+
+  setHoliday(id) {
+    const was = this.holiday;
+    this.holiday = id;
+    for (const tid of this.treats.keys()) this.broadcast({ t: 'treat_gone', id: tid });
+    this.treats.clear();
+    this.treatCounts.clear();
+    this.feasts.clear();
+    this.doorSpotsCache = null;
+    this.broadcast({ t: 'holiday', id });
+    if (id) {
+      this.log(`It's ${HOLIDAYS[id].name}!`);
+      this.npcs.onHoliday(id);
+    } else if (was) this.log(`${HOLIDAYS[was].name} is over`);
+  }
+
+  // A firework over the town square (everyone sees it go up).
+  townFirework() {
+    const colors = HOLIDAYS[this.holiday]?.lamps || ['#ffffff'];
+    const x = (Math.random() - 0.5) * 40, z = (Math.random() - 0.5) * 40;
+    this.broadcast({ t: 'fx', kind: 'firework', x, y: 0, z, color: colors[Math.floor(Math.random() * colors.length)], seed: Math.random() });
+  }
+
+  // Where Halloween candy goes: on the doorsteps of the town's houses (outside the front door,
+  // under the open sky). Worked out once per Halloween.
+  doorSpots() {
+    if (this.doorSpotsCache) return this.doorSpotsCache;
+    const spots = [];
+    for (const [k, v] of this.world) {
+      if (blockId(itemOf(v)) !== DOOR || blockMeta(itemOf(v)) & DOOR_TOP) continue;
+      const [x, y, z] = k.split(',').map(Number);
+      if (y !== 0 || Math.abs(x) > 300 || Math.abs(z) > 300) continue;
+      // (The step right outside is often under the roof's overhang: the candy goes one further
+      // out, on the path, under the open sky. Inside, that'd be under the ceiling: not there.)
+      const walkable = (cx, cz) => [0, 1].every(yy => { const v2 = this.get(cx, yy, cz); return !v2 || shapeOf(v2) === 'flat'; });
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const sx = x + 2 * dx, sz = z + 2 * dz;
+        if (!walkable(x + dx, z + dz) || !walkable(sx, sz)) continue;
+        let open = true;
+        for (let yy = 2; yy < 12 && open; yy++) if (this.get(sx, yy, sz)) open = false;
+        if (open) spots.push([sx, sz]);
+      }
+    }
+    return (this.doorSpotsCache = spots);
+  }
+
+  // A holiday treat somewhere out of doors (like a gold coin), now and then a big one.
+  dropTreat() {
+    const h = HOLIDAYS[this.holiday];
+    if (!h) return;
+    const doors = h.treat.doors ? this.doorSpots() : [];
+    for (let tries = 0; tries < 60; tries++) {
+      let x, z;
+      if (doors.length && Math.random() < 0.8) [x, z] = doors[Math.floor(Math.random() * doors.length)];
+      else {
+        x = Math.floor(Math.random() * 240) - 120;
+        z = Math.floor(Math.random() * 240) - 120;
+      }
+      const here = this.get(x, 0, z);
+      if (here && shapeOf(here) !== 'flat') continue;
+      if (blockId(itemOf(here)) === 36) continue;
+      let open = true;
+      for (let y = 1; y < 12 && open; y++) if (this.get(x, y, z)) open = false;
+      if (!open || [...this.treats.values()].some(c => Math.hypot(c[0] - x - 0.5, c[2] - z - 0.5) < 5)) continue;
+      const value = Math.random() < 0.06 ? TREAT_BIG : TREAT_VALUE;
+      const id = this.nextTreat++;
+      this.treats.set(id, [x + 0.5, 0, z + 0.5, value]);
+      this.broadcast({ t: 'treat_new', id, x: x + 0.5, y: 0, z: z + 0.5, value });
+      return;
+    }
+  }
+
   // ---------- Messages ----------
 
   handle(client, msg) {
@@ -2354,6 +2472,8 @@ export class GameRoom {
       // Where you were when you last left (your game puts you back there if there's room).
       resume: this.spots[nameKey(client.name)]?.slice(0, 4) || null,
       coins: [...this.coins].map(([id, c]) => [id, ...c]),
+      holiday: this.holiday,
+      treats: [...this.treats].map(([id, c]) => [id, ...c]),
       rain: this.weather?.rain || 0, // (raining right now?)
       snow: this.snowing(), // (it's winter: that's snow, not rain)
       day: this.day, // (for the seasons)
@@ -2822,6 +2942,22 @@ export class GameRoom {
       this.coinTimers.push(Date.now() + 15000 + Math.random() * 25000);
     },
 
+    // Picking up a holiday treat (a present, candy, an egg…): coins, and it counts for the hunt.
+    treat(client, { id }) {
+      const c = this.treats.get(id), h = HOLIDAYS[this.holiday];
+      if (!c || !h || !this.allow(client, 'treat', 6, 10)) return;
+      if (Math.hypot(client.pos[0] - c[0], client.pos[2] - c[2]) > 3 || Math.abs(client.pos[1] - c[1]) > 3) return;
+      this.treats.delete(id);
+      this.broadcast({ t: 'treat_gone', id, by: client.id });
+      this.pay(client, c[3]);
+      const key = nameKey(client.name), n = (this.treatCounts.get(key) || 0) + 1;
+      this.treatCounts.set(key, n);
+      client.send({ t: 'treat_got', value: c[3], n, big: c[3] >= TREAT_BIG });
+      if (h.treat.fills) this.feed(client, 25); // (a pie fills you up a bit)
+      if (c[3] >= TREAT_BIG) this.npcs.headline(`${client.name} just found ${h.treat.big}! ${h.treat.icon}✨`);
+      else if ([5, 10, 15, 20, 30, 40, 50].includes(n)) this.npcs.headline(`${client.name} has found ${n} ${h.treat.name}! ${h.treat.icon}`);
+    },
+
     // Buying something at the Luxe Store.
     buy(client, { item }) {
       const entry = SHOP_ITEMS.find(([i]) => i === item);
@@ -2836,8 +2972,14 @@ export class GameRoom {
         if ((w.pantry[food] || 0) >= MAX_PANTRY) return reply(`🍱 Your lunchbox is full of ${FOODS[food].icon}!`);
         // Taco Tuesday: the first few tacos are on the house! 🎉
         const free = food === 'taco' && this.freeTacos(client) > 0;
-        if (!free && w.coins < price) return reply(`🪙 ${FOODS[food].icon} ${price}`);
-        if (free) {
+        // Thanksgiving: a free feast (a few each)! 🦃
+        const feast = !free && HOLIDAYS[this.holiday]?.feast && (this.feasts.get(nameKey(client.name)) || 0) < FREE_FEAST;
+        if (!free && !feast && w.coins < price) return reply(`🪙 ${FOODS[food].icon} ${price}`);
+        if (feast) {
+          const had = (this.feasts.get(nameKey(client.name)) || 0) + 1;
+          this.feasts.set(nameKey(client.name), had);
+          reply(`🦃 Happy Thanksgiving! FREE! (${FREE_FEAST - had} 🆓 left)`);
+        } else if (free) {
           if (w.tacoDay !== this.day) w.tacos = 0;
           w.tacoDay = this.day;
           w.tacos = (w.tacos || 0) + 1;
@@ -4212,6 +4354,7 @@ export class GameRoom {
     this.time = (this.time + dt) % DAY_LENGTH;
     if (this.time < before) this.newDay();
     this.updateWeather(dt);
+    this.updateHoliday(before);
     const t = this.timers;
     for (const k in t) t[k] -= dt;
 

@@ -10,6 +10,7 @@ import { BLOCKS, isSolidBlock, blockId, itemOf, shapeOf, blockMeta, blockKey, to
 import { claimAt } from './claims.js';
 import { liftColumn, liftStops } from './elevator.js';
 import { SHOWERS } from './weather.js';
+import { HOLIDAYS } from './holidays.js';
 import { buildMap, route, nearestNode, cellKey, cellFlags, doorAt, nearGarage, STAND, DOOR, CLIMB, RIDE } from './homenav.js';
 import { inZone } from './secretbase.js';
 import { RESIDENTS } from './residents.js';
@@ -1321,7 +1322,9 @@ export class NpcCrew {
       this.say(n, done ? pickOne([`You're a star, ${c.name}! ⭐`, `Thanks for all your help, ${c.name}! 🏅`]) : pickOne([`Join my club, ${c.name}! 🏅`, `Can you help me, ${c.name}? 🙂`, `Here's what to do! 👇`]), true);
       c.send({ t: 'club_open', club: n.def.club });
     } else {
-      this.say(n, pickOne(n.def.tips), true);
+      // (On a holiday, now and then they wish you a happy one.)
+      const h = HOLIDAYS[this.room.holiday];
+      this.say(n, h && Math.random() < 0.4 ? `${h.greeting} ${h.icon} Found any ${h.treat.name} yet? ${h.treat.icon}` : pickOne(n.def.tips), true);
     }
   }
 
@@ -1860,6 +1863,19 @@ export class NpcCrew {
   newsInfo() {
     const n = this.list.find(m => m.def.reporter);
     return n?.story ? { place: n.story.label, guest: n.story.guest } : null;
+  }
+
+  // Something that happened, for Skye's news (the last dozen, for 20 minutes).
+  headline(text) {
+    this.feed ??= [];
+    this.feed.push({ text, at: Date.now() });
+    if (this.feed.length > 12) this.feed.shift();
+  }
+
+  // A holiday has begun!
+  onHoliday(id) {
+    const h = HOLIDAYS[id];
+    if (h) this.breaking(`${h.icon} It's ${h.name} in BuildZone! ${h.greeting} Find the ${h.treat.name} hidden all over town! ${h.treat.icon}`);
   }
 
   // Big news: Skye reports it wherever she is.

@@ -53,7 +53,8 @@ export class LightPools {
       if (!light || lightOff(v)) continue;
       // Lamps under a roof are indoor lamps: their glow stays on in the daytime too.
       const indoor = light.always || world.isCovered(x, y, z);
-      const color = world.lightTint(k, v) || light.color;
+      // (A holiday: outdoor lamps' light on the ground takes turns in its colors. Since v0.80.)
+      const color = (!indoor && this.holiday?.[Math.abs(x * 7 + z * 13) % this.holiday.length]) || world.lightTint(k, v) || light.color;
       lists[indoor ? 'indoor' : 'outdoor'].push({ x, z, floor: this.floorFor(world, x, y, z, block), light, color, power: light.power * (indoor ? 1.3 : 1) });
     }
     const m = new THREE.Matrix4(), q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)), color = new THREE.Color();

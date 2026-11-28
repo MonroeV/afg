@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { GameRoom, SAVE_VERSION } from './public/js/shared/game.js';
+import { HOLIDAYS } from './public/js/shared/holidays.js';
 import { CharacterStore } from './public/js/shared/characters.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -180,6 +181,8 @@ const room = new GameRoom({
   onDirty: () => (saveTimer ??= setTimeout(saveWorld, SAVE_DELAY)),
   log: msg => console.log(msg),
 });
+// (HOLIDAY=halloween npm start: a holiday any day, to try one out. HOLIDAY=none: no holidays.)
+if (process.env.HOLIDAY) room.forceHoliday = HOLIDAYS[process.env.HOLIDAY] ? process.env.HOLIDAY : null;
 room.build = BUILD;
 
 let saving = null; // the save being written right now
