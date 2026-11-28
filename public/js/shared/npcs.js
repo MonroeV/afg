@@ -4,13 +4,15 @@
 // come near, pet your pet, love your cool stuff, and react to fireworks, explosions,
 // dancing and water balloons.
 import { sanitizeLook } from './avatar.js';
-import { isTacoTuesday, WEEKDAYS, weekday } from './seasons.js';
+import { isTacoTuesday, WEEKDAYS, weekday, seasonAt, SEASONS, SEASON_ICONS } from './seasons.js';
 import { meetingOn, nextMeeting, clockAt } from './church.js';
 import { BLOCKS, isSolidBlock, blockId, itemOf, shapeOf, blockMeta, blockKey, toggleDoorValue, isNightTime, DOOR_OPEN, DOOR_TOP, SHOP_TOOLS } from './blocks.js';
 import { claimAt } from './claims.js';
 import { liftColumn, liftStops } from './elevator.js';
 import { SHOWERS } from './weather.js';
-import { HOLIDAYS } from './holidays.js';
+import { HOLIDAYS, nextGameHoliday } from './holidays.js';
+import { showAt } from './cinema.js';
+import { gameTime } from './train.js';
 import { buildMap, route, nearestNode, cellKey, cellFlags, doorAt, nearGarage, STAND, DOOR, CLIMB, RIDE } from './homenav.js';
 import { inZone } from './secretbase.js';
 import { RESIDENTS } from './residents.js';
@@ -427,6 +429,25 @@ const BEATS = {
   quarry: { label: 'at Big Rock Quarry', lines: ["I'm at Big Rock Quarry, where the dump trucks rumble! 🚚", 'Drive a dump truck under the chute to fill it with dirt! ⛏️', 'Then press G to dump it wherever you like! 🪨', 'Hard hats on, everybody! 👷'] },
   farm: { label: 'at Happy Acres Farm', lines: ['Live from Happy Acres Farm! Look at all those pumpkins! 🎃', 'The flower fields are in full bloom! 🌸', 'Hop in a pickup truck: a friend can ride in the back! 🛻', 'Nobody lives here yet. Claim it and it could be yours! 🚜'] },
   lodge: { label: 'at the ski lodge', lines: ['Brrr! Live from the ski lodge, up north! ❄️', 'The slopes are covered in fresh snow today! ⛷️', 'Grab some skis from the rack by the door and ride the lift to the top! 🚡', 'Coach Frost says: stay warm by the fire! 🔥'] },
+  // (Since v0.81: everywhere else in town too.)
+  zoo: { label: 'at the zoo', lines: ['Live from the BuildZone Zoo! The animals are wide awake! 🦁', "The penguins are waddling about. They're the stars of the show! 🐧", 'Feed the animals and watch them munch! 🥕', 'Did that giraffe just wink at the camera? 🦒'] },
+  airport: { label: 'at the airport', lines: ["I'm live at the airport, where the planes take off over the bay! ✈️", 'Captain Sky says the runway is clear for take-off! 🛫', 'Low on fuel? Park by a pump at the edge of the apron! ⛽', 'You can even jump out of a helicopter with a parachute! 🪂'] },
+  castle: { label: 'at the castle', lines: ['Live from the castle! Hear ye, hear ye! 🏰', 'Pull the lever and the drawbridge goes up! 🌉', 'They say there are golden treasures hidden all over the castle... 🏆', 'The view from the tower is fit for a king! 👑'] },
+  cinema: { label: 'at the movies', lines: ["I'm live at the cinema! Grab some popcorn! 🍿", '@movie', 'Sit in the front row for the best view! 🎬', 'Shh! The movie is starting! 🤫'] },
+  stadium: { label: 'at the stadium', lines: ['Live from the stadium! What a crowd! 🏟️', 'Kick the ball into the goal and the crowd goes wild! ⚽', 'Everybody do the wave! 🙌', "It's a beautiful day for a game! ☀️"] },
+  space: { label: 'at the space center', lines: ['Live from the space center! 3... 2... 1... 🚀', 'The rocket goes all the way to space! 🌌', 'Mission control says all systems are go! 🛰️', 'Astronauts, check your helmets! 👩‍🚀'] },
+  funland: { label: 'at Fun Land', lines: ["Live from Fun Land! Hear that screaming? It's the roller coaster! 🎢", 'The Ferris wheel is turning and the cotton candy is sweet! 🎡', 'Bumper cars: bump, bump, BUMP! 🚗💥', 'Win a prize at the games! 🧸'] },
+  mall: { label: 'at the mall', lines: ['Live from the BuildZone Mall! So many shops! 🛍️', 'The food court smells delicious! 🍔', 'Try on a costume at the costume shop! 🦸', 'The candy shop is the sweetest place in town! 🍭'] },
+  hospital: { label: 'at the hospital', lines: ['Live from the hospital, keeping BuildZone healthy! 🏥', 'Feeling hurt? A rest in a hospital bed fixes you right up! 🛏️', 'The ambulance is ready to roll! 🚑', 'Remember: eat your veggies! 🥦'] },
+  school: { label: 'at the school', lines: ['Live from BuildZone Elementary! 🏫', 'Ms. Lee has a quiz for anyone brave enough! ✏️', 'The playground is the busiest place at recess! 🛝', "Study hard and you'll be a super builder! 📚"] },
+  church: { label: 'at the church', lines: ['Live from the church on the hill, as peaceful as can be. ⛪', 'Everyone is welcome here! 🤗', 'The stained glass looks beautiful in the sunshine! 🌈', '@sunday'] },
+  shop_fiesta: { label: 'at Casa Fiesta', lines: ['¡Hola! Live from Casa Fiesta! 🌮', '@tuesday', 'The salsa is extra spicy today! 🌶️', 'Smash the piñata for a surprise! 🪅'] },
+  golf: { label: 'at mini golf', lines: ['Live from mini golf! Fore! ⛳', 'Can anyone get a hole in one today? 🏌️', 'Watch out for the windmill! 🌬️', 'Keep your score low and your smile big! 😄'] },
+  raceway: { label: 'at the raceway', lines: ['Live from the raceway! Start your engines! 🏎️', 'The go-karts are zooming round the track! 🏁', 'Who will set the fastest lap today? ⏱️', 'Vroom vroom! 💨'] },
+  skatepark: { label: 'at the skate park', lines: ['Live from the skate park! Look at those tricks! 🛹', 'Ride up the ramp fast and fly! 🚀', 'Kickflip! 360! Totally rad! 🤙', 'BMX bikes do tricks here too! 🚲'] },
+  firestation: { label: 'at the fire station', lines: ["Live from the fire station, home of BuildZone's bravest! 🚒", 'If you see smoke, call for help! 🔥', "The fire truck's hose can put out any fire! 💦", 'Ring the bell! 🔔'] },
+  park: { label: 'at Friendship Park', lines: ['Live from Friendship Park! Everyone is making friends! 🤝', 'Whee! The slides are super fast today! 🛝', 'Ask a kid to be your best friend! 💛', 'What a lovely day for the park! 🌳'] },
+  dealer: { label: 'at the car dealership', lines: ['Live from the car dealership! Shiny new cars! 🚗', 'Done with a car? Sell it back here! 🔑', 'You can own up to five vehicles! 🚙', 'That sports car is SO fast! 🏎️'] },
 };
 const SIGN_OFFS = ["This is Skye Summers, BZ News, live! 🎤", "Stay tuned, I'll be back with more news! 📺"];
 const GUEST_LINES = name => [
@@ -436,9 +457,39 @@ const GUEST_LINES = name => [
   `${name}, you're a star! ⭐ Back to you in the studio!`,
 ];
 
+// Now and then, between the news: did you know, and a joke. (Since v0.81.)
+const FACTS = [
+  'Did you know? Plant a lone log on the grass and it grows into a tree! 🌳',
+  'Did you know? Paint any side of a block a different color with the Paint Brush! 🖌️',
+  'Did you know? Gold coins hide all over town, and diamonds are worth 5! 💎',
+  'Did you know? A Lever next to Drawbridge blocks makes your own drawbridge! 🌉',
+  'Did you know? Bodyguards keep me out of your house if you ask them! 😅',
+  'Did you know? Water your garden and it grows faster in spring! 🌱',
+  'Did you know? Snowball fights happen in winter! Throw one! ⛄',
+  'Did you know? Clubs give you badges and special perks! 🏅',
+];
+const JOKES = [
+  'Joke time! Why did the cookie go to the doctor? It felt crummy! 🍪',
+  'Joke time! What do you call a sleeping dinosaur? A dino-snore! 🦕',
+  'Joke time! Why are fish so smart? They live in schools! 🐟',
+  'Joke time! What do you call a bear with no teeth? A gummy bear! 🐻',
+  "Joke time! Why can't a bike stand up by itself? It's two tired! 🚲",
+  'Joke time! What did the ocean say to the beach? Nothing, it just waved! 🌊',
+  'Joke time! How do you build a house for a duck? With quack-ers... I mean crackers! 🦆',
+  'Joke time! What has hands but cannot clap? A clock! ⏰',
+];
+const pickFrom = (list, used) => {
+  const fresh = list.filter(l => !used.has(l));
+  const pick = (fresh.length ? fresh : list)[Math.floor(Math.random() * (fresh.length || list.length))];
+  used.add(pick);
+  if (used.size >= list.length) used.clear();
+  return pick;
+};
+
 const PET_WORDS = { dog: 'puppy', cat: 'kitty', bunny: 'bunny', pig: 'piggy', dragon: 'dragon' };
 
 const SECOND = 1000;
+const INTERVIEW_GAP = 5 * 60 * SECOND; // (Skye interviews someone again only after this long)
 
 export class NpcCrew {
   constructor(room) {
@@ -1801,43 +1852,118 @@ export class NpcCrew {
     if (!story) return;
     if (story.guest) {
       const c = this.room.clients.get(story.guest);
-      if (c?.joined) this.face(n, c.pos[0], c.pos[2]);
-    }
-    if (n.lineT <= 0 && !n.task) {
-      n.lineT = 6 + Math.random() * 2.5;
-      this.say(n, story.lines[story.i++ % story.lines.length], true);
+      // (Walked off? That's a wrap.)
+      if (!c?.joined || Math.hypot(c.pos[0] - n.pos[0], c.pos[2] - n.pos[2]) > 14) return this.nextBeat(n, players);
+      this.face(n, c.pos[0], c.pos[2]);
+    } else this.lookForGuest(n, dt, players);
+    if (n.lineT <= 0 && !n.task && story.i < story.lines.length) {
+      // (A line every 12-16 seconds: since v0.81. An interview goes a bit quicker.)
+      n.lineT = story.guest ? 8 + Math.random() * 2 : 12 + Math.random() * 4;
+      this.say(n, story.lines[story.i++], true);
       if (story.guest && story.i === 2) this.act(n, NPC_ACT.wave, 1.5);
+    }
+  }
+
+  // Since v0.81 Skye never pops up beside you: walk up to her (and stay a couple of seconds) and
+  // she interviews you, live on BZ Live! (Not again for a few minutes.)
+  lookForGuest(n, dt, players) {
+    const now = Date.now();
+    for (const c of players) {
+      const near = !c.sleeping && Math.abs(c.pos[1] - n.pos[1]) < 3 && Math.hypot(c.pos[0] - n.pos[0], c.pos[2] - n.pos[2]) < 5;
+      c.skyeNearT = near ? (c.skyeNearT || 0) + dt : 0;
+      if (c.skyeNearT < 2 || now - (c.skyeInterviewAt || 0) < INTERVIEW_GAP) continue;
+      c.skyeInterviewAt = now;
+      c.skyeNearT = 0;
+      n.story = { key: n.story?.key, label: `with ${c.name}`, guest: c.id, lines: GUEST_LINES(c.name), i: 0 };
+      n.beatT = 4 * 9 + 4;
+      n.lineT = 0.8;
+      this.face(n, c.pos[0], c.pos[2]);
+      this.room.broadcast({ t: 'news', place: n.story.label, guest: c.id });
+      return;
     }
   }
 
   nextBeat(n, players) {
     const places = this.room.places || {};
-    const spots = Object.entries(BEATS).map(([key, beat]) => ({ key, beat, p: key === 'plaza' ? { x: 3.5, y: 0, z: 3.5 } : places[key] })).filter(s => s.p);
-    let stand = null, story = null;
-    // Sometimes: drop in on someone who's playing (on foot, out in the open).
-    const guests = players.filter(c => c.pos[1] < 40 && !c.sleeping && !inZone(this.zone, ...c.pos) && !this.skyeKeptOut(c.pos[0], c.pos[2]));
-    if (guests.length && Math.random() < 0.45 && n.story?.guest === 0) {
-      const c = guests[Math.floor(Math.random() * guests.length)];
-      stand = this.besideGuest(c, n.def);
-      if (stand) story = { label: `with ${c.name}`, guest: c.id, lines: GUEST_LINES(c.name), i: 0 };
-    }
-    if (!stand) {
-      const choices = spots.filter(s => s.key !== n.story?.key);
-      const s = choices[Math.floor(Math.random() * choices.length)] || spots[0];
-      if (!s) return;
-      stand = this.findStand(s.p.x, s.p.y ?? 0, s.p.z) || [s.p.x, s.p.y ?? 0, s.p.z];
-      story = { key: s.key, label: s.beat.label, guest: 0, lines: [...s.beat.lines, ...SIGN_OFFS], i: 0 };
-    }
+    const spots = Object.entries(BEATS).map(([key, beat]) => ({ key, beat, p: key === 'plaza' ? { x: 3.5, y: 0, z: 3.5 } : places[key] })).filter(s => s.p && !this.skyeKeptOut(s.p.x, s.p.z));
+    const recent = (n.recent ??= []);
+    const choices = spots.filter(s => !recent.includes(s.key));
+    const s = (choices.length ? choices : spots)[Math.floor(Math.random() * (choices.length || spots.length))];
+    if (!s) return;
+    recent.push(s.key);
+    if (recent.length > Math.min(8, spots.length - 1)) recent.shift();
+    const stand = this.findStand(s.p.x, s.p.y ?? 0, s.p.z) || [s.p.x, s.p.y ?? 0, s.p.z];
+    const story = { key: s.key, label: s.beat.label, guest: 0, lines: this.storyLines(s.beat), i: 0 };
     n.pos = stand.slice();
     n.home = stand.slice();
     n.area = [Math.floor(stand[0]) - 3, Math.floor(stand[2]) - 3, Math.floor(stand[0]) + 3, Math.floor(stand[2]) + 3];
     n.goal = null;
     n.task = null;
-    n.wait = story.guest ? 99 : 3;
+    n.wait = 3;
     n.story = story;
-    n.beatT = story.guest ? 26 : 34;
+    n.beatT = story.lines.length * 14 + 4;
     n.lineT = 1.2;
-    this.room.broadcast({ t: 'news', place: story.label, guest: story.guest });
+    this.room.broadcast({ t: 'news', place: story.label, guest: 0 });
+  }
+
+  // One news segment (since v0.81): hello from the place, the latest news from around town (if
+  // there is any), the holiday, one more thing about the place, now and then the weather, a fun
+  // fact or a joke, and a sign-off. Each line once.
+  storyLines(beat) {
+    const room = this.room, used = (this.usedLines ??= new Set());
+    const fill = l => {
+      if (l === '@movie') {
+        const show = showAt(gameTime(room.day, room.time));
+        return `Now showing: ${show.feature.title}! 🎬`;
+      }
+      if (l === '@sunday') return weekday(room.day) === 0 ? "It's Sunday: everyone's welcome at the meeting today! 🙏" : 'Sunday is meeting day here. Everyone is welcome! 🙏';
+      if (l === '@tuesday') return isTacoTuesday(room.day) ? "It's Taco Tuesday! The first tacos are FREE! 🎉🌮" : 'Come back on Tuesday: Taco Tuesday means free tacos! 🌮';
+      return l;
+    };
+    const place = beat.lines.map(fill);
+    const lines = [place[0]];
+    const news = this.freshHeadline();
+    if (news) lines.push(`News just in: ${news}`);
+    const h = HOLIDAYS[room.holiday];
+    if (h && (news ? Math.random() < 0.35 : Math.random() < 0.6)) lines.push(this.holidayLine(h));
+    lines.push(pickFrom(place.slice(1), used));
+    if (!news && Math.random() < 0.6) lines.push(pickFrom(place.slice(1), used));
+    if (Math.random() < 0.55) lines.push(this.feature(used));
+    lines.push(pickOne(SIGN_OFFS));
+    return [...new Set(lines)];
+  }
+
+  // The newest bit of news she hasn't told yet (from the last 20 minutes).
+  freshHeadline() {
+    const now = Date.now();
+    this.feed = (this.feed || []).filter(f => now - f.at < 20 * 60 * SECOND);
+    for (let i = this.feed.length - 1; i >= 0; i--) {
+      if (this.feed[i].told) continue;
+      this.feed[i].told = true;
+      return this.feed[i].text;
+    }
+    return null;
+  }
+
+  holidayLine(h) {
+    let best = null;
+    for (const [key, count] of this.room.treatCounts || []) if (!best || count > best[1]) best = [key, count];
+    const name = best && (this.room.treatNames?.get(best[0]) || best[0]);
+    return best && Math.random() < 0.7
+      ? `${h.icon} Happy ${h.name.replace(/^the /, '')}! ${name} leads the hunt with ${best[1]} ${h.treat.name}! ${h.treat.icon}`
+      : `${h.icon} It's ${h.name}! ${h.treat.icon} ${h.treat.name[0].toUpperCase()}${h.treat.name.slice(1)} are hidden all over town. Go find them!`;
+  }
+
+  // The weather (and what's coming up), a fun fact, or a joke.
+  feature(used) {
+    const r = Math.random();
+    if (r < 0.34) {
+      const room = this.room, se = seasonAt(room.day, room.time), next = nextGameHoliday(room.day);
+      const sky = room.weather?.rain ? (room.snowing?.() ? 'snowing! ❄️' : 'raining! ☔') : `${SEASONS[se.i]} ${SEASON_ICONS[se.i]}`;
+      const soon = next && !room.holiday ? ` Coming up: ${HOLIDAYS[next[0]].name} ${HOLIDAYS[next[0]].icon} ${next[1] === 1 ? 'tomorrow' : `in ${next[1]} days`}!` : '';
+      return `Here's the weather: it's ${sky}${soon}`;
+    }
+    return pickFrom(r < 0.67 ? FACTS : JOKES, used);
   }
 
   // Where Skye stands to interview someone: a few blocks away and off to one side of where

@@ -1352,6 +1352,7 @@ export class GameRoom {
     this.sendWallet(client);
     reply(frame ? `${spec.plane ? '✈️' : '🚁'} Your ${spec.name} is waiting for you out on the apron, by the runway! Only you can fly it. 🛫` : `${kind === 'bmx' ? '🚲' : '🛹'} It's yours! Hop on (E) and hit the ramps!`);
     this.log(`${client.name} bought a ${spec.name}`);
+    if (frame) this.npcs.headline(`${client.name} just bought their very own ${spec.name}! Look up in the sky! ${spec.plane ? '✈️' : '🚁'}`);
     this.onDirty();
   }
 
@@ -2222,6 +2223,7 @@ export class GameRoom {
       if (club === 'tunnel') client.send({ t: 'underground', ...this.undergroundInfo() }); // (now you know the secret)
       this.broadcast({ t: 'chat', system: true, text: `🏅 ${client.name} earned the ${def.icon} ${def.name} badge!` }, client);
       this.log(`${client.name} earned the ${def.name} badge`);
+      this.npcs.headline(`${client.name} just earned the ${def.icon} ${def.name} badge! Congratulations! 🏅`);
     }
     this.sendWallet(client);
     this.onDirty();
@@ -2952,6 +2954,7 @@ export class GameRoom {
       this.pay(client, c[3]);
       const key = nameKey(client.name), n = (this.treatCounts.get(key) || 0) + 1;
       this.treatCounts.set(key, n);
+      (this.treatNames ??= new Map()).set(key, client.name); // (for Skye's leaderboard)
       client.send({ t: 'treat_got', value: c[3], n, big: c[3] >= TREAT_BIG });
       if (h.treat.fills) this.feed(client, 25); // (a pie fills you up a bit)
       if (c[3] >= TREAT_BIG) this.npcs.headline(`${client.name} just found ${h.treat.big}! ${h.treat.icon}✨`);
@@ -3229,6 +3232,7 @@ export class GameRoom {
       this.broadcast({ t: 'car_owner', id: v.id, owner: v.owner });
       reply(`🔑 The ${name} is yours! Only you can drive it, and it stays wherever you park it. (You can have up to ${MAX_OWNED_VEHICLES}.)`);
       this.log(`${client.name} claimed a ${name}`);
+      this.npcs.headline(`${client.name} has a new ride: a ${name}! Beep beep! 🚗`);
       this.onDirty();
     },
 
@@ -3390,6 +3394,7 @@ export class GameRoom {
         this.claims = this.claims.filter(c => c.key !== key || c.vacation);
         this.claims.push({ owner: client.name, key, ...rect, createdAt: Date.now() });
         reply(`🏠 This land is now yours, ${client.name}!${had ? ' (Your old land is free again.)' : ''} Only someone named ${client.name} can build here.`);
+        if (!had) this.npcs.headline(`${client.name} has a brand new home in BuildZone! Welcome to the neighborhood! 🏠`);
       }
       this.seen(client.name);
       this.progress(client, 'gold', 'land');

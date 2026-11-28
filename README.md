@@ -830,10 +830,15 @@ customize your character, drive cars, build anything and play with friends.
     **night-vision goggles** (gear: wear them at night and you can see in the dark, all in green) and a big red
     button that says **DO NOT PRESS**. (Press it.)
 - **BZ Live, the news on TV**: Skye Summers, BZ News' roving reporter, travels around town with
-  her microphone: the town square, the Luxe Store, the Pizza Palace, the tower, the ski lodge…
-  and sometimes she drops in on whoever's playing ("Breaking news! I'm here with Mia, one of the
-  best builders in town!"), standing a few steps off to one side so she's not in the way of
-  what you're building. Turn any TV to **BZ Live** (channel 5) to watch a live camera
+  her microphone: the town square, the zoo, the airport, the castle, the cinema (with what's
+  showing), Fun Land, the stadium, the space center, Casa Fiesta (free tacos on Tuesdays!), the
+  church (Sunday meetings) and lots more. Since v0.81 her news is about what's really happening:
+  who just earned a badge, got a new home, bought an airplane or claimed a car, who's winning the
+  holiday treat hunt, plus the weather (and the next holiday), fun facts and jokes. She talks
+  every 12 to 16 seconds, and her words only show in your chat when you're within 10 blocks of
+  her. She never pops up next to you any more: **walk up to her** (and stay a couple of seconds)
+  and she interviews you ("Breaking news! I'm here with Mia, one of the best builders in
+  town!"), at most once every 5 minutes. Turn any TV to **BZ Live** (channel 5) to watch a live camera
   following her, with a LIVE banner, where she is and what she's saying. If you're the one she's
   interviewing, you're on TV! She also reports breaking news (exploding cars, fireworks). The
   live picture is only drawn while a TV showing it is near you, small and a dozen times a second,

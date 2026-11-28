@@ -1037,7 +1037,8 @@ net.on('npc_say', ({ id, text }) => {
   if (!a) return;
   a.say(text);
   if (id === REPORTER) Object.assign(news, { on: true, caption: text, captionT: timer.getElapsed() });
-  if (a.pos.distanceTo(player.pos) < 16) hud.addChat({ name: a.name, color: '#ffd54f', text });
+  // (Skye, the reporter: only in your chat when you're close by. Since v0.81.)
+  if (a.pos.distanceTo(player.pos) < (id === REPORTER ? 10 : 16)) hud.addChat({ name: a.name, color: '#ffd54f', text });
 });
 // Somebody paid Stormy: it's raining tacos (or ice cream, or pizza…)!
 net.on('shower', ({ kind, seconds }) => showers.start(kind, seconds)); // (and its song plays, if it has one)
